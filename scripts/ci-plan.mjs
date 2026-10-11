@@ -115,8 +115,13 @@ add(
   vitest("apps/desktop", " --project main-serial")
 );
 // A manual run can ask for Linux alone.
+// A change to the renderer alone reaches the desktop app only as its built
+// renderer, which Linux's Electron suites drive; macOS and Windows test what
+// differs by system, so they wait for a change outside apps/web.
+const beyondRenderer =
+  full || changed.some((file) => !file.startsWith("apps/web/"));
 const systems =
-  (agent || desktop) && process.env.PLATFORMS !== "linux"
+  (agent || (desktop && beyondRenderer)) && process.env.PLATFORMS !== "linux"
     ? ["macos-latest", "windows-latest"]
     : [];
 
