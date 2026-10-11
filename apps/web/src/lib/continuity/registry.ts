@@ -215,6 +215,11 @@ export const CONTINUITY_STORES: ReadonlyArray<{
     storage: "abacusai-bot:whatsapp.claim",
     schema: v.string(),
   },
+  {
+    key: "connect.signUpHop.v1",
+    storage: "abacusai-bot:sign-up-hop",
+    schema: v.string(),
+  },
 ];
 const binding = new Map<
   string,
