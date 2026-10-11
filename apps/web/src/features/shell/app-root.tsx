@@ -16,6 +16,7 @@ import { openStartDraft } from "#renderer/features/sessions/start/start-session"
 import { ChromeEffect, useChromeState } from "#renderer/lib/chrome-state";
 import { inertWhileHidden } from "#renderer/lib/inert-hidden";
 import { resolveKeymap } from "#renderer/lib/keyboard/actions";
+import { LanguageEffect } from "#renderer/lib/language-effect";
 import { useAppNavigate } from "#renderer/lib/navigation/use-app-navigate";
 import { uiPlatform } from "#renderer/lib/platform";
 import { ThemeEffect } from "#renderer/lib/theme-effect";
@@ -134,6 +135,7 @@ export const AppRoot = ({
             <AppIconSprite />
             <HostStatus />
             <ThemeEffect />
+            <LanguageEffect />
             <PlatformEffect platform={system.platform} />
             <ChromeEffect transport={transport} />
             <ReadinessReporter

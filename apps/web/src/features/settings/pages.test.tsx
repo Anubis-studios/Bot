@@ -8,6 +8,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import enUS from "#locales/en-US.json";
 import { updateStatusQuery } from "#renderer/features/settings/updates";
 import { ABACUS_BUY_CREDITS_URL } from "#renderer/lib/abacus-links";
+import { changeLanguage, i18n } from "#renderer/lib/i18n";
 import { defaultSeed, renderApp } from "#renderer/test-support/app-harness";
 const os = implement(contract);
 /** `update.events` as main serves it: the current status first, then held open. */
@@ -451,4 +452,16 @@ it("opens model setup when the optional local runtime is unavailable", async () 
     screen.getByRole("button", { name: enUS.onboarding.setupDoneCta })
   ).not.toBeNull();
   expect(screen.queryByText(enUS.errors.genericTitle)).toBeNull();
+});
+
+it("App language applies as soon as it is picked, without a restart", async () => {
+  app = await renderApp("/settings/language");
+  try {
+    const select = await screen.findByRole("combobox");
+    fireEvent.change(select, { target: { value: "fr-FR" } });
+    await waitFor(() => expect(i18n.language).toBe("fr-FR"));
+    expect(document.documentElement.lang).toBe("fr-FR");
+  } finally {
+    await changeLanguage("en-US");
+  }
 });
