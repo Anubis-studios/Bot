@@ -7,6 +7,9 @@ name: CI
 # Trusted Signing credentials. Nothing here needs a secret, which is the point: a
 # pull request from a fork runs the same checks as a push to main, and no
 # workflow in this repo can reach a signing key.
+#
+# A pull request runs what its diff reaches (scripts/ci-plan.mjs); a push to
+# main runs everything.
 
 on:
   push:
@@ -25,7 +28,7 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   # Keep the existing heap cap until a final-build peak measurement is available.
@@ -34,15 +37,18 @@ env:
   ABACUS_BUILD_COMMIT: ${{ github.sha }}
 
 jobs:
-  # Which release unit does this change touch? Renderer and agent source are
-  # an experience release (hot-swapped over TUF, no relaunch); anything else
-  # (dependencies, the shell, the preload, the lockfile) fails toward a
-  # full signed foundation release. Informational here; the release pipeline
-  # runs the same classifier to decide what a tag needs.
-  classify:
-    name: Classify release impact
-    if: github.event_name == 'pull_request'
+  # What this run has to test, and which release unit the change touches.
+  # Renderer and agent source are an experience release (hot-swapped over TUF,
+  # no relaunch); anything else fails toward a full signed foundation release,
+  # and only a foundation change has to package on every operating system.
+  plan:
+    name: Plan
     runs-on: ubuntu-latest
+    outputs:
+      tests: ${{ steps.plan.outputs.tests }}
+      any: ${{ steps.plan.outputs.any }}
+      desktop: ${{ steps.plan.outputs.desktop }}
+      package: ${{ steps.classify.outputs.package }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -53,18 +59,33 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec turbo run build --filter=@abacus-ai/updater
-      - name: Classify the changed paths
+      - id: plan
+        env:
+          PLATFORMS: ${{ inputs.platforms }}
+        run: node scripts/ci-plan.mjs
+      - id: classify
+        name: Classify release impact
         run: |
           set -euo pipefail
-          # No --depth here: the base can gain commits between checkout and
-          # this fetch (a merge landing mid-run), and a shallow fetch grafts
-          # that tip with no ancestry, so `...` finds no merge base.
-          git fetch --no-tags origin "${{ github.base_ref }}"
+          everywhere='package=["ubuntu-latest","macos-latest","windows-latest"]'
+          if [ "${{ inputs.platforms }}" = linux ]; then
+            echo 'package=["ubuntu-latest"]' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "$everywhere" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          pnpm exec turbo run build --filter=@abacus-ai/updater
           result=$(git diff --name-only "origin/${{ github.base_ref }}"...HEAD | node apps/updater/dist/classify.mjs)
           kind=$(echo "$result" | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>console.log(JSON.parse(d).kind))')
           echo "This change is a **${kind}** release." >> "$GITHUB_STEP_SUMMARY"
           echo "$result"
+          if [ "$kind" = experience ]; then
+            echo 'package=["ubuntu-latest"]' >> "$GITHUB_OUTPUT"
+          else
+            echo "$everywhere" >> "$GITHUB_OUTPUT"
+          fi
 
   check:
     name: Typecheck, lint and format
@@ -77,73 +98,71 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm run format:check
-      - run: pnpm run lint
-      # The tool configs (oxlint.config.ts, oxfmt.config.ts and what they
-      # import) belong to no workspace package, so `pnpm run typecheck` never
-      # sees them. Lint is invoked directly above, not through turbo, so
-      # the //#lint task's dependsOn never fires either.
-      - run: pnpm run typecheck:tools
-      # Covers every workspace package, so a reference to something that does
-      # not exist fails here rather than in six platform jobs several minutes
-      # later.
-      - run: pnpm run typecheck
-      - run: pnpm run check:knip
-      - run: pnpm run check:scripts
-      # The guard compares the browser graph with the Electron renderer's, so
-      # both builds have to exist; turbo builds the desktop's dependencies too.
-      # Electron 44 fetches its binary on first require, not on install, and
-      # the desktop build reads Chromium's notices from it.
-      - name: Install Electron before the desktop build
-        working-directory: apps/desktop
-        run: node -e 'require("electron")'
-      - name: Browser bundle platform guard
-        run: |
-          pnpm exec turbo run build --filter=@abacus-ai/desktop --filter=@abacus-ai/web
-          node scripts/check-web-bundle.mjs
-      - name: Open-source license policy and notices
-        run: |
-          pnpm run check:licenses
-          pnpm --filter @abacus-ai/desktop run generate:notices
-      - run: pnpm --filter @abacus-ai/desktop run check:ui-registry
-      - name: i18n and locale guards
-        run: |
-          pnpm --filter @abacus-ai/web run check:i18n
-          pnpm --filter @abacus-ai/web run check:locales
-
-      # Fails on any high/critical advisory that is not on the documented
-      # exception list in the script: each entry names why it is accepted, and
-      # goes stale (and fails) the moment the upstream fix ships.
-      - name: Audit dependencies
-        run: pnpm run check:audit
+      # The readers below run side by side; the route trees they read are
+      # settled first so none sees a build rewriting one.
+      - run: pnpm --filter @abacus-ai/web run generate:routes
+      - parallel:
+          - name: Format
+            run: pnpm run format:check
+          - name: Lint
+            run: pnpm run lint
+          # The tool configs belong to no workspace package, so the
+          # workspace typecheck never sees them.
+          - name: Tool configs typecheck
+            run: pnpm run typecheck:tools
+          - name: Unused files, exports and dependencies
+            run: pnpm run check:knip
+          - name: Script tests
+            run: pnpm run check:scripts
+          - name: i18n and locale guards
+            run: |
+              pnpm --filter @abacus-ai/web run check:i18n
+              pnpm --filter @abacus-ai/web run check:locales
+          - name: UI registry
+            run: pnpm --filter @abacus-ai/desktop run check:ui-registry
+          # Fails on any high/critical advisory that is not on the documented
+          # exception list in the script.
+          - name: Audit dependencies
+            run: pnpm run check:audit
+          # Typecheck covers every workspace package. The bundle guard compares
+          # the browser graph with the Electron renderer's, so both builds have
+          # to exist, and the desktop build reads Chromium's notices from the
+          # Electron binary, which Electron 44 fetches on first require.
+          - name: Typecheck, builds and the browser bundle guard
+            run: |
+              set -euo pipefail
+              (cd apps/desktop && node -e 'require("electron")')
+              pnpm run typecheck
+              pnpm exec turbo run build --filter=@abacus-ai/desktop --filter=@abacus-ai/web
+              node scripts/check-web-bundle.mjs
+              pnpm run check:licenses
+              pnpm --filter @abacus-ai/desktop run generate:notices
 
   test:
-    name: Tests (${{ matrix.os }})
+    name: Tests (${{ matrix.name }})
+    needs: plan
+    if: needs.plan.outputs.any == 'true'
     strategy:
-      fail-fast: false
+      # A failure ends the run's other suites: the fix is a new push anyway.
+      fail-fast: true
+      # The agent and the desktop main process run on all three systems.
       # macOS is not redundant: the sandbox confinement tests skip themselves on
-      # a platform with no backend, so on Linux alone the suite would report
-      # green while proving nothing about the thing most worth proving: that a
-      # write outside the workspace is actually refused.
+      # a platform with no backend, so Linux alone would report green while
+      # proving nothing about whether a write outside the workspace is refused.
+      # Windows is where cmd.exe quoting, taskkill and PATHEXT actually break,
+      # which faking `process.platform` cannot reach.
       #
-      # Windows is here because faking `process.platform` in a unit test cannot
-      # reach the things that actually break there: cmd.exe quoting, whether
-      # taskkill exists, how PATHEXT resolves an extensionless command.
-      matrix:
-        os: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.platforms == 'linux' && '["ubuntu-latest"]' || '["ubuntu-latest","macos-latest","windows-latest"]') }}
+      # Two agent-side bugs are still open, with their tests skipped and the
+      # reason named at each skip: the scratch carve-out in
+      # extensions/guardrails.ts matches the temp dir in short form against a
+      # long-form real path, and backends.ts terminate() has no process-tree
+      # kill on Windows.
+      matrix: ${{ fromJSON(needs.plan.outputs.tests) }}
     runs-on: ${{ matrix.os }}
-    # Windows blocks like the other platforms. A job nobody has to look at is
-    # a job nobody looks at.
-    #
-    # Two agent-side bugs are still open, with their tests skipped and the
-    # reason named at each skip: the scratch carve-out in
-    # extensions/guardrails.ts matches the temp dir in short form against a
-    # long-form real path, and backends.ts terminate() has no process-tree kill
-    # on Windows, so a stopped command leaks its descendants. Skipped is the
-    # right shape for those: they name themselves, and they do not hide a
-    # regression in everything else.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -152,26 +171,21 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       # E2E tests execute the built CLI and bundled-tools tests execute the
-      # vendored search binaries. A clean runner has neither until the complete
-      # build graph has run: fetching the binaries alone leaves the suites that
-      # spawn the CLI failing on a bundle that was never built.
-      # Electron 44 installs on first require. The desktop build reads
-      # Chromium's notices from the binary, and parallel Vitest workers can
-      # race while extracting into the same directory, especially on Windows.
-      - name: Install Electron before the desktop build and test workers
-        working-directory: apps/desktop
-        run: node -e 'require("electron")'
-
+      # vendored search binaries, so the whole build graph runs first. Electron
+      # 44 installs on first require; the desktop build reads Chromium's
+      # notices from it, and parallel test workers would race extracting it.
       - name: Build what the tests execute
-        run: pnpm run build
-
-      - name: Prepare Linux desktop tests
-        if: runner.os == 'Linux'
-        working-directory: apps/desktop
         shell: bash
         run: |
           set -euo pipefail
-          node -e 'require("electron")'
+          (cd apps/desktop && node -e 'require("electron")')
+          pnpm run build
+
+      - name: Chromium's setuid sandbox helper
+        if: runner.os == 'Linux' && matrix.suite == 'desktop'
+        working-directory: apps/desktop
+        run: |
+          set -euo pipefail
           sandbox=$(node -p 'require("path").join(require("path").dirname(require.resolve("electron/package.json")), "dist", "chrome-sandbox")')
           sudo chown root:root "$sandbox"
           sudo chmod 4755 "$sandbox"
@@ -180,16 +194,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ "$RUNNER_OS" = "Linux" ]; then
-            xvfb-run -a pnpm run test
-          else
-            pnpm run test
-          fi
+          if [ "$RUNNER_OS" = "Linux" ]; then xvfb-run -a ${{ matrix.run }}; else ${{ matrix.run }}; fi
 
       # The agent resolves these at runtime rather than shelling out to whatever
       # is on PATH, so a vendor step that half-succeeded is a search tool that
-      # does not exist, and on one platform only, which is how it goes unnoticed.
+      # does not exist, on one platform only.
       - name: The search binaries landed beside the agent and run
+        if: matrix.suite == 'agent'
         shell: bash
         run: |
           set -euo pipefail
@@ -199,14 +210,12 @@ jobs:
           "packages/agent/vendor/fd${suffix}" --version
 
       # The `bash` tool on Windows is the bundled busybox shell, installed and
-      # launched by the agent itself (src/posix-shell.ts). A unit test cannot
-      # run a Windows executable anywhere else, so the built bundle is asked
-      # to do the real thing here: install the payload, then run a pipeline,
-      # a heredoc, a quoted path and a failing command through the same
-      # operations the tool uses. Green on Windows means a stock machine gets
-      # a shell.
+      # launched by the agent itself (src/posix-shell.ts). Only a Windows
+      # machine can run it, so the built bundle installs the payload and runs a
+      # pipeline, a heredoc, a quoted path and a failing command through the
+      # same operations the tool uses.
       - name: The bundled Windows shell installs and runs
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && matrix.suite == 'agent'
         shell: bash
         env:
           LOCALAPPDATA: ${{ runner.temp }}/posix-shell-cache
@@ -242,22 +251,21 @@ jobs:
           await expect("printf '%s' \"$BB_OVERRIDE_APPLETS\" | cut -c1-1", ";");
           JS
 
-      # The desktop app spawns the agent and speaks NDJSON to it. This asserts
-      # the host still answers on stdout in the protocol, whatever it has to
-      # say: a stack trace on stderr and silence on stdout is a dead app.
+      # The desktop app spawns the agent and speaks NDJSON to it: the host has
+      # to answer on stdout in the protocol, whatever it has to say.
       - name: The agent speaks AG-UI with a compat stream
+        if: matrix.suite == 'agent'
         shell: bash
-        run: |
-          node scripts/agui-smoke.mjs
+        run: node scripts/agui-smoke.mjs
 
-  # renderer's screenshot gate (spec 01 §10.2) in the real Electron
+  # The renderer's screenshot gate (spec 01 §10.2) in the real Electron
   # window: every route and band, the collapsed, floating, split, compact and
-  # full-screen states, axe, and the Linux native-frame probe. The probe runs
-  # only on Linux, so this job requires it: a run that skipped it fails
-  # (ABACUSBOT_REQUIRE_NATIVE_FRAME). macOS runs record it as skipped.
+  # full-screen states, axe, and the Linux native-frame probe, which this job
+  # requires (ABACUSBOT_REQUIRE_NATIVE_FRAME).
   screenshots:
     name: renderer screenshots (Linux)
-    needs: [check]
+    needs: plan
+    if: needs.plan.outputs.desktop == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -272,13 +280,10 @@ jobs:
       # (VITE_UI_GALLERY=1, the fixture tables).
       - run: pnpm exec turbo run build --filter=@abacus-ai/desktop^...
 
-      # The same setuid helper the packaged-app smoke test sets up, for the
-      # unpacked Electron the script launches.
       - name: Chromium's setuid sandbox helper
         working-directory: apps/desktop
         run: |
           set -euo pipefail
-          # Electron 44 downloads its binary on first require, not on install.
           node -e 'require("electron")'
           sandbox=$(node -p 'require("path").join(require("path").dirname(require.resolve("electron/package.json")), "dist", "chrome-sandbox")')
           sudo chown root:root "$sandbox"
@@ -290,14 +295,17 @@ jobs:
           ABACUSBOT_REQUIRE_NATIVE_FRAME: "1"
         run: xvfb-run -a --server-args="-screen 0 1920x1080x24" node scripts/screenshots.mjs --require-native-frame
 
+  # Linux packages whenever the desktop app is affected. macOS and Windows
+  # package a foundation change and every push to main: an experience change
+  # leaves the packaged shell as it was.
   package:
     name: Package (${{ matrix.os }})
-    needs: [check]
+    needs: plan
+    if: needs.plan.outputs.desktop == 'true'
     strategy:
-      # A failure on one platform should not hide a passing build on the others.
       fail-fast: false
       matrix:
-        os: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.platforms == 'linux' && '["ubuntu-latest"]' || '["macos-latest","windows-latest","ubuntu-latest"]') }}
+        os: ${{ fromJSON(needs.plan.outputs.package) }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -308,16 +316,17 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
-      # Electron 44 fetches its binary on first require, not on install, and
-      # the desktop build reads Chromium's notices from it.
-      - name: Install Electron before the desktop build
-        working-directory: apps/desktop
-        run: node -e 'require("electron")'
-
       # Build every workspace dependency and fetch every vendored runtime before
-      # electron-builder walks dist/ and extraResources. Calling package:dir on
-      # its own does neither and produces an asar with no main entry.
-      - run: pnpm run build
+      # electron-builder walks dist/ and extraResources; package:dir alone does
+      # neither and produces an asar with no main entry. Electron 44 fetches its
+      # binary on first require, and the desktop build reads Chromium's notices
+      # from it.
+      - name: Build
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd apps/desktop && node -e 'require("electron")')
+          pnpm run build
       - name: Reject React Compiler bailouts
         run: pnpm --filter @abacus-ai/desktop run check:react-compiler
 
@@ -330,25 +339,17 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: false
         run: pnpm --filter @abacus-ai/desktop run package:dir
 
-      # A build that succeeds can still ship an app that cannot run what it
-      # spawns: electron-builder drops a nested node_modules without a word.
-      # Nothing before this step looks inside the packaged app.
+      # electron-builder drops a nested node_modules without a word; nothing
+      # before this step looks inside the packaged app.
       - name: Check the packaged app has what it spawns
         run: pnpm --filter @abacus-ai/desktop run check:packaged
 
-      # Nothing else starts the app. Typecheck and the unit suites never load
-      # main/index.ts, so the failures this shape produces (a named import from
-      # a CommonJS package, `__dirname` in an ESM main process, a module that is
-      # not inside the asar) get through green CI and only appear on launch.
-      #
-      # The app has to SAY it started: a still-running pid is not proof, since
-      # an uncaught exception at import time puts up Electron's "A JavaScript
-      # error occurred in the main process" dialog and waits on it, so a
-      # crashed app holds its pid open and looks healthy.
-      #
-      # So the app prints a marker at the end of its ready chain (every module
-      # evaluated, window created, IPC registered) and exits 0. No marker, no
-      # pass, however alive the process looks.
+      # Nothing else starts the app: typecheck and the unit suites never load
+      # main/index.ts, so a named import from a CommonJS package, `__dirname`
+      # in an ESM main process, or a module outside the asar only shows on
+      # launch. The app has to say it started (a crashed app holds its pid open
+      # behind Electron's error dialog), so it prints a marker at the end of
+      # its ready chain and exits 0.
       - name: The packaged app actually starts
         working-directory: apps/desktop
         shell: bash
@@ -365,12 +366,9 @@ jobs:
           [ -n "$app" ] || { echo "::error::could not find the unpacked app executable"; exit 1; }
           echo "Launching $app"
 
-          # Chromium's setuid sandbox refuses to run (and aborts the whole
-          # process) unless its helper is root-owned and setuid. electron-builder
-          # cannot set that when it unpacks as the runner user; the installers it
-          # produces do it at install time. Do the same here rather than passing
-          # --no-sandbox, so the smoke test starts the app the way a user's
-          # install does.
+          # Chromium's setuid sandbox aborts unless its helper is root-owned and
+          # setuid; the installers do this at install time, so do it here
+          # rather than pass --no-sandbox.
           if [ "$RUNNER_OS" = "Linux" ]; then
             sandbox="$(dirname "$app")/chrome-sandbox"
             sudo chown root:root "$sandbox"
@@ -400,9 +398,8 @@ jobs:
           grep -qF '[smoke] renderer ready' app.log
           grep -qE '\[smoke\] notch (ready|n/a|disabled: (probe failed|no internal display|no cut-out|off by pref))$' app.log
 
-          # Belt and braces: the marker says the ready chain finished, this checks
-          # nothing blew up on the way. ERR_MODULE_NOT_FOUND and Electron's own
-          # fatal-dialog text are the signatures of an import-time crash.
+          # The marker says the ready chain finished; this checks nothing blew
+          # up on the way.
           if grep -qiE 'ReferenceError|TypeError|SyntaxError|ERR_MODULE_NOT_FOUND|Cannot find (package|module)|Uncaught Exception|A JavaScript error occurred|threw an error|unhandled (promise )?rejection' app.log; then
             echo "::error::the main process logged a fatal error on startup"
             exit 1
