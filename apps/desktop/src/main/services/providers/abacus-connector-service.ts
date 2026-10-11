@@ -333,23 +333,26 @@ export const connectLinkStatus = async (
   };
 };
 
-const CONNECT_LINK_FAILED = "Could not start connecting. Please try again.";
-
 /**
  * A Connect button's link: the same owner-bound link a chat sends, for the
- * caller to open as the server returns it. Only a minted link carries the
- * connect page's hand-off, so a failed mint is an error, not the plain page.
+ * caller to open as the server returns it. When the server mints none, the
+ * connect page itself, as a chat's link falls back to: the button still
+ * connects, and the statuses tell when it landed.
  */
 export const connectButtonLink = async (
   service: string
 ): Promise<
-  { ok: true; url: string; requestId: string } | { ok: false; error: string }
+  { ok: true; url: string; requestId?: string } | { ok: false; error: string }
 > => {
   const serviceKey = service.toLowerCase();
   if (!SERVICE_RE.test(serviceKey))
     return { ok: false, error: "Unknown connector." };
   if (abacusApiKey().length === 0) return { ok: false, error: "not-signed-in" };
   const link = await createConnectLink(serviceKey);
-  if (link?.requestId == null) return { ok: false, error: CONNECT_LINK_FAILED };
-  return { ok: true, url: link.url, requestId: link.requestId };
+  if (link == null) return { ok: false, error: "not-signed-in" };
+  return {
+    ok: true,
+    url: link.url,
+    ...(link.requestId != null ? { requestId: link.requestId } : {}),
+  };
 };

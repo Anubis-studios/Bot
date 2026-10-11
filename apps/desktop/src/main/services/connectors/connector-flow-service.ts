@@ -28,12 +28,12 @@ export interface FlowSources {
     connect: (
       service: string
     ) => Promise<
-      | { ok: true; url: string; requestId: string }
+      | { ok: true; url: string; requestId?: string }
       | { ok: false; error: string }
     >;
     disconnect: (service: string) => Promise<ConnectorOutcome>;
     /** Follows a connector whose link was handed out until it connects. */
-    watch: (connectorId: string, requestId: string) => void;
+    watch: (connectorId: string, requestId?: string) => void;
   };
   mcp: {
     /** The entry installed under `name`, if any. */

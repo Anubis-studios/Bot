@@ -17,7 +17,7 @@ const platformConnect = vi.fn(
   async (
     _service: string
   ): Promise<
-    { ok: true; url: string; requestId: string } | { ok: false; error: string }
+    { ok: true; url: string; requestId?: string } | { ok: false; error: string }
   > => ({
     ok: true,
     url: "https://apps.example/connect?r=req_1",
@@ -70,6 +70,19 @@ describe("a platform connector", () => {
 
     expect(platformConnect).toHaveBeenCalledWith("gmailuser");
     expect(watch).toHaveBeenCalledWith("abacus-gmailuser", "req_1");
+  });
+
+  it("watches the statuses for a page opened without a minted link", async () => {
+    platformConnect.mockResolvedValueOnce({
+      ok: true,
+      url: "https://apps.example/chatllm/connect-connector?service=gmailuser",
+    });
+
+    expect(await flow().connect("abacus-gmailuser")).toEqual({
+      ok: true,
+      url: "https://apps.example/chatllm/connect-connector?service=gmailuser",
+    });
+    expect(watch).toHaveBeenCalledWith("abacus-gmailuser", undefined);
   });
 
   it("watches nothing when no link could be handed out", async () => {

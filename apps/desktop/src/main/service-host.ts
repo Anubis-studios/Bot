@@ -1523,7 +1523,7 @@ export class ServiceHost {
         this.connectWatcher.watch({
           connectorIds: [connectorId],
           sessionId: null,
-          requestId,
+          ...(requestId != null ? { requestId } : {}),
         }),
     },
     mcp: {

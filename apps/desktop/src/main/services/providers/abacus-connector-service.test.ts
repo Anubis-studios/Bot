@@ -315,13 +315,15 @@ describe("a Connect button's link", () => {
     expect(calls).toEqual(["_createAbacusbotConnectLink"]);
   });
 
-  it("fails when no link could be minted, rather than opening the plain page", async () => {
+  it("opens the connect page itself when no link could be minted", async () => {
     answer("_createAbacusbotConnectLink", null);
 
-    expect(await connectButtonLink("slack")).toEqual({
-      ok: false,
-      error: "Could not start connecting. Please try again.",
-    });
+    const link = await connectButtonLink("GmailUser");
+    expect(link).toEqual({ ok: true, url: expect.any(String) });
+    const url = new URL((link as { url: string }).url);
+    expect(url.pathname).toBe("/chatllm/connect-connector");
+    expect(url.searchParams.get("service")).toBe("gmailuser");
+    expect(url.searchParams.get("autostart")).toBe("1");
   });
 
   it("refuses an unknown service, and answers not-signed-in without a key", async () => {
