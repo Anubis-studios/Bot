@@ -66,55 +66,52 @@ const BUILD = {
   agent: "pnpm exec turbo run build vendor --filter=@abacus-ai/agent...",
   desktop: "pnpm run build",
 };
-const add = (when, os, name, suite, run) => {
-  if (when) tests.push({ os, name, suite, build: BUILD[suite], run });
+const add = (when, name, suite, run) => {
+  if (when) tests.push({ name, suite, build: BUILD[suite], run });
 };
 for (const shard of [1, 2, 3])
   add(
     web,
-    "ubuntu-latest",
     `web ${shard}/3`,
     "web",
     vitest("apps/web", ` --shard=${shard}/3`, narrowWeb)
   );
 add(
   packages,
-  "ubuntu-latest",
   "host and packages",
   "packages",
   "pnpm exec turbo run test --filter=@abacus-ai/host --filter=@abacus-ai/contract --filter=@abacus-ai/updater --filter=@abacus-ai/connectors"
 );
 // The agent and the desktop main process are what differ across operating
 // systems (sandbox confinement, cmd.exe quoting, paths, Electron itself); the
-// renderer and the host are not, so they run on Linux alone.
+// renderer and the host are not, so they run on Linux alone. Linux runs them
+// as separate jobs; macOS and Windows runners are scarce, so each of those
+// runs them in one job (the `system` job), in parallel steps.
+add(agent, "agent", "agent", vitest("packages/agent"));
+add(
+  desktop,
+  "desktop",
+  "desktop",
+  vitest("apps/desktop", " --project main --project preload")
+);
+add(
+  desktop,
+  "desktop electron",
+  "desktop",
+  vitest("apps/desktop", " --project main-serial")
+);
 // A manual run can ask for Linux alone.
 const systems =
-  process.env.PLATFORMS === "linux"
-    ? ["ubuntu-latest"]
-    : ["ubuntu-latest", "macos-latest", "windows-latest"];
-for (const os of systems) {
-  const label = os.replace("-latest", "");
-  add(agent, os, `agent (${label})`, "agent", vitest("packages/agent"));
-  add(
-    desktop,
-    os,
-    `desktop (${label})`,
-    "desktop",
-    vitest("apps/desktop", " --project main --project preload")
-  );
-  add(
-    desktop,
-    os,
-    `desktop electron (${label})`,
-    "desktop",
-    vitest("apps/desktop", " --project main-serial")
-  );
-}
+  (agent || desktop) && process.env.PLATFORMS !== "linux"
+    ? ["macos-latest", "windows-latest"]
+    : [];
 
 const outputs = {
   tests: JSON.stringify({ include: tests }),
   any: String(tests.length > 0),
+  agent: String(agent),
   desktop: String(desktop),
+  systems: JSON.stringify(systems),
 };
 const lines = Object.entries(outputs).map(([key, value]) => `${key}=${value}`);
 console.log(lines.join("\n"));

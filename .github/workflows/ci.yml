@@ -51,7 +51,9 @@ jobs:
     outputs:
       tests: ${{ steps.plan.outputs.tests }}
       any: ${{ steps.plan.outputs.any }}
+      agent: ${{ steps.plan.outputs.agent }}
       desktop: ${{ steps.plan.outputs.desktop }}
+      systems: ${{ steps.plan.outputs.systems }}
       package: ${{ steps.classify.outputs.package }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -143,6 +145,7 @@ jobs:
               pnpm run check:licenses
               pnpm --filter @abacus-ai/desktop run generate:notices
 
+  # Linux runs every suite the plan picked, each as its own job.
   test:
     name: Tests (${{ matrix.name }})
     needs: plan
@@ -150,20 +153,8 @@ jobs:
     strategy:
       # A failure ends the run's other suites: the fix is a new push anyway.
       fail-fast: true
-      # The agent and the desktop main process run on all three systems.
-      # macOS is not redundant: the sandbox confinement tests skip themselves on
-      # a platform with no backend, so Linux alone would report green while
-      # proving nothing about whether a write outside the workspace is refused.
-      # Windows is where cmd.exe quoting, taskkill and PATHEXT actually break,
-      # which faking `process.platform` cannot reach.
-      #
-      # Two agent-side bugs are still open, with their tests skipped and the
-      # reason named at each skip: the scratch carve-out in
-      # extensions/guardrails.ts matches the temp dir in short form against a
-      # long-form real path, and backends.ts terminate() has no process-tree
-      # kill on Windows.
       matrix: ${{ fromJSON(needs.plan.outputs.tests) }}
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -181,35 +172,87 @@ jobs:
       # Chromium's notices from it, and parallel test workers would race
       # extracting it.
       - name: Build what the tests execute
-        shell: bash
         run: |
           set -euo pipefail
           if [ "${{ matrix.suite }}" = desktop ]; then
             (cd apps/desktop && node -e 'require("electron")')
+            sandbox=$(node -p 'require("path").join(require("path").dirname(require.resolve("electron/package.json", { paths: ["apps/desktop"] })), "dist", "chrome-sandbox")')
+            sudo chown root:root "$sandbox"
+            sudo chmod 4755 "$sandbox"
           fi
           ${{ matrix.build }}
 
-      - name: Chromium's setuid sandbox helper
-        if: runner.os == 'Linux' && matrix.suite == 'desktop'
-        working-directory: apps/desktop
-        run: |
-          set -euo pipefail
-          sandbox=$(node -p 'require("path").join(require("path").dirname(require.resolve("electron/package.json")), "dist", "chrome-sandbox")')
-          sudo chown root:root "$sandbox"
-          sudo chmod 4755 "$sandbox"
-
       - name: Run tests
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ "$RUNNER_OS" = "Linux" ]; then xvfb-run -a ${{ matrix.run }}; else ${{ matrix.run }}; fi
+        run: xvfb-run -a ${{ matrix.run }}
 
       # The agent resolves these at runtime rather than shelling out to whatever
       # is on PATH, so a vendor step that half-succeeded is a search tool that
-      # does not exist, on one platform only.
+      # does not exist.
       - name: The search binaries landed beside the agent and run
         if: matrix.suite == 'agent'
+        run: packages/agent/vendor/rg --version && packages/agent/vendor/fd --version
+
+      # The desktop app spawns the agent and speaks NDJSON to it: the host has
+      # to answer on stdout in the protocol, whatever it has to say.
+      - name: The agent speaks AG-UI with a compat stream
+        if: matrix.suite == 'agent'
+        run: node scripts/agui-smoke.mjs
+
+  # macOS and Windows run the agent and the desktop main process, the parts
+  # that differ by system. macOS is not redundant: the sandbox confinement
+  # tests skip themselves on a platform with no backend, so Linux alone would
+  # report green while proving nothing about whether a write outside the
+  # workspace is refused. Windows is where cmd.exe quoting, taskkill and
+  # PATHEXT actually break, which faking `process.platform` cannot reach.
+  # Their runners are scarce, so each system is one job: one install and
+  # build, the agent and desktop suites side by side, then the Electron suites
+  # with the machine to themselves.
+  #
+  # Two agent-side bugs are still open, with their tests skipped and the reason
+  # named at each skip: the scratch carve-out in extensions/guardrails.ts
+  # matches the temp dir in short form against a long-form real path, and
+  # backends.ts terminate() has no process-tree kill on Windows.
+  system:
+    name: Tests (${{ matrix.os }})
+    needs: plan
+    if: needs.plan.outputs.systems != '[]'
+    strategy:
+      fail-fast: true
+      matrix:
+        os: ${{ fromJSON(needs.plan.outputs.systems) }}
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
         shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build what the tests execute
+        run: |
+          set -euo pipefail
+          (cd apps/desktop && node -e 'require("electron")')
+          pnpm run build
+
+      - parallel:
+          - name: Agent
+            if: needs.plan.outputs.agent == 'true'
+            run: pnpm --dir packages/agent exec vitest run
+          - name: Desktop main process
+            if: needs.plan.outputs.desktop == 'true'
+            run: pnpm --dir apps/desktop exec vitest run --project main --project preload
+
+      - name: Desktop Electron suites
+        if: needs.plan.outputs.desktop == 'true'
+        run: pnpm --dir apps/desktop exec vitest run --project main-serial
+
+      - name: The search binaries landed beside the agent and run
+        if: needs.plan.outputs.agent == 'true'
         run: |
           set -euo pipefail
           suffix=""
@@ -217,14 +260,17 @@ jobs:
           "packages/agent/vendor/rg${suffix}" --version
           "packages/agent/vendor/fd${suffix}" --version
 
+      - name: The agent speaks AG-UI with a compat stream
+        if: needs.plan.outputs.agent == 'true'
+        run: node scripts/agui-smoke.mjs
+
       # The `bash` tool on Windows is the bundled busybox shell, installed and
       # launched by the agent itself (src/posix-shell.ts). Only a Windows
       # machine can run it, so the built bundle installs the payload and runs a
       # pipeline, a heredoc, a quoted path and a failing command through the
       # same operations the tool uses.
       - name: The bundled Windows shell installs and runs
-        if: runner.os == 'Windows' && matrix.suite == 'agent'
-        shell: bash
+        if: runner.os == 'Windows' && needs.plan.outputs.agent == 'true'
         env:
           LOCALAPPDATA: ${{ runner.temp }}/posix-shell-cache
         run: |
@@ -258,13 +304,6 @@ jobs:
           await expect("node -e \"console.log(process.argv[1])\" 'C:/Users/Some One'", "C:/Users/Some One");
           await expect("printf '%s' \"$BB_OVERRIDE_APPLETS\" | cut -c1-1", ";");
           JS
-
-      # The desktop app spawns the agent and speaks NDJSON to it: the host has
-      # to answer on stdout in the protocol, whatever it has to say.
-      - name: The agent speaks AG-UI with a compat stream
-        if: matrix.suite == 'agent'
-        shell: bash
-        run: node scripts/agui-smoke.mjs
 
   # The renderer's screenshot gate (spec 01 §10.2) in the real Electron
   # window: every route and band, the collapsed, floating, split, compact and
