@@ -51,9 +51,13 @@ const applyDocumentLanguage = (code: string): void => {
   document.documentElement.dir = i18n.dir(code);
 };
 
+/** The language asked for last: a slower chunk for an earlier pick never wins. */
+let requested: SupportedLanguage | null = null;
+
 export const changeLanguage = async (
   code: SupportedLanguage
 ): Promise<void> => {
+  requested = code;
   await initI18n();
   if (
     code !== FALLBACK_LANGUAGE &&
@@ -62,6 +66,7 @@ export const changeLanguage = async (
     const bundle = await LOADERS[code as Exclude<SupportedLanguage, "en-US">]();
     i18n.addResourceBundle(code, "translation", bundle.default);
   }
+  if (requested !== code) return;
   await i18n.changeLanguage(code);
   applyDocumentLanguage(code);
 };

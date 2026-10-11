@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import enUS from "#locales/en-US.json";
 import { readSourceFiles } from "#renderer/test-support/source-files";
 
+import { changeLanguage, i18n } from "./index";
 import { matchSupportedLanguage, resolveLanguage } from "./languages";
 
 type Tree = { [key: string]: string | Tree };
@@ -51,6 +52,14 @@ describe("matchSupportedLanguage", () => {
   ])("%o → %s", (tags, expected) => {
     expect(matchSupportedLanguage(tags)).toBe(expected);
   });
+});
+
+it("the language picked last wins over a slower chunk picked before it", async () => {
+  const slow = changeLanguage("ja-JP");
+  await changeLanguage("en-US");
+  await slow;
+  expect(i18n.language).toBe("en-US");
+  expect(document.documentElement.lang).toBe("en-US");
 });
 
 describe("resolveLanguage", () => {
