@@ -24,16 +24,12 @@
     "typecheck": "tsc -b",
     "test": "vitest run",
     "dev": "node ../desktop/scripts/generate-notices.js --graph && vite",
-    "check:profile-theme-row": "node scripts/check-profile-theme-row.mjs",
-    "check:popup-bounds": "node --test scripts/check-popup-bounds.mjs",
     "check:layout": "node scripts/check-page-layout.mjs",
-    "check:workspace-geometry": "node scripts/check-workspace-geometry.mjs",
     "check:i18n": "node scripts/check-jsx-i18n.js",
     "check:locales": "node scripts/sync-locales.js --check && node --test scripts/i18n-dynamic-keys.test.mjs && node scripts/check-ui-copy.mjs && node --test scripts/check-ui-copy.test.mjs",
     "sync:locales": "node scripts/sync-locales.js",
     "generate:routes": "node scripts/generate-routes.mjs",
-    "sync:chat-fixtures": "node scripts/sync-chat-fixtures.mjs",
-    "check:composer-geometry": "node scripts/check-composer-geometry.mjs"
+    "sync:chat-fixtures": "node scripts/sync-chat-fixtures.mjs"
   },
   "dependencies": {
     "@abacus-ai/agent": "workspace:*",
