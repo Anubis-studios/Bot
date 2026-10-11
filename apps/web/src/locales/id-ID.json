@@ -266,7 +266,6 @@
     },
     "sidebar": {
       "new": "Bot baru",
-      "empty": "Belum ada bot",
       "search": "Search bots",
       "searchPlaceholder": "Search bots",
       "noMatches": "No bots match",
@@ -3049,7 +3048,8 @@
       "allSettings": "Semua pengaturan model",
       "connected": "Terhubung. Pilih model",
       "storedOnHost": "Kunci disimpan di VM host Anda."
-    }
+    },
+    "imageEnlarge": "Lihat lebih besar"
   },
   "notch": {
     "a11y": {

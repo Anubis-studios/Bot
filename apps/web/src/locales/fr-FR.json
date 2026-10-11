@@ -266,7 +266,6 @@
     },
     "sidebar": {
       "new": "Nouveau bot",
-      "empty": "Aucun bot pour l'instant",
       "search": "Search bots",
       "searchPlaceholder": "Search bots",
       "noMatches": "No bots match",
@@ -3049,7 +3048,8 @@
       "allSettings": "Tous les paramètres des modèles",
       "connected": "Connecté. Choisissez un modèle",
       "storedOnHost": "Les clés sont stockées sur la machine virtuelle hôte."
-    }
+    },
+    "imageEnlarge": "Agrandir"
   },
   "notch": {
     "a11y": {

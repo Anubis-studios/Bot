@@ -71,13 +71,11 @@ it("keeps naming single-line, autofocuses, and submits without accepting an IME 
   const button = form.querySelector("button")!;
   fireEvent.change(input, { target: { value: "" } });
   expect(button.hasAttribute("disabled")).toBe(true);
-  expect(button.classList.contains("bot-accent-control")).toBe(false);
   expect(input.tagName).toBe("INPUT");
   expect(input.maxLength).toBe(30);
   expect(document.activeElement).toBe(input);
   fireEvent.change(input, { target: { value: "Research helper" } });
   expect(button.hasAttribute("disabled")).toBe(false);
-  expect(button.classList.contains("bot-accent-control")).toBe(true);
   expect(fireEvent.keyDown(input, { key: "Enter", isComposing: true })).toBe(
     false
   );

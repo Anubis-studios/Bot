@@ -266,7 +266,6 @@
     },
     "sidebar": {
       "new": "새 봇",
-      "empty": "아직 봇이 없습니다",
       "search": "Search bots",
       "searchPlaceholder": "Search bots",
       "noMatches": "No bots match",
@@ -3049,7 +3048,8 @@
       "allSettings": "모든 모델 설정",
       "connected": "연결되었습니다. 모델을 선택하세요",
       "storedOnHost": "키는 호스트 VM에 저장됩니다."
-    }
+    },
+    "imageEnlarge": "크게 보기"
   },
   "notch": {
     "a11y": {

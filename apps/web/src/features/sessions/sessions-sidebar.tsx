@@ -14,6 +14,7 @@ import { Folder, Plus } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
+import { AppIcon } from "#renderer/components/app-icon";
 import { CommandPaletteAction } from "#renderer/components/command-palette-action";
 import { NavList } from "#renderer/components/nav-list";
 import { useDb } from "#renderer/data/db";
@@ -236,19 +237,18 @@ export const SessionsSidebar = () => {
         ) : status === "loading" ? (
           <NavList.Skeleton />
         ) : pinned.length === 0 && groups.length === 0 && needs.length === 0 ? (
-          <p className="text-muted-foreground px-2 pt-2 text-xs">
-            {t("sessions.sidebar.empty")}
-            <span className="mt-1 block">
-              {t("sessions.sidebar.emptyDescription", {
-                key:
-                  uiPlatform(
-                    document.documentElement.dataset.platform ?? "linux"
-                  ) === "mac"
-                    ? "⌘N"
-                    : "Ctrl+N",
-              })}
-            </span>
-          </p>
+          <NavList.Empty
+            media={<AppIcon name="sessions" size={28} />}
+            title={t("sessions.sidebar.empty")}
+            description={t("sessions.sidebar.emptyDescription", {
+              key:
+                uiPlatform(
+                  document.documentElement.dataset.platform ?? "linux"
+                ) === "mac"
+                  ? "⌘N"
+                  : "Ctrl+N",
+            })}
+          />
         ) : (
           <div className="ui-list flex flex-col gap-0.5">
             {needs.length ? (

@@ -80,7 +80,7 @@ export const composerReveal = (pref: MotionPreference): Transition =>
 export const cardEnter = (pref: MotionPreference): Transition =>
   motionFor<Transition>(
     pref,
-    { duration: 0.2, ease: [...easings.standard] },
+    { duration: durations.crossFade / 1000, ease: [...easings.standard] },
     { ...reducedTransition }
   );
 

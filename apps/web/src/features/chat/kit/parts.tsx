@@ -28,6 +28,7 @@ import { Marker, MarkerContent, MarkerIcon } from "#renderer/ui/marker";
 import { Markdown } from "../markdown/markdown";
 import type { ChatHostActions } from "../runtime/host-actions";
 import { useChatView } from "./context";
+import { ZoomableImage } from "./image-lightbox";
 import { MessageMenu, MessageReactionPills } from "./message-actions";
 import { useMessageScope } from "./message-scope";
 import { NoticeRow } from "./status/status";
@@ -318,7 +319,7 @@ export const ImageView = ({ part }: PartProps<unknown, "image">) => {
   if (src == null) return null;
   return (
     <figure className="flex max-w-md flex-col gap-1">
-      <img
+      <ZoomableImage
         src={src}
         alt={typeof abacus.prompt === "string" ? abacus.prompt : ""}
         loading="lazy"

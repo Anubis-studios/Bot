@@ -266,7 +266,6 @@
     },
     "sidebar": {
       "new": "New bot",
-      "empty": "No bots yet",
       "search": "Search bots",
       "searchPlaceholder": "Search bots",
       "noMatches": "No bots match",
@@ -436,7 +435,7 @@
         "title": "{{provider}} is not connected",
         "body": "{{provider}} has to be connected before the agent can use it. It is waiting on you.",
         "connect": "Connect {{provider}}",
-        "connecting": "Waiting for you to finish in the new tab",
+        "connecting": "Waiting for you to finish signing in",
         "decline": "Not now",
         "stop": "Stop connecting",
         "failed": "Could not connect {{provider}}.",
@@ -3049,7 +3048,8 @@
       "allSettings": "All model settings",
       "connected": "Connected. Pick a model",
       "storedOnHost": "Keys are stored on your host VM."
-    }
+    },
+    "imageEnlarge": "View larger"
   },
   "notch": {
     "a11y": {
@@ -3506,7 +3506,7 @@
     "category": "Category",
     "closePreview": "Close preview",
     "connectName": "Connect {{name}}",
-    "connectWaiting": "Waiting for you to finish in the new tab.",
+    "connectWaiting": "Waiting for you to finish signing in.",
     "popupBlocked": "Your browser blocked the new tab. Allow pop-ups for this site, then try again.",
     "connectTimedOut": "Connecting timed out. Please try again.",
     "connectFailed": "Connecting didn't finish. Please try again.",

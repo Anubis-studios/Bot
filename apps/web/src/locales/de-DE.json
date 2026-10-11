@@ -266,7 +266,6 @@
     },
     "sidebar": {
       "new": "Neuer Bot",
-      "empty": "Noch keine Bots",
       "search": "Search bots",
       "searchPlaceholder": "Search bots",
       "noMatches": "No bots match",
@@ -3049,7 +3048,8 @@
       "allSettings": "Alle Modelleinstellungen",
       "connected": "Verbunden. Wähle ein Modell",
       "storedOnHost": "Schlüssel werden auf deiner Host-VM gespeichert."
-    }
+    },
+    "imageEnlarge": "Größer anzeigen"
   },
   "notch": {
     "a11y": {

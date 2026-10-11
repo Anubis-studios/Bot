@@ -19,7 +19,11 @@ import {
   type Look,
 } from "#renderer/lib/bots/avatar";
 import { i18n } from "#renderer/lib/i18n";
-import { springs, useMotionPreference } from "#renderer/lib/motion";
+import {
+  reducedTransition,
+  springs,
+  useMotionPreference,
+} from "#renderer/lib/motion";
 
 export type BootStage =
   | "waking"
@@ -90,7 +94,7 @@ export const BootAvatarHost = ({ children }: { children: ReactNode }) => {
         flight.current = animate(
           element,
           { opacity: [0, 1] },
-          { duration: 0.12 }
+          reducedTransition
         );
       } else if (
         fly &&
@@ -118,22 +122,37 @@ export const BootAvatarHost = ({ children }: { children: ReactNode }) => {
     const delay = home.overlay ? setTimeout(move, 200) : null;
     if (!home.overlay) move();
     else element.style.opacity = "0";
-    const follow = () => move(false);
-    window.addEventListener("resize", follow);
-    window.addEventListener("scroll", follow, true);
-    // A dialog that grows as its content loads moves its home: follow it
-    // without a fade, once the avatar has been placed.
-    const resized = new ResizeObserver(() => {
+    // Pin the avatar to its home without a fade, once it has been placed.
+    const place = () => {
       if (element.style.opacity !== "1") return;
       const to = home.element.getBoundingClientRect();
       flight.current?.stop();
       element.style.transform = `translate(${to.x}px, ${to.y}px) scale(${to.width / 96})`;
       previous.current = to;
-    });
+    };
+    let frame = 0;
+    const follow = () => move(false);
+    // A window resize recentres an open dialog over the next frames, which
+    // no size change reports: track the home until it has settled.
+    const resize = () => {
+      move(false);
+      const until = performance.now() + 300;
+      cancelAnimationFrame(frame);
+      const track = () => {
+        place();
+        if (performance.now() < until) frame = requestAnimationFrame(track);
+      };
+      frame = requestAnimationFrame(track);
+    };
+    window.addEventListener("resize", resize);
+    window.addEventListener("scroll", follow, true);
+    // A dialog that grows as its content loads moves its home too.
+    const resized = new ResizeObserver(place);
     resized.observe(home.element.closest("[role=dialog]") ?? home.element);
     return () => {
       if (delay != null) clearTimeout(delay);
-      window.removeEventListener("resize", follow);
+      cancelAnimationFrame(frame);
+      window.removeEventListener("resize", resize);
       window.removeEventListener("scroll", follow, true);
       resized.disconnect();
     };

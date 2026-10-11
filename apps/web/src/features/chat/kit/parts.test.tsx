@@ -6,7 +6,7 @@ import { v1ToUiMessages } from "@abacus-ai/contract/transcript/v1-to-ui-messages
  * helpers (reminders stripped, routine fires hidden, attachment chips); an
  * empty assistant message renders nothing (F12).
  */
-import { screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import * as b from "../fixtures/builders";
@@ -58,6 +58,11 @@ describe("R2-T11 parts", () => {
     await screen.findByText("Draw a cat, then animate it");
     expect(document.querySelector("img")).toBeTruthy();
     expect(document.querySelector("video")).toBeTruthy();
+    // A generated image opens at full size.
+    fireEvent.click(screen.getByRole("button", { name: /cat/i }));
+    expect(
+      (await screen.findByRole("dialog")).querySelector("img")
+    ).toBeTruthy();
   });
 
   it("credits footers", async () => {

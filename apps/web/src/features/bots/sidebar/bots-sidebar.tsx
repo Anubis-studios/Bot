@@ -237,13 +237,11 @@ export const BotsSidebar = () => {
       ) : model.status !== "ready" ? (
         <NavList.Skeleton rows={5} />
       ) : model.bots.length === 0 ? (
-        <div className="flex flex-col items-center gap-2 px-4 pt-10 text-center">
-          <BotFace look={NEUTRAL_LOOK} mood="asleep" size={44} />
-          <p className="text-sm font-medium">{t("bots.sidebar.emptyTitle")}</p>
-          <p className="text-muted-foreground text-xs">
-            {t("bots.sidebar.emptyBody")}
-          </p>
-        </div>
+        <NavList.Empty
+          media={<BotFace look={NEUTRAL_LOOK} mood="asleep" size={44} />}
+          title={t("bots.sidebar.emptyTitle")}
+          description={t("bots.sidebar.emptyBody")}
+        />
       ) : model.entries.length === 0 ? (
         <p className="text-muted-foreground px-2 pt-4 text-center text-xs">
           {t("bots.sidebar.noMatches")}

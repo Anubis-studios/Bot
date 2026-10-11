@@ -278,6 +278,7 @@ export const ErrorCard = ({
       <div
         role="group"
         aria-label={t("chat.error.label")}
+        className="mx-auto w-full max-w-[calc(var(--composer-max-w)-var(--spacing)*8)]"
         data-slot="error-card"
         data-variant="upgrade"
       >
@@ -423,7 +424,7 @@ export const ErrorCard = ({
     <div
       role="group"
       aria-label={t("chat.error.label")}
-      className="bg-destructive/10 dark:bg-destructive/15 flex flex-col gap-2 rounded-2xl p-4 text-sm"
+      className="bg-destructive/10 dark:bg-destructive/15 mx-auto flex w-full max-w-[calc(var(--composer-max-w)-var(--spacing)*8)] flex-col gap-2 rounded-2xl p-4 text-sm"
       data-slot="error-card"
     >
       <div className="flex items-start gap-2">

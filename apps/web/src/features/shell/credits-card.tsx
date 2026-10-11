@@ -34,6 +34,22 @@ import {
   type PromoSnooze,
 } from "./promo-state";
 
+/** The boxes of visible text below `top`, which the floating card must not cover. */
+const textRects = (root: Element | null, top: number): DOMRect[] => {
+  if (!root) return [];
+  const rects: DOMRect[] = [];
+  const range = document.createRange();
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (!node.textContent?.trim()) continue;
+    if (node.parentElement?.closest('[data-slot="upgrade-promo"]')) continue;
+    range.selectNodeContents(node);
+    const rect = range.getBoundingClientRect();
+    if (rect.bottom > top) rects.push(rect);
+  }
+  return rects;
+};
+
 /** One portal and snooze state, shared by sidebar and floating presentations. */
 export const UpgradePromo = () => {
   const { transport } = useAppContext();
@@ -137,9 +153,14 @@ export const UpgradePromo = () => {
           '[data-slot="composer"], [data-slot="sidebar-footer"], [data-pane-gutter], .dv-sash, [data-slot="shell"] button, [data-slot="shell"] input, [data-slot="shell"] textarea, [data-slot="shell"] [role="button"]'
         ),
       ].filter((element) => !element.closest('[data-slot="upgrade-promo"]'));
-      const obstacles = controls
-        .map((element) => element.getBoundingClientRect())
-        .filter((rect) => rect.width > 0 && rect.height > 0);
+      const obstacles = [
+        ...controls.map((element) => element.getBoundingClientRect()),
+        // Text is content too: the card never sits on a label or a line.
+        ...textRects(
+          document.querySelector('[data-slot="shell"]'),
+          window.innerHeight - 24 - fullHeight.current - 16
+        ),
+      ].filter((rect) => rect.width > 0 && rect.height > 0);
       for (const element of [
         card,
         ...document.querySelectorAll(
@@ -190,11 +211,14 @@ export const UpgradePromo = () => {
     const moves = new MutationObserver(schedule);
     if (shell) moves.observe(shell, { childList: true, subtree: true });
     window.addEventListener("resize", schedule);
+    // Text scrolled under the card moves without a resize or a mutation.
+    window.addEventListener("scroll", schedule, true);
     return () => {
       observer.disconnect();
       moves.disconnect();
       cancelAnimationFrame(frame);
       window.removeEventListener("resize", schedule);
+      window.removeEventListener("scroll", schedule, true);
     };
   }, [state, location.href, host, target]);
   const remaining =
