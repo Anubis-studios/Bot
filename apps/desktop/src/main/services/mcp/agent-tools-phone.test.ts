@@ -378,18 +378,18 @@ describe("present_deliverable on the phone", () => {
   });
 
   it("refuses a file swapped after it was checked", async () => {
-    // The native resolution, as the tool's own: on Windows the JS one keeps
-    // 8.3 short names (RUNNER~1), so the two spellings would never match.
-    const real = await fs.promises.realpath(path.join(workspace, "love.pdf"));
     const stat = fs.promises.stat;
     const spy = vi
       .spyOn(fs.promises, "stat")
       .mockImplementation(async (target, ...rest) => {
         const found = await stat(target as string, ...(rest as []));
         // What was checked is not the file the handle then opens.
-        return target === real
+        // By name: Windows spells the resolved temp path more than one way.
+        return path.basename(String(target)) === "love.pdf"
           ? Object.assign(Object.create(Object.getPrototypeOf(found)), found, {
-              ino: Number(found.ino) + 1,
+              // Another device: a Windows file index is past 2^53, where
+              // adding one to the inode would not change the number.
+              dev: found.dev + 1,
             })
           : found;
       });
