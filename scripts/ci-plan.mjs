@@ -77,12 +77,14 @@ add(
   "desktop",
   vitest("apps/desktop", " --project main --project preload")
 );
-add(
-  desktop,
-  "desktop electron",
-  "desktop",
-  vitest("apps/desktop", " --project main-serial")
-);
+// The Electron suites run one file at a time, so two runners halve them.
+for (const shard of [1, 2])
+  add(
+    desktop,
+    `desktop electron ${shard}/2`,
+    "desktop",
+    vitest("apps/desktop", ` --project main-serial --shard=${shard}/2`)
+  );
 // A manual run can ask for Linux alone.
 // A change to the renderer alone reaches the desktop app only as its built
 // renderer, which Linux's Electron suites drive; macOS and Windows test what
