@@ -136,10 +136,8 @@ it("R8-T3 boots the browser shell against smoke:rpc --serve without denied calls
       expect(violations).toEqual([]);
     };
     await visit("/settings/appearance", '[data-setting-id="theme"]');
-    await visit(
-      "/settings/models",
-      'input[aria-label="Search model providers…"]'
-    );
+    // The provider search sits in the collapsed "Other providers" panel.
+    await visit("/settings/models", 'main [data-slot="collapsible-trigger"]');
     await act(async () => {
       await router.navigate({
         to: "/library/messaging",

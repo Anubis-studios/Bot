@@ -344,6 +344,8 @@ it("channel details retain pairing decisions and independent bot auto-reply cont
   });
   try {
     await screen.findByRole("dialog");
+    // The dialog opens before the snapshot's senders arrive.
+    await screen.findByText("First bot sender");
     const row = (name: string) =>
       screen.getByText(name).closest("[data-setting-id]") as HTMLElement;
     fireEvent.click(
@@ -385,7 +387,7 @@ it("a Telegram link walks its own steps, never Discord's", async () => {
   try {
     const dialog = await screen.findByRole("dialog", { name: "Telegram" });
     expect(
-      within(dialog).getByText(enUS.messaging.sharedLink.telegramStep)
+      await within(dialog).findByText(enUS.messaging.sharedLink.telegramStep)
     ).not.toBeNull();
     expect(within(dialog).queryByText(/Discord/)).toBeNull();
   } finally {
