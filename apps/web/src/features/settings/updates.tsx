@@ -11,6 +11,7 @@ import { useTranslation } from "react-i18next";
 import {
   AreaPage,
   GroupCard,
+  PageNote,
   SettingRow,
 } from "#renderer/components/form-kit/page";
 import { followNotices } from "#renderer/data/queries/notices";
@@ -312,7 +313,9 @@ export const CriticalUpdateDialog = () => {
           </AlertDialogDescription>
         </AlertDialogHeader>
         {update.status?.error || update.installError ? (
-          <p role="alert">{update.installError ?? update.status?.error}</p>
+          <PageNote error>
+            {update.installError ?? update.status?.error}
+          </PageNote>
         ) : (
           <p>
             {t("phase5.restartCountdown", {

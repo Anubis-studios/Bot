@@ -11,6 +11,7 @@ import {
 import {
   AreaPage,
   GroupCard,
+  PageNote,
   SettingRow,
   StatePill,
 } from "#renderer/components/form-kit/page";
@@ -108,12 +109,12 @@ export const EnvironmentPage = () => {
         })}
       </GroupCard>
       {query.data && query.data.selected !== query.data.effective && (
-        <p role="status">
+        <PageNote live>
           {t("phase5.backendFallback", {
             selected: query.data.selected,
             effective: query.data.effective,
           })}
-        </p>
+        </PageNote>
       )}
       <GroupCard>
         {shell.data && shell.data.statuses.length > 1 && (

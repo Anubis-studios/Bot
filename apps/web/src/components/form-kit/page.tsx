@@ -16,7 +16,9 @@ export const AreaPage = ({
   testId?: string;
 }) => (
   <div
-    className="size-full min-w-0 overflow-auto overscroll-contain"
+    // No scroll anchoring: rows settling in as the page mounts otherwise
+    // open a long page part-way down, title cut off.
+    className="size-full min-w-0 overflow-auto overscroll-contain [overflow-anchor:none]"
     data-testid={testId}
   >
     <main className="content-col page-column">
@@ -32,6 +34,31 @@ export const AreaPage = ({
       {children}
     </main>
   </div>
+);
+/** A page's line of state: loading, empty, a fallback, or an error. */
+export const PageNote = ({
+  children,
+  error = false,
+  live = false,
+  className,
+}: {
+  children: ReactNode;
+  /** Announced as an alert and painted destructive. */
+  error?: boolean;
+  /** Announced politely: loading and other passing states. */
+  live?: boolean;
+  className?: string;
+}) => (
+  <p
+    role={error ? "alert" : live ? "status" : undefined}
+    className={cn(
+      "phone:text-[15px] text-[13px] leading-relaxed",
+      error ? "text-destructive" : "text-muted-foreground",
+      className
+    )}
+  >
+    {children}
+  </p>
 );
 export const GroupCard = ({
   children,

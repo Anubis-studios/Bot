@@ -10,6 +10,7 @@ import { ConfirmAction } from "#renderer/components/form-kit/confirm";
 import {
   AreaPage,
   GroupCard,
+  PageNote,
   SettingRow,
 } from "#renderer/components/form-kit/page";
 import { ABACUS_BUY_CREDITS_URL } from "#renderer/lib/abacus-links";
@@ -130,7 +131,7 @@ export const AccountPage = () => {
             {t("phase5.ownKeys")}
           </Button>
         </div>
-        {error && <p role="alert">{error}</p>}
+        {error && <PageNote error>{error}</PageNote>}
         <LocalDataReset />
       </AreaPage>
     );
@@ -381,12 +382,14 @@ export const UsagePage = () => {
       }
     >
       {query.isError ? (
-        <p role="alert">{t("phase5.usageFailed")}</p>
+        <PageNote error>{t("phase5.usageFailed")}</PageNote>
       ) : !snapshot ? (
-        <p role="status">{t("phase5.usageLoading")}</p>
+        <PageNote live>{t("phase5.usageLoading")}</PageNote>
       ) : (
         <>
-          {snapshot.totals.requests === 0 && <p>{t("usage.empty")}</p>}
+          {snapshot.totals.requests === 0 && (
+            <PageNote>{t("usage.empty")}</PageNote>
+          )}
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
             <GroupCard>
               <SettingRow

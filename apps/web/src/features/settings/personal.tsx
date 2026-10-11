@@ -19,6 +19,7 @@ import { Choice, SettingSwitch } from "#renderer/components/form-kit/controls";
 import {
   AreaPage,
   GroupCard,
+  PageNote,
   SettingRow,
   StatePill,
 } from "#renderer/components/form-kit/page";
@@ -327,11 +328,13 @@ export const MemoryPage = () => {
       title={t("settings.pages.memory")}
       description={t("phase5.settings.memoryDetail")}
     >
-      {memoryQuery.isLoading && <p role="status">{t("memory.loading")}</p>}
+      {memoryQuery.isLoading && <PageNote live>{t("memory.loading")}</PageNote>}
       {(memoryQuery.isError || botNotes.isError || query.isError) && (
-        <div role="alert">
-          <p>{t("memory.readFailed")}</p>
+        <div className="flex items-center gap-3">
+          <PageNote error>{t("memory.readFailed")}</PageNote>
           <Button
+            size="sm"
+            variant="secondary"
             onClick={() => {
               void botNotes.refetch();
               void query.refetch();
@@ -345,16 +348,18 @@ export const MemoryPage = () => {
         !memoryQuery.isError &&
         memories.length === 0 &&
         !botNotes.data?.some((bot) => bot.noteDays > 0) && (
-          <p className="text-muted-foreground text-sm leading-relaxed">
-            {t("memory.empty")}
-          </p>
+          <PageNote>{t("memory.empty")}</PageNote>
         )}
       <GroupCard>
         <SettingRow
           id="customInstructions"
           title={t("phase5.settings.customInstructions")}
         />
-        {remoteChanged && <p role="status">{t("phase5.remoteChanged")}</p>}
+        {remoteChanged && (
+          <PageNote live className="px-3">
+            {t("phase5.remoteChanged")}
+          </PageNote>
+        )}
         <form
           className="space-y-3 p-3"
           onSubmit={(e) => {
@@ -393,7 +398,7 @@ export const MemoryPage = () => {
           </form.Subscribe>
         </form>
       </GroupCard>
-      {memoryError && <p role="alert">{memoryError}</p>}
+      {memoryError && <PageNote error>{memoryError}</PageNote>}
       {(["remember", "user", "memory"] as const)
         .filter((target) =>
           memories.some((m) => m.scope === "global" && m.target === target)

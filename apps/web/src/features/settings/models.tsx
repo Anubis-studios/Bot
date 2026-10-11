@@ -7,6 +7,7 @@ import {
 import { revalidateLogic } from "@tanstack/react-form";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearch } from "@tanstack/react-router";
+import { ChevronRightIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import * as v from "valibot";
@@ -21,6 +22,7 @@ import { ConfirmAction } from "#renderer/components/form-kit/confirm";
 import {
   AreaPage,
   GroupCard,
+  PageNote,
   SettingRow,
   StatePill,
 } from "#renderer/components/form-kit/page";
@@ -34,6 +36,11 @@ import { useAppContext, errorText } from "#renderer/lib/use-app-context";
 import { useCreditsAccount } from "#renderer/lib/use-credits-account";
 import { useNow } from "#renderer/lib/use-now";
 import { Button } from "#renderer/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "#renderer/ui/collapsible";
 import {
   Dialog,
   DialogContent,
@@ -246,26 +253,35 @@ export const ModelsPage = ({
         <GroupCard title={t("phase5.providers")}>
           {fields.filter((p) => p.featured).map(row)}
         </GroupCard>
-        <details>
-          <summary>{t("phase5.otherProviders")}</summary>
-          <Input
-            aria-label={t("phase5.searchProviders")}
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-          />
-          <GroupCard>
-            {fields
-              .filter(
-                (p) =>
-                  !p.featured &&
-                  [p.label, p.envVar, p.hint, p.provider]
-                    .join(" ")
-                    .toLowerCase()
-                    .includes(q.toLowerCase())
-              )
-              .map(row)}
-          </GroupCard>
-        </details>
+        <Collapsible className="flex flex-col gap-3">
+          <CollapsibleTrigger className="group/c text-muted-foreground hover:text-foreground flex items-center gap-1.5 self-start text-[13px] font-medium">
+            <ChevronRightIcon
+              aria-hidden
+              className="size-3.5 transition-transform group-data-[panel-open]/c:rotate-90"
+            />
+            {t("phase5.otherProviders")}
+          </CollapsibleTrigger>
+          <CollapsibleContent className="flex flex-col gap-3">
+            <Input
+              aria-label={t("phase5.searchProviders")}
+              placeholder={t("phase5.searchProviders")}
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+            />
+            <GroupCard>
+              {fields
+                .filter(
+                  (p) =>
+                    !p.featured &&
+                    [p.label, p.envVar, p.hint, p.provider]
+                      .join(" ")
+                      .toLowerCase()
+                      .includes(q.toLowerCase())
+                )
+                .map(row)}
+            </GroupCard>
+          </CollapsibleContent>
+        </Collapsible>
         {IS_ELECTRON && state.data?.runtimeAvailable && (
           <section data-setting-id="localModels">
             <GroupCard title={t("phase5.onThisMachine")}>
@@ -365,7 +381,7 @@ export const ModelsPage = ({
             </GroupCard>
           </section>
         )}
-        {error && <p role="alert">{error}</p>}
+        {error && <PageNote error>{error}</PageNote>}
       </AreaPage>
       {search.provider &&
         search.provider !== "local" &&
@@ -540,7 +556,7 @@ export const ProviderDialog = ({
             </form.AppForm>
           </form>
         )}
-        {error && <p role="alert">{error}</p>}
+        {error && <PageNote error>{error}</PageNote>}
         <DialogFooter>
           {stored && (
             <ConfirmAction
