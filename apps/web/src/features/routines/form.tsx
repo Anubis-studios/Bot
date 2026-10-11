@@ -344,7 +344,7 @@ export const RoutineDialog = ({
               void form.handleSubmit();
             }}
           >
-            <SendError error={error} />
+            {error && <SendError error={error} />}
             <FieldGroup className="min-h-0 overflow-y-auto pr-1">
               {!routineId && (
                 <div>

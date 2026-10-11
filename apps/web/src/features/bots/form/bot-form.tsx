@@ -232,7 +232,7 @@ const BotForm = ({ bot, initial, load }: BotFormProps) => {
         void form.handleSubmit();
       }}
     >
-      <SendError error={error} />
+      {error && <SendError error={error} />}
       <div className="bot-form-columns flex min-h-0 min-w-0 flex-1 overflow-y-auto">
         <aside className="bg-muted/40 flex w-[300px] min-w-0 shrink-0 flex-col items-center gap-3 px-6 pt-10 text-center">
           <BotFace morph look={look} size={wide ? 96 : 56} mood="happy" />
