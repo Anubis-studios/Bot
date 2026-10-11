@@ -54,6 +54,7 @@ jobs:
       agent: ${{ steps.plan.outputs.agent }}
       desktop: ${{ steps.plan.outputs.desktop }}
       systems: ${{ steps.plan.outputs.systems }}
+      migrations: ${{ steps.plan.outputs.migrations }}
       package: ${{ steps.classify.outputs.package }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -249,7 +250,8 @@ jobs:
 
       - name: Desktop Electron suites
         if: needs.plan.outputs.desktop == 'true'
-        run: pnpm --dir apps/desktop exec vitest run --project main-serial
+        run: >-
+          pnpm --dir apps/desktop exec vitest run --project main-serial ${{ needs.plan.outputs.migrations != 'true' && '--exclude src/main/migrations/runner.crash.test.ts' || '' }}
 
       - name: The search binaries landed beside the agent and run
         if: needs.plan.outputs.agent == 'true'

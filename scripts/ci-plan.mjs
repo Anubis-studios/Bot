@@ -112,6 +112,14 @@ const outputs = {
   agent: String(agent),
   desktop: String(desktop),
   systems: JSON.stringify(systems),
+  // The migration kill-point matrix takes five minutes on Windows' file
+  // system; off Linux it runs when migrations change, and on main.
+  migrations: String(
+    full ||
+      changed.some((file) =>
+        file.startsWith("apps/desktop/src/main/migrations/")
+      )
+  ),
 };
 const lines = Object.entries(outputs).map(([key, value]) => `${key}=${value}`);
 console.log(lines.join("\n"));
