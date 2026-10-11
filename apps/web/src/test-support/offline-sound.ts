@@ -162,6 +162,13 @@ export const renderSoundLevels = async (
     browserProcess.kill();
     await exited;
     await bundle.close();
-    await rm(scratch, { recursive: true, force: true });
+    // Chromium's helper processes can outlive the browser by a moment and
+    // still be writing to the profile.
+    await rm(scratch, {
+      recursive: true,
+      force: true,
+      maxRetries: 5,
+      retryDelay: 200,
+    });
   }
 };
