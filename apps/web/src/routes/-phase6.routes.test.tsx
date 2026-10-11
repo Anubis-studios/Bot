@@ -518,7 +518,7 @@ it.each(["whatsapp", "telegram", "discord"] as const)(
           writes.some((write) => write.platformId === platform && write.enabled)
         ).toBe(true)
       );
-      fireEvent.click(within(dialog).getByRole("button", { name: "Done" }));
+      fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
       await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
       expect(harness.router.state.location.pathname).toBe(
         "/onboarding/connectors"

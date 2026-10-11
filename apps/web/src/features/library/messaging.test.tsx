@@ -418,7 +418,10 @@ it("a signed-in Discord without its bot linked is not finished", async () => {
       await within(dialog).findByText("First, sign in to Discord")
     ).not.toBeNull();
     expect(
-      within(dialog).getByText(enUS.messaging.sharedLink.stepLink)
+      within(dialog).getByText(enUS.messaging.sharedLink.step1)
+    ).not.toBeNull();
+    expect(
+      within(dialog).getByText(enUS.messaging.finishLinkFirst)
     ).not.toBeNull();
     expect(within(dialog).getByText("/link abc")).not.toBeNull();
     expect(
