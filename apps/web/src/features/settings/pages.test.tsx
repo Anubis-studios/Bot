@@ -269,12 +269,12 @@ it.each([
   if ("ABACUS_API_KEY" in apiKeys) {
     await screen.findByText("ada@example.com");
     expect(
-      await screen.findByRole("button", { name: enUS.phase5.signOut })
+      await screen.findByRole("button", { name: enUS.userMenu.signOut })
     ).not.toBeNull();
   } else {
     await screen.findByRole("button", { name: "Sign up for free" });
     expect(
-      screen.queryByRole("button", { name: enUS.phase5.signOut })
+      screen.queryByRole("button", { name: enUS.userMenu.signOut })
     ).toBeNull();
     expect(screen.queryByRole("checkbox")).toBeNull();
   }

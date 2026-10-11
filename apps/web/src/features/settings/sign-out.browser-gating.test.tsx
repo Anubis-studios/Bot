@@ -33,7 +33,7 @@ it("offers website sign-out without a host API key and shows a failed logout in 
     },
   });
   try {
-    await screen.findByRole("button", { name: enUS.phase5.signOut });
+    await screen.findByRole("button", { name: enUS.userMenu.signOut });
     await act(async () => {
       app.router.options.context.queryClient.setQueryData(
         app.transport.orpc.settings.get.queryKey({ input: {} }),
@@ -41,11 +41,11 @@ it("offers website sign-out without a host API key and shows a failed logout in 
       );
     });
     fireEvent.click(
-      await screen.findByRole("button", { name: enUS.phase5.signOut })
+      await screen.findByRole("button", { name: enUS.userMenu.signOut })
     );
     const dialog = await screen.findByRole("alertdialog");
     fireEvent.click(
-      within(dialog).getByRole("button", { name: enUS.phase5.signOut })
+      within(dialog).getByRole("button", { name: enUS.userMenu.signOut })
     );
     expect(await screen.findByRole("alert")).toHaveProperty(
       "textContent",

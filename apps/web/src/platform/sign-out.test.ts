@@ -120,13 +120,14 @@ it.each(["settings", "profile"])(
         );
       } else {
         fireEvent.click(
-          await screen.findByRole("button", { name: enUS.phase5.signOut })
+          await screen.findByRole("button", { name: enUS.userMenu.signOut })
         );
       }
       const dialog = await screen.findByRole("alertdialog");
       fireEvent.click(
         within(dialog).getByRole("button", {
-          name: entry === "profile" ? enUS.profile.logOut : enUS.phase5.signOut,
+          name:
+            entry === "profile" ? enUS.profile.logOut : enUS.userMenu.signOut,
         })
       );
       await waitFor(() =>

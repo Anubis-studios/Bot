@@ -16,6 +16,7 @@ export const ConfirmAction = ({
   description,
   label,
   children,
+  body,
   onConfirm,
   open: controlledOpen,
   onOpenChange,
@@ -24,6 +25,8 @@ export const ConfirmAction = ({
   description: string;
   label: string;
   children?: ReactNode;
+  /** Options that belong to this decision, shown under the description. */
+  body?: ReactNode;
   open?: boolean;
   onOpenChange?(open: boolean): void;
   onConfirm(): Promise<unknown>;
@@ -57,6 +60,7 @@ export const ConfirmAction = ({
             <AlertDialogTitle>{title}</AlertDialogTitle>
             <AlertDialogDescription>{description}</AlertDialogDescription>
           </AlertDialogHeader>
+          {body}
           {error && <p role="alert">{error}</p>}
           <AlertDialogFooter>
             <AlertDialogCancel disabled={busy}>

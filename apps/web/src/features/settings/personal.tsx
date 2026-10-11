@@ -31,6 +31,7 @@ import {
   isRpcError,
 } from "#renderer/data/query-client";
 import { resolveLook } from "#renderer/lib/bots/avatar";
+import { cn } from "#renderer/lib/cn";
 import { AppLink } from "#renderer/lib/navigation/app-link";
 import { isQuietNow } from "#renderer/lib/notify";
 import { IS_ELECTRON } from "#renderer/lib/platform";
@@ -44,6 +45,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "#renderer/ui/collapsible";
+import { Input } from "#renderer/ui/input";
 import { Textarea } from "#renderer/ui/textarea";
 const modes = [
   "AUTO",
@@ -670,10 +672,15 @@ export const QuietTimes = ({
       {(["start", "end"] as const).map((key) => (
         <form.Field key={key} name={key}>
           {(f) => (
-            <label className="flex flex-col gap-1 text-xs">
+            <label
+              className={cn(
+                "flex flex-col gap-1 text-xs",
+                !quiet.enabled && "text-muted-foreground"
+              )}
+            >
               {t(`phase5.${key}`)}
-              <input
-                className="bg-muted rounded-md p-2"
+              <Input
+                className="w-32"
                 type="time"
                 disabled={!quiet.enabled}
                 value={f.state.value}
@@ -692,7 +699,11 @@ export const QuietTimes = ({
           )}
         </form.Field>
       ))}
-      {error && <p role="alert">{t("phase5.differentTimes")}</p>}
+      {error && (
+        <p role="alert" className="text-destructive self-end text-xs">
+          {t("phase5.differentTimes")}
+        </p>
+      )}
     </div>
   );
 };

@@ -91,18 +91,17 @@ export const EnvironmentPage = () => {
             >
               {query.data?.selected === backend.id ? (
                 <StatePill tone="success">{t("phase5.inUse")}</StatePill>
-              ) : (
+              ) : status?.ready && backend.implemented ? (
                 <Button
                   size="sm"
-                  disabled={
-                    !status?.ready ||
-                    !backend.implemented ||
-                    setBackend.isPending
-                  }
+                  disabled={setBackend.isPending}
                   onClick={() => setBackend.mutate({ backend: backend.id })}
                 >
-                  {t(status?.ready ? "phase5.use" : "phase5.unavailable")}
+                  {t("phase5.use")}
                 </Button>
+              ) : (
+                // A state, not an action: worded and styled like the other rows' pills.
+                <StatePill>{t("phase5.unavailable")}</StatePill>
               )}
             </SettingRow>
           );

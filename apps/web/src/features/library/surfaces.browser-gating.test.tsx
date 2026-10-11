@@ -391,12 +391,14 @@ it("hides WhatsApp referrals in account, invite choices and direct links", async
     ).toBeNull();
     await waitFor(() => {
       expect(
-        document.querySelector('[data-setting-id="invite-link"]')
+        document.querySelector('[data-setting-id="inviteLink"]')
       ).not.toBeNull();
     });
     for (const invite of ["link", "gmail"] as const) {
       expect(
-        document.querySelector(`[data-setting-id="invite-${invite}"]`)
+        document.querySelector(
+          `[data-setting-id="${invite === "link" ? "inviteLink" : `invite-${invite}`}"]`
+        )
       ).not.toBeNull();
       await act(async () => {
         await app.router.navigate({

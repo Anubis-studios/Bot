@@ -176,7 +176,8 @@ export const SETTINGS_INDEX: readonly SettingEntry[] = [
       labelKey: `phase5.cues.${cue}`,
     })
   ),
-  ...["link", "gmail", "whatsapp"].map((channel) => ({
+  // The link channel's row is `inviteLink`, listed with the account rows.
+  ...["gmail", "whatsapp"].map((channel) => ({
     id: `invite-${channel}`,
     page: "account" as const,
     labelKey: `phase5.inviteChannels.${channel}`,

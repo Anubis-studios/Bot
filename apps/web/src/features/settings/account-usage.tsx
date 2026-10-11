@@ -95,7 +95,7 @@ export const AccountPage = () => {
             <ConfirmAction
               title={t("phase5.signOut")}
               description={t("web.signOutDetail")}
-              label={t("phase5.signOut")}
+              label={t("userMenu.signOut")}
               onConfirm={() => signOutAbacus(context, true)}
             />
           )}
@@ -148,7 +148,20 @@ export const AccountPage = () => {
               description={t(
                 IS_ELECTRON ? "phase5.signOutDetail" : "web.signOutDetail"
               )}
-              label={t("phase5.signOut")}
+              label={t("userMenu.signOut")}
+              body={
+                IS_ELECTRON && (
+                  <label className="flex items-center gap-2 text-xs">
+                    <Checkbox
+                      checked={removeOthers}
+                      onCheckedChange={(value) =>
+                        setRemoveOthers(value === true)
+                      }
+                    />
+                    {t("phase5.removeOtherKeys")}
+                  </label>
+                )
+              }
               onConfirm={async () => {
                 await signOutAbacus(context, !removeOthers);
                 if (IS_ELECTRON)
@@ -162,15 +175,6 @@ export const AccountPage = () => {
             />
           )}
         </SettingRow>
-        {IS_ELECTRON && canSignOut && (
-          <label className="flex items-center gap-2 p-3 text-xs">
-            <Checkbox
-              checked={removeOthers}
-              onCheckedChange={(value) => setRemoveOthers(value === true)}
-            />
-            {t("phase5.removeOtherKeys")}
-          </label>
-        )}
         <SettingRow
           id="plan"
           title={account.data.plan ?? t("phase5.unknownPlan")}
@@ -246,22 +250,6 @@ export const AccountPage = () => {
         )}
       </GroupCard>
       <GroupCard title={t("phase5.referrals")}>
-        <SettingRow id="inviteLink" title={t("phase5.inviteLink")}>
-          <Button
-            size="sm"
-            disabled={!inviteLink}
-            onClick={() => {
-              if (inviteLink)
-                void navigator.clipboard
-                  .writeText(inviteLink)
-                  .then(() => showInfo(t("phase5.copied")));
-            }}
-          >
-            {t("phase5.copy")}
-          </Button>
-        </SettingRow>
-      </GroupCard>
-      <GroupCard>
         {(
           [
             ...(referrals.data?.gmailConnected
@@ -274,9 +262,24 @@ export const AccountPage = () => {
           .map((invite) => (
             <SettingRow
               key={invite}
-              id={`invite-${invite}`}
+              id={invite === "link" ? "inviteLink" : `invite-${invite}`}
               title={t(`phase5.inviteChannels.${invite}`)}
             >
+              {invite === "link" && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={!inviteLink}
+                  onClick={() => {
+                    if (inviteLink)
+                      void navigator.clipboard
+                        .writeText(inviteLink)
+                        .then(() => showInfo(t("phase5.copied")));
+                  }}
+                >
+                  {t("phase5.copy")}
+                </Button>
+              )}
               <Button
                 size="sm"
                 onClick={() =>
