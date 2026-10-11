@@ -11,16 +11,24 @@
  *   node scripts/shadcn-registry-snapshot.mjs --check        (check:ui-registry)
  *     Offline. Copies this package's registry inputs to a temp dir, replays
  *     the `add` from the newest snapshot there, formats the output with the
- *     repo's oxfmt config and diffs it against the committed ui/.
+ *     repo's oxfmt config, applies ui-local.patch and diffs the result
+ *     against the committed ui/.
+ *
+ *   node scripts/shadcn-registry-snapshot.mjs --local-patch
+ *     Rewrites ui-local.patch as the committed ui/ against the replay. The
+ *     patch is every edit made to registry output, reviewed as a diff: an
+ *     edit to ui/ that is not in it fails the check.
  */
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import {
   cpSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
   rmSync,
+  writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -46,36 +54,72 @@ const record = async () => {
   console.log(`recorded ${snapshot}`);
 };
 
+const LOCAL_PATCH = join(desktop, "../desktop/shadcn-registry/ui-local.patch");
+
+/** The snapshot's `add` replayed and formatted in `temp`, as `temp/src/ui`. */
+const replay = async (temp) => {
+  for (const file of ["package.json", "components.json", "tsconfig.json"])
+    cpSync(join(desktop, file), join(temp, file));
+  mkdirSync(join(temp, "src"), { recursive: true });
+  for (const dir of ["styles", "lib"])
+    cpSync(join(desktop, "src", dir), join(temp, "src", dir), {
+      recursive: true,
+    });
+  // The CLI resolves packages from node_modules next to package.json.
+  execFileSync("ln", [
+    "-s",
+    join(repo, "node_modules"),
+    join(temp, "node_modules"),
+  ]);
+
+  await addFromSnapshot({
+    cwd: temp,
+    items: INITIAL_ITEMS,
+    snapshot: latestSnapshot(),
+  });
+  execFileSync(
+    join(repo, "node_modules/.bin/oxfmt"),
+    ["--config", join(repo, "oxfmt.config.ts"), join(temp, "src/ui")],
+    {
+      cwd: repo,
+      stdio: "inherit",
+    }
+  );
+};
+
+const localPatch = async () => {
+  const temp = mkdtempSync(join(tmpdir(), "ui-registry-"));
+  try {
+    await replay(temp);
+    cpSync(join(desktop, "src/ui"), join(temp, "committed/src/ui"), {
+      recursive: true,
+    });
+    // Exit 1 means the trees differ, which is the point.
+    const diff = spawnSync(
+      "git",
+      ["diff", "--no-index", "--no-prefix", "src/ui", "committed/src/ui"],
+      { cwd: temp, encoding: "utf8" }
+    );
+    if (diff.status !== 0 && diff.status !== 1) throw new Error(diff.stderr);
+    writeFileSync(
+      LOCAL_PATCH,
+      diff.stdout.replaceAll("committed/src/ui/", "src/ui/")
+    );
+    console.log(`wrote ${LOCAL_PATCH}`);
+  } finally {
+    rmSync(temp, { recursive: true, force: true });
+  }
+};
+
 const check = async () => {
   const temp = mkdtempSync(join(tmpdir(), "ui-registry-"));
   try {
-    for (const file of ["package.json", "components.json", "tsconfig.json"])
-      cpSync(join(desktop, file), join(temp, file));
-    mkdirSync(join(temp, "src"), { recursive: true });
-    for (const dir of ["styles", "lib"])
-      cpSync(join(desktop, "src", dir), join(temp, "src", dir), {
-        recursive: true,
-      });
-    // The CLI resolves packages from node_modules next to package.json.
-    execFileSync("ln", [
-      "-s",
-      join(repo, "node_modules"),
-      join(temp, "node_modules"),
-    ]);
-
-    await addFromSnapshot({
-      cwd: temp,
-      items: INITIAL_ITEMS,
-      snapshot: latestSnapshot(),
-    });
-    execFileSync(
-      join(repo, "node_modules/.bin/oxfmt"),
-      ["--config", join(repo, "oxfmt.config.ts"), join(temp, "src/ui")],
-      {
-        cwd: repo,
+    await replay(temp);
+    if (existsSync(LOCAL_PATCH))
+      execFileSync("git", ["apply", "-p0", LOCAL_PATCH], {
+        cwd: temp,
         stdio: "inherit",
-      }
-    );
+      });
 
     const committed = join(desktop, "src/ui");
     const replayed = join(temp, "src/ui");
@@ -111,7 +155,10 @@ const check = async () => {
 const mode = process.argv[2];
 if (mode === "--record") await record();
 else if (mode === "--check") await check();
+else if (mode === "--local-patch") await localPatch();
 else {
-  console.error("usage: shadcn-registry-snapshot.mjs --record | --check");
+  console.error(
+    "usage: shadcn-registry-snapshot.mjs --record | --check | --local-patch"
+  );
   process.exit(1);
 }
