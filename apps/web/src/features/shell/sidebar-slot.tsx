@@ -24,6 +24,8 @@ import { useEffect, useRef, type KeyboardEvent, type ReactNode } from "react";
 
 import { cn } from "#renderer/lib/cn";
 import {
+  durations,
+  easings,
   motionFor,
   reducedTransition,
   springs,
@@ -66,8 +68,6 @@ const columnWidth = (mode: SidebarMode): number =>
       : 0;
 
 /** Sheet and drawer curve, the one vaul and LibreChat settle on. */
-const PHONE_DRAWER_EASE = [0.32, 0.72, 0, 1] as const;
-
 const FOCUSABLE =
   "a[href], button:not([disabled]), [tabindex]:not([tabindex='-1'])";
 
@@ -181,8 +181,15 @@ export const SidebarSlot = ({
               className="fixed inset-0 z-30 bg-black/30 dark:bg-black/50"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              exit={{ opacity: 0, transition: { duration: 0.2 } }}
-              transition={{ duration: motionPref === "reduced" ? 0 : 0.3 }}
+              exit={{
+                opacity: 0,
+                transition: { duration: durations.crossFade / 1000 },
+              }}
+              transition={
+                motionPref === "reduced"
+                  ? reducedTransition
+                  : { duration: durations.layout / 1000 }
+              }
               onClick={() => onEscape?.()}
             />
           )}
@@ -218,7 +225,10 @@ export const SidebarSlot = ({
                   transition:
                     motionPref === "reduced"
                       ? reducedTransition
-                      : { duration: 0.3, ease: PHONE_DRAWER_EASE },
+                      : {
+                          duration: durations.surface / 1000,
+                          ease: [...easings.drawer],
+                        },
                   drag: "x" as const,
                   dragDirectionLock: true,
                   dragConstraints: { left: 0, right: 0 },
@@ -261,7 +271,10 @@ export const SidebarSlot = ({
                 transition={
                   motionPref === "reduced"
                     ? reducedTransition
-                    : { duration: 0.14, ease: [0.2, 0, 0, 1] }
+                    : {
+                        duration: durations.route / 1000,
+                        ease: [...easings.standard],
+                      }
                 }
               >
                 <SidebarContent

@@ -13,7 +13,11 @@ import { useTranslation } from "react-i18next";
 
 import { BotAppMark } from "#renderer/components/app-icon";
 import { useOptionalDb } from "#renderer/data/db";
-import { springs, useMotionPreference } from "#renderer/lib/motion";
+import {
+  reducedTransition,
+  springs,
+  useMotionPreference,
+} from "#renderer/lib/motion";
 import {
   ONBOARDING_STEPS,
   type OnboardingStepId,
@@ -156,7 +160,7 @@ export const OnboardingFrame = ({
               x: reduce ? 0 : transition.direction === "back" ? -12 : 12,
             }}
             animate={{ opacity: 1, x: 0 }}
-            transition={reduce ? { duration: 0.12 } : springs.surface}
+            transition={reduce ? reducedTransition : springs.surface}
           >
             {children}
           </motion.div>

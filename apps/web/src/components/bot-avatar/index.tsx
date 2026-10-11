@@ -11,6 +11,7 @@ import type {
 import { cn } from "#renderer/lib/cn";
 import {
   hatch as hatchMotion,
+  reducedTransition,
   useMotionPreference,
 } from "#renderer/lib/motion";
 
@@ -627,7 +628,7 @@ const HatchingAvatar = ({
         opacity: 1,
         scale: egg || reduced || settled ? 1 : hatchMotion.pop,
       }}
-      transition={reduced ? { duration: 0.12 } : hatchMotion.settle}
+      transition={reduced ? reducedTransition : hatchMotion.settle}
       onAnimationComplete={() => {
         if (!egg) {
           if (reduced || settled) hatch.onDone();

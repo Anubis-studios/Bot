@@ -24,6 +24,8 @@ export const durations = {
 export const easings = {
   standard: [0.2, 0.8, 0.2, 1],
   notch: [0.22, 1, 0.36, 1],
+  /** A drawer sliding over the page (the registry drawer's curve). */
+  drawer: [0.32, 0.72, 0, 1],
 } as const;
 
 export const springs = {
