@@ -1737,6 +1737,7 @@
     },
     "dock": {
       "add": "Add tab",
+      "new": "Nouvel onglet",
       "chat": "Chat",
       "changes": "Changes",
       "files": "Files",

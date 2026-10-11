@@ -128,6 +128,9 @@ export const updateTab = (
       tabs: s.tabs.map((tab) => (tab.ref === ref ? { ...tab, ...patch } : tab)),
     };
   });
+/** The tab closing `ref` lands on, without closing it. */
+export const nextTab = (key: string, ref: string): string | undefined =>
+  removeRefs(panelTabsStore.state[key] ?? EMPTY_TABS, [ref]).last ?? undefined;
 export const closeTab = (key: string, ref: string): string | undefined => {
   const pending = pendingTerminalStarts.get(key);
   pending?.delete(ref);

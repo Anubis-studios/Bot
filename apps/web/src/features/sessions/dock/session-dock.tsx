@@ -45,6 +45,7 @@ import { IS_ELECTRON } from "#renderer/lib/platform";
 import { useShellWidth } from "#renderer/lib/shell-breakpoints";
 import { shellLayout } from "#renderer/lib/shell-layout";
 import type { PanelTabKind } from "#renderer/lib/side-panel/store";
+import { Button } from "#renderer/ui/button";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -65,6 +66,7 @@ import {
   openTab,
   openTerminalTab,
   closeTab,
+  nextTab,
   reopenTab,
   reconcileTerminals,
   updateTabs,
@@ -105,6 +107,49 @@ const TabPending = () => {
   );
 };
 const terminalId = () => `terminal:terminal-${crypto.randomUUID()}`;
+/** A fresh panel's tab: the kinds it can open, until one is picked. */
+const LAUNCHER = "new";
+const KIND_ICONS: Record<string, typeof Terminal> = {
+  browser: Globe,
+  terminal: Terminal,
+  files: Folder,
+  changes: GitCompare,
+  agents: Bot,
+  device: Monitor,
+};
+const TabLauncher = ({
+  kinds,
+  onOpen,
+}: {
+  kinds: readonly string[];
+  onOpen(kind: string): void;
+}) => {
+  const { t } = useTranslation();
+  return (
+    <div
+      data-slot="dock-launcher"
+      className="flex size-full min-h-0 flex-col items-center justify-center gap-3 overflow-y-auto p-6"
+    >
+      <p className="text-muted-foreground text-xs">{t("sessions.dock.new")}</p>
+      <div className="grid w-full max-w-sm grid-cols-2 gap-2">
+        {kinds.map((kind) => {
+          const Icon = KIND_ICONS[kind] ?? Terminal;
+          return (
+            <Button
+              key={kind}
+              variant="secondary"
+              className="h-auto min-h-20 flex-col items-start justify-between gap-2 rounded-2xl p-3 text-start whitespace-normal"
+              onClick={() => onOpen(kind)}
+            >
+              <Icon aria-hidden className="text-muted-foreground size-4" />
+              <span>{t(`sessions.dock.${kind}`)}</span>
+            </Button>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
 export const SessionDock = ({
   row,
   chat,
@@ -158,7 +203,7 @@ export const SessionDock = ({
       open: tab != null && (expanded || tab !== "chat"),
       last: tab && tab !== "chat" ? tab : s.last,
     }));
-    void navigate({
+    return navigate({
       to: "/sessions/$sessionId",
       params: { sessionId: row.id },
       search: (previous) => ({ ...previous, tab }),
@@ -190,8 +235,13 @@ export const SessionDock = ({
           .then((state) => transport.client.browser.runtime.close(state.lease))
           .catch(() => {});
     }
-    const next = closeTab(key, ref);
-    if (active === ref) select(next);
+    if (active !== ref) {
+      closeTab(key, ref);
+      return;
+    }
+    // The URL leaves the tab first: while it still names an open-once kind
+    // (Files, Changes), the dock reopens that kind.
+    void select(nextTab(key, ref)).then(() => closeTab(key, ref));
   };
   useEffect(() => {
     const abort = new AbortController();
@@ -237,7 +287,7 @@ export const SessionDock = ({
       (!active.startsWith("terminal:") || terminalSnapshot === key)
     ) {
       if (
-        ["files", "changes", "agents", "device"].includes(active) ||
+        ["files", "changes", "agents", "device", LAUNCHER].includes(active) ||
         active.startsWith("browser:")
       )
         openTab(key, {
@@ -272,25 +322,23 @@ export const SessionDock = ({
     });
     select(ref);
   };
-  const titleTabs = expanded
-    ? [...entries.tabs]
-    : ["changes", "terminal", "files", "browser"]
-        .flatMap((kind) => {
-          const tabs = entries.tabs.filter(
-            (tab) => tab.ref === kind || tab.ref.startsWith(`${kind}:`)
-          );
-          return tabs.length
-            ? tabs
-            : [{ ref: kind, title: t(`sessions.dock.${kind}`), openedAt: 0 }];
-        })
-        .concat(
-          entries.tabs.filter(
-            (tab) =>
-              !["changes", "terminal", "files", "browser"].includes(
-                tab.ref.split(":")[0]!
-              )
-          )
-        );
+  const kinds = [
+    ...(IS_ELECTRON ? ["browser"] : []),
+    "terminal",
+    "files",
+    "changes",
+    "agents",
+    ...(IS_ELECTRON && device.data?.enabled ? ["device"] : []),
+  ];
+  // The launcher hands its place to the kind picked on it.
+  const launch = (kind: string) => {
+    add(kind);
+    updateTabs(key, (s) => ({
+      ...s,
+      tabs: s.tabs.filter((tab) => tab.ref !== LAUNCHER),
+    }));
+  };
+  const titleTabs = [...entries.tabs];
   if (entries.order)
     titleTabs.sort((a, b) => {
       const position = (ref: string) => {
@@ -299,10 +347,6 @@ export const SessionDock = ({
       };
       return position(a.ref) - position(b.ref);
     });
-  const choose = (ref: string) => {
-    if (ref === "terminal" || ref === "browser") add(ref);
-    else select(ref);
-  };
   const rename = (ref: string, title: string) =>
     updateTabs(key, (state) => ({
       ...state,
@@ -345,33 +389,17 @@ export const SessionDock = ({
                   </span>
                 </DropdownMenuItem>
               ))}
-              {[
-                ...(IS_ELECTRON ? ["browser"] : []),
-                "terminal",
-                "files",
-                "changes",
-                "agents",
-                ...(IS_ELECTRON && device.data?.enabled ? ["device"] : []),
-              ].map((kind) => (
-                <DropdownMenuItem key={kind} onClick={() => add(kind)}>
-                  {kind === "browser" ? (
-                    <Globe />
-                  ) : kind === "files" ? (
-                    <Folder />
-                  ) : kind === "changes" ? (
-                    <GitCompare />
-                  ) : kind === "agents" ? (
-                    <Bot />
-                  ) : kind === "device" ? (
-                    <Monitor />
-                  ) : (
-                    <Terminal />
-                  )}
-                  <span className="min-w-0 truncate">
-                    {t(`sessions.dock.${kind}`)}
-                  </span>
-                </DropdownMenuItem>
-              ))}
+              {kinds.map((kind) => {
+                const Icon = KIND_ICONS[kind] ?? Terminal;
+                return (
+                  <DropdownMenuItem key={kind} onClick={() => add(kind)}>
+                    <Icon />
+                    <span className="min-w-0 truncate">
+                      {t(`sessions.dock.${kind}`)}
+                    </span>
+                  </DropdownMenuItem>
+                );
+              })}
             </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -441,7 +469,12 @@ export const SessionDock = ({
                 : undefined
             }
             onRename={rename}
-            onChange={choose}
+            onChange={select}
+            renderIcon={(tab) =>
+              tab.id === LAUNCHER ? (
+                <Plus className="size-3.5 shrink-0" aria-hidden />
+              ) : undefined
+            }
             onReopen={() => {
               const ref = reopenTab(key);
               if (ref) select(ref);
@@ -478,7 +511,7 @@ export const SessionDock = ({
             open={entries.open === true && active != null}
             onToggle={() =>
               select(
-                entries.open && active ? undefined : (entries.last ?? "changes")
+                entries.open && active ? undefined : (entries.last ?? LAUNCHER)
               )
             }
           />
@@ -513,7 +546,11 @@ export const SessionDock = ({
               content: (visible: boolean) => (
                 <PaneBoundary resetKey={tab.ref}>
                   <Suspense fallback={<TabPending />}>
-                    {renderTab(tab, visible, () => close(tab.ref))}
+                    {tab.ref === LAUNCHER ? (
+                      <TabLauncher kinds={kinds} onOpen={launch} />
+                    ) : (
+                      renderTab(tab, visible, () => close(tab.ref))
+                    )}
                   </Suspense>
                 </PaneBoundary>
               ),

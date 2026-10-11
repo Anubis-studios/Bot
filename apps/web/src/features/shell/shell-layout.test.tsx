@@ -117,15 +117,20 @@ describe("ShellLayout", () => {
         top().getByRole("tab", { name: "Files" }).getAttribute("aria-selected")
       ).toBe("true")
     );
+    // Only the tabs that are open, each closable: no placeholder kinds.
     expect(
       top()
         .getAllByRole("tab")
         .map((tab) => tab.textContent)
-    ).toEqual(["Changes", "Terminal", "Files", "Browser"]);
+    ).toEqual(["Files"]);
     expect(
       screen.getByTestId("panel-toggle").getAttribute("aria-pressed")
     ).toBe("true");
-    fireEvent.click(top().getByRole("tab", { name: "Changes" }));
+    await navigate({
+      to: "/sessions/$sessionId",
+      params: { sessionId: "review-prs" },
+      search: { tab: "changes" },
+    });
     await waitFor(() =>
       expect(
         top()
@@ -172,17 +177,15 @@ describe("ShellLayout", () => {
     expect(document.querySelector('[data-dock-pane="changes"]')).toBe(content);
     top().getByRole("tab", { name: "Changes" }).focus();
     fireEvent.keyDown(top().getByRole("tab", { name: "Changes" }), {
-      key: "End",
+      key: "Home",
     });
     await waitFor(() =>
       expect(
-        top()
-          .getByRole("tab", { name: "Browser" })
-          .getAttribute("aria-selected")
+        top().getByRole("tab", { name: "Files" }).getAttribute("aria-selected")
       ).toBe("true")
     );
     expect(document.activeElement).toBe(
-      top().getByRole("tab", { name: "Browser" })
+      top().getByRole("tab", { name: "Files" })
     );
   });
 
@@ -755,7 +758,12 @@ describe("the title bar", () => {
   });
 
   it("reveals a forced floating primary sidebar without closing the Session tools", async () => {
-    await at(1000, "/sessions/review-prs?tab=files");
+    await at(1000, "/sessions/review-prs?tab=changes");
+    await navigate({
+      to: "/sessions/$sessionId",
+      params: { sessionId: "review-prs" },
+      search: { tab: "files" },
+    });
     fireEvent.click(screen.getByTestId("sidebar-toggle"));
     await waitFor(() => expect(shellStore.state.floating.open).toBe(true));
     fireEvent.click(screen.getByRole("tab", { name: "Changes" }));

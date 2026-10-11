@@ -86,6 +86,36 @@ it("normalizes an absent terminal URL after the initial terminal snapshot", asyn
   }
 });
 
+it("a fresh panel opens on one closable launcher, and the kind picked there takes its place", async () => {
+  const key = sessionConversationKey("abacusai-bot", "compress-installers");
+  const harness = await renderApp("/sessions/compress-installers");
+  const tabs = () =>
+    screen.queryAllByRole("tab").map((tab) => tab.getAttribute("aria-label"));
+  try {
+    fireEvent.click(await screen.findByTestId("panel-toggle"));
+    await waitFor(() => expect(tabs()).toEqual(["New tab"]));
+    const launcher = await waitFor(() => {
+      const element = document.querySelector<HTMLElement>(
+        '[data-slot="dock-launcher"]'
+      );
+      expect(element).not.toBeNull();
+      return element!;
+    });
+    fireEvent.click(within(launcher).getByRole("button", { name: "Changes" }));
+    await waitFor(() => expect(tabs()).toEqual(["Changes"]));
+    expect(panelTabsStore.state[key]!.tabs.map((tab) => tab.ref)).toEqual([
+      "changes",
+    ]);
+    fireEvent.keyDown(screen.getByRole("tab", { name: "Changes" }), {
+      key: "Delete",
+    });
+    await waitFor(() => expect(panelTabsStore.state[key]!.tabs).toEqual([]));
+  } finally {
+    harness.view.unmount();
+    await harness.cleanup();
+  }
+});
+
 it("restores the selected workspace file when returning to a session without URL state", async () => {
   const key = sessionConversationKey("default", "spreadsheet");
   const harness = await renderApp(

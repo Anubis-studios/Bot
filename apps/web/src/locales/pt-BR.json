@@ -1737,6 +1737,7 @@
     },
     "dock": {
       "add": "Add tab",
+      "new": "Nova aba",
       "chat": "Chat",
       "changes": "Changes",
       "files": "Files",

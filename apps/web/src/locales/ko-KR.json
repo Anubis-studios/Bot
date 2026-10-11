@@ -1737,6 +1737,7 @@
     },
     "dock": {
       "add": "Add tab",
+      "new": "새 탭",
       "chat": "Chat",
       "changes": "Changes",
       "files": "Files",
