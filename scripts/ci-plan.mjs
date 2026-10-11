@@ -29,6 +29,9 @@ const affected = new Set(
           ["exec", "turbo", "ls", "--affected", "--output=json"],
           {
             encoding: "utf8",
+            // Against the pull request's own base, which for a stacked
+            // pull request is not main.
+            env: { ...process.env, TURBO_SCM_BASE: `origin/${base}` },
           }
         )
       ).packages.items.map((item) => item.name.replace("@abacus-ai/", ""))
@@ -69,13 +72,24 @@ const BUILD = {
 const add = (when, name, suite, run) => {
   if (when) tests.push({ name, suite, build: BUILD[suite], run });
 };
-for (const shard of [1, 2, 3])
+// Narrowed, the renderer project runs the changed files' tests in one job;
+// the browser-graph and build projects always run whole, since walking their
+// graph for --changed loads modules their boundary plugin forbids.
+if (narrowWeb)
   add(
     web,
-    `web ${shard}/3`,
+    "web (changed)",
     "web",
-    vitest("apps/web", ` --shard=${shard}/3`, narrowWeb)
+    `${vitest("apps/web", " --project renderer", true)} && ${vitest("apps/web", " --project renderer-browser --project vite")}`
   );
+else
+  for (const shard of [1, 2, 3])
+    add(
+      web,
+      `web ${shard}/3`,
+      "web",
+      vitest("apps/web", ` --shard=${shard}/3`)
+    );
 add(
   packages,
   "host and packages",
