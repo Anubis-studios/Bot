@@ -290,9 +290,11 @@ describe.skipIf(!ready.runnable)("chat kit gates (Electron)", () => {
         });
         return out;
       })()`);
-      numbers.a_idleFpsMedian =
-        Math.round((1000 / stats(idleIntervals).median) * 10) / 10;
-      expect(fps).toBeGreaterThanOrEqual(50);
+      const idleFps = 1000 / stats(idleIntervals).median;
+      numbers.a_idleFpsMedian = Math.round(idleFps * 10) / 10;
+      // 50 fps, unless the runner cannot pace that idle (a macOS runner idles
+      // near 44): then scrolling may lose no more than a tenth of idle.
+      expect(fps).toBeGreaterThanOrEqual(Math.min(50, idleFps * 0.9));
       expect((await rows()).total).toBeLessThanOrEqual(MAX_ROWS);
     });
 
