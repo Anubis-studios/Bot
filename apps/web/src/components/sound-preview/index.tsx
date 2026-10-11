@@ -1,3 +1,4 @@
+import { PlayIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -16,7 +17,7 @@ export const SoundPreview = ({ cue }: { cue: Cue }) => {
   );
   return (
     <Button
-      size="sm"
+      size="icon-sm"
       variant="ghost"
       disabled={playing}
       aria-label={t("phase5.playSound", { cue: t(`phase5.cues.${cue}`) })}
@@ -26,7 +27,7 @@ export const SoundPreview = ({ cue }: { cue: Cue }) => {
         timer.current = setTimeout(() => setPlaying(false), 600);
       }}
     >
-      ▶
+      <PlayIcon />
     </Button>
   );
 };

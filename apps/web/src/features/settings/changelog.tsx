@@ -28,7 +28,7 @@ export const ChangelogPage = () => {
               {release.date}
             </time>
           </div>
-          <div className="chat-prose px-4 pb-4 text-sm [&_h3]:mt-4 [&_h3]:mb-2 [&_h3]:font-semibold [&_li]:my-1 [&_ol]:list-decimal [&_ol]:ps-5 [&_p]:mb-3 [&_ul]:list-disc [&_ul]:ps-5">
+          <div className="chat-prose px-4 pb-4 text-sm [&_h3]:mt-4 [&_h3]:mb-2 [&_h3]:font-semibold [&_li]:my-1 [&_ol]:mb-3 [&_ol]:list-decimal [&_ol]:ps-5 [&_p]:mb-3 [&_ul]:mb-3 [&_ul]:list-disc [&_ul]:ps-5">
             <TextPart content={release.body} role="assistant" />
           </div>
         </GroupCard>
