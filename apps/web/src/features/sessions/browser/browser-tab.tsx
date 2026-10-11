@@ -20,6 +20,7 @@ import {
 import { useTranslation } from "react-i18next";
 
 import { BrowserSurface } from "#renderer/components/browser-surface";
+import { useOptionalDb } from "#renderer/data/db";
 import { followNotices } from "#renderer/data/queries/notices";
 import { platformSystem } from "#renderer/lib/platform-system";
 import { Button } from "#renderer/ui/button";
@@ -75,9 +76,14 @@ export const BrowserTab = ({
 }) => {
   const { t } = useTranslation();
   const transport = useSessionsTransport();
+  const db = useOptionalDb();
+  // Settings → Browser → Home page, read once, when the tab opens.
+  const [home] = useState(
+    () => db?.collections.prefs.get("app")?.browserHomepage ?? NEW_TAB_URL
+  );
   const [retry, setRetry] = useState(0);
   const [state, setState] = useState<BrowserRuntimeState | null>(null);
-  const [address, setAddress] = useState(url ?? NEW_TAB_URL);
+  const [address, setAddress] = useState(url ?? home);
   const [error, setError] = useState<string | null>(null);
   const key = scope ?? sessionConversationKey(row.workspaceId, row.id);
   const apply = (next: BrowserRuntimeState) => {
@@ -101,7 +107,7 @@ export const BrowserTab = ({
       : transport.client.browser.runtime.materialize({
           conversationKey: key,
           resourceId: id,
-          url: url ?? NEW_TAB_URL,
+          url: url ?? home,
         });
     void promise
       .then((s) => {
@@ -115,7 +121,7 @@ export const BrowserTab = ({
       live = false;
       local?.release();
     };
-  }, [transport, key, id, url, file, root, retry]);
+  }, [transport, key, id, url, home, file, root, retry]);
   useEffect(() => {
     const abort = new AbortController();
     void followNotices(
@@ -196,7 +202,7 @@ export const BrowserTab = ({
               if (e.key === "Enter")
                 void action({ action: "url", url: normalizeAddress(address) });
               if (e.key === "Escape") {
-                setAddress(state?.url ?? NEW_TAB_URL);
+                setAddress(state?.url ?? home);
                 e.currentTarget.blur();
               }
             }}

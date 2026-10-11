@@ -8,6 +8,8 @@ vi.mock("../data/queries", () => ({
 }));
 import type { BrowserRuntimeState } from "@abacus-ai/contract/contracts";
 
+import { DbProvider, type Db } from "#renderer/data/db";
+
 import { BrowserTab, NEW_TAB_URL, normalizeAddress } from "./browser-tab";
 
 const state = (resourceId: string, url: string): BrowserRuntimeState => ({
@@ -86,4 +88,46 @@ it("opens on google.com as its new-tab page, one runtime per tab, no profile pic
     expect(onState).toHaveBeenCalledWith({ url: NEW_TAB_URL, title: "Google" })
   );
   expect(normalizeAddress("")).toBe(NEW_TAB_URL);
+});
+
+it("opens on the home page set in Settings", async () => {
+  const materialize = vi.fn(
+    async (input: { resourceId: string; url?: string }) =>
+      state(input.resourceId, input.url ?? "about:blank")
+  );
+  mock.transport = {
+    client: {
+      browser: { runtime: { materialize }, events: async function* () {} },
+    },
+  };
+  const db = {
+    collections: {
+      prefs: { get: () => ({ browserHomepage: "https://home.test/" }) },
+    },
+  } as unknown as Db;
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <DbProvider value={db}>
+        <BrowserTab
+          row={{ workspaceId: "w", id: "s" }}
+          id="browser:home"
+          root="/root"
+          visible
+          presenter={{
+            captures: new Store<Record<string, string>>({}),
+            owner: new Store<string | null>(null),
+            register: () => () => {},
+            activate: async () => {},
+            refresh: async () => {},
+          }}
+          blocked={() => false}
+        />
+      </DbProvider>
+    </QueryClientProvider>
+  );
+  await waitFor(() =>
+    expect(materialize).toHaveBeenCalledWith(
+      expect.objectContaining({ url: "https://home.test/" })
+    )
+  );
 });
