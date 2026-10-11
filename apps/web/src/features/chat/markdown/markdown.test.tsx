@@ -50,7 +50,10 @@ describe("R2-T17 markdown", () => {
     expect(code?.textContent).toContain('const value = "<script>&";');
     expect(code?.querySelector("script")).toBeNull();
     expect(code?.querySelector("span")).toBeNull();
-    await waitFor(() => expect(code?.querySelector("span")).toBeTruthy());
+    // The first grammar import is cold; a Windows runner takes over a second.
+    await waitFor(() => expect(code?.querySelector("span")).toBeTruthy(), {
+      timeout: 5_000,
+    });
     expect(code?.textContent).toContain('const value = "<script>&";');
     expect(code?.querySelector("script")).toBeNull();
   });
