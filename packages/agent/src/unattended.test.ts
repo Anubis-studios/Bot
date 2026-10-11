@@ -39,7 +39,7 @@ import {
 } from "./tool-policy.js";
 import { collectFiles } from "./workspace-scan.js";
 
-const WORKSPACE = "/tmp/routine-workspace";
+const WORKSPACE = path.resolve("/tmp/routine-workspace");
 
 const POLICY: UnattendedPolicy = {
   sources: ["https://news.example/"],
@@ -766,6 +766,16 @@ describe("secrets inside the folder", () => {
 });
 
 describe("Windows spellings of one path", () => {
+  it("refuses a drive-less Windows file URL instead of resolving it inside the workspace", () => {
+    expect(
+      toolPath(
+        "file:///tmp/routine-workspace/notes.md",
+        "C:\\tmp\\routine-workspace",
+        "win32"
+      )
+    ).toBeNull();
+  });
+
   it.each([
     "C:\\work\\x.txt",
     "C:/work/x.txt",

@@ -124,7 +124,7 @@ const LinkDialog = ({
   const start = async () => {
     setBusy(true);
     setError(null);
-    try {
+    const request = async () => {
       const link = v.parse(
         Link,
         await callApps("linkAbacusBotWhatsApp", {
@@ -142,11 +142,12 @@ const LinkDialog = ({
         setCode(link.code ?? null);
         setStep("code");
       }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : t("phase5.failed"));
-    } finally {
-      setBusy(false);
-    }
+    };
+    await request()
+      .catch((e) => {
+        setError(e instanceof Error ? e.message : t("phase5.failed"));
+      })
+      .finally(() => setBusy(false));
   };
 
   const reset = (next: boolean) => {
