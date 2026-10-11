@@ -5,10 +5,14 @@
  * `document.startViewTransition` (React then skips view transitions), and a
  * stub `navigator.windowControlsOverlay` factory.
  */
-import { cleanup } from "@testing-library/react";
+import { cleanup, configure } from "@testing-library/react";
 import { afterEach, vi } from "vitest";
 
 import { resetMedia } from "./media";
+
+// A shared CI runner (Windows most of all) can take past the default second
+// to load a lazy chunk or settle a retry; a findBy or waitFor gives up early.
+if (process.env.CI) configure({ asyncUtilTimeout: 5_000 });
 
 afterEach(() => {
   cleanup();
