@@ -8,7 +8,23 @@ renderer, a chunk split by a stray import), not against features. A feature
 that needs more is measured, reviewed and recorded here as a new baseline,
 in a commit of its own that says by how much it grew.
 
-## Current: `700190fc` (renderer as merged while the guard was not running)
+## Current: `43330457` (renderer as merged while CI was red)
+
+**388 / 7271703 / 2441495.** Records the renderer as merged through
+`43330457` (#369). Main's CI has failed since early October on other steps,
+so this guard ran on every merge but its failure was never the first one
+anyone looked at. Against `700190fc`: +66 chunks (+20.5%), +771569 bytes
+(+11.9%), +253362 gzip bytes (+11.6%). The growth is spread across the
+onboarding, phone, routines, billing and settings work merged in that window
+and was not measured per merge. The 1% allowance is unchanged.
+
+Measured from a clean worktree build of `43330457` with the #370 lockfile
+(frozen-lockfile install, Linux x64); this baseline-only change touches no
+renderer code.
+
+## History
+
+### `700190fc` (renderer as merged while the guard was not running)
 
 **322 / 6500134 / 2188133.** Records the renderer as merged through `700190fc`.
 While the desktop build failed in CI (the notices step needed the Electron
@@ -28,8 +44,6 @@ Where it grew, measured per merge from clean builds (gzip bytes):
 
 Measured from a clean worktree build of `700190fc` (frozen-lockfile install,
 Linux x64, Node 24); this baseline-only commit changes no renderer code.
-
-## History
 
 ### `7926220a` (open-source license browser)
 
