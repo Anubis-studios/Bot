@@ -6,6 +6,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -281,9 +282,11 @@ describe("reads, the way the file tools read paths", () => {
 
   it("still reads the folder's own files, an @-prefixed one included", () => {
     expect(decide("read", { path: "@notes.md" })).toBe("allow");
-    expect(decide("read", { path: `file://${WORKSPACE}/notes.md` })).toBe(
-      "allow"
-    );
+    expect(
+      decide("read", {
+        path: pathToFileURL(path.join(WORKSPACE, "notes.md")).href,
+      })
+    ).toBe("allow");
   });
 
   it("is not widened by anything the session allowed", () => {
