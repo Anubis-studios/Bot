@@ -6,6 +6,7 @@ import {
 import { useTranslation } from "react-i18next";
 
 import { Spinner } from "#renderer/components/spinner";
+import { cn } from "#renderer/lib/cn";
 import { Button } from "#renderer/ui/button";
 import {
   Field,
@@ -86,7 +87,13 @@ const TextField = ({
     </Field>
   );
 };
-const SubmitButton = ({ label }: { label: string }) => {
+const SubmitButton = ({
+  label,
+  className,
+}: {
+  label: string;
+  className?: string;
+}) => {
   const form = useFormContext();
   return (
     <form.Subscribe
@@ -97,7 +104,7 @@ const SubmitButton = ({ label }: { label: string }) => {
       {([canSubmit, busy, attempts]) => (
         <Button
           type="submit"
-          className="bot-accent-control aria-busy:opacity-100"
+          className={cn("bot-accent-control aria-busy:opacity-100", className)}
           aria-busy={busy}
           disabled={busy || (!canSubmit && attempts > 0)}
         >

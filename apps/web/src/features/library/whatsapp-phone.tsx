@@ -12,7 +12,14 @@ import * as v from "valibot";
 
 import { ConnectorMark } from "#renderer/components/connector-mark";
 import { ConfirmAction } from "#renderer/components/form-kit/confirm";
-import { ConnectDialogContent } from "#renderer/components/form-kit/connect-dialog";
+import {
+  CONNECT_PRIMARY,
+  ConnectDialogContent,
+  ConnectHeader,
+  ConnectNote,
+  ConnectStep,
+  ConnectWaiting,
+} from "#renderer/components/form-kit/connect-dialog";
 import {
   AreaPage,
   GroupCard,
@@ -21,12 +28,7 @@ import {
 } from "#renderer/components/form-kit/page";
 import { maskedPhone } from "#renderer/lib/format/phone";
 import { Button } from "#renderer/ui/button";
-import {
-  Dialog,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "#renderer/ui/dialog";
+import { Dialog } from "#renderer/ui/dialog";
 import { Input } from "#renderer/ui/input";
 
 import { useMessagingDialog } from "./messaging-dialog";
@@ -166,23 +168,21 @@ const LinkDialog = ({
         className="sm:max-w-[440px]"
         finalFocus={dialog.finalFocus}
       >
-        <DialogHeader className="flex-row items-center gap-3">
-          <ConnectorMark id="whatsapp" size={32} />
-          <DialogTitle className="text-xl font-bold tracking-tight">
-            {t(
-              step === "code"
-                ? "web.whatsapp.codeTitle"
-                : step === "done"
-                  ? "web.whatsapp.doneTitle"
-                  : manage || bot
-                    ? "web.whatsapp.title"
-                    : "web.whatsapp.dialogTitle"
-            )}
-          </DialogTitle>
-          <DialogDescription className="sr-only">
-            {t(bot ? "web.whatsappBot.body" : "web.whatsapp.dialogBody")}
-          </DialogDescription>
-        </DialogHeader>
+        <ConnectHeader
+          mark={<ConnectorMark id="whatsapp" size={32} />}
+          title={t(
+            step === "code"
+              ? "web.whatsapp.codeTitle"
+              : step === "done"
+                ? "web.whatsapp.doneTitle"
+                : manage || bot
+                  ? "web.whatsapp.title"
+                  : "web.whatsapp.dialogTitle"
+          )}
+          description={t(
+            bot ? "web.whatsappBot.body" : "web.whatsapp.dialogBody"
+          )}
+        />
         <div className="flex min-w-0 flex-col gap-4 text-[15px] leading-[21px]">
           {manage ? (
             <>
@@ -193,7 +193,7 @@ const LinkDialog = ({
               </p>
               <Button
                 size="lg"
-                className="h-12 rounded-full text-base"
+                className={CONNECT_PRIMARY}
                 nativeButton={false}
                 render={
                   <a
@@ -208,7 +208,7 @@ const LinkDialog = ({
               <Button
                 size="lg"
                 variant="ghost"
-                className="text-destructive h-12 rounded-full text-base"
+                className={`text-destructive ${CONNECT_PRIMARY}`}
                 onClick={() => setConfirming(true)}
               >
                 {t("web.whatsapp.unlink")}
@@ -268,7 +268,7 @@ const LinkDialog = ({
                 type="submit"
                 size="lg"
                 disabled={busy || number.replace(/\D/g, "").length < 8}
-                className="h-12 rounded-full text-base"
+                className={CONNECT_PRIMARY}
               >
                 {t("web.whatsapp.getCode")}
               </Button>
@@ -306,32 +306,25 @@ const LinkDialog = ({
               </div>
               <ol className="flex flex-col gap-3">
                 {(["step1", "step2", "step3"] as const).map((key, index) => (
-                  <li key={key} className="flex items-start gap-3">
-                    <span className="bg-muted flex size-6 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold">
-                      {index + 1}
-                    </span>
-                    <span>{t(`web.whatsapp.${key}`)}</span>
-                  </li>
+                  <ConnectStep
+                    key={key}
+                    index={index + 1}
+                    title={t(`web.whatsapp.${key}`)}
+                  />
                 ))}
               </ol>
-              <p className="text-muted-foreground text-[13px] leading-[18px]">
-                {t("web.whatsapp.scamNote")}
-              </p>
+              <ConnectNote>{t("web.whatsapp.scamNote")}</ConnectNote>
               <Button
                 size="lg"
-                className="h-12 rounded-full text-base"
+                className={CONNECT_PRIMARY}
                 nativeButton={false}
                 render={<a href="whatsapp://" />}
               >
                 {t("web.whatsapp.openWhatsApp")}
               </Button>
-              <p
-                role="status"
-                className="text-muted-foreground flex items-center justify-center gap-2 text-[13px]"
-              >
-                <span className="size-2 animate-pulse rounded-full bg-[var(--chat-status-attention)]" />
+              <ConnectWaiting className="justify-center">
                 {t("web.whatsapp.waiting")}
-              </p>
+              </ConnectWaiting>
             </>
           ) : (
             <>
@@ -350,7 +343,7 @@ const LinkDialog = ({
               </div>
               <Button
                 size="lg"
-                className="h-12 rounded-full text-base"
+                className={CONNECT_PRIMARY}
                 nativeButton={false}
                 render={
                   <a
@@ -365,7 +358,7 @@ const LinkDialog = ({
               <Button
                 size="lg"
                 variant="secondary"
-                className="h-12 rounded-full text-base"
+                className={CONNECT_PRIMARY}
                 onClick={() => reset(false)}
               >
                 {t("web.whatsapp.done")}

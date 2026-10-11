@@ -14,7 +14,10 @@ import * as v from "valibot";
 
 import { useAppForm } from "#renderer/components/form-kit";
 import { ConfirmAction } from "#renderer/components/form-kit/confirm";
-import { ConnectDialogContent } from "#renderer/components/form-kit/connect-dialog";
+import {
+  ConnectDialogContent,
+  ConnectNote,
+} from "#renderer/components/form-kit/connect-dialog";
 import {
   AreaPage,
   GroupCard,
@@ -631,9 +634,11 @@ export const McpServerDialog = ({
           <DialogTitle>{t("phase5.customMcp")}</DialogTitle>
           <DialogDescription>{t("phase5.mcpLive")}</DialogDescription>
         </DialogHeader>
-        {remoteChanged && <p role="status">{t("phase5.remoteChanged")}</p>}
+        {remoteChanged && (
+          <ConnectNote role="status">{t("phase5.remoteChanged")}</ConnectNote>
+        )}
         {name !== "new" && !entry ? (
-          <p>{t("phase5.serverGone")}</p>
+          <ConnectNote error>{t("phase5.serverGone")}</ConnectNote>
         ) : (
           <form
             onSubmit={(e) => {
@@ -733,10 +738,12 @@ export const McpServerDialog = ({
               </form.Subscribe>
               <form.Subscribe selector={(state) => state.isValid}>
                 {(valid) =>
-                  valid ? null : <p role="alert">{t("phase5.invalidMcp")}</p>
+                  valid ? null : (
+                    <ConnectNote error>{t("phase5.invalidMcp")}</ConnectNote>
+                  )
                 }
               </form.Subscribe>
-              {error && <p role="alert">{error}</p>}
+              {error && <ConnectNote error>{error}</ConnectNote>}
               <DialogFooter>
                 <Button type="button" variant="secondary" onClick={close}>
                   {t("phase5.cancel")}

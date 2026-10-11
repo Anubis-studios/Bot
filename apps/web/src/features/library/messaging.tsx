@@ -10,8 +10,8 @@ import {
 import { useLiveQuery } from "@tanstack/react-db";
 import { revalidateLogic } from "@tanstack/react-form";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckIcon, ExternalLinkIcon } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { ExternalLinkIcon } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import * as v from "valibot";
 
@@ -19,7 +19,15 @@ import { WebMessagingPage } from "#platform/whatsapp-phone";
 import { ConnectorMark } from "#renderer/components/connector-mark";
 import { useAppForm } from "#renderer/components/form-kit";
 import { ConfirmAction } from "#renderer/components/form-kit/confirm";
-import { ConnectDialogContent } from "#renderer/components/form-kit/connect-dialog";
+import {
+  CONNECT_ACTION,
+  CONNECT_PRIMARY,
+  ConnectDialogContent,
+  ConnectHeader,
+  ConnectNote,
+  ConnectStep as Step,
+  ConnectWaiting,
+} from "#renderer/components/form-kit/connect-dialog";
 import { SettingSwitch, Choice } from "#renderer/components/form-kit/controls";
 import {
   AreaPage,
@@ -33,17 +41,11 @@ import {
   useMutation,
   useMutationState,
 } from "#renderer/data/query-client";
-import { cn } from "#renderer/lib/cn";
 import { IS_ELECTRON } from "#renderer/lib/platform";
 import { showError } from "#renderer/lib/toast";
 import { useAppContext } from "#renderer/lib/use-app-context";
 import { Button } from "#renderer/ui/button";
-import {
-  Dialog,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "#renderer/ui/dialog";
+import { Dialog } from "#renderer/ui/dialog";
 import { Field, FieldGroup, FieldLabel, FieldError } from "#renderer/ui/field";
 import { Input } from "#renderer/ui/input";
 
@@ -317,30 +319,21 @@ export const MessagingPlatformDialog = ({
         className="sm:max-w-[440px]"
         finalFocus={finalFocus}
       >
-        <DialogHeader className="flex-row items-center gap-3">
-          <ConnectorMark id={platform} size={32} />
-          <DialogTitle className="text-xl font-bold tracking-tight">
-            {appName}
-          </DialogTitle>
-          {state && (
-            <span className="ml-auto">
-              <StatePill
-                tone={
-                  connected
-                    ? "success"
-                    : state === "disabled"
-                      ? "neutral"
-                      : "warning"
-                }
-              >
-                {t(`messaging.states.${state}`)}
-              </StatePill>
-            </span>
-          )}
-          <DialogDescription className="sr-only">
-            {description}
-          </DialogDescription>
-        </DialogHeader>
+        <ConnectHeader
+          mark={<ConnectorMark id={platform} size={32} />}
+          title={appName}
+          status={
+            state && {
+              label: t(`messaging.states.${state}`),
+              tone: connected
+                ? "success"
+                : state === "disabled"
+                  ? "neutral"
+                  : "warning",
+            }
+          }
+          description={description}
+        />
         <div className="flex min-w-0 flex-col gap-4 text-[15px] leading-[21px]">
           <p className="text-muted-foreground">
             {linkRequired
@@ -348,17 +341,9 @@ export const MessagingPlatformDialog = ({
               : description}
           </p>
           {notice && (
-            <p
-              role="alert"
-              className={cn(
-                "text-[13px] leading-[18px]",
-                !error && p?.state === "rate_limited"
-                  ? "text-muted-foreground"
-                  : "text-destructive"
-              )}
-            >
+            <ConnectNote error={!!error || p?.state !== "rate_limited"}>
               {notice}
-            </p>
+            </ConnectNote>
           )}
           <ol className="flex flex-col gap-4">
             {WEB_LOGIN.has(platform) && (
@@ -371,18 +356,18 @@ export const MessagingPlatformDialog = ({
                     : undefined
                 }
               >
-                <p className="text-muted-foreground text-[13px] leading-[18px]">
+                <ConnectNote>
                   {t(
                     signedIn
                       ? `messaging.${platform}Connected`
                       : `messaging.${platform}Scan`
                   )}
-                </p>
+                </ConnectNote>
                 {!signedIn && p?.enabled && (
                   <Button
                     size="sm"
                     variant="secondary"
-                    className="self-start rounded-full"
+                    className={CONNECT_ACTION}
                     onClick={() =>
                       void transport.client.messaging.showLogin({
                         platformId: platform,
@@ -416,9 +401,7 @@ export const MessagingPlatformDialog = ({
             )}
           </ol>
           {platform === "whatsapp" && p?.state === "syncing" && (
-            <p className="text-muted-foreground text-[13px] leading-[18px]">
-              {t("messaging.whatsappSyncing")}
-            </p>
+            <ConnectNote>{t("messaging.whatsappSyncing")}</ConnectNote>
           )}
           {p && p.fields.length > 0 && <PlatformCredentials platform={p} />}
           {s?.pending
@@ -494,20 +477,16 @@ export const MessagingPlatformDialog = ({
           {setupIncomplete &&
             signedIn &&
             shared?.sharedLink?.status !== "pending" && (
-              <p
-                role="status"
-                className="text-muted-foreground flex items-center justify-center gap-2 text-[13px]"
-              >
-                <span className="size-2 animate-pulse rounded-full bg-[var(--chat-status-attention)]" />
+              <ConnectWaiting className="justify-center">
                 {t("messaging.finishLinkFirst")}
-              </p>
+              </ConnectWaiting>
             )}
           {/* An unfinished setup closes as a Cancel: settling it switches the
               platform back off. */}
           <Button
             size="lg"
             variant={connected ? "default" : "secondary"}
-            className="h-12 rounded-full text-base"
+            className={CONNECT_PRIMARY}
             onClick={() => void close()}
           >
             {t(connected ? "messaging.doneConnect" : "messaging.cancelConnect")}
@@ -542,38 +521,6 @@ const WEB_LOGIN = new Set<MessagingPlatformId>([
   "discord",
 ]);
 
-/** One step of a connect; numbered only when there is more than one. */
-const Step = ({
-  index,
-  done = false,
-  title,
-  children,
-}: {
-  index?: number;
-  done?: boolean;
-  title?: string;
-  children?: ReactNode;
-}) => (
-  <li className="flex items-start gap-3">
-    {index != null && (
-      <span
-        className={cn(
-          "flex size-6 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold",
-          done
-            ? "bg-[var(--chat-status-done)]/15 text-[var(--chat-status-done)]"
-            : "bg-muted"
-        )}
-      >
-        {done ? <CheckIcon className="size-3.5" /> : index}
-      </span>
-    )}
-    <div className="flex min-w-0 flex-1 flex-col gap-2">
-      {title && <span className="font-medium">{title}</span>}
-      {children}
-    </div>
-  </li>
-);
-
 /**
  * Pairing with a shared Abacus-owned bot: the server mints a one-time code,
  * the user sends the bot `/link <code>`, and the steps flip once it lands.
@@ -602,7 +549,6 @@ const SharedLinkSteps = ({
   const title = t(
     required ? "messaging.sharedLink.stepLink" : "messaging.sharedLink.title"
   );
-  const note = "text-muted-foreground text-[13px] leading-[18px]";
   const open = (target: "install" | "dm") =>
     void transport.client.messaging.openSharedLink({
       platformId: platform.id,
@@ -614,29 +560,23 @@ const SharedLinkSteps = ({
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
-  const waiting = (text: string) => (
-    <p role="status" className={cn(note, "flex items-center gap-2")}>
-      <span className="size-2 animate-pulse rounded-full bg-[var(--chat-status-attention)]" />
-      {text}
-    </p>
-  );
   if (link.status === "linked")
     return (
       <Step index={first} done title={title}>
-        <p className={note}>
+        <ConnectNote>
           {link.displayName
             ? t("messaging.sharedLink.linkedAs", {
                 name: link.displayName,
                 app,
               })
             : t("messaging.sharedLink.linked", { app })}
-        </p>
+        </ConnectNote>
       </Step>
     );
   if (link.status === "pending" && platform.id === "abacus_telegram")
     return (
       <Step index={first} title={title}>
-        <p className={note}>{t("messaging.sharedLink.telegramStep")}</p>
+        <ConnectNote>{t("messaging.sharedLink.telegramStep")}</ConnectNote>
         {link.qrDataUrl && (
           <img
             className="size-[180px] self-center rounded-[18px] border bg-white p-2"
@@ -646,7 +586,11 @@ const SharedLinkSteps = ({
         )}
         {/* No "open link" button: the pairing has to be tapped on the phone
             that carries the account. */}
-        {waiting(t("messaging.sharedLink.waitingTelegram"))}
+        {
+          <ConnectWaiting>
+            {t("messaging.sharedLink.waitingTelegram")}
+          </ConnectWaiting>
+        }
       </Step>
     );
   if (link.status === "pending") {
@@ -658,7 +602,7 @@ const SharedLinkSteps = ({
             <Button
               size="sm"
               variant="secondary"
-              className="self-start rounded-full"
+              className={CONNECT_ACTION}
               onClick={() => open("install")}
             >
               <ExternalLinkIcon data-icon="inline-start" />
@@ -690,7 +634,7 @@ const SharedLinkSteps = ({
             <Button
               size="sm"
               variant="secondary"
-              className="self-start rounded-full"
+              className={CONNECT_ACTION}
               onClick={() => {
                 // The paste is the whole of this step: the command goes back
                 // on the clipboard on the way out, in case the copy was skipped.
@@ -702,29 +646,29 @@ const SharedLinkSteps = ({
               {t("messaging.sharedLink.openDm")}
             </Button>
           )}
-          {waiting(t("messaging.sharedLink.waiting"))}
+          {<ConnectWaiting>{t("messaging.sharedLink.waiting")}</ConnectWaiting>}
         </Step>
       </>
     );
   }
   return (
     <Step index={first} title={title}>
-      <p className={link.error ? "text-destructive text-[13px]" : note}>
+      <ConnectNote error={!!link.error}>
         {link.error ??
           t(
             required
               ? "messaging.sharedLink.requiredIntro"
               : "messaging.sharedLink.intro"
           )}
-      </p>
+      </ConnectNote>
       {link.status === "unlinked" &&
         (preparing ? (
-          waiting(t("messaging.sharedLink.preparing"))
+          <ConnectWaiting>{t("messaging.sharedLink.preparing")}</ConnectWaiting>
         ) : (
           <Button
             size="sm"
             variant="secondary"
-            className="self-start rounded-full"
+            className={CONNECT_ACTION}
             onClick={retry}
           >
             {t(

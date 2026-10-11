@@ -1,11 +1,20 @@
+import { CheckIcon } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
 
 import { BootAvatar, type BootStage } from "#renderer/components/boot-avatar";
 import type { AvatarMood } from "#renderer/lib/bots/avatar";
 import { cn } from "#renderer/lib/cn";
 import { useMediaQuery } from "#renderer/lib/use-media-query";
-import { Dialog, DialogContent } from "#renderer/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "#renderer/ui/dialog";
 import { SheetContent } from "#renderer/ui/sheet";
+
+import { StatePill } from "./page";
 
 export const ConnectDialogContent = ({
   children,
@@ -86,3 +95,104 @@ export const ConnectDialog = ({
     </ConnectDialogContent>
   </Dialog>
 );
+
+/** A connect dialog's header: the service's mark, its name and where it stands. */
+export const ConnectHeader = ({
+  mark,
+  title,
+  status,
+  description,
+}: {
+  mark?: ReactNode;
+  title: ReactNode;
+  status?: { label: string; tone: ComponentProps<typeof StatePill>["tone"] };
+  /** Read to assistive tech; the body says it on screen. */
+  description: ReactNode;
+}) => (
+  <DialogHeader className="flex-row items-center gap-3">
+    {mark}
+    <DialogTitle className="text-xl font-bold tracking-tight">
+      {title}
+    </DialogTitle>
+    {status && (
+      <span className="ml-auto">
+        <StatePill tone={status.tone}>{status.label}</StatePill>
+      </span>
+    )}
+    <DialogDescription className="sr-only">{description}</DialogDescription>
+  </DialogHeader>
+);
+
+/** The secondary line under a step or a field: muted, or an error. */
+export const ConnectNote = ({
+  error = false,
+  className,
+  ...props
+}: ComponentProps<"p"> & { error?: boolean }) => (
+  <p
+    {...(error ? { role: "alert" } : {})}
+    {...props}
+    className={cn(
+      "text-[13px] leading-[18px]",
+      error ? "text-destructive" : "text-muted-foreground",
+      className
+    )}
+  />
+);
+
+/** What a connect is waiting on, as one pulsing line. */
+export const ConnectWaiting = ({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) => (
+  <p
+    role="status"
+    className={cn(
+      "text-muted-foreground flex items-center gap-2 text-[13px] leading-[18px]",
+      className
+    )}
+  >
+    <span className="size-2 shrink-0 animate-pulse rounded-full bg-[var(--chat-status-attention)]" />
+    {children}
+  </p>
+);
+
+/** One step of a connect; numbered only when there is more than one. */
+export const ConnectStep = ({
+  index,
+  done = false,
+  title,
+  children,
+}: {
+  index?: number;
+  done?: boolean;
+  title?: ReactNode;
+  children?: ReactNode;
+}) => (
+  <li className="flex items-start gap-3">
+    {index != null && (
+      <span
+        className={cn(
+          "flex size-6 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold",
+          done
+            ? "bg-[var(--chat-status-done)]/15 text-[var(--chat-status-done)]"
+            : "bg-muted"
+        )}
+      >
+        {done ? <CheckIcon className="size-3.5" /> : index}
+      </span>
+    )}
+    <div className="flex min-w-0 flex-1 flex-col gap-2">
+      {title && <span className="font-medium">{title}</span>}
+      {children}
+    </div>
+  </li>
+);
+
+/** The dialog's closing action: one large rounded button. */
+export const CONNECT_PRIMARY = "h-12 rounded-full text-base";
+/** A step's own action: small, rounded, secondary. */
+export const CONNECT_ACTION = "self-start rounded-full";

@@ -7,6 +7,7 @@ import {
 import { revalidateLogic } from "@tanstack/react-form";
 import { useQuery } from "@tanstack/react-query";
 import { useSearch } from "@tanstack/react-router";
+import { ExternalLinkIcon } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import * as v from "valibot";
@@ -14,7 +15,15 @@ import * as v from "valibot";
 import { ConnectorMark } from "#renderer/components/connector-mark";
 import { useAppForm } from "#renderer/components/form-kit";
 import { ConfirmAction } from "#renderer/components/form-kit/confirm";
-import { ConnectDialogContent } from "#renderer/components/form-kit/connect-dialog";
+import {
+  CONNECT_ACTION,
+  CONNECT_PRIMARY,
+  ConnectDialogContent,
+  ConnectHeader,
+  ConnectNote,
+  ConnectStep,
+  ConnectWaiting,
+} from "#renderer/components/form-kit/connect-dialog";
 import { Segments } from "#renderer/components/form-kit/controls";
 import {
   AreaPage,
@@ -27,13 +36,7 @@ import { useAppNavigate } from "#renderer/lib/navigation/use-app-navigate";
 import { platformSystem } from "#renderer/lib/platform-system";
 import { useAppContext, foldSearch } from "#renderer/lib/use-app-context";
 import { Button } from "#renderer/ui/button";
-import {
-  Dialog,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "#renderer/ui/dialog";
+import { Dialog } from "#renderer/ui/dialog";
 import { Field, FieldLabel, FieldGroup } from "#renderer/ui/field";
 import { Input } from "#renderer/ui/input";
 
@@ -172,16 +175,16 @@ export const ConnectorsPage = () => {
           </GroupCard>
         </section>
       ))}
-      {flow.state.phase !== "idle" && (
-        <p aria-live="polite">
-          {t("phase5.connectWaiting")}
+      {flow.state.phase !== "idle" && flow.state.phase !== "fields" && (
+        <div className="flex items-center gap-2">
+          <ConnectWaiting>{t("phase5.connectWaiting")}</ConnectWaiting>
           <Button size="sm" variant="ghost" onClick={() => void flow.cancel()}>
             {t("phase5.cancel")}
           </Button>
-        </p>
+        </div>
       )}
       {flow.state.error && (
-        <p role="alert">{connectErrorText(t, flow.state.error)}</p>
+        <ConnectNote error>{connectErrorText(t, flow.state.error)}</ConnectNote>
       )}
     </AreaPage>
   );
@@ -195,6 +198,19 @@ export const ConnectorDialog = ({ connector }: { connector: string }) => {
   const statuses = useQuery(
     transport.orpc.connectors.statuses.queryOptions({ input: {} })
   );
+  const status = statuses.data?.[connector];
+  const connected = status?.state === "connected";
+  const signIn = status?.reason === "sign-in-required";
+  const waiting =
+    flow.state.connectorId === connector && flow.state.phase !== "idle";
+  const tools =
+    entry?.kind === "platform"
+      ? entry.via != null
+        ? [entry.via]
+        : entry.tools
+      : entry?.kind === "mcp"
+        ? [entry.entry.url ?? entry.entry.command ?? ""].filter(Boolean)
+        : [];
   const close = () =>
     void navigate({
       to: "/library/connectors",
@@ -210,60 +226,120 @@ export const ConnectorDialog = ({ connector }: { connector: string }) => {
     >
       <ConnectDialogContent
         data-testid="connector-dialog"
-        className="sm:max-w-[420px]"
+        className="sm:max-w-[440px]"
       >
-        <DialogHeader>
-          <DialogTitle>{entry?.name ?? connector}</DialogTitle>
-          <DialogDescription>{entry?.description}</DialogDescription>
-        </DialogHeader>
-        <div className="flex min-w-0 flex-col gap-4">
-          <ConnectorMark id={entry?.logo ?? connector} size={40} />
-          <StatePill>
-            {statuses.data?.[connector]?.account ??
-              statuses.data?.[connector]?.state}
-          </StatePill>
-          <h2>{t("phase5.whatItCanDo")}</h2>
-          {entry?.kind === "platform" ? (
-            entry.via != null ? (
-              <code>{entry.via}</code>
-            ) : (
-              entry.tools.map((tool) => <code key={tool}>{tool}</code>)
-            )
-          ) : entry?.kind === "mcp" ? (
-            <code>{entry.entry.url ?? entry.entry.command}</code>
-          ) : null}
-          {entry?.setup?.map((step) => (
-            <p key={step}>{step}</p>
-          ))}
-          <Button
-            variant="secondary"
-            onClick={() =>
-              entry &&
-              void platformSystem(transport.client).openExternal({
-                url: entry.docsUrl,
-              })
+        <ConnectHeader
+          mark={<ConnectorMark id={entry?.logo ?? connector} size={32} />}
+          title={entry?.name ?? connector}
+          status={
+            status && {
+              label: t(
+                connected
+                  ? "phase5.connected"
+                  : signIn
+                    ? "phase5.signInNeeded"
+                    : "phase5.notConnected"
+              ),
+              tone: connected ? "success" : "warning",
             }
-          >
-            {t("phase5.documentation")}
-          </Button>
-          <Button onClick={() => void flow.start(connector)}>
-            {t("phase5.connect")}
-          </Button>
-          <ConfirmAction
-            title={t("phase5.disconnectTitle", { name: entry?.name })}
-            description={t("phase5.disconnectDescription")}
-            label={t("phase5.disconnect")}
-            onConfirm={async () => {
-              const result = await transport.client.connectors.disconnect({
-                connectorId: connector,
-              });
-              if (!result.ok) throw new Error(result.error);
-              close();
-            }}
-          />
-          <Button variant="secondary" onClick={close}>
-            {t("phase5.done")}
-          </Button>
+          }
+          description={entry?.description}
+        />
+        <div className="flex min-w-0 flex-col gap-4 text-[15px] leading-[21px]">
+          <p className="text-muted-foreground">
+            {status?.account ?? entry?.description}
+          </p>
+          {tools.length > 0 && (
+            <section className="flex flex-col gap-2">
+              <span className="font-medium">{t("phase5.whatItCanDo")}</span>
+              <div className="flex flex-wrap gap-1.5">
+                {tools.map((tool) => (
+                  <code
+                    key={tool}
+                    className="bg-muted rounded-md px-1.5 py-0.5 font-mono text-xs"
+                  >
+                    {tool}
+                  </code>
+                ))}
+              </div>
+            </section>
+          )}
+          {entry?.setup && entry.setup.length > 0 && (
+            <ol className="flex flex-col gap-3">
+              {entry.setup.map((step, index) => (
+                <ConnectStep
+                  key={step}
+                  index={entry.setup!.length > 1 ? index + 1 : undefined}
+                  done={connected}
+                >
+                  <ConnectNote>{step}</ConnectNote>
+                </ConnectStep>
+              ))}
+            </ol>
+          )}
+          {entry?.docsUrl && (
+            <Button
+              size="sm"
+              variant="secondary"
+              className={CONNECT_ACTION}
+              onClick={() =>
+                void platformSystem(transport.client).openExternal({
+                  url: entry.docsUrl,
+                })
+              }
+            >
+              <ExternalLinkIcon data-icon="inline-start" />
+              {t("phase5.documentation")}
+            </Button>
+          )}
+          {waiting && (
+            <ConnectWaiting className="justify-center">
+              {t("phase5.connectWaiting")}
+            </ConnectWaiting>
+          )}
+          {flow.state.connectorId === connector && flow.state.error && (
+            <ConnectNote error>
+              {connectErrorText(t, flow.state.error)}
+            </ConnectNote>
+          )}
+          {connected ? (
+            <Button size="lg" className={CONNECT_PRIMARY} onClick={close}>
+              {t("phase5.done")}
+            </Button>
+          ) : waiting ? (
+            <Button
+              size="lg"
+              variant="secondary"
+              className={CONNECT_PRIMARY}
+              onClick={() => void flow.cancel()}
+            >
+              {t("phase5.cancel")}
+            </Button>
+          ) : (
+            <Button
+              size="lg"
+              className={CONNECT_PRIMARY}
+              onClick={() => void flow.start(connector)}
+            >
+              {t(signIn ? "phase5.signIn" : "phase5.connect")}
+            </Button>
+          )}
+          {connected && (
+            <div className="flex justify-center">
+              <ConfirmAction
+                title={t("phase5.disconnectTitle", { name: entry?.name })}
+                description={t("phase5.disconnectDescription")}
+                label={t("phase5.disconnect")}
+                onConfirm={async () => {
+                  const result = await transport.client.connectors.disconnect({
+                    connectorId: connector,
+                  });
+                  if (!result.ok) throw new Error(result.error);
+                  close();
+                }}
+              />
+            </div>
+          )}
         </div>
       </ConnectDialogContent>
     </Dialog>
@@ -291,8 +367,8 @@ const FieldForm = ({ connector }: { connector: string }) => {
     onSubmit: async ({ value }) => {
       try {
         await flow.submit(v.parse(schema, value));
-      } catch {
-        setError(t("phase5.failed"));
+      } catch (e) {
+        setError(e instanceof Error ? e.message : t("phase5.failed"));
       }
     },
   });
@@ -303,19 +379,22 @@ const FieldForm = ({ connector }: { connector: string }) => {
         if (!open) void flow.cancel();
       }}
     >
-      <ConnectDialogContent className="sm:max-w-[480px]">
-        <DialogHeader>
-          <DialogTitle>
-            {t("phase5.connectName", { name: entry.name })}
-          </DialogTitle>
-          <DialogDescription>{t("phase5.credentialsLocal")}</DialogDescription>
-        </DialogHeader>
+      <ConnectDialogContent className="sm:max-w-[440px]">
+        <ConnectHeader
+          mark={<ConnectorMark id={entry.logo ?? entry.id} size={32} />}
+          title={t("phase5.connectName", { name: entry.name })}
+          description={t("phase5.credentialsLocal")}
+        />
         <form
+          className="flex min-w-0 flex-col gap-4 text-[15px] leading-[21px]"
           onSubmit={(e) => {
             e.preventDefault();
             void form.handleSubmit();
           }}
         >
+          <p className="text-muted-foreground">
+            {t("phase5.credentialsLocal")}
+          </p>
           <FieldGroup>
             {Object.entries(fields).map(([key, field]) => (
               <form.Field key={key} name={key}>
@@ -339,22 +418,20 @@ const FieldForm = ({ connector }: { connector: string }) => {
               </form.Field>
             ))}
             {entry.kind === "mcp" && entry.auth === "oauth-client" && (
-              <code>http://127.0.0.1:33418/callback</code>
+              <code className="bg-muted self-start rounded-md px-1.5 py-0.5 font-mono text-xs">
+                http://127.0.0.1:33418/callback
+              </code>
             )}
-            {error && <p role="alert">{error}</p>}
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => void flow.cancel()}
-              >
-                {t("phase5.cancel")}
-              </Button>
-              <form.AppForm>
-                <form.SubmitButton label={t("phase5.connect")} />
-              </form.AppForm>
-            </DialogFooter>
           </FieldGroup>
+          {error && (
+            <ConnectNote error>{connectErrorText(t, error)}</ConnectNote>
+          )}
+          <form.AppForm>
+            <form.SubmitButton
+              label={t("phase5.connect")}
+              className={CONNECT_PRIMARY}
+            />
+          </form.AppForm>
         </form>
       </ConnectDialogContent>
     </Dialog>

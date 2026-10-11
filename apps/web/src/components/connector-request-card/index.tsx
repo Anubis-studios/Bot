@@ -20,6 +20,7 @@ import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useBotNumberConnect } from "#platform/whatsapp-bot";
+import { ConnectorMark } from "#renderer/components/connector-mark";
 import { Spinner } from "#renderer/components/spinner";
 import { cn } from "#renderer/lib/cn";
 import { connectErrorText } from "#renderer/lib/connect-page";
@@ -74,9 +75,17 @@ export const ConnectorRequestCard = ({
       role="group"
       aria-labelledby={`${id}-title`}
     >
-      <span className="bg-muted flex size-9 shrink-0 items-center justify-center rounded-lg">
-        <Plug aria-hidden className="size-4" />
-      </span>
+      {connector ? (
+        <ConnectorMark
+          id={connector.logo ?? connector.id}
+          initial={connector.name.slice(0, 1)}
+          size={36}
+        />
+      ) : (
+        <span className="bg-muted flex size-9 shrink-0 items-center justify-center rounded-lg">
+          <Plug aria-hidden className="size-4" />
+        </span>
+      )}
       <div className="min-w-0 flex-1">
         <div id={`${id}-title`} className="text-sm font-medium">
           {t("bots.chat.connector.title", { provider })}
