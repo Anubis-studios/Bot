@@ -163,12 +163,7 @@ export const platformPlugin = async (
         },
       }),
       transformIndexHtml: (html: string) => ({
-        // The static splash is the browser's: Electron mounts from a local
-        // file and keeps its blank first frame.
-        html:
-          platform === "electron"
-            ? html.replace(/\s*<!-- splash:[\s\S]*<!-- \/splash -->\s*/, "")
-            : html,
+        html,
         tags: [
           {
             tag: "meta",
