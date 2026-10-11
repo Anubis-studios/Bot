@@ -421,7 +421,7 @@ it("a signed-in Discord without its bot linked is not finished", async () => {
       within(dialog).getByText(enUS.messaging.sharedLink.step1)
     ).not.toBeNull();
     expect(
-      within(dialog).getByText(enUS.messaging.finishLinkFirst)
+      within(dialog).getByText(enUS.messaging.sharedLink.waiting)
     ).not.toBeNull();
     expect(within(dialog).getByText("/link abc")).not.toBeNull();
     expect(

@@ -225,7 +225,6 @@ export const MessagingPlatformDialog = ({
   }, [flow]);
   const [error, setError] = useState<string | null>(null);
   const [preparing, setPreparing] = useState(true);
-  const [unlinking, setUnlinking] = useState(false);
   const writesSnapshot = useWritesSnapshot();
   const decide = useMutation(
     transport.orpc.messaging.decidePairing.mutationOptions(writesSnapshot)
@@ -293,8 +292,17 @@ export const MessagingPlatformDialog = ({
   const setupIncomplete =
     linkRequired && shared?.sharedLink?.status !== "linked";
   const connected = s != null && isMessagingPlatformConnected(s, platform);
-  const state =
-    setupIncomplete && p?.state === "connected" ? "needs_link" : p?.state;
+  const state = connected
+    ? "connected"
+    : setupIncomplete && p?.state === "connected"
+      ? "needs_link"
+      : p?.state;
+  // Waiting on a login is step 1's own instruction, not a second notice.
+  const notice =
+    error ??
+    (p?.state === "needs_login" && WEB_LOGIN.has(platform)
+      ? null
+      : p?.errorMessage);
   const description = t(`messaging.descriptions.${p?.nameKey ?? platform}`, {
     defaultValue: t("phase5.messagingDescription"),
   });
@@ -339,19 +347,17 @@ export const MessagingPlatformDialog = ({
               ? t("messaging.twoStepSetup", { app: appName })
               : description}
           </p>
-          {(error || p?.errorMessage) && (
+          {notice && (
             <p
               role="alert"
               className={cn(
                 "text-[13px] leading-[18px]",
-                // Waiting on a login is an instruction, not a failure.
-                !error &&
-                  (p?.state === "needs_login" || p?.state === "rate_limited")
+                !error && p?.state === "rate_limited"
                   ? "text-muted-foreground"
                   : "text-destructive"
               )}
             >
-              {error ?? p?.errorMessage}
+              {notice}
             </p>
           )}
           <ol className="flex flex-col gap-4">
@@ -392,6 +398,7 @@ export const MessagingPlatformDialog = ({
             {shared && (
               <SharedLinkSteps
                 platform={shared}
+                app={appName}
                 first={linkRequired ? 2 : undefined}
                 required={linkRequired}
                 preparing={preparing}
@@ -483,15 +490,18 @@ export const MessagingPlatformDialog = ({
                 />
               </SettingRow>
             ))}
-          {setupIncomplete && signedIn && (
-            <p
-              role="status"
-              className="text-muted-foreground flex items-center justify-center gap-2 text-[13px]"
-            >
-              <span className="size-2 animate-pulse rounded-full bg-[var(--chat-status-attention)]" />
-              {t("messaging.finishLinkFirst")}
-            </p>
-          )}
+          {/* A pending link already says what it waits for. */}
+          {setupIncomplete &&
+            signedIn &&
+            shared?.sharedLink?.status !== "pending" && (
+              <p
+                role="status"
+                className="text-muted-foreground flex items-center justify-center gap-2 text-[13px]"
+              >
+                <span className="size-2 animate-pulse rounded-full bg-[var(--chat-status-attention)]" />
+                {t("messaging.finishLinkFirst")}
+              </p>
+            )}
           {/* An unfinished setup closes as a Cancel: settling it switches the
               platform back off. */}
           <Button
@@ -503,18 +513,8 @@ export const MessagingPlatformDialog = ({
             {t(connected ? "messaging.doneConnect" : "messaging.cancelConnect")}
           </Button>
           {connected && (
-            <>
-              <Button
-                size="lg"
-                variant="ghost"
-                className="text-destructive h-12 rounded-full text-base"
-                onClick={() => setUnlinking(true)}
-              >
-                {t("phase5.unlink")}
-              </Button>
+            <div className="flex justify-center">
               <ConfirmAction
-                open={unlinking}
-                onOpenChange={setUnlinking}
                 title={t("phase5.unlinkTitle")}
                 description={t("phase5.unlinkDescription")}
                 label={t("phase5.unlink")}
@@ -527,7 +527,7 @@ export const MessagingPlatformDialog = ({
                   );
                 }}
               />
-            </>
+            </div>
           )}
         </div>
       </ConnectDialogContent>
@@ -580,12 +580,15 @@ const Step = ({
  */
 const SharedLinkSteps = ({
   platform,
+  app,
   first,
   required,
   preparing,
   retry,
 }: {
   platform: MessagingPlatformInfo;
+  /** The app the bot is reached in, e.g. Discord. */
+  app: string;
   first?: number;
   required: boolean;
   preparing: boolean;
@@ -596,7 +599,6 @@ const SharedLinkSteps = ({
   const [copied, setCopied] = useState(false);
   const link = platform.sharedLink ?? { status: "unlinked" as const };
   const command = link.code ? `/link ${link.code}` : null;
-  const app = t(`messaging.platforms.${platform.nameKey}`);
   const title = t(
     required ? "messaging.sharedLink.stepLink" : "messaging.sharedLink.title"
   );

@@ -1212,7 +1212,7 @@
     "unsavedChanges": "Unsaved changes",
     "whatsappConnected": "Connected. Message me from your “Message yourself” chat in WhatsApp. The agent also messages people as your account.",
     "whatsappOpenLogin": "Open WhatsApp login",
-    "whatsappScan": "Open WhatsApp → Linked devices → Link a device, then scan the code above. Once linked, message me from your “Message yourself” chat.",
+    "whatsappScan": "A WhatsApp login window opened. Scan its QR with WhatsApp on your phone: Settings, Linked devices, Link a device.",
     "whatsappSyncing": "Linked. WhatsApp is syncing your chats to this device. This takes a few minutes the first time. Keep WhatsApp open on your phone and keep this app open until it finishes.",
     "sharedLink": {
       "title": "Abacus AI bot",

@@ -121,10 +121,21 @@ export const BootAvatarHost = ({ children }: { children: ReactNode }) => {
     const follow = () => move(false);
     window.addEventListener("resize", follow);
     window.addEventListener("scroll", follow, true);
+    // A dialog that grows as its content loads moves its home: follow it
+    // without a fade, once the avatar has been placed.
+    const resized = new ResizeObserver(() => {
+      if (element.style.opacity !== "1") return;
+      const to = home.element.getBoundingClientRect();
+      flight.current?.stop();
+      element.style.transform = `translate(${to.x}px, ${to.y}px) scale(${to.width / 96})`;
+      previous.current = to;
+    });
+    resized.observe(home.element.closest("[role=dialog]") ?? home.element);
     return () => {
       if (delay != null) clearTimeout(delay);
       window.removeEventListener("resize", follow);
       window.removeEventListener("scroll", follow, true);
+      resized.disconnect();
     };
   }, [home]);
   return (
