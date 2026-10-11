@@ -3366,7 +3366,6 @@
       "workspaceDetail": "Where new sessions run unless you pick a folder",
       "defaultMode": "Default permission mode",
       "botMode": "Bots and routines run in",
-      "modes": "Permission modes",
       "theme": "थीम",
       "density": "Density",
       "densityDetail": "The window reopens to apply this.",

@@ -20,12 +20,6 @@ const labelKeys: Record<string, string> = {
   showInNotch: "settings.notifications.showInNotch.title",
   tour: "tour.replay",
   ...Object.fromEntries(
-    ["AUTO", "DEFAULT", "ACCEPTEDITS", "PLAN", "YOLO"].map((id) => [
-      `mode-${id}`,
-      `chat.mode.${id}`,
-    ])
-  ),
-  ...Object.fromEntries(
     EXEC_BACKENDS.map((backend) => [
       `backend-${backend.id}`,
       `execBackends.${backend.labelKey}.label`,
@@ -79,14 +73,10 @@ const groups: Partial<Record<SettingsPageId, string[]>> = {
     "notchHaptics",
     "notchShortcut",
     "tour",
+    "showLinkPreviews",
     "defaultWorkspace",
     "defaultMode",
     "botMode",
-    "mode-AUTO",
-    "mode-DEFAULT",
-    "mode-ACCEPTEDITS",
-    "mode-PLAN",
-    "mode-YOLO",
   ],
   appearance: [
     "palette",

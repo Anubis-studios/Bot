@@ -147,7 +147,14 @@ export const GeneralPage = () => {
             }
           />
         </SettingRow>
-        <SettingRow id="defaultMode" title={t("phase5.settings.defaultMode")}>
+        <SettingRow
+          id="defaultMode"
+          title={t("phase5.settings.defaultMode")}
+          detail={t(`phase5.modeDescriptions.${prefs.defaultMode}`)}
+        >
+          {prefs.defaultMode === "YOLO" && (
+            <StatePill tone="warning">{t("phase5.careful")}</StatePill>
+          )}
           <Choice
             id="defaultMode"
             value={prefs.defaultMode}
@@ -162,7 +169,11 @@ export const GeneralPage = () => {
           />
         </SettingRow>
         {sandbox.data?.available && (
-          <SettingRow id="botMode" title={t("phase5.settings.botMode")}>
+          <SettingRow
+            id="botMode"
+            title={t("phase5.settings.botMode")}
+            detail={t(`phase5.modeDescriptions.${botMode.data ?? "YOLO"}`)}
+          >
             <Choice
               id="botMode"
               value={botMode.data ?? "YOLO"}
@@ -178,18 +189,6 @@ export const GeneralPage = () => {
             />
           </SettingRow>
         )}
-      </GroupCard>
-      <GroupCard title={t("phase5.settings.modes")}>
-        {modes.map((m) => (
-          <SettingRow
-            key={m}
-            id={`mode-${m}`}
-            title={t(`chat.mode.${m}`)}
-            detail={t(`phase5.modeDescriptions.${m}`)}
-          >
-            {m === "YOLO" && <StatePill>{t("phase5.careful")}</StatePill>}
-          </SettingRow>
-        ))}
       </GroupCard>
     </AreaPage>
   );
@@ -536,6 +535,8 @@ export const NotificationsPage = () => {
           <SettingSwitch
             id="notify"
             checked={notification.data?.enabled ?? true}
+            // The write carries `sound` too: wait for the stored one.
+            disabled={!notification.data}
             onCheckedChange={(enabled) =>
               setNotify.mutate({
                 enabled,
@@ -544,6 +545,8 @@ export const NotificationsPage = () => {
             }
           />
         </SettingRow>
+      </GroupCard>
+      <GroupCard>
         <SettingRow id="sounds" title={t("phase5.settings.sounds")}>
           <SettingSwitch
             id="sounds"
@@ -571,6 +574,7 @@ export const NotificationsPage = () => {
             <SoundPreview cue={cue} />
             <SettingSwitch
               id={`sound-${cue}`}
+              disabled={!prefs.sounds.enabled}
               checked={prefs.sounds.perEvent[cue] !== false}
               onCheckedChange={(enabled) =>
                 void update({
@@ -582,6 +586,8 @@ export const NotificationsPage = () => {
             />
           </SettingRow>
         ))}
+      </GroupCard>
+      <GroupCard>
         <SettingRow
           id="quietHours"
           title={t("phase5.settings.quietHours")}

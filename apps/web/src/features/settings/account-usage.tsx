@@ -369,6 +369,8 @@ export const UsagePage = () => {
       actions={
         <Button
           size="sm"
+          variant="secondary"
+          disabled={query.isFetching || account.isFetching}
           onClick={() => {
             void query.refetch();
             void account.refetch();

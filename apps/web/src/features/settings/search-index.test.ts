@@ -39,9 +39,6 @@ describe("R5-T24 settings index", () => {
       if (entry.labelKey)
         expect(typeof lookup(entry.labelKey), entry.id).toBe("string");
     expect(
-      SETTINGS_INDEX.find((row) => row.id === "mode-ACCEPTEDITS")?.labelKey
-    ).toBe("chat.mode.ACCEPTEDITS");
-    expect(
       SETTINGS_INDEX.find((row) => row.id === "device-ios")?.labelKey
     ).toBe("phase5.deviceTools.ios");
   });
