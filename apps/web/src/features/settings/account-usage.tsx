@@ -12,9 +12,6 @@ import {
   GroupCard,
   SettingRow,
 } from "#renderer/components/form-kit/page";
-import { accountStateQuery } from "#renderer/features/onboarding/actions";
-import { onboardingStore } from "#renderer/features/onboarding/store";
-import { tourSignedOut } from "#renderer/features/tour/store";
 import { ABACUS_BUY_CREDITS_URL } from "#renderer/lib/abacus-links";
 import { accountIdentity } from "#renderer/lib/account-identity";
 import { accountTier } from "#renderer/lib/credits";
@@ -26,6 +23,7 @@ import { showInfo } from "#renderer/lib/toast";
 import { openUpgrade } from "#renderer/lib/upgrade";
 import { useAccount } from "#renderer/lib/use-account";
 import { useAppContext, errorText } from "#renderer/lib/use-app-context";
+import { forgetAccount } from "#renderer/platform/forget-account";
 import { Button } from "#renderer/ui/button";
 import { Checkbox } from "#renderer/ui/checkbox";
 export const AccountPage = () => {
@@ -313,23 +311,7 @@ export const AccountPage = () => {
               )}
               label={t("phase5.forget")}
               onConfirm={async () => {
-                const state = await transport.client.account.forget({});
-                context.queryClient.setQueryData(
-                  accountStateQuery(transport).queryKey,
-                  state
-                );
-                await context.db.updatePrefs({
-                  onboardingStep: null,
-                  onboardingFlow: null,
-                  onboardingExit: null,
-                  onboardingPairing: [],
-                  tour: { status: "unseen", at: null },
-                });
-                onboardingStore.setState(() => ({
-                  signIn: null,
-                  createdBotId: null,
-                }));
-                tourSignedOut();
+                await forgetAccount(context);
                 await navigate({
                   to: "/onboarding/$step",
                   params: { step: "welcome" },
