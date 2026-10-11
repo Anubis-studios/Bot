@@ -1,4 +1,5 @@
 import {
+  isMessagingPlatformConnected,
   SHARED_BOT_PLATFORM_OF,
   SHARED_LINK_REQUIRED,
   type MessagingPlatformId,
@@ -9,7 +10,8 @@ import {
 import { useLiveQuery } from "@tanstack/react-db";
 import { revalidateLogic } from "@tanstack/react-form";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { ExternalLinkIcon } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import * as v from "valibot";
 
@@ -174,6 +176,17 @@ const useWritesSnapshot = () => {
       ),
   };
 };
+/** The shared bot lane on, and a fresh link code minted for it. */
+const pairSharedLane = async (
+  deps: Parameters<typeof connectPlatform>[0],
+  platformId: MessagingPlatformId
+) => {
+  await connectPlatform(deps, platformId);
+  deps.queryClient.setQueryData(
+    deps.transport.orpc.messaging.snapshot.queryKey({ input: {} }),
+    await deps.transport.client.messaging.pairShared({ platformId })
+  );
+};
 const PlatformDialog = () => {
   const dialog = useMessagingDialog();
   return dialog.platform ? (
@@ -210,6 +223,7 @@ export const MessagingPlatformDialog = ({
     flowRef.current = flow;
   }, [flow]);
   const [error, setError] = useState<string | null>(null);
+  const [preparing, setPreparing] = useState(true);
   const writesSnapshot = useWritesSnapshot();
   const decide = useMutation(
     transport.orpc.messaging.decidePairing.mutationOptions(writesSnapshot)
@@ -237,23 +251,27 @@ export const MessagingPlatformDialog = ({
   useEffect(() => {
     let live = true;
     const ready = flowRef.current.registerPairing(platform, async () => {
-      await connectPlatform({ transport, queryClient: cache }, platform);
+      const next = await connectPlatform(
+        { transport, queryClient: cache },
+        platform
+      );
       if (!live) return;
-      await transport.client.messaging.showLogin({ platformId: platform });
-      if (sharedId && SHARED_LINK_REQUIRED.has(platform)) {
-        await connectPlatform({ transport, queryClient: cache }, sharedId);
-        const next = await transport.client.messaging.pairShared({
-          platformId: sharedId,
-        });
-        cache.setQueryData(
-          transport.orpc.messaging.snapshot.queryKey({ input: {} }),
-          next
-        );
-      }
+      // The login window shows itself only while there is a login to do.
+      const state = next.platforms.find((p) => p.id === platform)?.state;
+      if (state !== "connected" && state !== "syncing")
+        await transport.client.messaging.showLogin({ platformId: platform });
+      if (!live || !sharedId || !SHARED_LINK_REQUIRED.has(platform)) return;
+      const link = next.platforms.find((p) => p.id === sharedId)?.sharedLink;
+      if (link == null || link.status === "unlinked")
+        await pairSharedLane({ transport, queryClient: cache }, sharedId);
     });
-    void ready.catch((e) => {
-      if (live) setError(e instanceof Error ? e.message : t("phase5.failed"));
-    });
+    void ready
+      .catch((e) => {
+        if (live) setError(e instanceof Error ? e.message : t("phase5.failed"));
+      })
+      .finally(() => {
+        if (live) setPreparing(false);
+      });
     return () => {
       live = false;
       void flowRef.current.settlePairing(platform).catch((e) => {
@@ -262,6 +280,19 @@ export const MessagingPlatformDialog = ({
       });
     };
   }, [platform, transport, cache, sharedId, t]);
+  const appName = t(`messaging.platforms.${p?.nameKey ?? platform}`);
+  // Signing in is one step; where a shared bot is offered, linking it is the
+  // other, and setup is not finished until both are done.
+  const linkRequired =
+    SHARED_LINK_REQUIRED.has(platform) &&
+    shared != null &&
+    shared.sharedLink?.status !== "unavailable";
+  const signedIn = p?.state === "connected" || p?.state === "syncing";
+  const setupIncomplete =
+    linkRequired && shared?.sharedLink?.status !== "linked";
+  const connected = s != null && isMessagingPlatformConnected(s, platform);
+  const state =
+    setupIncomplete && p?.state === "connected" ? "needs_link" : p?.state;
   return (
     <Dialog
       open
@@ -270,78 +301,106 @@ export const MessagingPlatformDialog = ({
       }}
     >
       <ConnectDialogContent
-        className="sm:max-w-[480px]"
+        className="max-h-[calc(100vh-2rem)] overflow-y-auto sm:max-w-[520px]"
         finalFocus={finalFocus}
       >
         <DialogHeader>
-          <DialogTitle>
-            {t(`messaging.platforms.${p?.nameKey ?? platform}`)}
-          </DialogTitle>
+          <DialogTitle>{appName}</DialogTitle>
           <DialogDescription>
-            {t("phase5.messagingDescription")}
+            {t(`messaging.descriptions.${p?.nameKey ?? platform}`, {
+              defaultValue: t("phase5.messagingDescription"),
+            })}
           </DialogDescription>
         </DialogHeader>
-        <div className="flex min-w-0 flex-col gap-3">
-          {p && <StatePill>{t(`messaging.states.${p.state}`)}</StatePill>}
-          {(error || p?.errorMessage) && (
-            <p role="alert">{error ?? p?.errorMessage}</p>
-          )}
-          <Button
-            variant="secondary"
-            onClick={() =>
-              void transport.client.messaging.showLogin({
-                platformId: platform,
-              })
-            }
-          >
-            {t("phase5.openLogin")}
-          </Button>
-          {p && p.fields.length > 0 && <PlatformCredentials platform={p} />}
-          {shared?.sharedLink && (
-            <>
-              {shared.sharedLink.qrDataUrl && (
-                <img
-                  className="size-[180px]"
-                  src={shared.sharedLink.qrDataUrl}
-                  alt={t("phase5.linkQr")}
-                />
-              )}
-              <code>/link {shared.sharedLink.code}</code>
-              <Button
-                onClick={() =>
-                  void navigator.clipboard.writeText(
-                    `/link ${shared.sharedLink?.code}`
-                  )
+        <div className="flex min-w-0 flex-col gap-4">
+          {state && (
+            <div className="flex flex-wrap items-center gap-2">
+              <StatePill
+                tone={
+                  connected
+                    ? "success"
+                    : state === "disabled"
+                      ? "neutral"
+                      : "warning"
                 }
               >
-                {t("phase5.copy")}
-              </Button>
-              {sharedId && (
-                <>
-                  <Button
-                    onClick={() =>
-                      void transport.client.messaging.openSharedLink({
-                        platformId: sharedId,
-                        target: "install",
-                      })
-                    }
-                  >
-                    {t("phase5.addDiscord")}
-                  </Button>
-                  <Button
-                    onClick={() =>
-                      void transport.client.messaging.openSharedLink({
-                        platformId: sharedId,
-                        target: "dm",
-                      })
-                    }
-                  >
-                    {t("phase5.openSharedChat")}
-                  </Button>
-                </>
+                {t(`messaging.states.${state}`)}
+              </StatePill>
+              {p && !p.configured && (
+                <StatePill>{t("messaging.needsSetup")}</StatePill>
               )}
-            </>
+            </div>
           )}
+          {linkRequired && (
+            <p className="text-muted-foreground text-xs">
+              {t("messaging.twoStepSetup", { app: appName })}
+            </p>
+          )}
+          {(error || p?.errorMessage) && (
+            <p
+              role="alert"
+              className={
+                // Waiting on a login is an instruction, not a failure.
+                !error &&
+                (p?.state === "needs_login" || p?.state === "rate_limited")
+                  ? "text-muted-foreground text-xs"
+                  : "text-destructive text-xs"
+              }
+            >
+              {error ?? p?.errorMessage}
+            </p>
+          )}
+          {p?.enabled && WEB_LOGIN.has(platform) && (
+            <StepSection
+              title={
+                linkRequired
+                  ? t("messaging.stepSignIn", { app: appName })
+                  : undefined
+              }
+            >
+              <p className="text-muted-foreground text-xs">
+                {t(
+                  signedIn
+                    ? `messaging.${platform}Connected`
+                    : `messaging.${platform}Scan`
+                )}
+              </p>
+              {!signedIn && (
+                <Button
+                  size="sm"
+                  className="self-start"
+                  onClick={() =>
+                    void transport.client.messaging.showLogin({
+                      platformId: platform,
+                    })
+                  }
+                >
+                  {t(`messaging.${platform}OpenLogin`)}
+                </Button>
+              )}
+            </StepSection>
+          )}
+          {shared && (
+            <SharedLinkSection
+              platform={shared}
+              required={linkRequired}
+              preparing={preparing}
+              retry={() =>
+                void pairSharedLane(
+                  { transport, queryClient: cache },
+                  shared.id
+                ).catch((e) =>
+                  setError(e instanceof Error ? e.message : t("phase5.failed"))
+                )
+              }
+            />
+          )}
+          {platform === "whatsapp" && p?.state === "syncing" && (
+            <p className="text-muted-foreground text-xs">
+              {t("messaging.whatsappSyncing")}
+            </p>
+          )}
+          {p && p.fields.length > 0 && <PlatformCredentials platform={p} />}
           {s?.pending
             .filter((u) => u.platform === platform)
             .map((u) => (
@@ -410,25 +469,226 @@ export const MessagingPlatformDialog = ({
                 />
               </SettingRow>
             ))}
-          <ConfirmAction
-            title={t("phase5.unlinkTitle")}
-            description={t("phase5.unlinkDescription")}
-            label={t("phase5.unlink")}
-            onConfirm={async () => {
-              if (sharedId)
-                await unlinkShared.mutateAsync({ platformId: sharedId });
-              await disablePlatform(
-                { transport, queryClient: cache },
-                platform
-              );
-            }}
-          />
-          <Button variant="secondary" onClick={() => void close()}>
-            {t("phase5.done")}
-          </Button>
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            {setupIncomplete && p?.state === "connected" && (
+              <p className="text-muted-foreground mr-auto text-xs">
+                {t("messaging.finishLinkFirst")}
+              </p>
+            )}
+            {connected && (
+              <ConfirmAction
+                title={t("phase5.unlinkTitle")}
+                description={t("phase5.unlinkDescription")}
+                label={t("phase5.unlink")}
+                onConfirm={async () => {
+                  if (sharedId)
+                    await unlinkShared.mutateAsync({ platformId: sharedId });
+                  await disablePlatform(
+                    { transport, queryClient: cache },
+                    platform
+                  );
+                }}
+              />
+            )}
+            {/* An unfinished setup closes as a Cancel: settling it switches the
+                platform back off. */}
+            <Button
+              size="sm"
+              variant={connected ? "default" : "outline"}
+              onClick={() => void close()}
+            >
+              {t(
+                connected ? "messaging.doneConnect" : "messaging.cancelConnect"
+              )}
+            </Button>
+          </div>
         </div>
       </ConnectDialogContent>
     </Dialog>
+  );
+};
+
+/** Platforms whose login is the platform's own page in a window of its own. */
+const WEB_LOGIN = new Set<MessagingPlatformId>([
+  "whatsapp",
+  "telegram",
+  "discord",
+]);
+
+const StepSection = ({
+  title,
+  children,
+}: {
+  title?: string;
+  children: ReactNode;
+}) => (
+  <section className="border-border flex flex-col gap-2 rounded-lg border p-4">
+    {title && (
+      <h3 className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+        {title}
+      </h3>
+    )}
+    {children}
+  </section>
+);
+
+/**
+ * Pairing with a shared Abacus-owned bot: the server mints a one-time code,
+ * the user sends the bot `/link <code>`, and the section flips once it lands.
+ */
+const SharedLinkSection = ({
+  platform,
+  required,
+  preparing,
+  retry,
+}: {
+  platform: MessagingPlatformInfo;
+  required: boolean;
+  preparing: boolean;
+  retry(): void;
+}) => {
+  const { t } = useTranslation();
+  const { transport } = useAppContext();
+  const [copied, setCopied] = useState(false);
+  const link = platform.sharedLink ?? { status: "unlinked" as const };
+  const command = link.code ? `/link ${link.code}` : null;
+  const app = t(`messaging.platforms.${platform.nameKey}`);
+  const copy = async () => {
+    if (!command) return;
+    await navigator.clipboard.writeText(command);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  const open = (target: "install" | "dm") =>
+    void transport.client.messaging.openSharedLink({
+      platformId: platform.id,
+      target,
+    });
+  return (
+    <StepSection
+      title={t(
+        required
+          ? "messaging.sharedLink.stepLink"
+          : "messaging.sharedLink.title"
+      )}
+    >
+      {link.status === "linked" && (
+        <p className="text-muted-foreground text-xs">
+          {link.displayName
+            ? t("messaging.sharedLink.linkedAs", {
+                name: link.displayName,
+                app,
+              })
+            : t("messaging.sharedLink.linked", { app })}
+        </p>
+      )}
+      {link.status === "pending" && platform.id === "abacus_telegram" && (
+        <>
+          <p className="text-muted-foreground text-xs">
+            {t("messaging.sharedLink.telegramStep")}
+          </p>
+          {link.qrDataUrl && (
+            <img
+              className="size-[180px] rounded-md bg-white p-1"
+              src={link.qrDataUrl}
+              alt={t("phase5.linkQr")}
+            />
+          )}
+          {/* No "open link" button: the pairing has to be tapped on the phone
+              that carries the account. */}
+          <p className="text-muted-foreground text-xs">
+            {t("messaging.sharedLink.waitingTelegram")}
+          </p>
+        </>
+      )}
+      {link.status === "pending" && platform.id !== "abacus_telegram" && (
+        <>
+          <p className="text-muted-foreground text-xs">
+            {t("messaging.sharedLink.step1")}
+          </p>
+          {link.deepLink && (
+            <Button
+              size="sm"
+              className="self-start"
+              onClick={() => open("install")}
+            >
+              <ExternalLinkIcon data-icon="inline-start" />
+              {t("messaging.sharedLink.addToDiscord")}
+            </Button>
+          )}
+          <p className="text-muted-foreground text-xs">
+            {t("messaging.sharedLink.step2Copy")}
+          </p>
+          {command && (
+            <div className="flex items-center gap-2">
+              <code className="bg-muted rounded px-2 py-1 text-xs">
+                {command}
+              </code>
+              <Button variant="outline" size="sm" onClick={() => void copy()}>
+                {t(
+                  copied
+                    ? "messaging.sharedLink.copied"
+                    : "messaging.sharedLink.copy"
+                )}
+              </Button>
+            </div>
+          )}
+          <p className="text-muted-foreground text-xs">
+            {t("messaging.sharedLink.step3Dm")}
+          </p>
+          {link.botProfileUrl && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="self-start"
+              onClick={() => {
+                // The paste is the whole of step 3: the command goes back on
+                // the clipboard on the way out, in case step 2 was skipped.
+                if (command) void navigator.clipboard.writeText(command);
+                open("dm");
+              }}
+            >
+              <ExternalLinkIcon data-icon="inline-start" />
+              {t("messaging.sharedLink.openDm")}
+            </Button>
+          )}
+          <p className="text-muted-foreground text-xs">
+            {t("messaging.sharedLink.waiting")}
+          </p>
+        </>
+      )}
+      {(link.status === "unlinked" || link.status === "unavailable") && (
+        <>
+          <p className="text-muted-foreground text-xs">
+            {link.error ??
+              t(
+                required
+                  ? "messaging.sharedLink.requiredIntro"
+                  : "messaging.sharedLink.intro"
+              )}
+          </p>
+          {link.status === "unlinked" &&
+            (preparing ? (
+              <p className="text-muted-foreground text-xs">
+                {t("messaging.sharedLink.preparing")}
+              </p>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                className="self-start"
+                onClick={retry}
+              >
+                {t(
+                  required
+                    ? "messaging.sharedLink.retry"
+                    : "messaging.sharedLink.link"
+                )}
+              </Button>
+            ))}
+        </>
+      )}
+    </StepSection>
   );
 };
 

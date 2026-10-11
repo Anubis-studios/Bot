@@ -6,6 +6,9 @@ import type { Transport } from "#renderer/data/transport";
 import { ConnectAttempt } from "#renderer/lib/connect-page";
 import { connectTarget } from "#renderer/lib/platform-system";
 
+/** A connect that did not finish, with the outcome's reason for the step to show. */
+export class ConnectFailed extends Error {}
+
 /** The step's pending connect; leaving the step cancels it. */
 let waiting: ConnectAttempt | null = null;
 
@@ -41,7 +44,7 @@ export const connectOnboarding = async (
   try {
     const outcome = await attempt.result;
     if (!outcome.ok && !outcome.cancelled)
-      throw new Error("connector-connect-failed");
+      throw new ConnectFailed(outcome.error);
     return outcome;
   } finally {
     if (waiting === attempt) waiting = null;

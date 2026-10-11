@@ -18,7 +18,8 @@ import { renderApp } from "#renderer/test-support/app-harness";
 const os = implement(contract);
 const setup = (
   platform: MessagingPlatformId = "whatsapp",
-  unlinkFails = false
+  unlinkFails = false,
+  connected = false
 ) => {
   const calls: string[] = [];
   let snapshot = {
@@ -33,17 +34,18 @@ const setup = (
     platforms: [
       platform,
       ...(platform === "discord" ? ["abacus_discord" as const] : []),
+      ...(platform === "telegram" ? ["abacus_telegram" as const] : []),
     ].map((id) => ({
       id,
       nameKey: id,
       enabled: false,
       configured: true,
-      state: "needs_login",
+      state: connected ? "connected" : "needs_login",
       fields: [],
       docsUrl: "",
       errorMessage: null,
       pendingCount: 0,
-      sharedLink: { status: "pending" },
+      sharedLink: { status: connected ? "linked" : "pending" },
     })),
   } as MessagingSnapshot;
   return {
@@ -79,7 +81,7 @@ const setup = (
     },
   };
 };
-it.each(["Escape", "Done", "navigation"])(
+it.each(["Escape", "Cancel", "navigation"])(
   "direct Messaging Connect settles unfinished setup on %s",
   async (close) => {
     const d = setup();
@@ -90,8 +92,8 @@ it.each(["Escape", "Done", "navigation"])(
       fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
       await screen.findByRole("dialog");
       await waitFor(() => expect(d.calls).toContain("whatsapp:true"));
-      if (close === "Done")
-        fireEvent.click(screen.getByRole("button", { name: "Done" }));
+      if (close === "Cancel")
+        fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
       else if (close === "Escape")
         fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
       else
@@ -112,12 +114,12 @@ it.each(["Escape", "Done", "navigation"])(
 it.each([false, true])(
   "Unlink awaits remote unlink and preserves activation on failure=%s",
   async (fail) => {
-    const d = setup("discord", fail);
+    const d = setup("discord", fail, true);
     const app = await renderApp("/library/messaging?platform=discord", {
       procedures: d.procedures,
     });
     try {
-      await waitFor(() => expect(d.calls).toContain("abacus_discord:true"));
+      await waitFor(() => expect(d.calls).toContain("discord:true"));
       fireEvent.click(
         await screen.findByRole("button", { name: enUS.phase5.unlink })
       );
@@ -277,7 +279,7 @@ it("a cold Messaging dialog link closes by replacement without reopening on Back
   try {
     await screen.findByRole("dialog", { name: "WhatsApp" });
     const length = app.router.history.length;
-    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(app.router.state.location.href).toBe("/library/messaging");
     expect(app.router.history.length).toBe(length);
@@ -369,6 +371,65 @@ it("channel details retain pairing decisions and independent bot auto-reply cont
       decision: "approve",
     });
     expect(screen.getByText("Second bot sender")).not.toBeNull();
+  } finally {
+    app.view.unmount();
+    await app.cleanup();
+  }
+});
+
+it("a Telegram link walks its own steps, never Discord's", async () => {
+  const d = setup("telegram");
+  const app = await renderApp("/library/messaging?platform=telegram", {
+    procedures: d.procedures,
+  });
+  try {
+    const dialog = await screen.findByRole("dialog", { name: "Telegram" });
+    expect(
+      within(dialog).getByText(enUS.messaging.sharedLink.telegramStep)
+    ).not.toBeNull();
+    expect(within(dialog).queryByText(/Discord/)).toBeNull();
+  } finally {
+    app.view.unmount();
+    await app.cleanup();
+  }
+});
+
+it("a signed-in Discord without its bot linked is not finished", async () => {
+  const d = setup("discord");
+  const signedIn = (): MessagingSnapshot => ({
+    ...d.snapshot(),
+    platforms: d
+      .snapshot()
+      .platforms.map((p) =>
+        p.id === "discord"
+          ? { ...p, enabled: true, state: "connected" as const }
+          : { ...p, sharedLink: { status: "pending" as const, code: "abc" } }
+      ),
+  });
+  d.procedures.messaging.snapshot = os.messaging.snapshot.handler(signedIn);
+  d.procedures.messaging.updatePlatform =
+    os.messaging.updatePlatform.handler(signedIn);
+  const app = await renderApp("/library/messaging?platform=discord", {
+    procedures: d.procedures,
+  });
+  try {
+    const dialog = await screen.findByRole("dialog", { name: "Discord" });
+    expect(
+      await within(dialog).findByText("First, sign in to Discord")
+    ).not.toBeNull();
+    expect(
+      within(dialog).getByText(enUS.messaging.sharedLink.stepLink)
+    ).not.toBeNull();
+    expect(within(dialog).getByText("/link abc")).not.toBeNull();
+    expect(
+      within(dialog).getByText(enUS.messaging.states.needs_link)
+    ).not.toBeNull();
+    expect(
+      within(dialog).getByRole("button", { name: "Cancel" })
+    ).not.toBeNull();
+    expect(
+      within(dialog).queryByRole("button", { name: "Continue" })
+    ).toBeNull();
   } finally {
     app.view.unmount();
     await app.cleanup();

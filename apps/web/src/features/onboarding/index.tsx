@@ -7,9 +7,11 @@ import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useDb } from "#renderer/data/db";
+import { connectErrorText } from "#renderer/lib/connect-page";
 import type { OnboardingStepId } from "#renderer/lib/navigation/areas";
 import { IS_ELECTRON } from "#renderer/lib/platform";
 
+import { ConnectFailed } from "./connect";
 import { ensureFirstBot, firstBotStore } from "./first-bot";
 import { OnboardingNavigation } from "./frame";
 import { next, connectedProviders } from "./machine";
@@ -149,8 +151,12 @@ export const OnboardingStepPage = (props: OnboardingPageProps) => {
     setError(null);
     try {
       await action();
-    } catch {
-      setError(t("onboarding.frame.failed"));
+    } catch (error) {
+      setError(
+        error instanceof ConnectFailed
+          ? connectErrorText(t, error.message)
+          : t("onboarding.frame.failed")
+      );
     }
     performing.current = false;
     setBusy(false);
