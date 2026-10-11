@@ -31,6 +31,7 @@ import {
   SettingRow,
   StatePill,
 } from "#renderer/components/form-kit/page";
+import { Spinner } from "#renderer/components/spinner";
 import { connectErrorText } from "#renderer/lib/connect-page";
 import { useAppNavigate } from "#renderer/lib/navigation/use-app-navigate";
 import { platformSystem } from "#renderer/lib/platform-system";
@@ -114,18 +115,23 @@ export const ConnectorsPage = () => {
           }
         />
       )}
-      {[true, false].map((group) => (
-        <section key={String(group)}>
-          <h2 className="mb-2 text-sm font-semibold">
-            {t(group ? "phase5.connected" : "phase5.available")}
-          </h2>
-          <GroupCard>
-            {entries
-              .filter((e) => connected(e.id) === group)
-              .map((e) => {
+      {[true, false].map((group) => {
+        const rows = entries.filter((e) => connected(e.id) === group);
+        if (rows.length === 0) return null;
+        return (
+          <section key={String(group)}>
+            <h2 className="mb-2 text-sm font-semibold">
+              {t(group ? "phase5.connected" : "phase5.available")}
+            </h2>
+            <GroupCard>
+              {rows.map((e) => {
                 // Installed, but its sign-in never finished: offer the sign-in.
                 const signIn =
                   statuses.data?.[e.id]?.reason === "sign-in-required";
+                const inFlight =
+                  flow.state.connectorId === e.id &&
+                  flow.state.phase !== "idle" &&
+                  flow.state.phase !== "fields";
                 return (
                   <SettingRow
                     key={e.id}
@@ -138,7 +144,11 @@ export const ConnectorsPage = () => {
                     <span
                       className={signIn ? "contents" : "phone:hidden contents"}
                     >
-                      <StatePill>
+                      <StatePill
+                        tone={
+                          signIn ? "warning" : group ? "success" : "neutral"
+                        }
+                      >
                         {t(
                           signIn
                             ? "phase5.signInNeeded"
@@ -151,6 +161,8 @@ export const ConnectorsPage = () => {
                     <Button
                       size="sm"
                       variant="secondary"
+                      disabled={inFlight}
+                      aria-busy={inFlight}
                       onClick={() => {
                         if (group && !signIn)
                           void navigate({
@@ -161,6 +173,7 @@ export const ConnectorsPage = () => {
                         else void flow.start(e.id);
                       }}
                     >
+                      {inFlight && <Spinner aria-hidden />}
                       {t(
                         signIn
                           ? "phase5.signIn"
@@ -172,9 +185,10 @@ export const ConnectorsPage = () => {
                   </SettingRow>
                 );
               })}
-          </GroupCard>
-        </section>
-      ))}
+            </GroupCard>
+          </section>
+        );
+      })}
       {flow.state.phase !== "idle" && flow.state.phase !== "fields" && (
         <div className="flex items-center gap-2">
           <ConnectWaiting>{t("phase5.connectWaiting")}</ConnectWaiting>

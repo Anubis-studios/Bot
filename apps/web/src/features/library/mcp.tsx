@@ -16,6 +16,7 @@ import { useAppForm } from "#renderer/components/form-kit";
 import { ConfirmAction } from "#renderer/components/form-kit/confirm";
 import {
   ConnectDialogContent,
+  ConnectHeader,
   ConnectNote,
 } from "#renderer/components/form-kit/connect-dialog";
 import {
@@ -39,13 +40,7 @@ import { connectTarget } from "#renderer/lib/platform-system";
 import { showError, showInfo } from "#renderer/lib/toast";
 import { useAppContext, errorText } from "#renderer/lib/use-app-context";
 import { Button } from "#renderer/ui/button";
-import {
-  Dialog,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "#renderer/ui/dialog";
+import { Dialog, DialogFooter } from "#renderer/ui/dialog";
 import { Field, FieldGroup, FieldLabel } from "#renderer/ui/field";
 import { Input } from "#renderer/ui/input";
 import { NativeSelect, NativeSelectOption } from "#renderer/ui/native-select";
@@ -630,10 +625,13 @@ export const McpServerDialog = ({
       }}
     >
       <ConnectDialogContent className="max-h-[90vh] overflow-auto sm:max-w-[560px]">
-        <DialogHeader>
-          <DialogTitle>{t("phase5.customMcp")}</DialogTitle>
-          <DialogDescription>{t("phase5.mcpLive")}</DialogDescription>
-        </DialogHeader>
+        <ConnectHeader
+          title={t("phase5.customMcp")}
+          description={t("phase5.mcpLive")}
+        />
+        <p className="text-muted-foreground text-[15px] leading-[21px]">
+          {t("phase5.mcpLive")}
+        </p>
         {remoteChanged && (
           <ConnectNote role="status">{t("phase5.remoteChanged")}</ConnectNote>
         )}
