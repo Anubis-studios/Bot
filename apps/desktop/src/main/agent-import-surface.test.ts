@@ -51,6 +51,7 @@ const ALLOWED = new Set([
   "@abacus-ai/agent/secret-paths",
   // Saved travelers: node's fs and path, and the atomic-file leaf above.
   "@abacus-ai/agent/traveler-store",
+  "@abacus-ai/agent/user-text",
 ]);
 
 const MAIN_DIR = resolve(import.meta.dirname);
