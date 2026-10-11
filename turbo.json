@@ -165,7 +165,7 @@
       "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/apps/desktop/src/main/**"]
     },
     "@abacus-ai/host#test": {
-      "dependsOn": ["^build", "build", "vendor"],
+      "dependsOn": ["^build", "build", "vendor", "^vendor"],
       "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/apps/desktop/src/main/**"]
     },
     "//#generate:licenses": {

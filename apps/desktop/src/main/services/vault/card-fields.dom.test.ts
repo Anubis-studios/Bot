@@ -208,6 +208,8 @@ describe("a card expiry or name", () => {
   });
 });
 
+// The bound catches a pass that turns quadratic (seconds at 500 fields), not
+// a loaded runner: jsdom on a busy Windows runner took 240 ms for one pass.
 describe("reading a large page", () => {
   it("reads 500 checkboxes and a card form in well under the time a call has", () => {
     window.history.replaceState({}, "", "/checkout/payment");
@@ -217,7 +219,7 @@ describe("reading a large page", () => {
     const facts = Function(
       `return ${controlFactsScript("#go")}`
     )() as ControlFacts;
-    expect(performance.now() - started).toBeLessThan(200);
+    expect(performance.now() - started).toBeLessThan(1_000);
     expect(facts.cardFields).toBe(true);
   });
 
@@ -226,7 +228,7 @@ describe("reading a large page", () => {
     const started = performance.now();
     factsFromDocument(dump().root);
     live();
-    expect(performance.now() - started).toBeLessThan(200);
+    expect(performance.now() - started).toBeLessThan(1_000);
   });
 });
 
