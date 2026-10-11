@@ -83,6 +83,10 @@ const expectedFailures: Record<string, { code: string; message: string }> = {
     code: "CONFLICT",
     message: "not-a-file",
   },
+  "files.listDirectory": {
+    code: "CONFLICT",
+    message: "not-found",
+  },
   "ai.subscribe": {
     code: "NOT_FOUND",
     message: "No session fixture",
