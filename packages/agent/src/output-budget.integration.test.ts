@@ -16,73 +16,14 @@
  * unavailable.
  */
 import * as fs from "node:fs";
-import * as http from "node:http";
-import type { AddressInfo } from "node:net";
 import * as os from "node:os";
 import * as path from "node:path";
 
+import { FakeProvider } from "@abacus-ai/test-support/fake-provider";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { DEFAULT_MAX_OUTPUT_TOKENS } from "./providers.js";
 import { AbacusBotSession } from "./session.js";
-
-/** An endpoint that answers once and keeps what it was asked for. */
-function endpoint(): {
-  url: string;
-  bodies: Array<Record<string, unknown>>;
-  close: () => Promise<void>;
-  ready: Promise<void>;
-} {
-  const bodies: Array<Record<string, unknown>> = [];
-  const server = http.createServer((request, response) => {
-    let body = "";
-
-    request.on("data", (chunk) => (body += chunk));
-    request.on("end", () => {
-      if ((request.url ?? "").endsWith("/models")) {
-        response.writeHead(200, { "content-type": "application/json" });
-        response.end(JSON.stringify({ data: [{ id: "m" }] }));
-
-        return;
-      }
-
-      bodies.push(JSON.parse(body || "{}") as Record<string, unknown>);
-      response.writeHead(200, { "content-type": "application/json" });
-      response.end(
-        JSON.stringify({
-          id: "1",
-          object: "chat.completion",
-          created: 1,
-          model: "m",
-          choices: [
-            {
-              index: 0,
-              message: { role: "assistant", content: "ok" },
-              finish_reason: "stop",
-            },
-          ],
-          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
-        })
-      );
-    });
-  });
-  let port = 0;
-  const ready = new Promise<void>((resolve) =>
-    server.listen(0, "127.0.0.1", () => {
-      port = (server.address() as AddressInfo).port;
-      resolve();
-    })
-  );
-
-  return {
-    get url() {
-      return `http://127.0.0.1:${port}/v1`;
-    },
-    bodies,
-    ready,
-    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
-  };
-}
 
 const homes: string[] = [];
 
@@ -92,10 +33,7 @@ async function budgetAskedFor(model: {
   maxTokens: number;
   maxOutputTokens?: number;
 }): Promise<number | undefined> {
-  const server = endpoint();
-
-  await server.ready;
-
+  const provider = await FakeProvider.start();
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "budget-home-"));
 
   homes.push(home);
@@ -110,7 +48,7 @@ async function budgetAskedFor(model: {
       customProviders: [
         {
           id: "probe",
-          baseUrl: server.url,
+          baseUrl: provider.baseUrl,
           apiKey: "k",
           models: [
             {
@@ -134,9 +72,9 @@ async function budgetAskedFor(model: {
   await session.start();
   await session.send("hi");
   session.dispose();
-  await server.close();
+  await provider.close();
 
-  const first = server.bodies[0] ?? {};
+  const first = provider.firstCall?.body ?? {};
 
   return (first.max_completion_tokens ?? first.max_tokens) as
     | number

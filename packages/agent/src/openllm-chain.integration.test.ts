@@ -296,7 +296,20 @@ describe("the same chain in a bot's chat", () => {
     const turn = async (text: string) => {
       const before = provider.calls.length;
       const seen = events.length;
+      const completed = (): number =>
+        events.filter(
+          (event) =>
+            event.type === "event" && event.event.type === "turn_complete"
+        ).length;
+      const turns = completed();
       await bot.send(text);
+      // send can settle before the turn's last events land, as Chat.turn
+      // waits out above; a slow runner read the reply before its text.
+      const deadline = Date.now() + 15_000;
+      while (completed() === turns) {
+        if (Date.now() > deadline) throw new Error("turn never completed");
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
       const fresh = events
         .slice(seen)
         .filter(
@@ -310,6 +323,12 @@ describe("the same chain in a bot's chat", () => {
           .map((event) => (event.type === "text_delta" ? event.content : ""))
           .join(""),
         failed: fresh.some((event) => event.type === "error"),
+        // What a reply missing on a slow runner looked like, for the log.
+        trace: JSON.stringify({
+          models: provider.calls.slice(before).map((call) => call.model),
+          events: fresh.map((event) => event.type),
+          errors: fresh.filter((event) => event.type === "error"),
+        }),
       };
     };
 
@@ -325,7 +344,9 @@ describe("the same chain in a bot's chat", () => {
     connect("gemini");
     await bot.refreshProviders();
     result = await turn("again");
-    expect(result.reply).toContain("answered on gemini-3.6-flash");
+    expect(result.reply, result.trace).toContain(
+      "answered on gemini-3.6-flash"
+    );
     expect(result.failed).toBe(false);
 
     behaviour.set("gemini-3.6-flash", GEMINI_QUOTA_SPENT);

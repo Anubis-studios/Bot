@@ -10,29 +10,24 @@
  * system message the provider was sent.
  */
 import * as fs from "node:fs";
-import * as http from "node:http";
-import type { AddressInfo } from "node:net";
 import * as os from "node:os";
 import * as path from "node:path";
 
+import { FakeProvider } from "@abacus-ai/test-support/fake-provider";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { writeCustomInstructions } from "./custom-instructions.js";
 import { AbacusBotSession } from "./session.js";
 
-interface Sent {
-  messages?: Array<{ role: string; content: unknown }>;
-}
-
-const sent: Sent[] = [];
-let server: http.Server;
-let port = 0;
+let provider: FakeProvider;
 let home: string;
 let cwd: string;
 
 /** The system message of the nth request, flattened to text. */
 const systemPrompt = (index: number): string => {
-  const message = sent[index]?.messages?.find((m) => m.role === "system");
+  const message = provider.calls[index]?.messages.find(
+    (m) => m.role === "system"
+  );
   const content = message?.content;
 
   return typeof content === "string"
@@ -49,43 +44,7 @@ const systemPrompt = (index: number): string => {
 };
 
 beforeEach(async () => {
-  sent.length = 0;
-  server = http.createServer((request, response) => {
-    let body = "";
-
-    request.on("data", (chunk) => (body += chunk));
-    request.on("end", () => {
-      if ((request.url ?? "").endsWith("/models")) {
-        response.writeHead(200, { "content-type": "application/json" });
-        response.end(JSON.stringify({ data: [{ id: "m" }] }));
-
-        return;
-      }
-
-      sent.push(JSON.parse(body || "{}") as Sent);
-      response.writeHead(200, { "content-type": "application/json" });
-      response.end(
-        JSON.stringify({
-          id: "1",
-          object: "chat.completion",
-          created: 1,
-          model: "m",
-          choices: [
-            {
-              index: 0,
-              message: { role: "assistant", content: "ok" },
-              finish_reason: "stop",
-            },
-          ],
-          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
-        })
-      );
-    });
-  });
-  await new Promise<void>((resolve) =>
-    server.listen(0, "127.0.0.1", () => resolve())
-  );
-  port = (server.address() as AddressInfo).port;
+  provider = await FakeProvider.start();
 
   home = fs.mkdtempSync(path.join(os.tmpdir(), "ci-home-"));
   cwd = fs.mkdtempSync(path.join(os.tmpdir(), "ci-cwd-"));
@@ -97,7 +56,7 @@ beforeEach(async () => {
       customProviders: [
         {
           id: "probe",
-          baseUrl: `http://127.0.0.1:${port}/v1`,
+          baseUrl: provider.baseUrl,
           apiKey: "k",
           models: [{ id: "m", contextWindow: 128_000, maxTokens: 4_096 }],
         },
@@ -108,7 +67,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   delete process.env.ABACUSAI_BOT_HOME;
-  await new Promise<void>((resolve) => server.close(() => resolve()));
+  await provider.close();
   fs.rmSync(home, { recursive: true, force: true });
   fs.rmSync(cwd, { recursive: true, force: true });
 });
@@ -166,7 +125,7 @@ describe("standing instructions in a real turn", () => {
 
     expect(systemPrompt(0)).toContain("Answer in French.");
 
-    const second = systemPrompt(sent.length - 1);
+    const second = systemPrompt(provider.calls.length - 1);
 
     expect(second).toContain("Answer in German.");
     expect(second).not.toContain("Answer in French.");

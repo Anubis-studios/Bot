@@ -16,6 +16,8 @@ export interface RecordedCall {
   messages: Array<{ role: string; content: unknown }>;
   /** Text of the user messages, in order: what the model was actually asked. */
   userText: string[];
+  /** The request body as sent, for what the fields above do not carry. */
+  body: Record<string, unknown>;
 }
 
 /**
@@ -134,7 +136,7 @@ export class FakeProvider {
       return;
     }
 
-    const parsed = JSON.parse(body || "{}") as {
+    const parsed = JSON.parse(body || "{}") as Record<string, unknown> & {
       model?: string;
       tools?: Array<{ function?: { name?: string }; name?: string }>;
       messages?: Array<{ role: string; content: unknown }>;
@@ -156,6 +158,7 @@ export class FakeProvider {
       userText: messages
         .filter((message) => message.role === "user")
         .map((message) => textOf(message.content)),
+      body: parsed,
     };
 
     const index = this.calls.length;
