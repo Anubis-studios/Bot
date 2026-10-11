@@ -15,6 +15,9 @@ on:
   push:
     branches: [main]
   pull_request:
+    # `closed` only takes the concurrency group, which cancels a run still
+    # going for a pull request that has merged; no job runs on it.
+    types: [opened, synchronize, reopened, closed]
   workflow_dispatch:
     inputs:
       platforms:
@@ -43,6 +46,7 @@ jobs:
   # and only a foundation change has to package on every operating system.
   plan:
     name: Plan
+    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     outputs:
       tests: ${{ steps.plan.outputs.tests }}
@@ -89,6 +93,7 @@ jobs:
 
   check:
     name: Typecheck, lint and format
+    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -171,15 +176,18 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       # E2E tests execute the built CLI and bundled-tools tests execute the
-      # vendored search binaries, so the whole build graph runs first. Electron
-      # 44 installs on first require; the desktop build reads Chromium's
-      # notices from it, and parallel test workers would race extracting it.
+      # vendored search binaries, so each suite builds its package's graph
+      # first. Electron 44 installs on first require; the desktop build reads
+      # Chromium's notices from it, and parallel test workers would race
+      # extracting it.
       - name: Build what the tests execute
         shell: bash
         run: |
           set -euo pipefail
-          (cd apps/desktop && node -e 'require("electron")')
-          pnpm run build
+          if [ "${{ matrix.suite }}" = desktop ]; then
+            (cd apps/desktop && node -e 'require("electron")')
+          fi
+          ${{ matrix.build }}
 
       - name: Chromium's setuid sandbox helper
         if: runner.os == 'Linux' && matrix.suite == 'desktop'
