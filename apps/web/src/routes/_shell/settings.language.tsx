@@ -1,6 +1,12 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
-import { LanguagePage } from "#renderer/features/settings/personal";
+/** App language lives in General now; old links land on its row. */
 export const Route = createFileRoute("/_shell/settings/language")({
-  component: LanguagePage,
+  beforeLoad: () => {
+    throw redirect({
+      to: "/settings/general",
+      search: { focus: "language" },
+      replace: true,
+    });
+  },
 });

@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { PlayIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { SettingSwitch } from "#renderer/components/form-kit/controls";
@@ -132,8 +133,13 @@ export const CompanionSettings = ({
         </>
       )}
       <SettingRow id="tour" title={t("tour.replay")}>
-        <Button variant="secondary" onClick={replay}>
-          {t("tour.replay")}
+        <Button
+          size="icon-sm"
+          variant="secondary"
+          aria-label={t("tour.replay")}
+          onClick={replay}
+        >
+          <PlayIcon />
         </Button>
       </SettingRow>
     </GroupCard>

@@ -54,7 +54,6 @@ const routes = [
     "environment",
     "browser",
     "devices",
-    "language",
     "keyboard",
     "about",
     "about/changelog",

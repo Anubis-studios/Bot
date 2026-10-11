@@ -179,13 +179,11 @@ const Identity = ({
                 ? t(
                     pathname.split("/")[2] === "keyboard"
                       ? "settings.pages.keyboard"
-                      : pathname.split("/")[2] === "language"
-                        ? "settings.pages.language"
-                        : pathname.split("/")[2] === "browser"
-                          ? "settings.pages.browser"
-                          : pathname.split("/")[2] === "devices"
-                            ? "settings.pages.devices"
-                            : "settings.sidebar.label"
+                      : pathname.split("/")[2] === "browser"
+                        ? "settings.pages.browser"
+                        : pathname.split("/")[2] === "devices"
+                          ? "settings.pages.devices"
+                          : "settings.sidebar.label"
                   )
                 : t("shell.appName");
   return (

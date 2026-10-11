@@ -455,9 +455,13 @@ it("opens model setup when the optional local runtime is unavailable", async () 
 });
 
 it("App language applies as soon as it is picked, without a restart", async () => {
+  // The old Language page's link lands on the row in General.
   app = await renderApp("/settings/language");
   try {
-    const select = await screen.findByRole("combobox");
+    const select = await screen.findByRole("combobox", {
+      name: enUS.phase5.settings.language,
+    });
+    expect(app.router.state.location.pathname).toBe("/settings/general");
     fireEvent.change(select, { target: { value: "fr-FR" } });
     await waitFor(() => expect(i18n.language).toBe("fr-FR"));
     expect(document.documentElement.lang).toBe("fr-FR");

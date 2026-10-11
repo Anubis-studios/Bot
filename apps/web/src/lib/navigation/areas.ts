@@ -44,7 +44,6 @@ export const SETTINGS_PAGES = [
   "about",
   "browser",
   "devices",
-  "language",
   "keyboard",
 ] as const;
 export type SettingsPageId = (typeof SETTINGS_PAGES)[number];

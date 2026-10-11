@@ -41,7 +41,7 @@ const GROUPS: Array<{ label: string; pages: SettingsPage[] }> = [
   },
   {
     label: "settings.sidebar.app",
-    pages: ["language", "keyboard", "about"],
+    pages: ["keyboard", "about"],
   },
 ];
 

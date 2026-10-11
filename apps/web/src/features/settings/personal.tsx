@@ -98,21 +98,7 @@ export const GeneralPage = () => {
     <AreaPage title={t("settings.pages.general")}>
       <CompanionSettings />
       <GroupCard>
-        <SettingRow
-          id="showLinkPreviews"
-          title={t("phase5.settings.showLinkPreviews")}
-          detail={t("phase5.settings.linkPreviewsDetail")}
-        >
-          <SettingSwitch
-            id="showLinkPreviews"
-            checked={prefs.showLinkPreviews !== false}
-            onCheckedChange={(showLinkPreviews) =>
-              void update({ showLinkPreviews }).catch(fail)
-            }
-          />
-        </SettingRow>
-      </GroupCard>
-      <GroupCard>
+        <LanguageRow />
         {IS_ELECTRON && info.data?.platform !== "linux" && (
           <SettingRow
             id="launchAtLogin"
@@ -129,6 +115,21 @@ export const GeneralPage = () => {
             />
           </SettingRow>
         )}
+        <SettingRow
+          id="showLinkPreviews"
+          title={t("phase5.settings.showLinkPreviews")}
+          detail={t("phase5.settings.linkPreviewsDetail")}
+        >
+          <SettingSwitch
+            id="showLinkPreviews"
+            checked={prefs.showLinkPreviews !== false}
+            onCheckedChange={(showLinkPreviews) =>
+              void update({ showLinkPreviews }).catch(fail)
+            }
+          />
+        </SettingRow>
+      </GroupCard>
+      <GroupCard>
         <SettingRow
           id="defaultWorkspace"
           title={t("phase5.settings.defaultWorkspace")}
@@ -194,45 +195,40 @@ export const GeneralPage = () => {
     </AreaPage>
   );
 };
-export const LanguagePage = () => {
+const LanguageRow = () => {
   const { t, i18n } = useTranslation();
   const prefs = usePrefs();
   const update = useUpdatePrefs();
   return (
-    <AreaPage title={t("settings.pages.language")}>
-      <GroupCard>
-        <SettingRow
-          id="language"
-          title={t("phase5.settings.language")}
-          detail={t("phase5.settings.languageDetail")}
-        >
-          <Choice
-            id="language"
-            value={prefs.language}
-            options={[
-              {
-                value: "system",
-                label: t("phase5.systemLanguage", {
-                  language: new Intl.DisplayNames([i18n.language], {
-                    type: "language",
-                  }).of(i18n.language),
-                }),
-              },
-              ...SUPPORTED_LANGUAGES.map((x) => ({
-                value: x,
-                label:
-                  new Intl.DisplayNames([x], { type: "language" }).of(x) ?? x,
-              })),
-            ]}
-            onChange={(language) =>
-              void update({ language: language as PrefsRow["language"] }).catch(
-                () => showError(t("phase5.saveFailed"))
-              )
-            }
-          />
-        </SettingRow>
-      </GroupCard>
-    </AreaPage>
+    <SettingRow
+      id="language"
+      title={t("phase5.settings.language")}
+      detail={t("phase5.settings.languageDetail")}
+    >
+      <Choice
+        id="language"
+        value={prefs.language}
+        options={[
+          {
+            value: "system",
+            label: t("phase5.systemLanguage", {
+              language: new Intl.DisplayNames([i18n.language], {
+                type: "language",
+              }).of(i18n.language),
+            }),
+          },
+          ...SUPPORTED_LANGUAGES.map((x) => ({
+            value: x,
+            label: new Intl.DisplayNames([x], { type: "language" }).of(x) ?? x,
+          })),
+        ]}
+        onChange={(language) =>
+          void update({ language: language as PrefsRow["language"] }).catch(
+            () => showError(t("phase5.saveFailed"))
+          )
+        }
+      />
+    </SettingRow>
   );
 };
 const InstructionSchema = v.object({ text: v.pipe(v.string(), v.trim()) });
@@ -540,13 +536,10 @@ export const NotificationsPage = () => {
           <SettingSwitch
             id="notify"
             checked={notification.data?.enabled ?? true}
-            // The write carries `sound` too: wait for the stored one.
-            disabled={!notification.data}
+            // System notifications are always silent; their `sound` flag
+            // only mirrors Play sounds, which is the one sound control.
             onCheckedChange={(enabled) =>
-              setNotify.mutate({
-                enabled,
-                sound: notification.data?.sound ?? true,
-              })
+              setNotify.mutate({ enabled, sound: prefs.sounds.enabled })
             }
           />
         </SettingRow>

@@ -2605,7 +2605,6 @@
       "about": "About",
       "browser": "Browser",
       "devices": "Devices",
-      "language": "Language",
       "keyboard": "Keyboard"
     },
     "theme": {
@@ -3362,8 +3361,8 @@
     "settings": {
       "launchAtLogin": "Launch at login",
       "launchDetail": "Start AbacusAI Bot when you sign in.",
-      "defaultWorkspace": "Default workspace",
-      "workspaceDetail": "Where new sessions run unless you pick a folder",
+      "defaultWorkspace": "Last used folder",
+      "workspaceDetail": "Where new sessions start. Picking a folder for a session changes it.",
       "defaultMode": "Default permission mode",
       "botMode": "Bots and routines run in",
       "theme": "Tema",
@@ -3514,7 +3513,7 @@
     "connectChatAppOnDesktop": "This chat app connects from the AbacusAI Bot desktop app.",
     "connectorsDescription": "Conecta los servicios que tu agente puede usar para completar tareas.",
     "credentialsLocal": "Las credenciales se guardan en este ordenador.",
-    "defaultWorkspace": "Default workspace",
+    "defaultWorkspace": "Automatic",
     "deliverToBot": "Deliver to bot",
     "details": "Details",
     "disconnectDescription": "Tu agente perderá el acceso a este servicio. Podrás conectarlo de nuevo más tarde.",

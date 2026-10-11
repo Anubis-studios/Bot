@@ -2605,7 +2605,6 @@
       "about": "About",
       "browser": "Browser",
       "devices": "Devices",
-      "language": "Language",
       "keyboard": "Keyboard"
     },
     "theme": {
@@ -3362,8 +3361,8 @@
     "settings": {
       "launchAtLogin": "Launch at login",
       "launchDetail": "Start AbacusAI Bot when you sign in.",
-      "defaultWorkspace": "Default workspace",
-      "workspaceDetail": "Where new sessions run unless you pick a folder",
+      "defaultWorkspace": "Last used folder",
+      "workspaceDetail": "Where new sessions start. Picking a folder for a session changes it.",
       "defaultMode": "Default permission mode",
       "botMode": "Bots and routines run in",
       "theme": "테마",
@@ -3514,7 +3513,7 @@
     "connectChatAppOnDesktop": "This chat app connects from the AbacusAI Bot desktop app.",
     "connectorsDescription": "에이전트가 작업을 완료하는 데 사용할 서비스를 연결하세요.",
     "credentialsLocal": "인증 정보는 이 컴퓨터에 저장됩니다.",
-    "defaultWorkspace": "Default workspace",
+    "defaultWorkspace": "Automatic",
     "deliverToBot": "Deliver to bot",
     "details": "Details",
     "disconnectDescription": "에이전트가 이 서비스에 접근할 수 없게 됩니다. 나중에 다시 연결할 수 있습니다.",

@@ -66,13 +66,14 @@ const labelKeys: Record<string, string> = {
 };
 const groups: Partial<Record<SettingsPageId, string[]>> = {
   general: [
-    "launchAtLogin",
     "notchCompanion",
     "notchIdle",
     "notchDisplays",
     "notchHaptics",
     "notchShortcut",
     "tour",
+    "language",
+    "launchAtLogin",
     "showLinkPreviews",
     "defaultWorkspace",
     "defaultMode",
@@ -98,7 +99,6 @@ const groups: Partial<Record<SettingsPageId, string[]>> = {
   ],
   notifications: ["notify", "sounds", "quietHours", "showInNotch"],
   memory: ["customInstructions"],
-  language: ["language"],
   browser: [
     "browserEnabled",
     "browserEngine",
