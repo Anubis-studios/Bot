@@ -58,8 +58,16 @@ const vitest = (dir, args = "", narrow = false) =>
     narrow ? ` --changed=origin/${base} --passWithNoTests` : ""
   }`;
 const tests = [];
+// What each suite builds before it runs: its package and what it imports.
+// turbo's test task builds the small packages' graphs itself.
+const BUILD = {
+  web: "pnpm exec turbo run build --filter=@abacus-ai/web^...",
+  packages: "true",
+  agent: "pnpm exec turbo run build vendor --filter=@abacus-ai/agent...",
+  desktop: "pnpm run build",
+};
 const add = (when, os, name, suite, run) => {
-  if (when) tests.push({ os, name, suite, run });
+  if (when) tests.push({ os, name, suite, build: BUILD[suite], run });
 };
 for (const shard of [1, 2, 3])
   add(
