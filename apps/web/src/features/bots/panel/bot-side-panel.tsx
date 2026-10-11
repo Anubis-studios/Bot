@@ -50,6 +50,7 @@ import {
   useCheckIn,
   botsQueries,
 } from "../data/queries";
+import { botTagline } from "../data/tagline";
 import { useBotsTransport } from "../data/transport";
 import { ModelPicker, type useBotModelBinding } from "../model/picker";
 import { DeleteBotDialog } from "../sidebar/delete-dialog";
@@ -101,7 +102,7 @@ export const DetailsTab = ({
           {bot.name}
         </h2>
         <p className="text-muted-foreground max-w-full text-center text-xs [overflow-wrap:anywhere]">
-          {bot.title}
+          {botTagline(bot, t)}
         </p>
         {bot.channel == null && (
           <AppLink

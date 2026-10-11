@@ -27,6 +27,7 @@ import { AppLink } from "#renderer/lib/navigation/app-link";
 
 import { BotFace } from "../avatar";
 import { moodFor, type BotAttention } from "../data/attention";
+import { botTagline } from "../data/tagline";
 import { useBotAttention } from "../data/use-attention";
 
 export const BotGone = ({ chat = false }: { chat?: boolean }) => {
@@ -131,7 +132,9 @@ const statusText = (
   attention: BotAttention,
   t: ReturnType<typeof useTranslation>["t"]
 ): string =>
-  attention.kind === "idle" ? bot.title : t(`bots.status.${attention.kind}`);
+  attention.kind === "idle"
+    ? botTagline(bot, t)
+    : t(`bots.status.${attention.kind}`);
 
 const dotClass = (attention: BotAttention): string =>
   attention.kind === "idle"

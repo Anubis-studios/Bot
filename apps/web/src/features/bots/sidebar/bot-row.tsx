@@ -38,6 +38,7 @@ import {
 
 import { BotFace } from "../avatar";
 import { moodFor, type BotAttention } from "../data/attention";
+import { botTagline } from "../data/tagline";
 import {
   MENU_LABEL_KEYS,
   type BotMenuItem,
@@ -47,7 +48,7 @@ import {
 /** The row's secondary line and its colour (§7.3 table). */
 export const secondaryLine = (
   attention: BotAttention,
-  bot: Pick<BotRow, "title">,
+  bot: Pick<BotRow, "name" | "title">,
   preview: string | null,
   t: TFunction
 ): { text: string; tone: "attention" | "running" | "error" | "muted" } => {
@@ -84,7 +85,7 @@ export const secondaryLine = (
               .replace(/[*_`#>~]/g, "")
               .replace(/\s+/g, " ")
               .trim()
-          : bot.title,
+          : botTagline(bot, t),
         tone: "muted",
       };
   }
