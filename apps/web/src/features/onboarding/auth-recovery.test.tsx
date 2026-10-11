@@ -18,6 +18,17 @@ afterEach(async () => {
   onboardingStore.setState(() => ({ signIn: null, createdBotId: null }));
 });
 
+it("resumes setup instead of showing signup when the account is already signed in", async () => {
+  app = await renderApp("/onboarding/welcome", {
+    onboarded: false,
+    signedIn: true,
+  });
+  await waitFor(() =>
+    expect(app!.router.state.location.pathname).toBe("/onboarding/connected")
+  );
+  expect(screen.queryByRole("button", { name: "Sign up for free" })).toBeNull();
+});
+
 it("finishes sign-in when the optional Gmail status lookup fails", async () => {
   const statuses = vi.fn(async () => {
     throw new Error("connector service offline");
@@ -73,95 +84,74 @@ it("offers retry when refreshing the signed-in account fails", async () => {
   );
 });
 
-it.each([false, true])(
-  "cancel during account refresh prevents a stale handoff, retry=%s",
-  async (retry) => {
-    let releaseAccount!: (value: {
-      email: string;
-      subscription_tier: string;
-    }) => void;
-    const account = new Promise<{ email: string; subscription_tier: string }>(
-      (resolve) => {
-        releaseAccount = resolve;
-      }
-    );
-    let finished!: () => void;
-    const settled = new Promise<void>((resolve) => {
-      finished = resolve;
-    });
-    const original = signInStore.startSignIn;
-    vi.spyOn(signInStore, "startSignIn").mockImplementation(
-      (transport, intent, profile, callback) =>
-        original(transport, intent, profile, async (outcome) => {
-          try {
-            await callback(outcome);
-          } finally {
-            finished();
-          }
-        })
-    );
-    let refreshing = false;
-    let releaseAuth!: (outcome: {
-      ok: false;
-      cancelled: true;
-      error: string;
-    }) => void;
-    const nextAuth = new Promise<{ ok: false; cancelled: true; error: string }>(
-      (resolve) => {
-        releaseAuth = resolve;
-      }
-    );
-    const authStart = vi
-      .fn()
-      .mockResolvedValueOnce({ ok: true })
-      .mockImplementation(() => nextAuth);
-    const connect = vi.fn(
-      async () => ({ ok: false, error: "cancelled" }) as never
-    );
-    app = await renderApp("/onboarding/welcome", {
-      onboarded: false,
-      signedIn: false,
-      authStart,
-      procedures: {
-        account: {
-          abacus: os.account.abacus.handler(({ input }) => {
-            if (input?.refresh) {
-              refreshing = true;
-              return account as never;
-            }
-            return { email: "", subscription_tier: "free" } as never;
-          }),
-        },
-        connectors: {
-          statuses: os.connectors.statuses.handler(() => ({})),
-          connect: os.connectors.connect.handler(connect),
-        },
-      },
-    });
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Sign up for free" })
-    );
-    await waitFor(() => expect(refreshing).toBe(true));
-    fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
-    await waitFor(() =>
-      expect(app!.router.state.location.pathname).toBe("/onboarding/welcome")
-    );
-    if (retry) {
-      fireEvent.click(
-        await screen.findByRole("button", { name: "Sign up for free" })
-      );
-      await screen.findByRole("button", { name: "Cancel" });
+it("cancel after credentials are saved skips signup without allowing a stale handoff", async () => {
+  let releaseAccount!: (value: {
+    email: string;
+    subscription_tier: string;
+  }) => void;
+  const account = new Promise<{ email: string; subscription_tier: string }>(
+    (resolve) => {
+      releaseAccount = resolve;
     }
-    const currentAttempt = onboardingStore.state.signIn?.id;
-    await act(async () => {
-      releaseAccount({ email: "demo@example.test", subscription_tier: "free" });
-      await settled;
-    });
-    expect(app.router.state.location.pathname).toBe(
-      retry ? "/onboarding/connect" : "/onboarding/welcome"
-    );
-    expect(connect).not.toHaveBeenCalled();
-    expect(onboardingStore.state.signIn?.id).toBe(currentAttempt);
-    releaseAuth({ ok: false, cancelled: true, error: "cancelled" });
-  }
-);
+  );
+  let finished!: () => void;
+  const settled = new Promise<void>((resolve) => {
+    finished = resolve;
+  });
+  const original = signInStore.startSignIn;
+  vi.spyOn(signInStore, "startSignIn").mockImplementation(
+    (transport, intent, profile, callback) =>
+      original(transport, intent, profile, async (outcome) => {
+        try {
+          await callback(outcome);
+        } finally {
+          finished();
+        }
+      })
+  );
+  let refreshing = false;
+  const authStart = vi.fn(async () => ({ ok: true as const }));
+  const connect = vi.fn(
+    async () => ({ ok: false, error: "cancelled" }) as never
+  );
+  app = await renderApp("/onboarding/welcome", {
+    onboarded: false,
+    signedIn: false,
+    authStart,
+    procedures: {
+      account: {
+        abacus: os.account.abacus.handler(({ input }) => {
+          if (input?.refresh) {
+            refreshing = true;
+            return account as never;
+          }
+          return { email: "", subscription_tier: "free" } as never;
+        }),
+      },
+      connectors: {
+        statuses: os.connectors.statuses.handler(() => ({})),
+        connect: os.connectors.connect.handler(connect),
+      },
+    },
+  });
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Sign up for free" })
+  );
+  await waitFor(() => expect(refreshing).toBe(true));
+  fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
+  await waitFor(() =>
+    expect(app!.router.state.location.pathname).toBe("/onboarding/connected")
+  );
+  const currentAttempt = onboardingStore.state.signIn?.id;
+  await act(async () => {
+    releaseAccount({ email: "demo@example.test", subscription_tier: "free" });
+    await settled;
+  });
+  await waitFor(() =>
+    expect(app!.router.state.location.pathname).toBe("/onboarding/connected")
+  );
+  expect(screen.queryByRole("button", { name: "Sign up for free" })).toBeNull();
+  expect(authStart).toHaveBeenCalledOnce();
+  expect(connect).not.toHaveBeenCalled();
+  expect(onboardingStore.state.signIn?.id).toBe(currentAttempt);
+});

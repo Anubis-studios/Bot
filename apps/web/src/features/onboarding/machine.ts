@@ -95,11 +95,12 @@ export const guardStep = (
   doc: { signIn: { status: string } | null; createdBotId: string | null }
 ): OnboardingStepId => {
   if (!IS_ELECTRON && step === "models") return "connectors";
+  if (facts.signedIn && step === "welcome") return "connected";
   if (
     step === "connect" &&
     !["pending", "failed"].includes(doc.signIn?.status ?? "")
   )
-    return "welcome";
+    return facts.signedIn ? "connected" : "welcome";
   if (!facts.signedIn && step !== "welcome" && step !== "connect")
     return "welcome";
   if (step === "done") return "first-bot";

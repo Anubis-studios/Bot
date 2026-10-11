@@ -3308,7 +3308,7 @@
     "continueBrowser": "Continue in your browser",
     "ownKeys": "Use my own keys",
     "signOut": "Sign out of Abacus.AI?",
-    "signOutDetail": "A chat that is already running keeps the key it started with until you start a new one.",
+    "signOutDetail": "Running chats will stop. Your conversations will be restored when you sign in to this account again.",
     "removeOtherKeys": "Also remove my other API keys",
     "unknownPlan": "Plan",
     "managePlan": "Manage plan",

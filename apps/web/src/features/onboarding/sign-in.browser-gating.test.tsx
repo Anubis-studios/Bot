@@ -1,4 +1,4 @@
-import { act, screen } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { renderApp } from "#renderer/test-support/app-harness";
@@ -98,6 +98,23 @@ it("never shows a signed-in browser the sign-up wall: its welcome is the account
     ).toBeTruthy();
     expect(screen.queryByText("Sign Up For Free")).toBeNull();
     expect(screen.queryByText("I already have an account")).toBeNull();
+  } finally {
+    app.view.unmount();
+    await app.cleanup();
+  }
+});
+
+it("resumes setup when the website handoff has already saved credentials", async () => {
+  const app = await renderApp("/onboarding/welcome", {
+    onboarded: false,
+    signedIn: true,
+  });
+  try {
+    await waitFor(() =>
+      expect(app.router.state.location.pathname).toBe("/onboarding/connected")
+    );
+    expect(screen.queryByText("Sign up for free")).toBeNull();
+    expect(screen.queryByText("Connecting your account")).toBeNull();
   } finally {
     app.view.unmount();
     await app.cleanup();

@@ -207,13 +207,14 @@ const coalesced = (run: () => Promise<void>): (() => void) => {
 };
 
 /**
- * Browser only (spec 09 D12): write authorization follows the signed-in
- * answer. Whenever it is invalidated (a credentials notice, this window's
+ * Route gates follow the signed-in answer on both platforms. Whenever it
+ * is invalidated (a credentials notice, this window's
  * own credential change, the settings stream reopening) and on every
  * replacement socket (which the transport opens with writes suspended),
  * writes are suspended and the route gates re-run from fresh state: the one
  * that keeps its route releases them, one that leaves revokes them. Outside
- * a gated route the answer itself decides.
+ * a gated route the answer itself decides. Write suspension is browser-only
+ * (spec 09 D12); the desktop's MessagePort implements it as a no-op.
  */
 export const followWriteAuthorization = (
   context: GateContext,

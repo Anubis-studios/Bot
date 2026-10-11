@@ -41,7 +41,7 @@ it("R6-T2 fresh account reaches onboarding before shell; signed-out onboarded ac
     await screen.findByRole("button", { name: "Sign up for free" })
   ).toBeTruthy();
 });
-it("R6-T7 real router preserves failed attempts and ignores cancellation's late success", async () => {
+it("R6-T7 real router preserves failed attempts and resumes persisted authentication after cancellation", async () => {
   let outcome!: (value: { ok: false; error: string } | { ok: true }) => void;
   harness = await renderApp("/onboarding/welcome", {
     onboarded: false,
@@ -74,10 +74,25 @@ it("R6-T7 real router preserves failed attempts and ignores cancellation's late 
   await waitFor(() =>
     expect(harness!.router.state.location.pathname).toBe("/onboarding/welcome")
   );
+  expect(onboardingStore.state.signIn).toBeNull();
   await act(async () => {
+    // The host has saved credentials even though this attempt was cancelled.
+    // Ignore its stale handoff, not the authenticated route guard's answer.
     outcome({ ok: true });
   });
-  expect(harness.router.state.location.pathname).toBe("/onboarding/welcome");
+  await waitFor(() =>
+    expect(harness!.router.state.location.pathname).toBe(
+      "/onboarding/connected"
+    )
+  );
+  expect(onboardingStore.state.signIn).toBeNull();
+  expect(screen.queryByRole("button", { name: "Sign up for free" })).toBeNull();
+  expect(
+    (await harness.transport.client.settings.get({})).apiKeys?.ABACUS_API_KEY
+  ).toBeTruthy();
+  expect(
+    harness.calls.filter(([name]) => name === "auth.abacus.start")
+  ).toHaveLength(2);
 });
 
 it.each([false, true])(

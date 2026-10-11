@@ -71,7 +71,7 @@ describe("R6-T4 step machine and R6-T5 resume", () => {
       })
     ).toBe("connect");
     expect(guardStep("connect", f, { signIn: null, createdBotId: null })).toBe(
-      "welcome"
+      "connected"
     );
     expect(
       guardStep("first-bot", f, { signIn: null, createdBotId: "client" })
