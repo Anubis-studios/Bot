@@ -1,5 +1,4 @@
 import { useQuery } from "@tanstack/react-query";
-import { cn } from "cn";
 import { ArrowRight } from "lucide-react";
 import { motion } from "motion/react";
 import { useState, type CSSProperties } from "react";
@@ -183,10 +182,7 @@ export const BotStartPage = ({
                 <Button
                   type="submit"
                   size="icon"
-                  className={cn(
-                    "concentric size-(--composer-button-size)",
-                    values.name.trim() && "bot-accent-control"
-                  )}
+                  className="concentric size-(--composer-button-size)"
                   aria-label={t("bots.start.setup", { name: values.name })}
                   disabled={!values.name.trim()}
                 >

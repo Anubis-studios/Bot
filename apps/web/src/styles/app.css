@@ -171,17 +171,39 @@
   color: var(--accent-text, var(--primary));
 }
 
-/* Destructive actions retain their meaning in either theme. */
-[data-slot="button"].text-destructive, [data-slot="alert-dialog-action"].text-destructive {
+/*
+ * Destructive actions retain their meaning in either theme. A row-level
+ * action (Uninstall, Remove, Disconnect) stays quiet: destructive text on
+ * its own surface. Only the confirming button in a dialog footer is filled.
+ */
+[data-slot="button"].text-destructive {
+  color: oklch(0.52 0.2 25);
+  background-color: transparent;
+}
+[data-slot="button"].text-destructive:hover {
+  background-color: color-mix(in oklch, oklch(0.52 0.2 25) 10%, transparent);
+}
+.dark [data-slot="button"].text-destructive {
+  color: oklch(0.75 0.17 25);
+}
+.dark [data-slot="button"].text-destructive:hover {
+  background-color: color-mix(in oklch, oklch(0.75 0.17 25) 14%, transparent);
+}
+:is([data-slot="alert-dialog-footer"], [data-slot="dialog-footer"]) [data-slot="button"].text-destructive,
+[data-slot="alert-dialog-action"].text-destructive {
   color: white;
   background-color: oklch(0.52 0.2 25);
 }
-.dark [data-slot="button"].text-destructive, .dark [data-slot="alert-dialog-action"].text-destructive {
+.dark :is([data-slot="alert-dialog-footer"], [data-slot="dialog-footer"]) [data-slot="button"].text-destructive,
+.dark [data-slot="alert-dialog-action"].text-destructive {
   color: oklch(0.15 0 0);
   background-color: oklch(0.75 0.17 25);
 }
-/* A theme solves its own destructive fill and the text on it. */
-html:not([data-palette="default"]):is([data-palette]) :is([data-slot="button"], [data-slot="alert-dialog-action"]).text-destructive {
+/* A theme solves its own destructive colors and the text on its fill. */
+html:not([data-palette="default"]):is([data-palette]) [data-slot="button"].text-destructive {
+  color: var(--destructive);
+}
+html:not([data-palette="default"]):is([data-palette]) :is(:is([data-slot="alert-dialog-footer"], [data-slot="dialog-footer"]) [data-slot="button"], [data-slot="alert-dialog-action"]).text-destructive {
   color: var(--destructive-foreground);
   background-color: var(--destructive);
 }

@@ -104,7 +104,7 @@ const SubmitButton = ({
       {([canSubmit, busy, attempts]) => (
         <Button
           type="submit"
-          className={cn("bot-accent-control aria-busy:opacity-100", className)}
+          className={cn("aria-busy:opacity-100", className)}
           aria-busy={busy}
           disabled={busy || (!canSubmit && attempts > 0)}
         >
