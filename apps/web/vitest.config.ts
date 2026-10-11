@@ -9,7 +9,7 @@ import {
 } from "./vite.renderer.ts";
 export default defineConfig({
   test: {
-    maxWorkers: process.env.CI ? 2 : 4,
+    maxWorkers: process.env.CI ? 3 : 4,
     coverage: {
       provider: "v8",
       reporter: ["text-summary", "html"],
@@ -59,7 +59,7 @@ export default defineConfig({
             : {}),
           name: platform === "electron" ? "renderer" : "renderer-browser",
           environment: "jsdom",
-          maxWorkers: process.env.CI ? 2 : 4,
+          maxWorkers: process.env.CI ? 3 : 4,
           css: { include: [/tokens\.css/] },
           include:
             platform === "electron"
