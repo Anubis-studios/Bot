@@ -34,5 +34,5 @@ it.skipIf(!chrome)(
     }
     expect(overload.peak).toBeLessThanOrEqual(Math.SQRT1_2 + 0.001);
   },
-  45000
+  60000
 );

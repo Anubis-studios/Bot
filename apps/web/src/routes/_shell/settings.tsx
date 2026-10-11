@@ -26,7 +26,7 @@ function SettingsLayout() {
       element
         .querySelector<HTMLElement>("button,input,select,textarea")
         ?.focus();
-      if (motion !== "reduced")
+      if (motion !== "reduced" && typeof element.animate === "function")
         element.animate(
           [
             { backgroundColor: "var(--accent)" },

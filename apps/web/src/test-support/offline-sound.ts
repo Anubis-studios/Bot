@@ -64,7 +64,8 @@ export const renderSoundLevels = async (
       let stderr = "";
       const timer = setTimeout(
         () => reject(new Error("Chrome did not start")),
-        15000
+        // Started beside the rest of the suite, a CI runner can take over 15 s.
+        30000
       );
       browserProcess.stderr!.on("data", (chunk) => {
         stderr += chunk.toString();
