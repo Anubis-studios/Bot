@@ -257,6 +257,7 @@ export const UNATTENDED_EXCLUDED_TOOLS: Readonly<Record<string, string>> = {
   bfl_flux3_video_continuation: NO_MEDIA,
   bfl_flux3_get_result: NO_MEDIA,
   bfl_flux3_prompting_guide: NO_MEDIA,
+  browser_media: NO_MEDIA,
   send_chat_message: NO_MESSAGES,
   list_chats: NO_MESSAGES,
   read_chat_messages: NO_MESSAGES,
