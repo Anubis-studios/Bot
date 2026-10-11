@@ -921,12 +921,15 @@ describeInBrowser("the tools' page scripts, against real layout", () => {
       ) as unknown as Loose,
     };
 
+    // Focused by script: `autofocus` waits for a rendering update a hidden
+    // window may not have had by the time the summary is read.
     summary = runSnapshotFixtures(PAGE_SUMMARY_JS, {
       page: wrap(`
         <h1>Flights</h1><h2>Best departing</h2>
         <main>12 results found for your search.</main>
         <div role="dialog">Sign in to continue</div>
-        <input id="to" placeholder="Where to?" autofocus>
+        <input id="to" placeholder="Where to?">
+        <script>document.getElementById("to").focus();</script>
       `),
     }) as unknown as Loose;
   }, 180_000);
