@@ -451,13 +451,16 @@ describe.skipIf(!ready.runnable)("chat kit gates (Electron)", () => {
       };
       expect(commits.length, `${label}: activations`).toBe(20);
       for (const drift of drifts) expect(drift).toBeLessThanOrEqual(1);
-      // A shared CI runner puts single commits a few ms either side of the
-      // 50 ms long-task line; the typical commit stays under it, and none
-      // may become a real stall.
+      // The typical commit stays under the 50 ms long-task line, or, on a
+      // slower runner, under 30% of the same run's first paint in (a): every
+      // runner so far commits "Show earlier" in 22-25% of it, so a heavier
+      // commit still fails while a slower CPU does not. None may stall.
+      const firstPaint = Number(numbers.a_firstPaintMs ?? 0);
+      const budget = Math.max(50, firstPaint * 0.3);
       const commitMs = stats(commits);
-      const times = `${label}: all commit times ${JSON.stringify(commits)}`;
-      expect(commitMs.median, times).toBeLessThan(50);
-      expect(commitMs.max, times).toBeLessThan(100);
+      const times = `${label}: all commit times ${JSON.stringify(commits)}, budget ${budget}`;
+      expect(commitMs.median, times).toBeLessThan(budget);
+      expect(commitMs.max, times).toBeLessThan(budget * 2);
     };
 
     it('history: "Show earlier" 20 times away from the end', async () => {

@@ -70,9 +70,11 @@ const bundle = async (options: {
       // Keep Photon's WASM beside its loader, as the shipping build does.
       // The temporary bundle has no node_modules to resolve a bare import.
       paths: {
-        "@silvia-odwyer/photon-node": createRequire(import.meta.url).resolve(
-          "@silvia-odwyer/photon-node"
-        ),
+        // Forward slashes: the path is printed into a JS string as is, where
+        // Windows backslashes would read as escapes.
+        "@silvia-odwyer/photon-node": createRequire(import.meta.url)
+          .resolve("@silvia-odwyer/photon-node")
+          .replaceAll("\\", "/"),
       },
     },
     write: true,
