@@ -1,7 +1,7 @@
 // Which test suites a CI run needs. A pull request runs the suites of the
 // packages its diff reaches (turbo's --affected: changed packages and their
-// dependents) with vitest's --changed narrowing them to the related files; a
-// push to main, a manual run, or a change to shared tooling runs everything.
+// dependents); a push to main, a manual run, or a change to shared tooling
+// runs everything.
 // Writes `tests` (a job matrix) and the flags the other jobs read to
 // $GITHUB_OUTPUT.
 import { execFileSync } from "node:child_process";
@@ -44,22 +44,7 @@ const desktop = hit("desktop");
 const agent = hit("agent");
 const packages = hit("host", "contract", "updater", "connectors", "desktop");
 
-// Only the renderer suite narrows to the changed files' tests (vitest
-// --changed), and only when every change is TypeScript source: tests
-// read CSS, HTML, JSON and images from disk, and the agent, connectors and
-// updater are imported as their built dist/, so no import graph reaches them.
-const narrowWeb =
-  !full &&
-  changed.every(
-    (file) =>
-      !/^(packages\/(agent|connectors|test-support)|apps\/updater)\//.test(
-        file
-      ) && /\.tsx?$/.test(file)
-  );
-const vitest = (dir, args = "", narrow = false) =>
-  `pnpm --dir ${dir} exec vitest run${args}${
-    narrow ? ` --changed=origin/${base} --passWithNoTests` : ""
-  }`;
+const vitest = (dir, args = "") => `pnpm --dir ${dir} exec vitest run${args}`;
 const tests = [];
 // What each suite builds before it runs: its package and what it imports.
 // turbo's test task builds the small packages' graphs itself.
@@ -72,24 +57,8 @@ const BUILD = {
 const add = (when, name, suite, run) => {
   if (when) tests.push({ name, suite, build: BUILD[suite], run });
 };
-// Narrowed, the renderer project runs the changed files' tests in one job;
-// the browser-graph and build projects always run whole, since walking their
-// graph for --changed loads modules their boundary plugin forbids.
-if (narrowWeb)
-  add(
-    web,
-    "web (changed)",
-    "web",
-    `${vitest("apps/web", " --project renderer", true)} && ${vitest("apps/web", " --project renderer-browser --project vite")}`
-  );
-else
-  for (const shard of [1, 2, 3])
-    add(
-      web,
-      `web ${shard}/3`,
-      "web",
-      vitest("apps/web", ` --shard=${shard}/3`)
-    );
+for (const shard of [1, 2, 3])
+  add(web, `web ${shard}/3`, "web", vitest("apps/web", ` --shard=${shard}/3`));
 add(
   packages,
   "host and packages",
