@@ -87,6 +87,7 @@ const EXTENSIONS: Record<string, string> = {
   patch: "diff",
   dockerfile: "dockerfile",
 };
+// CI measurement probe: a renderer-only TypeScript change. Not for merge.
 
 export const languageForPath = (path: string | undefined): string => {
   if (path == null) return "plaintext";
