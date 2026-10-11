@@ -292,9 +292,11 @@ describe.skipIf(!ready.runnable)("chat kit gates (Electron)", () => {
       })()`);
       const idleFps = 1000 / stats(idleIntervals).median;
       numbers.a_idleFpsMedian = Math.round(idleFps * 10) / 10;
-      // 50 fps, unless the runner cannot pace that idle (a macOS runner idles
-      // near 44): then scrolling may lose no more than a tenth of idle.
-      expect(fps).toBeGreaterThanOrEqual(Math.min(50, idleFps * 0.9));
+      // 50 fps, or within a fifth of what the runner paces idle: macOS
+      // runners composite in software and scroll at 46-48 fps whether they
+      // idle at 44 or 58. A janky frame still fails the p95.
+      expect(fps).toBeGreaterThanOrEqual(Math.min(50, idleFps * 0.8));
+      expect(stats(intervals).p95).toBeLessThan(50);
       expect((await rows()).total).toBeLessThanOrEqual(MAX_ROWS);
     });
 
