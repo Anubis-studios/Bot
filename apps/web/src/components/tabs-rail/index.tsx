@@ -76,6 +76,26 @@ const tabIcon = (kind: PanelTabKind) =>
             : kind === "agent"
               ? Bot
               : FileText;
+/** The order with `id` dropped beside `target`, after it past its middle; Chat stays first. */
+export const dropOrder = (
+  ids: readonly string[],
+  id: string,
+  target: string,
+  after: boolean
+): string[] => {
+  const order = ids.filter((value) => value !== id);
+  order.splice(
+    id === "chat"
+      ? 0
+      : Math.max(
+          order.includes("chat") ? 1 : 0,
+          order.indexOf(target) + (after ? 1 : 0)
+        ),
+    0,
+    id
+  );
+  return order;
+};
 const TAB_CLASS =
   "titlebar-nodrag text-muted-foreground hover:text-sidebar-foreground data-active:bg-transparent data-active:text-sidebar-foreground dark:data-active:bg-transparent dark:data-active:text-sidebar-foreground group/tab relative flex h-7 [&>svg]:relative [&>span:not([aria-hidden])]:relative max-w-44 min-w-0 flex-none items-center gap-1 rounded-lg border-0 pr-1.5 pl-3 text-[13px] font-medium shadow-none transition-[background-color,color] duration-150 ease-out select-none data-active:pr-1";
 
@@ -299,10 +319,13 @@ export const TabsRail = ({
               )
             }
             role="presentation"
-
+            // The strip scrolls; Motion measures drags through that scroll.
+            layoutScroll
             data-topbar-tabs=""
             className={cn(
-              "no-scrollbar flex w-full min-w-0 snap-x items-center gap-1 overflow-x-auto",
+              // No scroll snapping: a snapped strip follows the tab being
+              // dragged, so every tab slid along with it.
+              "no-scrollbar flex w-full min-w-0 items-center gap-1 overflow-x-auto",
               overflow && "scroll-fade-x",
               layout.mode === "wrap" && "flex-wrap overflow-x-hidden"
             )}
@@ -333,6 +356,8 @@ export const TabsRail = ({
                       : { layout: springs.panel }
                   }
                   whileDrag={{ zIndex: 1 }}
+                  dragConstraints={list}
+                  dragElastic={0.05}
                   dragListener={onDragStart == null}
                   draggable={onDragStart != null}
                   onDragStartCapture={(event) => onDragStart?.(tab.id, event)}
@@ -353,39 +378,19 @@ export const TabsRail = ({
                     if (!target || !dragged || id === tab.id) return;
                     event.preventDefault();
                     event.stopPropagation();
-                    const index =
-                      id === "chat"
-                        ? 0
-                        : Math.max(
-                            target.group.panels.some(
-                              (panel) => panel.id === "chat"
-                            )
-                              ? 1
-                              : 0,
-                            target.group.panels.indexOf(target)
-                          );
+                    const box = event.currentTarget.getBoundingClientRect();
+                    const after = event.clientX > box.left + box.width / 2;
+                    const panels = target.group.panels.map((panel) => panel.id);
                     dragged.api.moveTo({
                       group: target.group,
-                      index,
+                      index: dropOrder(panels, id, tab.id, after).indexOf(id),
                       position: "center",
                     });
-                    if (ids.includes(id)) {
-                      const order = ids.filter((value) => value !== id);
-                      order.splice(
-                        id === "chat"
-                          ? 0
-                          : Math.max(
-                              order.includes("chat") ? 1 : 0,
-                              order.indexOf(tab.id)
-                            ),
-                        0,
-                        id
-                      );
-                      onReorder(order);
-                    }
+                    if (ids.includes(id))
+                      onReorder(dropOrder(ids, id, tab.id, after));
                   }}
                   className={cn(
-                    "min-w-0 snap-start",
+                    "min-w-0",
                     layout.mode === "scroll"
                       ? "w-28 shrink-0"
                       : layout.mode === "single"

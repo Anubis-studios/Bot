@@ -11,7 +11,7 @@ import { fixturePrefs } from "#renderer/data/fixture-db/rows";
 import { initI18n } from "#renderer/lib/i18n";
 import { TooltipProvider } from "#renderer/ui/tooltip";
 
-import { TabsRail } from ".";
+import { dropOrder, TabsRail } from ".";
 vi.mock("#renderer/data/db/prefs", () => ({
   usePrefs: () => ({ ...fixturePrefs(), motion: { reduce: "on" } }),
 }));
@@ -78,4 +78,48 @@ it("keeps the full title discoverable on keyboard focus with reduced motion", as
     (await screen.findByRole("tooltip", { hidden: true })).textContent
   ).toContain(label);
   expect(document.querySelector("[data-marquee-active]")).toBeNull();
+});
+
+it("drops a tab before or after the one it lands on, keeping Chat first", () => {
+  const ids = ["chat", "files", "changes", "agents"];
+  expect(dropOrder(ids, "files", "agents", true)).toEqual([
+    "chat",
+    "changes",
+    "agents",
+    "files",
+  ]);
+  expect(dropOrder(ids, "files", "agents", false)).toEqual([
+    "chat",
+    "changes",
+    "files",
+    "agents",
+  ]);
+  expect(dropOrder(ids, "agents", "chat", false)).toEqual([
+    "chat",
+    "agents",
+    "files",
+    "changes",
+  ]);
+});
+
+it("does not snap the strip, so a dragged tab moves alone", async () => {
+  await initI18n();
+  render(
+    <TabsRail
+      tabs={[
+        { id: "files", kind: "files", title: "Files" },
+        { id: "changes", kind: "changes", title: "Changes" },
+      ]}
+      active="files"
+      title={(tab) => tab.title!}
+      kinds={[]}
+      onChange={() => {}}
+      onClose={() => {}}
+      onReorder={() => {}}
+      onAdd={() => {}}
+    />
+  );
+  const strip = document.querySelector<HTMLElement>("[data-topbar-tabs]")!;
+  for (const element of [strip, ...strip.children])
+    expect(element.className).not.toMatch(/\bsnap-/);
 });
