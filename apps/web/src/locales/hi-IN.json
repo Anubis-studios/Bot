@@ -266,7 +266,6 @@
     },
     "sidebar": {
       "new": "नया बॉट",
-      "empty": "अभी कोई बॉट नहीं",
       "search": "Search bots",
       "searchPlaceholder": "Search bots",
       "noMatches": "No bots match",

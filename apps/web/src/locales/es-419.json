@@ -266,7 +266,6 @@
     },
     "sidebar": {
       "new": "Nuevo bot",
-      "empty": "Aún no hay bots",
       "search": "Search bots",
       "searchPlaceholder": "Search bots",
       "noMatches": "No bots match",

@@ -3,6 +3,7 @@ import { useParams } from "@tanstack/react-router";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { AppIcon } from "#renderer/components/app-icon";
 import { ConfirmAction } from "#renderer/components/form-kit/confirm";
 import { NavList } from "#renderer/components/nav-list";
 import { useCollectionStatus } from "#renderer/data/db/status";
@@ -98,6 +99,16 @@ export const RoutinesSidebar = () => {
         />
       ) : status !== "ready" ? (
         <NavList.Skeleton />
+      ) : routines.length === 0 ? (
+        <NavList.Empty
+          media={<AppIcon name="routines" size={28} />}
+          title={t("routines.sidebar.empty")}
+          description={t("routines.page.emptyDescription")}
+        />
+      ) : ordered.length === 0 ? (
+        <p className="text-muted-foreground px-2 pt-4 text-center text-xs">
+          {t("artifacts.noMatchesTitle")}
+        </p>
       ) : (
         <NavList.Rows>
           {ordered.map((r) => {

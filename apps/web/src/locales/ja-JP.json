@@ -266,7 +266,6 @@
     },
     "sidebar": {
       "new": "新しいボット",
-      "empty": "ボットはまだありません",
       "search": "Search bots",
       "searchPlaceholder": "Search bots",
       "noMatches": "No bots match",

@@ -16,6 +16,13 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "#renderer/ui/collapsible";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "#renderer/ui/empty";
 import { Item, ItemContent, ItemMedia, ItemTitle } from "#renderer/ui/item";
 import { Skeleton as RegistrySkeleton } from "#renderer/ui/skeleton";
 
@@ -219,6 +226,27 @@ const Rows = ({ children }: { children: ReactNode }) => (
   </div>
 );
 
+/** A sidebar with nothing in it yet: the registry `Empty`, compact. */
+const EmptyRow = ({
+  media,
+  title,
+  description,
+}: {
+  media?: ReactNode;
+  title: string;
+  description?: ReactNode;
+}) => (
+  <Empty className="flex-none justify-start gap-2 px-4 pt-10 pb-4">
+    <EmptyHeader className="gap-1.5">
+      {media != null && <EmptyMedia>{media}</EmptyMedia>}
+      <EmptyTitle className="text-sm">{title}</EmptyTitle>
+      {description != null && (
+        <EmptyDescription className="text-xs">{description}</EmptyDescription>
+      )}
+    </EmptyHeader>
+  </Empty>
+);
+
 const ErrorRow = ({
   message,
   retryLabel,
@@ -248,5 +276,6 @@ export const NavList = {
   Action,
   Badge,
   Skeleton,
+  Empty: EmptyRow,
   Error: ErrorRow,
 };

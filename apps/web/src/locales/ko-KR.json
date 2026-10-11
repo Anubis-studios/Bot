@@ -266,7 +266,6 @@
     },
     "sidebar": {
       "new": "새 봇",
-      "empty": "아직 봇이 없습니다",
       "search": "Search bots",
       "searchPlaceholder": "Search bots",
       "noMatches": "No bots match",

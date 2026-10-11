@@ -273,9 +273,10 @@ const ShellSection = () => {
         <div className="bg-sidebar h-64 w-[280px] overflow-hidden rounded-md border pt-2">
           <NavList.Root label="Empty">
             <NavList.Header title="Empty" />
-            <p className="text-muted-foreground px-2 pt-2 text-xs">
-              {t("bots.sidebar.empty")}
-            </p>
+            <NavList.Empty
+              title={t("bots.sidebar.emptyTitle")}
+              description={t("bots.sidebar.emptyBody")}
+            />
           </NavList.Root>
         </div>
         <div className="bg-sidebar h-64 w-[280px] overflow-hidden rounded-md border pt-2">
