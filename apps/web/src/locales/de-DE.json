@@ -3049,7 +3049,8 @@
       "allSettings": "Alle Modelleinstellungen",
       "connected": "Verbunden. Wähle ein Modell",
       "storedOnHost": "Schlüssel werden auf deiner Host-VM gespeichert."
-    }
+    },
+    "imageEnlarge": "Größer anzeigen"
   },
   "notch": {
     "a11y": {

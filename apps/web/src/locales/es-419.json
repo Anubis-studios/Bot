@@ -3049,7 +3049,8 @@
       "allSettings": "Toda la configuración de modelos",
       "connected": "Conectado. Elige un modelo",
       "storedOnHost": "Las claves se guardan en la VM del host."
-    }
+    },
+    "imageEnlarge": "Ver más grande"
   },
   "notch": {
     "a11y": {

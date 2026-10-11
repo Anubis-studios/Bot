@@ -26,6 +26,7 @@ import { IS_ELECTRON } from "#renderer/lib/platform";
 import { Button } from "#renderer/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "#renderer/ui/tooltip";
 
+import { ZoomableImage } from "../kit/image-lightbox";
 import { useMessageScope } from "../kit/message-scope";
 import { useCodeHighlighter } from "./highlighter";
 import { AUTOLINK_TITLE, replyLinks } from "./links";
@@ -47,6 +48,8 @@ export const MarkdownLinksProvider = LinksContext.Provider;
 /** Whether the message this block belongs to is still streaming. */
 const StreamingContext = createContext(false);
 const ReplyContext = createContext(false);
+/** Inside a link: an image is the link's content, not something to enlarge. */
+const InLinkContext = createContext(false);
 
 const COLLAPSE_LINES = 30;
 
@@ -89,7 +92,7 @@ export const ChatLink = ({ href, children, ...rest }: ComponentProps<"a">) => {
           scrollToAnchor(event.currentTarget, href.slice(1));
       }}
     >
-      {children}
+      <InLinkContext value>{children}</InLinkContext>
     </a>
   );
   if (reply && message && href && previewTarget(href))
@@ -238,9 +241,17 @@ const Table = (props: ComponentProps<"table">) => (
   </div>
 );
 
-const Image = ({ alt, ...props }: ComponentProps<"img">) => (
-  <img {...props} alt={alt ?? ""} loading="lazy" className="chat-image" />
-);
+const Image = ({ alt, ...props }: ComponentProps<"img">) =>
+  use(InLinkContext) ? (
+    <img {...props} alt={alt ?? ""} loading="lazy" className="chat-image" />
+  ) : (
+    <ZoomableImage
+      {...props}
+      alt={alt ?? ""}
+      loading="lazy"
+      className="chat-image"
+    />
+  );
 
 const COMPONENTS = {
   a: ChatLink,

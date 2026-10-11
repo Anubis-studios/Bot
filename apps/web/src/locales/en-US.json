@@ -3049,7 +3049,8 @@
       "allSettings": "All model settings",
       "connected": "Connected. Pick a model",
       "storedOnHost": "Keys are stored on your host VM."
-    }
+    },
+    "imageEnlarge": "View larger"
   },
   "notch": {
     "a11y": {

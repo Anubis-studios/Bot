@@ -3049,7 +3049,8 @@
       "allSettings": "モデルのすべての設定",
       "connected": "接続しました。モデルを選択してください",
       "storedOnHost": "キーはホストの仮想マシンに保存されます。"
-    }
+    },
+    "imageEnlarge": "拡大表示"
   },
   "notch": {
     "a11y": {

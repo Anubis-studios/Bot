@@ -3049,7 +3049,8 @@
       "allSettings": "Semua pengaturan model",
       "connected": "Terhubung. Pilih model",
       "storedOnHost": "Kunci disimpan di VM host Anda."
-    }
+    },
+    "imageEnlarge": "Lihat lebih besar"
   },
   "notch": {
     "a11y": {

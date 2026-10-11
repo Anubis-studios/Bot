@@ -3049,7 +3049,8 @@
       "allSettings": "Tous les paramètres des modèles",
       "connected": "Connecté. Choisissez un modèle",
       "storedOnHost": "Les clés sont stockées sur la machine virtuelle hôte."
-    }
+    },
+    "imageEnlarge": "Agrandir"
   },
   "notch": {
     "a11y": {
