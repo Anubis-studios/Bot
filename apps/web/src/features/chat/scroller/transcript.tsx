@@ -16,6 +16,7 @@ import {
   useState,
   type ComponentType,
   type ReactNode,
+  type RefObject,
 } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -59,6 +60,9 @@ import {
   earlierSteps,
   ROW_FALLBACK_PX,
 } from "./window";
+
+const ROWS =
+  '[data-slot="message-scroller-item"], [data-tool], [data-slot="subagent-row"]';
 
 export interface TranscriptProps {
   messages: UIMessage[];
@@ -401,6 +405,39 @@ const outcomesByAnchor = (
   return { byAnchor, orphans };
 };
 
+type HeldRow = { el: Element; top: number };
+
+function holdRow(
+  viewportRef: RefObject<HTMLDivElement | null>,
+  held: RefObject<HeldRow | null>,
+  change: () => void
+) {
+  const viewport = viewportRef.current;
+  if (viewport != null) {
+    const box = viewport.getBoundingClientRect();
+    for (const el of viewport.querySelectorAll(ROWS)) {
+      const rect = el.getBoundingClientRect();
+      if (rect.top >= box.bottom) break;
+      if (rect.height > 0 && rect.top >= box.top && rect.bottom <= box.bottom) {
+        held.current = { el, top: rect.top };
+        viewport.style.overflowAnchor = "none";
+        break;
+      }
+    }
+  }
+  change();
+}
+
+function useHold(
+  viewportRef: RefObject<HTMLDivElement | null>,
+  held: RefObject<HeldRow | null>
+) {
+  return useCallback(
+    (change: () => void) => holdRow(viewportRef, held, change),
+    [viewportRef, held]
+  );
+}
+
 export const Transcript = ({ messages, Message }: TranscriptProps) => {
   const { t } = useTranslation();
   const { session, slots, skin } = useChatView();
@@ -565,15 +602,33 @@ export const Transcript = ({ messages, Message }: TranscriptProps) => {
     setWindow(newestWindow(currentItems.current));
     scrollToEnd();
   }, [sent, scrollToEnd]);
+  // Paging the window keeps the first fully visible row where it was. Native
+  // anchoring is off for that commit: it misses rows evicted across the top
+  // edge, and would correct a second time on top of this.
+  const held = useRef<HeldRow | null>(null);
+  const hold = useHold(viewportRef, held);
+  useLayoutEffect(() => {
+    const viewport = viewportRef.current;
+    const row = held.current;
+    if (viewport == null || row == null) return;
+    held.current = null;
+    if (row.el.isConnected)
+      viewport.scrollTop += row.el.getBoundingClientRect().top - row.top;
+    viewport.style.overflowAnchor = "";
+  }, [window]);
   const more = useCallback(
     (id: string) =>
-      setWindow((current) => moreSteps(currentItems.current, current, id)),
-    [setWindow]
+      hold(() =>
+        setWindow((current) => moreSteps(currentItems.current, current, id))
+      ),
+    [hold, setWindow]
   );
   const earlier = useCallback(
     (id: string) =>
-      setWindow((current) => earlierSteps(currentItems.current, current, id)),
-    [setWindow]
+      hold(() =>
+        setWindow((current) => earlierSteps(currentItems.current, current, id))
+      ),
+    [hold, setWindow]
   );
   const signature = items
     .map((item) => `${item.id}:${item.fixed}:${item.units}`)
@@ -695,7 +750,9 @@ export const Transcript = ({ messages, Message }: TranscriptProps) => {
         // The header's scroll-linked morph into the title bar reads this
         // viewport's named timeline (bots.css).
         data-identity-timeline={slots.header != null ? "" : undefined}
-        preserveScrollOnPrepend
+        // Where the browser anchors scrolling, the scroller's own prepend
+        // restore would correct a second time.
+        preserveScrollOnPrepend={!CSS.supports("overflow-anchor", "auto")}
         aria-label={t("chat.transcript.label")}
         onPointerDownCapture={(event) => {
           if (
@@ -725,7 +782,7 @@ export const Transcript = ({ messages, Message }: TranscriptProps) => {
             rows={start}
             height={placeholderHeight(0, start)}
             label={t("chat.transcript.showEarlier")}
-            onActivate={() => setWindow(showEarlier(items, window))}
+            onActivate={() => hold(() => setWindow(showEarlier(items, window)))}
           />
         ) : null}
         <MessageScrollerContent
@@ -746,7 +803,7 @@ export const Transcript = ({ messages, Message }: TranscriptProps) => {
             rows={visible.length - end}
             height={placeholderHeight(end, visible.length)}
             label={t("chat.transcript.showLater")}
-            onActivate={() => setWindow(showLater(items, window))}
+            onActivate={() => hold(() => setWindow(showLater(items, window)))}
           />
         ) : null}
       </MessageScrollerViewport>
