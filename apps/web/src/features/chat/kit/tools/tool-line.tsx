@@ -49,6 +49,9 @@ import { useChatView, useSubagentScope } from "../context";
 import { useMessageScope } from "../message-scope";
 import { selectPermission } from "../permissions/selection";
 import { parseAnsi, tailLines } from "./ansi";
+import { AskRecapBody } from "./ask-recap";
+import { ComponentTitle } from "./component-title";
+import { componentLine } from "./component-tools";
 import {
   diffLines,
   humanToolName,
@@ -106,6 +109,7 @@ export type Expander =
   | "read"
   | "browser"
   | "todo"
+  | "ask"
   | "generic"
   | "none";
 
@@ -118,6 +122,7 @@ export const expanderFor = (name: string): Expander => {
     return "diff";
   if (name.startsWith("browser")) return "browser";
   if (name === "todo" || name === "todo_write") return "todo";
+  if (name === "ask_user_question") return "ask";
   return "generic";
 };
 
@@ -582,6 +587,14 @@ const Body = ({
       );
     case "todo":
       return <TodoBody input={input} />;
+    case "ask":
+      return (
+        <AskRecapBody
+          input={input}
+          resultText={tool.text}
+          running={tool.status === "running"}
+        />
+      );
     case "none":
       return null;
   }
@@ -594,6 +607,7 @@ const hasBody = (
 ): boolean => {
   if (expander === "none") return false;
   if (expander === "todo") return todoItems(input).length > 0;
+  if (expander === "ask") return tool.status !== "running" || tool.text !== "";
   if (expander === "bash") return tool.terminal != null || tool.text !== "";
   if (expander === "diff") return tool.diff != null || tool.text !== "";
   return (
@@ -641,6 +655,12 @@ const MountedToolLine = ({ part, result, expander: fixed }: ToolLineProps) => {
   const expander = fixed ?? expanderFor(part.name);
   const Icon = KIND_ICONS[kindOf(part.name)] ?? Wrench;
   const title = toolTitle(part.name, input);
+  const component = componentLine(
+    part.name,
+    input,
+    tool.status === "running",
+    t
+  );
   const meta = toolMeta(
     part.name,
     input,
@@ -649,7 +669,7 @@ const MountedToolLine = ({ part, result, expander: fixed }: ToolLineProps) => {
   );
   const bodyId = useId();
   const openPath = toolOpenPath(part.name, input, workspaceRoot);
-  const expandable = hasBody(expander, tool, input);
+  const expandable = component == null && hasBody(expander, tool, input);
   const row = (
     <>
       <span
@@ -659,14 +679,18 @@ const MountedToolLine = ({ part, result, expander: fixed }: ToolLineProps) => {
         {t(STATUS_KEY[tool.status])}
       </span>
       <Icon aria-hidden className="text-muted-foreground size-3.5 shrink-0" />
-      <span
-        className={cn(
-          "text-foreground min-w-0 truncate",
-          tool.status === "running" && "shimmer"
-        )}
-      >
-        {title}
-      </span>
+      {component != null ? (
+        <ComponentTitle line={component} running={tool.status === "running"} />
+      ) : (
+        <span
+          className={cn(
+            "text-foreground min-w-0 truncate",
+            tool.status === "running" && "shimmer"
+          )}
+        >
+          {title}
+        </span>
+      )}
       <Meta meta={meta} />
     </>
   );

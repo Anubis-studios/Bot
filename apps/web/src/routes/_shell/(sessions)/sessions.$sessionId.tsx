@@ -17,6 +17,7 @@ import { ChatView } from "#renderer/features/chat/kit/lazy-view";
 import { useSubagents } from "#renderer/features/chat/kit/subagents/use-subagents";
 import { openStartDraft } from "#renderer/features/sessions/start/start-session";
 import { updateDraft } from "#renderer/lib/continuity/composer-drafts";
+import { IS_ELECTRON } from "#renderer/lib/platform";
 import { platformSystem } from "#renderer/lib/platform-system";
 const SubagentDetail = lazy(() =>
   import("#renderer/features/chat/kit/subagents/detail").then((m) => ({
@@ -32,10 +33,15 @@ import { SessionId } from "@abacus-ai/contract/contract/ids";
 import { sessionConversationKey } from "@abacus-ai/contract/conversation-scope";
 
 import { EmptyState } from "#renderer/components/empty-state";
+import { hasInAppViewer, isUrl } from "#renderer/components/file-preview";
 import { MessageFeedback } from "#renderer/components/message-feedback";
 import { chatLoading } from "#renderer/features/chat/runtime/lazy-runtime";
 import { type ChatRuntime } from "#renderer/features/chat/runtime/runtime";
 import { SessionChangesCard } from "#renderer/features/sessions/changes/changes-card";
+import {
+  deliverablesAfter,
+  sessionDeliverablesCard,
+} from "#renderer/features/sessions/chat/deliverables";
 import { SessionContextTray } from "#renderer/features/sessions/context/context-tray";
 import { SessionPermissionAction } from "#renderer/features/sessions/context/permission-terminal-action";
 import { SessionTasks } from "#renderer/features/sessions/context/tasks";
@@ -45,7 +51,10 @@ import {
   useWorkspace,
 } from "#renderer/features/sessions/data/queries";
 import { openSessionOnce } from "#renderer/features/sessions/data/unread-store";
-import { openTab } from "#renderer/features/sessions/dock/panel-tabs-store";
+import {
+  openTab,
+  panelTabsStore,
+} from "#renderer/features/sessions/dock/panel-tabs-store";
 import { SessionWorkspace } from "#renderer/features/sessions/session-workspace";
 import { SessionIdentity } from "#renderer/features/sessions/sessions-pages";
 import {
@@ -270,33 +279,50 @@ const SessionRoute = () => {
       transition: "none",
     });
   const openFile = (path: string) => {
+    if (isUrl(path)) {
+      openUrl(path);
+      return;
+    }
     if (!root || !path.startsWith(`${root}/`)) {
       void platformSystem(transport.client).openPath({ path });
       return;
     }
-    const ref = `preview:${crypto.randomUUID()}`;
+    const relative = path.slice(root.length + 1);
+    // A file already open in the panel is focused, not opened twice.
+    const existing = panelTabsStore.state[key]?.tabs.find(
+      (tab) => tab.ref.startsWith("preview:") && tab.path === relative
+    );
+    const ref = existing?.ref ?? `preview:${crypto.randomUUID()}`;
     openTab(key, {
       ref,
       title: path.split("/").at(-1) ?? path,
-      path: path.slice(root.length + 1),
+      path: relative,
     });
     select(ref);
   };
+  function openUrl(url?: string) {
+    const existing = url
+      ? panelTabsStore.state[key]?.tabs.find(
+          (tab) => tab.ref.startsWith("browser:") && tab.url === url
+        )
+      : undefined;
+    const ref = existing?.ref ?? `browser:${crypto.randomUUID()}`;
+    openTab(key, { ref, title: url ?? t("sessions.dock.browser"), url });
+    select(ref);
+  }
   return (
     <>
       <PreviewRegistration
         conversationKey={key}
         open={(path, url) => {
-          if (path) openFile(path);
-          else {
-            const ref = `browser:${crypto.randomUUID()}`;
-            openTab(key, {
-              ref,
-              title: url ?? t("sessions.dock.browser"),
-              url,
-            });
-            select(ref);
-          }
+          // `present_deliverable` opens the panel unasked, so only what the
+          // panel can show: a URL, or a workspace file with an in-app viewer.
+          // Anything else never launches another app on its own.
+          if (path && isUrl(path)) openUrl(path);
+          else if (path) {
+            if (root && path.startsWith(`${root}/`) && hasInAppViewer(path))
+              openFile(path);
+          } else openUrl(url);
         }}
       />
       <TopBarSlot>
@@ -354,16 +380,48 @@ const SessionRoute = () => {
             slots={{
               composerNotice: <ComposerUpdateNotice />,
               decorateMessage: (message, context) => {
+                if (message.role !== "assistant") return null;
+                let at = context.index;
+                if (context.messages[at]?.id !== message.id)
+                  at = context.messages.findIndex(
+                    (row) => row.id === message.id
+                  );
+                const files =
+                  at < 0
+                    ? null
+                    : deliverablesAfter(
+                        context.messages,
+                        at,
+                        context.runActive
+                      );
+                const after =
+                  files == null
+                    ? undefined
+                    : sessionDeliverablesCard(files, {
+                        workspaceRoot: root,
+                        onOpenFile: openFile,
+                        onOpenUrl: openUrl,
+                        onOpenExternal: (url) =>
+                          void platformSystem(transport.client).openExternal({
+                            url,
+                          }),
+                        onReveal: IS_ELECTRON
+                          ? (path) =>
+                              void transport.client.system.showItemInFolder({
+                                path,
+                              })
+                          : undefined,
+                      });
                 if (
-                  message.role !== "assistant" ||
-                  (context.runActive &&
-                    context.index === context.messages.length - 1)
+                  context.runActive &&
+                  context.index === context.messages.length - 1
                 )
-                  return null;
+                  return after != null ? { after } : null;
                 const source = message.metadata?.abacus?.segmentId;
                 const segmentId =
                   typeof source === "string" ? source : message.id;
                 return {
+                  ...(after != null ? { after } : {}),
                   actions: (
                     <MessageFeedback
                       id={`${sessionId}:${segmentId}`}

@@ -24,6 +24,7 @@ import { useThreadStore } from "../../store/selectors";
 import { formatElapsed, useSeconds } from "../clock";
 import { SubagentScope, useChatView } from "../context";
 import { toolTitle } from "../tools/tool-line";
+import { narrationLines, subagentEnding } from "./summary";
 
 const stepsOf = (messages: readonly UIMessage[]): number =>
   messages.reduce(
@@ -79,6 +80,10 @@ const MountedSubagentCard = ({ subagent, Parts }: SubagentProps<unknown>) => {
   const description = (subagent as { description?: string }).description;
   const name =
     description ?? t(KIND_KEYS[subagent.name] ?? "chat.subagent.kind.generic");
+  const ending = subagentEnding(
+    subagent as Parameters<typeof subagentEnding>[0]
+  );
+  const narration = running ? narrationLines(subagent.messages) : [];
   const sub = running
     ? [
         latestTool(subagent.messages),
@@ -86,12 +91,14 @@ const MountedSubagentCard = ({ subagent, Parts }: SubagentProps<unknown>) => {
       ]
         .filter(Boolean)
         .join(" · ")
-    : subagent.status === "error"
-      ? (subagent.error?.message ?? t("chat.subagent.failed"))
-      : t("chat.subagent.done", {
-          count: steps,
-          duration: formatElapsed((times?.end ?? now) - started),
-        });
+    : ending === "unfinished"
+      ? t("chat.subagent.unfinished")
+      : subagent.status === "error"
+        ? (subagent.error?.message ?? t("chat.subagent.failed"))
+        : t("chat.subagent.done", {
+            count: steps,
+            duration: formatElapsed((times?.end ?? now) - started),
+          });
   const PartsView = Parts as ComponentType;
   return (
     <Collapsible
@@ -158,6 +165,18 @@ const MountedSubagentCard = ({ subagent, Parts }: SubagentProps<unknown>) => {
           </Tooltip>
         ) : null}
       </div>
+      {narration.length > 0 ? (
+        <ul
+          data-slot="subagent-narration"
+          className="text-muted-foreground flex flex-col gap-0.5 px-8 pb-2 text-xs"
+        >
+          {narration.map((line, index) => (
+            <li key={`${index}-${line}`} className="truncate">
+              {line}
+            </li>
+          ))}
+        </ul>
+      ) : null}
       <CollapsibleContent className="flex flex-col gap-1 px-4 pb-3">
         <SubagentScope value={subagent.id}>
           <PartsView />

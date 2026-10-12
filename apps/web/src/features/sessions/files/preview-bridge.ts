@@ -21,19 +21,24 @@ export const recordBackgroundPreview = (
   const root =
     row.worktreePath ?? db.collections.workspaces.get(row.workspaceId)?.path;
   if (!root) return;
-  const path = event.path?.startsWith(`${root}/`)
-    ? event.path.slice(root.length + 1)
-    : event.path;
+  // A served app arrives as the event's path: it is a browser tab.
+  const served = event.path && /^https?:\/\//i.test(event.path);
+  const url = served ? event.path : event.url;
+  const path = served
+    ? undefined
+    : event.path?.startsWith(`${root}/`)
+      ? event.path.slice(root.length + 1)
+      : event.path;
   if (path && !isRelativePath(path)) return;
   const existing = panelTabsStore.state[event.conversationKey]?.tabs.find(
-    (tab) => (path ? tab.path === path : tab.url === event.url)
+    (tab) => (path ? tab.path === path : tab.url === url)
   );
   const tab =
     existing?.ref ?? `${path ? "preview" : "browser"}:${crypto.randomUUID()}`;
   openTab(event.conversationKey, {
     ref: tab,
-    title: path?.split("/").at(-1) ?? event.url ?? "Browser",
-    ...(path ? { path } : { url: event.url }),
+    title: path?.split("/").at(-1) ?? url ?? "Browser",
+    ...(path ? { path } : { url }),
   });
   markSessionUnread(row.id);
 };

@@ -2990,7 +2990,8 @@
       "steps_one": "{{count}} step",
       "steps_other": "{{count}} steps",
       "stop": "중지",
-      "stopHint": "Stops the whole reply"
+      "stopHint": "Stops the whole reply",
+      "unfinished": "Did not finish"
     },
     "tool": {
       "diff": "Changes",
@@ -3049,7 +3050,28 @@
       "readMore_other": "+{{count}} more lines",
       "inputLabel": "Input",
       "todoProgress": "{{done}} of {{total}} done",
-      "openPath": "Open {{path}}"
+      "openPath": "Open {{path}}",
+      "componentDocumentActive": "Writing document",
+      "componentDocumentDone": "Wrote document",
+      "componentPrintActive": "Printing PDF",
+      "componentPrintDone": "Printed PDF",
+      "componentDeckActive": "Building deck",
+      "componentDeckDone": "Built deck",
+      "componentPdfActive": "Building PDF",
+      "componentPdfDone": "Built PDF",
+      "componentDesignActive": "Designing",
+      "componentDesignDone": "Designed",
+      "componentIdleActive": "Working",
+      "componentIdleDone": "Ran",
+      "componentChipDeck": "deck",
+      "componentChipPdf": "PDF",
+      "componentOpenActive": "Opening",
+      "componentOpenDone": "Opened",
+      "componentPreviewActive": "Opening preview",
+      "componentPreviewDone": "Opened preview",
+      "componentOpenFile": "Open {{name}} in preview",
+      "askWaiting": "Waiting for a response…",
+      "askSkipped": "Skipped"
     },
     "transcript": {
       "jump": "Jump to the end",
