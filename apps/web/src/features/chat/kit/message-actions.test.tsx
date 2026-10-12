@@ -797,7 +797,7 @@ it("sessions never render Copy or feedback for tool-only messages with blank tex
       },
     }
   );
-  await screen.findByText("bash");
+  await screen.findByText("Ran 1 command");
   expect(screen.queryByRole("button", { name: "Copy message" })).toBeNull();
   expect(screen.queryByRole("button", { name: "Feedback" })).toBeNull();
   expect(

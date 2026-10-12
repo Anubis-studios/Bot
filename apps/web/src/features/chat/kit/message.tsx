@@ -13,7 +13,18 @@ import {
  */
 import type { UIMessage } from "@tanstack/ai-client";
 import type { MessageProps } from "@tanstack/ai-react/ui";
-import { ChevronRight, FileText } from "lucide-react";
+import {
+  ChevronRight,
+  CircleAlert,
+  Eye,
+  FileText,
+  Globe,
+  Hammer,
+  Search,
+  SquarePen,
+  Terminal,
+  Wrench,
+} from "lucide-react";
 import {
   useEffect,
   useRef,
@@ -54,9 +65,9 @@ import {
   MessageMenu,
   MessageReactionPills,
 } from "./message-actions";
-import { useKitParts, MessageScope } from "./message-scope";
+import { useKitParts, useMessageScope, MessageScope } from "./message-scope";
 import { ReplyQuote, jumpToMessage } from "./reply";
-import { toolRunCounts } from "./tool-run";
+import { joinLabels, toolRunCounts, toolRunKind } from "./tool-run";
 
 type Loose = Record<string, unknown>;
 
@@ -446,9 +457,96 @@ const StepControls = ({ side }: { side: "earlier" | "more" }) => {
   );
 };
 
+const RUN_ICONS = {
+  Read: Eye,
+  Edit: SquarePen,
+  Command: Terminal,
+  CodeSearch: Search,
+  WebSearch: Globe,
+  Other: Wrench,
+  mixed: Hammer,
+} as const;
+
+type ToolCall = Extract<UIMessage["parts"][number], { type: "tool-call" }>;
+type ToolResult = Extract<UIMessage["parts"][number], { type: "tool-result" }>;
+
+const callFailed = (call: ToolCall, result: ToolResult | undefined) =>
+  result == null
+    ? call.state === "error"
+    : (result.state === "error" ||
+        (result.state as string) === "output-error") &&
+      result.outcome !== "denied" &&
+      result.outcome !== "cancelled";
+
+/**
+ * Every consecutive tool call, of any kind, is one run. It stays closed unless
+ * the person opens it; while it works the header says so with a shimmer.
+ */
+const ToolRun = ({
+  calls,
+  results,
+  streaming,
+  summary,
+  children,
+}: {
+  calls: ToolCall[];
+  results: ReadonlyMap<string, ToolResult>;
+  streaming: boolean;
+  /** The server's own summary, when it made this run whole. */
+  summary: string | undefined;
+  children: ReactNode;
+}) => {
+  const { t, i18n } = useTranslation();
+  const running =
+    streaming &&
+    calls.some((call) => !results.has(call.id) && call.state !== "error");
+  const failed = calls.filter((call) =>
+    callFailed(call, results.get(call.id))
+  ).length;
+  const runCalls = calls.map((call) => ({
+    name: call.name,
+    input: call.input,
+  }));
+  const label =
+    (!running ? summary : undefined) ??
+    joinLabels(
+      toolRunCounts(runCalls).map(([action, count]) =>
+        t(`chat.tool.summary${action}${running ? "Active" : ""}`, { count })
+      ),
+      i18n.language
+    );
+  const Icon = RUN_ICONS[toolRunKind(runCalls)];
+  return (
+    <Collapsible data-slot="tool-group" data-running={running ? "" : undefined}>
+      <CollapsibleTrigger className="group/run text-muted-foreground hover:text-foreground flex w-full items-center gap-2 text-xs transition-colors">
+        <Icon aria-hidden className="size-3.5 shrink-0" />
+        <span className={cn("min-w-0 truncate", running && "shimmer")}>
+          {label}
+        </span>
+        {failed > 0 ? (
+          <span className="text-destructive flex shrink-0 items-center gap-1">
+            <CircleAlert aria-hidden className="size-3" />
+            {t("chat.tool.summaryFailed", { count: failed })}
+          </span>
+        ) : null}
+        <ChevronRight
+          aria-hidden
+          className="size-3 shrink-0 transition-transform duration-150 group-data-[panel-open]/run:rotate-90 motion-reduce:transition-none"
+        />
+      </CollapsibleTrigger>
+      <CollapsibleContent
+        data-slot="tool-cluster"
+        className="h-(--collapsible-panel-height) overflow-hidden transition-[height] duration-150 data-[ending-style]:h-0 data-[starting-style]:h-0 motion-reduce:transition-none"
+      >
+        {children}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+};
+
 const GroupedParts = ({ message }: { message: UIMessage }) => {
-  const { t } = useTranslation();
   const SessionUI = useKitParts();
+  const { streaming } = useMessageScope();
   const window = useToolWindow();
   const scope = useSubagentScope() ?? "";
   const indexed = messageIndex(message);
@@ -471,10 +569,18 @@ const GroupedParts = ({ message }: { message: UIMessage }) => {
             return true;
           }),
         };
+  const results = new Map<string, ToolResult>();
+  for (const part of selectedMessage.parts)
+    if (part.type === "tool-result") results.set(part.toolCallId, part);
   return (
     <SessionUI.Message message={selectedMessage}>
       {(parts) => {
-        const blocks: Array<{ id: string | null; parts: typeof parts }> = [];
+        // Only a call that is not a tool call (prose, a sub-agent card, ...)
+        // ends a run; the server's own groups never split one.
+        type Item = (typeof parts)[number];
+        const blocks: Array<
+          { run: false; part: Item } | { run: true; parts: Item[] }
+        > = [];
         for (const part of parts) {
           if (
             part.part.type === "tool-result" ||
@@ -484,100 +590,53 @@ const GroupedParts = ({ message }: { message: UIMessage }) => {
                 .metadata?.abacus?.kind)
           )
             continue;
+          if (part.part.type !== "tool-call") {
+            blocks.push({ run: false, part });
+            continue;
+          }
           if (
-            part.part.type === "tool-call" &&
             visibleUnits != null &&
             !visibleUnits.has(`${scope}\0${part.part.id}`)
           )
             continue;
-          const index = indexed.parts.get(part.part)!;
-          const id = indexed.groupIds.get(index) ?? null;
           const previous = blocks.at(-1);
-          const previousPart = previous?.parts.at(-1)?.part;
-          if (
-            previous?.id === id &&
-            (id != null ||
-              (part.part.type === "tool-call" &&
-                previousPart?.type === "tool-call"))
-          )
-            previous.parts.push(part);
-          else blocks.push({ id, parts: [part] });
+          if (previous?.run) previous.parts.push(part);
+          else blocks.push({ run: true, parts: [part] });
         }
         return blocks.map((block) => {
-          const content = block.parts.map((part) => (
-            <SessionUI.Part key={indexed.parts.get(part.part)} part={part} />
-          ));
-          const calls = block.parts.flatMap((p) =>
-            p.part.type === "tool-call" ? [p.part] : []
+          if (!block.run)
+            return (
+              <SessionUI.Part
+                key={indexed.parts.get(block.part.part)}
+                part={block.part}
+              />
+            );
+          const calls = block.parts.map((p) => p.part as ToolCall);
+          const ids = new Set(
+            block.parts.map(
+              (p) => indexed.groupIds.get(indexed.parts.get(p.part)!) ?? null
+            )
           );
-          if (block.id == null && calls.length > 1) {
-            const settled = new Set(
-              selectedMessage.parts.flatMap((p) =>
-                p.type === "tool-result" ? [p.toolCallId] : []
-              )
-            );
-            const running = calls.some((call) => !settled.has(call.id));
-            return (
-              <Collapsible
-                key={indexed.parts.get(block.parts[0]!.part)}
-                defaultOpen={running}
-                data-slot="tool-group"
-              >
-                <CollapsibleTrigger className="text-muted-foreground flex items-center gap-2 text-xs">
-                  <ChevronRight aria-hidden className="size-3" />
-                  {running
-                    ? t("chat.tool.runRunning")
-                    : toolRunCounts(calls.map((call) => call.name))
-                        .map(([action, count]) =>
-                          t(`chat.tool.run${action}`, { count })
-                        )
-                        .join(", ")}
-                </CollapsibleTrigger>
-                <CollapsibleContent data-slot="tool-cluster">
-                  {content}
-                </CollapsibleContent>
-              </Collapsible>
-            );
-          }
-          if (block.id == null)
-            return (
-              <div
-                key={indexed.parts.get(block.parts[0]!.part)}
-                data-slot={
-                  block.parts[0]!.part.type === "tool-call"
-                    ? "tool-cluster"
-                    : undefined
-                }
-              >
-                {content}
-              </div>
-            );
-          const headerVisible =
-            visibleUnits == null ||
-            visibleUnits.has(`group\0${scope}\0${message.id}\0${block.id}`);
-          const childVisible =
-            visibleUnits == null ||
-            block.parts.some(
-              (p) =>
-                p.part.type === "tool-call" &&
-                visibleUnits.has(`${scope}\0${p.part.id}`)
-            );
-          if (!headerVisible && !childVisible) return null;
-          if (!headerVisible) return <div key={block.id}>{content}</div>;
-          const group = indexed.groups.get(block.id);
+          const groupId = ids.size === 1 ? [...ids][0] : null;
           return (
-            <Collapsible key={block.id} defaultOpen data-slot="tool-group">
-              <CollapsibleTrigger
-                hidden={!headerVisible}
-                className="text-muted-foreground flex items-center gap-2 text-xs"
-              >
-                <ChevronRight aria-hidden className="size-3" />
-                {group?.summary ?? group?.category ?? block.id}
-              </CollapsibleTrigger>
-              <CollapsibleContent data-slot="tool-cluster">
-                {content}
-              </CollapsibleContent>
-            </Collapsible>
+            <ToolRun
+              key={indexed.parts.get(block.parts[0]!.part)}
+              calls={calls}
+              results={results}
+              streaming={streaming}
+              summary={
+                groupId == null
+                  ? undefined
+                  : indexed.groups.get(groupId)?.summary
+              }
+            >
+              {block.parts.map((part) => (
+                <SessionUI.Part
+                  key={indexed.parts.get(part.part)}
+                  part={part}
+                />
+              ))}
+            </ToolRun>
           );
         });
       }}

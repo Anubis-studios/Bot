@@ -17,6 +17,14 @@ afterEach(async () => {
   closeMemoryRelays();
 });
 
+/** Tool runs start closed; open every one that is mounted. */
+const openRuns = () => {
+  for (const trigger of document.querySelectorAll(
+    '[data-slot="tool-group"] > button[aria-expanded="false"]'
+  ))
+    fireEvent.click(trigger);
+};
+
 describe("R2-T12/T13 rendered tool rows", () => {
   it("an MCP tool and unknown sub-agent retain the default widget context in nested Parts", async () => {
     const relay = await memoryRelay();
@@ -53,6 +61,8 @@ describe("R2-T12/T13 rendered tool rows", () => {
       b.runFinished("r"),
     ]);
     current = await renderRelay(relay, "session");
+    await screen.findByRole("button", { name: /Used 2 tools|Used 1 tool/ });
+    openRuns();
     const parent = await screen.findByRole("button", {
       name: /linear|create.issue/i,
     });
@@ -60,7 +70,10 @@ describe("R2-T12/T13 rendered tool rows", () => {
     expect(await screen.findByText("Issue created")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /Nested child/ }));
     expect(await screen.findByText("Nested assistant text")).toBeTruthy();
-    expect(document.querySelectorAll("[data-tool]")).toHaveLength(2);
+    await waitFor(() => {
+      openRuns();
+      expect(document.querySelectorAll("[data-tool]")).toHaveLength(2);
+    });
     fireEvent.click(screen.getByRole("button", { name: /new.server|read/i }));
     expect(await screen.findByText("Nested tool result")).toBeTruthy();
   });
@@ -75,6 +88,8 @@ describe("R2-T12/T13 rendered tool rows", () => {
       b.custom("tool.output", { toolCallId: "bash", output: "live line" }),
     ]);
     current = await renderRelay(relay, "session");
+    await screen.findByRole("button", { name: /command/ });
+    openRuns();
     fireEvent.click(
       await screen.findByRole("button", { name: /printf hello/ })
     );

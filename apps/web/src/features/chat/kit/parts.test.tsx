@@ -6,7 +6,7 @@ import { v1ToUiMessages } from "@abacus-ai/contract/transcript/v1-to-ui-messages
  * helpers (reminders stripped, routine fires hidden, attachment chips); an
  * empty assistant message renders nothing (F12).
  */
-import { fireEvent, screen } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import * as b from "../fixtures/builders";
@@ -96,8 +96,12 @@ describe("R2-T11 parts", () => {
       const summary = await screen.findByRole("button", {
         name: "Read 2 files, searched 1 pattern",
       });
-      expect(summary.getAttribute("aria-expanded")).toBe("true");
-      expect(document.querySelectorAll("[data-tool]")).toHaveLength(3);
+      expect(summary.getAttribute("aria-expanded")).toBe("false");
+      expect(document.querySelectorAll("[data-tool]")).toHaveLength(0);
+      fireEvent.click(summary);
+      await waitFor(() =>
+        expect(document.querySelectorAll("[data-tool]")).toHaveLength(3)
+      );
     }
   );
 
@@ -210,7 +214,7 @@ it("clusters consecutive tools while dropping blank prose wrappers", async () =>
     b.textEnd("calls"),
   ]);
   current = await renderRelay(relay, "session");
-  const summary = await screen.findByText("2 commands run, 1 file read");
+  const summary = await screen.findByText("Ran 2 commands and read 1 file");
   expect(document.querySelectorAll('[data-slot="tool-group"]')).toHaveLength(1);
   fireEvent.click(summary);
   await screen.findByText("Run npm test");
@@ -223,4 +227,30 @@ it("clusters consecutive tools while dropping blank prose wrappers", async () =>
   expect(
     document.querySelector('[data-slot="session-message-actions"]')
   ).toBeNull();
+});
+
+it("keeps one collapsed run for every kind of tool call while streaming", async () => {
+  const relay = new FakeRelay();
+  relay.emitAll([
+    ...b.sessionReady(),
+    b.runStarted("live"),
+    b.textStart("calls"),
+    ...b.toolCall("c1", "bash", "calls", { command: "npm test" }),
+    b.toolResult("c1", { text: "ok" }),
+    ...b.toolCall("c2", "update_plan", "calls", { plan: [] }),
+    b.toolResult("c2", { text: "ok" }),
+    ...b.toolCall("c3", "bash", "calls", { command: "npm run lint" }),
+  ]);
+  current = await renderRelay(relay, "session");
+  const header = await screen.findByRole("button", {
+    name: "Running 2 commands and using 1 tool",
+  });
+  expect(document.querySelectorAll('[data-slot="tool-group"]')).toHaveLength(1);
+  expect(header.getAttribute("aria-expanded")).toBe("false");
+  expect(header.querySelector(".shimmer")).toBeTruthy();
+  expect(document.querySelectorAll("[data-tool]")).toHaveLength(0);
+  fireEvent.click(header);
+  await waitFor(() =>
+    expect(document.querySelectorAll("[data-tool]")).toHaveLength(3)
+  );
 });

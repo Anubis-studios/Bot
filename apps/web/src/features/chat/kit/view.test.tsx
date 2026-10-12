@@ -16,6 +16,14 @@ afterEach(async () => {
   current = null;
 });
 
+/** Tool runs start closed; open every one that is mounted. */
+const openRuns = () => {
+  for (const trigger of document.querySelectorAll(
+    '[data-slot="tool-group"] > button[aria-expanded="false"]'
+  ))
+    fireEvent.click(trigger);
+};
+
 describe("ChatView over scenarios", () => {
   it("renders a golden replay in the bot skin", async () => {
     current = await renderScenario("bot-golden-plain");
@@ -29,6 +37,10 @@ describe("ChatView over scenarios", () => {
     const warn = vi.spyOn(console, "warn");
     current = await renderScenario("session-running");
     await screen.findByText(/The restore takes all of its width/);
+    openRuns();
+    await waitFor(() =>
+      expect(document.querySelectorAll("[data-tool]").length).toBeGreaterThan(0)
+    );
     const rows = [...document.querySelectorAll("[data-tool]")];
     expect(rows.map((row) => row.getAttribute("data-tool"))).toEqual([
       "read",
