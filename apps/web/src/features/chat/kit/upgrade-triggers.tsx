@@ -1,5 +1,5 @@
 import type { UIMessage } from "@tanstack/ai-client";
-import { useEffect } from "react";
+import { useEffect, useEffectEvent } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -55,32 +55,25 @@ export const UpgradeTriggers = ({
     outOfAbacusCredits(outcome)
       ? `credits:${outcome.runId}`
       : null;
-  useEffect(() => {
-    if (creditsKey == null) return;
+  // One ask per key; the messages and resume are read at that moment.
+  const ask = useEffectEvent((kind: "credits" | "connectors", key: string) =>
     requestUpgradeDialog({
-      kind: "credits",
-      key: creditsKey,
+      kind,
+      key,
       threadId: session.threadId,
       pendingText: lastUserText(messages),
       resume,
-    });
-    // One ask per refused run; the messages and resume are read at that moment.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    })
+  );
+  useEffect(() => {
+    if (creditsKey != null) ask("credits", creditsKey);
   }, [creditsKey]);
 
   const refused = canReply ? connectorCreditRefusals(messages, fresh) : [];
   const connectorKey =
     refused.length > 0 ? `connectors:${refused.at(-1)}` : null;
   useEffect(() => {
-    if (connectorKey == null) return;
-    requestUpgradeDialog({
-      kind: "connectors",
-      key: connectorKey,
-      threadId: session.threadId,
-      pendingText: lastUserText(messages),
-      resume,
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (connectorKey != null) ask("connectors", connectorKey);
   }, [connectorKey]);
 
   return null;
