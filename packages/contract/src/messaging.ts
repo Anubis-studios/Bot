@@ -308,6 +308,9 @@ export const isMessagingPlatformConnected = (
     (entry) => entry.id === platformId
   )?.state;
   if (state === "connected" || state === "syncing") return true;
+  // The user's own sign-in is the other half: an account-level bot link from
+  // an earlier install does not connect this device.
+  if (SHARED_LINK_REQUIRED.has(platformId)) return false;
   const shared = SHARED_BOT_PLATFORM_OF[platformId];
   return shared != null && isMessagingPlatformConnected(snapshot, shared);
 };
