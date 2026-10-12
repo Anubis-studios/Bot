@@ -1,6 +1,6 @@
 /**
- * R2-T16, jsdom half (spec 02 §10): message ids and user anchors on rows,
- * `aria-busy` while a run is active, timestamps from `createdAt` or
+ * R2-T16, jsdom half (spec 02 §10): message ids on rows, no scroll anchors,
+ * holding the end as the content grows, `aria-busy` while a run is active, timestamps from `createdAt` or
  * `metadata.tanstack.createdAt`, day separators, paging (a page after a
  * reset is discarded, ids deduplicated, older outcomes merged), and the
  * bounded window: repeated "Show earlier" never mounts more than MAX_ROWS.
@@ -205,7 +205,7 @@ describe("R2-T16 transcript", () => {
     expect(document.querySelector('[data-message-id="a1"]')).not.toBeNull();
   });
 
-  it("rows carry message ids, users anchor, the log is busy while a run is active", async () => {
+  it("rows carry message ids and never anchor the scroller; the log is busy while a run is active", async () => {
     const relay = new FakeRelay();
     relay.emitAll([
       ...b.sessionReady(),
@@ -215,17 +215,108 @@ describe("R2-T16 transcript", () => {
     ]);
     current = await renderRelay(relay, "session");
     await screen.findByText("go");
-    const user = document.querySelector('[data-message-id="u0"]')!;
-    expect(user.getAttribute("data-scroll-anchor")).toBe("true");
-    expect(
-      document
-        .querySelector('[data-message-id="a0"]')!
-        .getAttribute("data-scroll-anchor")
-    ).toBe("false");
+    // A user row as a scroll anchor jumps the view to it on any list change.
+    for (const id of ["u0", "a0", "u-live"])
+      expect(
+        document
+          .querySelector(`[data-message-id="${id}"]`)!
+          .getAttribute("data-scroll-anchor")
+      ).toBe("false");
     expect(screen.getByRole("log").getAttribute("aria-busy")).toBe("true");
     expect(
       document.querySelectorAll('[data-slot="day-separator"]').length
     ).toBeGreaterThan(0);
+  });
+
+  it("holds the end in the frame the content grows, and leaves a reader who scrolled up", async () => {
+    const observers: {
+      callback: ResizeObserverCallback;
+      targets: Element[];
+    }[] = [];
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        entry: (typeof observers)[number];
+        constructor(callback: ResizeObserverCallback) {
+          this.entry = { callback, targets: [] };
+          observers.push(this.entry);
+        }
+        observe(target: Element) {
+          this.entry.targets.push(target);
+        }
+        unobserve() {}
+        disconnect() {}
+      }
+    );
+    try {
+      const relay = new FakeRelay();
+      relay.emitAll([...b.sessionReady(), ...turns(3)]);
+      current = await renderRelay(relay, "session");
+      await screen.findByText("answer 2");
+      const viewport = document.querySelector<HTMLElement>(
+        '[data-slot="message-scroller-viewport"]'
+      )!;
+      const content = viewport.querySelector(
+        '[data-slot="message-scroller-content"]'
+      )!;
+      const geometry = { height: 1000, client: 400, top: 600 };
+      Object.defineProperties(viewport, {
+        scrollHeight: { configurable: true, get: () => geometry.height },
+        clientHeight: { configurable: true, get: () => geometry.client },
+        scrollTop: {
+          configurable: true,
+          get: () => geometry.top,
+          set: (value: number) => {
+            geometry.top = Math.min(value, geometry.height - geometry.client);
+          },
+        },
+      });
+      const pin = observers.find(
+        (entry) =>
+          entry.targets.includes(viewport) && entry.targets.includes(content)
+      )!;
+      const resize = () => pin.callback([], {} as ResizeObserver);
+      resize();
+      geometry.height = 1200;
+      resize();
+      expect(geometry.top).toBe(800);
+      // The reader's scroll is applied before the content grows again.
+      geometry.top = 500;
+      geometry.height = 1400;
+      resize();
+      expect(geometry.top).toBe(500);
+      // History mounts above a reader: the offset rises with it, not to the end.
+      fireEvent.scroll(viewport);
+      geometry.height = 2200;
+      geometry.top = 1300;
+      resize();
+      expect(geometry.top).toBe(1300);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("a turn the reader sends takes them to the end; history on open does not", async () => {
+    const scrollToEnd = vi.fn(() => true);
+    const spy = vi.spyOn(scroller, "useMessageScroller").mockReturnValue({
+      scrollToEnd,
+      scrollToMessage: () => true,
+      scrollToStart: () => true,
+    });
+    try {
+      const relay = new FakeRelay();
+      relay.emitAll([...b.sessionReady(), ...turns(2)]);
+      current = await renderRelay(relay, "session");
+      await screen.findByText("answer 1");
+      expect(scrollToEnd).not.toHaveBeenCalled();
+      await act(async () =>
+        relay.emitAll([b.runStarted("live"), ...b.text("u-live", "user", "go")])
+      );
+      await screen.findByText("go");
+      expect(scrollToEnd).toHaveBeenCalledTimes(1);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("marks only messages that arrive while it is open as fresh, never on remount", async () => {

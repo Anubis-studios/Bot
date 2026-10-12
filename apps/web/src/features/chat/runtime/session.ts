@@ -211,13 +211,6 @@ export class ThreadSession {
   #cancelTimer: ReturnType<typeof setTimeout> | null = null;
   readonly #admission: AdmissionHost;
   /** Message ids confirmed by `abacus.duplicate_echo` (§14.12). */
-  readonly #prependListeners = new Set<() => void>();
-  onPrepend(listener: () => void): () => void {
-    this.#prependListeners.add(listener);
-    return () => {
-      this.#prependListeners.delete(listener);
-    };
-  }
   readonly #echoed = new Set<string>();
 
   constructor(options: ThreadSessionOptions) {
@@ -364,7 +357,6 @@ export class ThreadSession {
     this.#retired = true;
     this.#rev += 1;
     this.#echoed.clear();
-    this.#prependListeners.clear();
     this.#host({ rev: this.#rev, outbox: [] });
     const error = new ThreadRetiredError(this.threadId);
     for (const gen of [this.#pending, this.#live]) {
@@ -678,7 +670,6 @@ export class ThreadSession {
       token.gen === this.#gen &&
       token.rev === this.#rev &&
       this.#live?.client === token.client;
-    for (const listener of this.#prependListeners) listener();
     this.#host({ older: "loading" });
     let page: AiHydration;
     try {
@@ -707,7 +698,6 @@ export class ThreadSession {
     const existing = token.client.getMessages();
     const ids = new Set(existing.map((message) => message.id));
     const older = page.messages.filter((message) => !ids.has(message.id));
-    for (const listener of this.#prependListeners) listener();
     live.activeStart += older.length;
     token.client.setMessagesManually([...older, ...existing]);
     this.#mergeOutcomes(live, page.abacus.runOutcomes);
