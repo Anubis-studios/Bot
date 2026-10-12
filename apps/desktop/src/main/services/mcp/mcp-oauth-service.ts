@@ -11,6 +11,7 @@ import {
 } from "@abacus-ai/contract/contracts";
 
 import { abacusBotHome } from "../../paths";
+import { handoffPage } from "../providers/handoff-page";
 
 /**
  * Signing in to an MCP server: the interactive half of MCP OAuth (RFC 9728,
@@ -381,15 +382,17 @@ export interface McpOAuthOptions {
   openUrl?: (url: string) => Promise<void>;
 }
 
-const RESPONSE_PAGE = `<!doctype html><meta charset="utf-8"><title>AbacusAI Bot</title>
-<body style="font-family:system-ui;display:grid;place-items:center;height:100vh;margin:0;background:#111;color:#eee">
-<div style="text-align:center"><h2>Signed in</h2><p>You can close this tab and return to AbacusAI Bot.</p></div>`;
+const RESPONSE_PAGE = handoffPage({
+  title: "You're signed in",
+  body: "Go back to AbacusAI Bot. You can close this tab.",
+});
 
-const errorPage = (
-  detail: string
-): string => `<!doctype html><meta charset="utf-8"><title>AbacusAI Bot</title>
-<body style="font-family:system-ui;display:grid;place-items:center;height:100vh;margin:0;background:#111;color:#eee">
-<div style="text-align:center"><h2>Sign-in failed</h2><p>${detail.replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch] ?? ch)}</p><p>You can close this tab and try again from AbacusAI Bot.</p></div>`;
+const errorPage = (detail: string): string =>
+  handoffPage({
+    title: "Sign-in failed",
+    body: `${detail} Close this tab and try again from AbacusAI Bot.`,
+    tone: "warn",
+  });
 
 /**
  * Whether a discovered authorization endpoint may be opened. It is

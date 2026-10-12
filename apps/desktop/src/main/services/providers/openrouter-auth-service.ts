@@ -4,6 +4,8 @@ import type { AddressInfo } from "net";
 
 import { shell } from "electron";
 
+import { handoffPage } from "./handoff-page";
+
 /**
  * "Connect OpenRouter": OAuth PKCE instead of copy-pasting a key. The flow
  * needs no registered client id and accepts a loopback callback on any port,
@@ -188,28 +190,7 @@ const exchange = async (
 };
 
 /** What the browser tab shows after the redirect; a raw "OK" reads like a failure. */
-const RESPONSE_PAGE = `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<title>AbacusAI Bot connected</title>
-<style>
-  :root { color-scheme: light dark; }
-  body {
-    margin: 0; min-height: 100vh; display: grid; place-items: center;
-    font: 15px/1.5 ui-sans-serif, -apple-system, system-ui, sans-serif;
-    background: #fff; color: #111;
-  }
-  @media (prefers-color-scheme: dark) { body { background: #111; color: #eee; } }
-  .card { text-align: center; padding: 2rem; }
-  h1 { font-size: 1.05rem; margin: 0 0 .35rem; }
-  p { margin: 0; opacity: .65; font-size: .875rem; }
-</style>
-</head>
-<body>
-  <div class="card">
-    <h1>AbacusAI Bot is connected</h1>
-    <p>You can close this tab and go back to the app.</p>
-  </div>
-</body>
-</html>`;
+const RESPONSE_PAGE = handoffPage({
+  title: "OpenRouter is connected",
+  body: "Go back to AbacusAI Bot. You can close this tab.",
+});
