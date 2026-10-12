@@ -1358,7 +1358,11 @@
     "connectedPromiseWorkLead": "Get work done",
     "connectedPromiseWork": "Gets your work done, and connects to all your services",
     "connectedPromiseLocalLead": "Runs locally.",
-    "connectedPromiseLocal": "Chat with it wherever you work."
+    "connectedPromiseLocal": "Chat with it wherever you work.",
+    "pages.buildTitle": "Langsung coding dan membangun",
+    "pages.buildBody": "Tulis kode, buat aplikasi, kerjakan di folder Anda",
+    "pages.buildCta": "Mulai membangun",
+    "pages.editBot": "Edit {{name}}"
   },
   "referralCard": {
     "cta": "Invite friends",

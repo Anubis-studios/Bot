@@ -141,6 +141,7 @@ const OnboardingRoute = () => {
                 step: "first_bot_skipped",
                 detail: "has_bots",
               });
+              if (exit.to === "new-session") return exit;
               return exit.to === "bot" || exit.to === "bot-tour"
                 ? {
                     ...exit,
@@ -160,6 +161,8 @@ const OnboardingRoute = () => {
             await transport.client.system.funnelStep({
               step: "first_bot_kept",
             });
+            // Building straight away keeps the bot, and still opens the session.
+            if (exit.to === "new-session") return exit;
             return exit.to === "bot" || exit.to === "bot-tour"
               ? { ...exit, botId: bot.id }
               : { to: "bot", botId: bot.id };
@@ -180,12 +183,10 @@ const OnboardingRoute = () => {
     );
   const create = async (id: string) =>
     previewFirstBot(id, t("bots.templates.chief-of-staff.name"));
+  const showFirstBot = useEffectEvent(() => void go("first-bot"));
   const automaticallySignIn = useEffectEvent(() => {
     if (onboardingStore.state.signIn?.status !== "pending") auth("signin");
   });
-  const completeWebsiteSignup = useEffectEvent(() =>
-    finish({ to: "new-bot" }, true)
-  );
   useEffect(() => {
     // Nothing is known yet: no sign-in starts, nothing completes.
     if (facts.provisional) return;
@@ -193,8 +194,9 @@ const OnboardingRoute = () => {
       void startWebsiteSignIn(transport, automaticallySignIn).catch(() => {});
     if (facts.signedIn && facts.googleSignIn)
       void startFirstRunGmail(transport, true).catch(() => {});
+    // A website sign-up skips the setup screens but still picks: its bot, or building.
     if (facts.signedIn && facts.webSignup && step === "connected")
-      void completeWebsiteSignup();
+      showFirstBot();
   }, [
     step,
     facts.provisional,
@@ -220,7 +222,9 @@ const OnboardingRoute = () => {
         navigate={navigateStep}
         signIn={auth}
         cancelSignIn={() => cancelSignIn(transport)}
-        complete={finish}
+        complete={(exit, options) =>
+          finish(exit, options?.keepFirstBot === true)
+        }
         createFirstBot={create}
         connect={connect}
         localModel={

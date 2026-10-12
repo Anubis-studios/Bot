@@ -1358,7 +1358,11 @@
     "connectedPromiseWorkLead": "Get work done",
     "connectedPromiseWork": "Gets your work done, and connects to all your services",
     "connectedPromiseLocalLead": "Runs locally.",
-    "connectedPromiseLocal": "Chat with it wherever you work."
+    "connectedPromiseLocal": "Chat with it wherever you work.",
+    "pages.buildTitle": "तुरंत कोड करें और बनाएं",
+    "pages.buildBody": "कोड लिखें, ऐप बनाएं, अपने फ़ोल्डर में काम करें",
+    "pages.buildCta": "बनाना शुरू करें",
+    "pages.editBot": "{{name}} संपादित करें"
   },
   "referralCard": {
     "cta": "Invite friends",

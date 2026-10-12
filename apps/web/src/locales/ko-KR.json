@@ -1358,7 +1358,11 @@
     "connectedPromiseWorkLead": "Get work done",
     "connectedPromiseWork": "Gets your work done, and connects to all your services",
     "connectedPromiseLocalLead": "Runs locally.",
-    "connectedPromiseLocal": "Chat with it wherever you work."
+    "connectedPromiseLocal": "Chat with it wherever you work.",
+    "pages.buildTitle": "바로 코딩하고 만들기",
+    "pages.buildBody": "코드 작성, 앱 만들기, 내 폴더에서 작업",
+    "pages.buildCta": "만들기 시작",
+    "pages.editBot": "{{name}} 편집"
   },
   "referralCard": {
     "cta": "Invite friends",

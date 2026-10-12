@@ -1358,7 +1358,11 @@
     "connectedPromiseWorkLead": "Get work done",
     "connectedPromiseWork": "across your tools and services",
     "connectedPromiseLocalLead": "Runs locally.",
-    "connectedPromiseLocal": "Chat with it wherever you work."
+    "connectedPromiseLocal": "Chat with it wherever you work.",
+    "pages.buildTitle": "Code and build right away",
+    "pages.buildBody": "Write code, build apps, work in your folders",
+    "pages.buildCta": "Start building",
+    "pages.editBot": "Edit {{name}}"
   },
   "referralCard": {
     "cta": "Invite friends",

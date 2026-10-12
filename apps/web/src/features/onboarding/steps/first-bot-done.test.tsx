@@ -93,7 +93,7 @@ describe("FirstBotStep", () => {
       })
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: `Edit ${bot.name}` }));
     await vi.waitFor(() =>
       expect(context.props.complete).toHaveBeenCalledWith({
         to: "bot",
@@ -101,6 +101,14 @@ describe("FirstBotStep", () => {
         edit: true,
       })
     );
+    fireEvent.click(screen.getByRole("button", { name: "Start building" }));
+    await vi.waitFor(() =>
+      expect(context.props.complete).toHaveBeenCalledWith(
+        { to: "new-session" },
+        { keepFirstBot: true }
+      )
+    );
+    expect(funnelStep).toHaveBeenCalledWith({ step: "first_build_chosen" });
     expect(
       screen.queryByRole("button", { name: "Start from scratch" })
     ).toBeNull();
