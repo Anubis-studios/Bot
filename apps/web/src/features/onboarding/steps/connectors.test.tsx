@@ -103,6 +103,46 @@ describe("ConnectorsStep", () => {
     expect(context.props.navigate).not.toHaveBeenCalled();
   });
 
+  it("waits for the statuses instead of offering Connect or Skip", async () => {
+    await initI18n();
+    const props = {
+      ctx: ctx(),
+      refresh: async () => {},
+      heading: createRef<HTMLHeadingElement>(),
+    };
+    const view = render(
+      <ConnectorsStep {...props} statuses={undefined} loading />
+    );
+    const tiles = () =>
+      Array.from(
+        view.container.querySelectorAll<HTMLButtonElement>("[data-connector]")
+      );
+    for (const tile of tiles()) {
+      expect(tile.getAttribute("data-state")).toBe("loading");
+      expect(tile.disabled).toBe(true);
+      expect(tile.getAttribute("aria-busy")).toBe("true");
+    }
+    expect(
+      screen.queryByRole("button", { name: "Continue without connectors" })
+    ).toBeNull();
+
+    view.rerender(
+      <ConnectorsStep
+        {...props}
+        statuses={{ "abacus-gmailuser": { state: "connected" } }}
+      />
+    );
+    const gmail = view.container.querySelector(
+      '[data-connector="abacus-gmailuser"]'
+    )!;
+    expect(gmail.getAttribute("data-state")).toBe("connected");
+    expect(
+      view.container
+        .querySelector('[data-connector="messaging-whatsapp"]')!
+        .getAttribute("data-state")
+    ).toBe("idle");
+  });
+
   it.each([
     ["Gmail", "abacus-gmailuser"],
     ["WhatsApp", "messaging-whatsapp"],

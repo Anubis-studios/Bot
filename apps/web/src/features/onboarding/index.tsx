@@ -312,6 +312,7 @@ export const OnboardingStepPage = (props: OnboardingPageProps) => {
         <ConnectorsStep
           ctx={ctx}
           statuses={statuses.data}
+          loading={statuses.isPending}
           refresh={() => statuses.refetch()}
           heading={heading}
         />

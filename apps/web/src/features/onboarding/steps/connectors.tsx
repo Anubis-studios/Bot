@@ -41,11 +41,14 @@ export const connectorTiles = (
 export const ConnectorsStep = ({
   ctx,
   statuses,
+  loading = false,
   refresh,
   heading,
 }: {
   ctx: StepContext;
   statuses: ConnectorStatuses | undefined;
+  /** Statuses not read yet: tiles wait instead of showing "Connect". */
+  loading?: boolean;
   refresh(): Promise<unknown>;
   heading: Ref<HTMLHeadingElement>;
 }) => {
@@ -124,13 +127,15 @@ export const ConnectorsStep = ({
         {tiles.map((entry) => {
           const connected = statuses?.[entry.id]?.state === "connected";
           const reason = failed[entry.id];
-          const state = connected
-            ? "connected"
-            : pending.has(entry.id)
-              ? "connecting"
-              : reason != null || statuses?.[entry.id]?.state === "error"
-                ? "error"
-                : "idle";
+          const state = loading
+            ? "loading"
+            : connected
+              ? "connected"
+              : pending.has(entry.id)
+                ? "connecting"
+                : reason != null || statuses?.[entry.id]?.state === "error"
+                  ? "error"
+                  : "idle";
           return (
             <li key={entry.id} className="min-w-0">
               <Button
@@ -149,8 +154,8 @@ export const ConnectorsStep = ({
                 })}
                 aria-describedby={`onboarding-${entry.id}-description`}
                 aria-pressed={connected}
-                aria-busy={state === "connecting"}
-                disabled={busy || connected}
+                aria-busy={state === "connecting" || state === "loading"}
+                disabled={busy || connected || state === "loading"}
                 onClick={() => start(entry.id)}
               >
                 <ConnectorMark
@@ -178,11 +183,12 @@ export const ConnectorsStep = ({
                         <span>{t("onboarding.pages.connectedLabel")}</span>
                       </>
                     )}
-                    {state === "connecting" && (
+                    {(state === "connecting" || state === "loading") && (
                       <LoaderCircleIcon className="size-3.5 animate-spin motion-reduce:animate-none" />
                     )}
                     {state === "idle" && t("onboarding.connectorsConnectCta")}
                     {state === "connecting" && t("phase5.connecting")}
+                    {state === "loading" && t("common.loading")}
                     {state === "error" && (
                       <>
                         <TriangleAlertIcon className="text-destructive size-3.5" />
@@ -208,7 +214,7 @@ export const ConnectorsStep = ({
         <StepButton disabled={busy} onClick={finish}>
           {t("onboarding.connectorsContinue")}
         </StepButton>
-        {!connectedAny && !queuedAny && (
+        {!loading && !connectedAny && !queuedAny && (
           <StepButton variant="secondary" disabled={busy} onClick={finish}>
             {t("onboarding.connectorsSkipCta")}
           </StepButton>
