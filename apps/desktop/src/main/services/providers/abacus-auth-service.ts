@@ -469,6 +469,9 @@ const exchange = async (
  * short code through the browser, which reaches it even when the app's own
  * request could not. Without the script the page is exactly what it was.
  */
+// The app icon as the AbacusAI Bot site serves it.
+const BOT_LOGO_URL = "https://abacus.ai/static/imgs/abacusbot/bot-logo.webp";
+
 const responsePage = (): string => {
   let build = "packaged";
   try {
@@ -504,7 +507,7 @@ const responsePage = (): string => {
   }
   .card { width: 100%; max-width: 384px; display: flex; flex-direction: column; align-items: center; text-align: center; }
   .mark { position: relative; width: 64px; height: 64px; }
-  .tile { width: 64px; height: 64px; border-radius: 18px; background: #171717; display: flex; align-items: center; justify-content: center; }
+  .logo { display: block; width: 64px; height: 64px; border-radius: 16px; }
   .badge {
     position: absolute; right: -4px; bottom: -4px; width: 28px; height: 28px; box-sizing: border-box;
     border-radius: 999px; border: 3px solid #fff; background: #16a34a;
@@ -525,7 +528,7 @@ const responsePage = (): string => {
 <body>
   <div class="card">
     <div class="mark">
-      <div class="tile"><svg width="34" height="34" viewBox="0 0 32 32" fill="none" aria-hidden="true"><rect x="5" y="9" width="22" height="16" rx="6" stroke="#fafafa" stroke-width="2.2"/><circle cx="12" cy="17" r="2" fill="#a594ff"/><circle cx="20" cy="17" r="2" fill="#a594ff"/><path d="M16 9V5" stroke="#fafafa" stroke-width="2.2" stroke-linecap="round"/><circle cx="16" cy="4" r="2" fill="#a594ff"/></svg></div>
+      <img class="logo" src="${BOT_LOGO_URL}" alt="" width="64" height="64">
       <span class="badge" id="badge"><svg id="badge-ok" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg><svg id="badge-warn" hidden width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M12 8v5M12 17h.01"/></svg></span>
     </div>
     <h1 id="title">You're signed in</h1>
