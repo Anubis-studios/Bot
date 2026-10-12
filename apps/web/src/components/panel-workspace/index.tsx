@@ -297,7 +297,11 @@ export const PanelWorkspace = ({
   }, [split, folded, stored, sidePanel]);
   const attach = (id: string, element: HTMLDivElement | null) => {
     const target = targets.get(id);
-    if (!docked && target && element) element.append(target);
+    // Inline ref callbacks run on every render. Re-appending a node that is
+    // already in place still detaches it, which reloads iframes and resets
+    // scroll and focus in every pane on each parent render.
+    if (!docked && target && element && target.parentNode !== element)
+      element.append(target);
   };
   return (
     <Context

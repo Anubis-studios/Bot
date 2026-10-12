@@ -6,7 +6,13 @@ import {
   redirect,
 } from "@tanstack/react-router";
 import { useSelector } from "@tanstack/react-store";
-import { lazy, Suspense, useEffect, useEffectEvent } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useEffectEvent,
+  type ComponentProps,
+} from "react";
 import { useTranslation } from "react-i18next";
 import * as v from "valibot";
 
@@ -237,6 +243,31 @@ const SessionBeside = ({ id }: { id: string }) => {
     />
   );
 };
+/** Messages stream in here, not in the route, so the dock is not re-rendered per tick. */
+const LiveChangesCard = ({
+  session,
+  ...props
+}: { session: ReturnType<ChatRuntime["session"]> } & Omit<
+  ComponentProps<typeof SessionChangesCard>,
+  "messages"
+>) => (
+  <SessionChangesCard
+    {...props}
+    messages={useSelector(session.hostStore, (s) => s.messages)}
+  />
+);
+const LiveTasks = ({
+  session,
+  plan,
+}: {
+  session: ReturnType<ChatRuntime["session"]>;
+  plan: ComponentProps<typeof SessionTasks>["plan"];
+}) => (
+  <SessionTasks
+    messages={useSelector(session.hostStore, (s) => s.messages)}
+    plan={plan}
+  />
+);
 const SessionRoute = () => {
   const { sessionId } = Route.useParams();
   const { transport, chat: runtime } = Route.useRouteContext();
@@ -256,12 +287,15 @@ const SessionRoute = () => {
     (row ? collections.workspaces.get(row.workspaceId) : undefined);
   const model = useSessionComposerModel(row);
   const session = runtime.session(sessionId);
-  const host = useSelector(session.hostStore, (s) => s);
-  const incarnation = useSelector(host.store, (s) => s.incarnation);
-  const outcomes = useSelector(host.store, (s) => s.runs.outcomes);
-  const plan = useSelector(host.store, (s) => s.agent?.plan);
+  // Only the inner store handle: the host state also carries the streaming
+  // messages, and subscribing to it here would re-render the route (and the
+  // dock under it) on every stream tick.
+  const hostCore = useSelector(session.hostStore, (s) => s.store);
+  const incarnation = useSelector(hostCore, (s) => s.incarnation);
+  const outcomes = useSelector(hostCore, (s) => s.runs.outcomes);
+  const plan = useSelector(hostCore, (s) => s.agent?.plan);
   const completed = useSelector(
-    host.store,
+    hostCore,
     (s) => s.runs.active === null && s.runs.outcomes.at(-1)?.kind === "success"
   );
   const presenter = nativePresenterFor(transport.client);
@@ -457,18 +491,16 @@ const SessionRoute = () => {
                 />
               ),
               runTail: (
-                <SessionChangesCard
+                <LiveChangesCard
+                  session={session}
                   row={row}
                   finished={completed}
-                  messages={host.messages}
                   outcomes={outcomes}
                   root={root ?? ""}
                   review={() => select("changes")}
                 />
               ),
-              composerTasks: (
-                <SessionTasks messages={host.messages} plan={plan} />
-              ),
+              composerTasks: <LiveTasks session={session} plan={plan} />,
               composerContext: (
                 <SessionContextTray
                   workspaceId={row.workspaceId}
