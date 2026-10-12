@@ -48,7 +48,7 @@ export const UpgradePromo = () => {
       return;
     }
     target.setAttribute("style", "pointer-events:none");
-    host.element.append(target);
+    host.element.appendChild(target);
     const next = target.firstElementChild?.getBoundingClientRect();
     const controls =
       previous && next && preference !== "reduced"
