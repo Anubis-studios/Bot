@@ -68,6 +68,10 @@ import {
   openTab,
   panelTabsStore,
 } from "#renderer/features/sessions/dock/panel-tabs-store";
+import {
+  isAbsolutePreviewPath,
+  previewTargetPath,
+} from "#renderer/features/sessions/files/preview-target";
 import { SessionWorkspace } from "#renderer/features/sessions/session-workspace";
 import { SessionIdentity } from "#renderer/features/sessions/sessions-pages";
 import {
@@ -86,6 +90,7 @@ import {
   SessionSearch,
 } from "#renderer/lib/navigation/search";
 import { useAppNavigate } from "#renderer/lib/navigation/use-app-navigate";
+import { useVisibleThread } from "#renderer/lib/navigation/visible-thread";
 import { Button } from "#renderer/ui/button";
 
 const SessionAgents = ({
@@ -303,6 +308,10 @@ const SessionRoute = () => {
   useEffect(() => {
     openSessionOnce(sessionId);
   }, [sessionId]);
+  // The primary pane's thread (never a read-only beside pane) is the one the
+  // user sees: completion neither marks it unread nor sounds, and the agent
+  // browser's adoption reads the same fact.
+  useVisibleThread(row ? sessionId : null);
   if (!row) return <SessionGone />;
   const root = row.worktreePath ?? workspace?.path ?? null;
   const checkout = { workspaceId: row.workspaceId, sessionId };
@@ -319,11 +328,16 @@ const SessionRoute = () => {
       openUrl(path);
       return;
     }
-    if (!root || !path.startsWith(`${root}/`)) {
+    // Inside the checkout, or any absolute file the panel has a viewer for
+    // (guest `/workspace/...` paths map onto the checkout). What it cannot
+    // show goes to the OS: only reached from an explicit click.
+    const target = previewTargetPath(path, root);
+    const inside = target !== null && !isAbsolutePreviewPath(target);
+    if (target === null || (!inside && !hasInAppViewer(target))) {
       void platformSystem(transport.client).openPath({ path });
       return;
     }
-    const relative = path.slice(root.length + 1);
+    const relative = target;
     // A file already open in the panel is focused, not opened twice.
     const existing = panelTabsStore.state[key]?.tabs.find(
       (tab) => tab.ref.startsWith("preview:") && tab.path === relative
@@ -356,7 +370,7 @@ const SessionRoute = () => {
           // Anything else never launches another app on its own.
           if (path && isUrl(path)) openUrl(path);
           else if (path) {
-            if (root && path.startsWith(`${root}/`) && hasInAppViewer(path))
+            if (previewTargetPath(path, root) !== null && hasInAppViewer(path))
               openFile(path);
           } else if (hasAgentBrowserTab(key)) {
             // The agent's own browser follows the agent; a second view
@@ -541,9 +555,8 @@ const SessionRoute = () => {
                 },
               },
               setMode: async (mode: AgentMode) => {
-                await collections.sessions.update(sessionId, (d) => {
-                  d.mode = mode;
-                }).isPersisted.promise;
+                // The server owns `mode`: a db patch would be refused, so tell
+                // the agent and let its state echo come back through the row.
                 await transport.client.agent.setMode({
                   workspaceId: row.workspaceId,
                   sessionId,

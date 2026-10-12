@@ -712,6 +712,7 @@ export const ThreadComposer = () => {
           setError(message);
         };
         void config.history?.add(route.text).catch(() => {});
+        historyIndex.current = -1;
         submitting.current = config.onSubmitEnvelope != null;
         const admission = config.onSubmitEnvelope
           ? config
@@ -817,15 +818,14 @@ export const ThreadComposer = () => {
       const collapsed = field.selectionStart === field.selectionEnd;
       const up = event.key === "ArrowUp";
       const browsing = historyIndex.current >= 0;
-      // Up from the first line (start when not browsing), Down from the last
-      // line while browsing; otherwise the arrows move the caret as usual.
+      // Up from the first line (start when not browsing), Down only from the
+      // end of the text while browsing; otherwise the arrows move the caret.
       const caret = field.selectionStart;
       const firstLine = !field.value.slice(0, caret).includes("\n");
-      const lastLine = !field.value.slice(caret).includes("\n");
       if (
         !collapsed ||
         (up && (browsing ? !firstLine : caret !== 0)) ||
-        (!up && (!browsing || !lastLine))
+        (!up && (!browsing || caret !== field.value.length))
       )
         return;
       event.preventDefault();
@@ -843,7 +843,8 @@ export const ThreadComposer = () => {
         if (historyIndex.current < 0) historyStash.current = draft.text;
         historyIndex.current = next;
         historyItems.current = items;
-        setText(items[items.length - 1 - next] ?? "", null);
+        // The list is newest first: Up walks toward older entries.
+        setText(items[next] ?? "", null);
       });
       return;
     }

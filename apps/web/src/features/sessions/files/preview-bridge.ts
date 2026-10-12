@@ -7,10 +7,10 @@ import { hasInAppViewer } from "#renderer/components/file-preview";
 import type { Db } from "#renderer/data/db";
 import { isListedSession } from "#renderer/data/db/filters";
 
-import { isRelativePath } from "../data/search";
 import { markSessionUnread } from "../data/unread-store";
 import { hasAgentBrowserTab } from "../dock/agent-browser";
 import { openTab, panelTabsStore } from "../dock/panel-tabs-store";
+import { previewTargetPath } from "./preview-target";
 export const recordBackgroundPreview = (
   db: Db,
   event: { conversationKey?: string; path?: string; url?: string }
@@ -28,10 +28,11 @@ export const recordBackgroundPreview = (
   const url = served ? event.path : event.url;
   const path = served
     ? undefined
-    : event.path?.startsWith(`${root}/`)
-      ? event.path.slice(root.length + 1)
-      : event.path;
-  if (path && !isRelativePath(path)) return;
+    : event.path
+      ? (previewTargetPath(event.path, root) ?? undefined)
+      : undefined;
+  // A path no viewer may touch is dropped, not turned into a url tab.
+  if (event.path && !served && path === undefined) return;
   // Never a tab for what the panel cannot show; never a second view of the
   // agent's own browser.
   if (path && !hasInAppViewer(path)) return;

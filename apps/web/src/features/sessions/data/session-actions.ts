@@ -37,6 +37,7 @@ export const setSessionModel = async (
   row: SessionRow,
   model: string
 ): Promise<void> => {
+  const previous = row.model ?? null;
   await db.collections.sessions.update(row.id, (d) => {
     d.model = model;
   }).isPersisted.promise;
@@ -50,6 +51,14 @@ export const setSessionModel = async (
         })
       : Promise.resolve(),
   ]);
+  // The running agent refused the pick: the picker must show the model the
+  // chat is still on, not the one it was told no to.
+  if (results[1].status === "rejected")
+    await db.collections.sessions
+      .update(row.id, (d) => {
+        d.model = previous;
+      })
+      .isPersisted.promise.catch(() => undefined);
   const refused = results.find((r) => r.status === "rejected");
   if (refused?.status === "rejected") throw refused.reason;
 };

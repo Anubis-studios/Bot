@@ -123,7 +123,8 @@ export const TriggerMenu = ({
             options.length
         );
       } else if (
-        (event.key === "Enter" || event.key === "Tab") &&
+        // Shift+Enter stays a newline; only plain Enter / Tab selects.
+        ((event.key === "Enter" && !event.shiftKey) || event.key === "Tab") &&
         !(event.metaKey || event.ctrlKey)
       ) {
         event.preventDefault();

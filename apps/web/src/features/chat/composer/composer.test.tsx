@@ -488,6 +488,58 @@ describe("R2-T25 composer", () => {
     await waitFor(() => expect(relay.stats.send).toHaveLength(1));
   });
 
+  it("Shift+Enter with options showing does not select one (newline stays native)", async () => {
+    const relay = new FakeRelay();
+    relay.emitAll(b.sessionReady());
+    current = await renderRelay(relay, "session", {
+      mentions: { search: async () => ["src/a.ts"] },
+    });
+    await waitFor(() => expect(composer()).toBeTruthy());
+    const textarea = field() as HTMLTextAreaElement;
+    fireEvent.change(textarea, {
+      target: { value: "@src", selectionStart: 4 },
+    });
+    await screen.findAllByRole("option");
+    const notPrevented = fireEvent.keyDown(textarea, {
+      key: "Enter",
+      shiftKey: true,
+    });
+    expect(notPrevented).toBe(true);
+    expect(textarea.value).toBe("@src");
+    // Plain Enter still picks the option.
+    fireEvent.keyDown(textarea, { key: "Enter" });
+    await waitFor(() => expect(textarea.value).toBe("@src/a.ts "));
+  });
+
+  it("prompt history: Down only from the end, and an edit leaves browsing", async () => {
+    const relay = new FakeRelay();
+    relay.emitAll(b.sessionReady());
+    current = await renderRelay(relay, "session", {
+      history: { list: async () => ["newer", "older"], add: async () => {} },
+    });
+    await waitFor(() => expect(composer()).toBeTruthy());
+    const textarea = field() as HTMLTextAreaElement;
+    fireEvent.change(textarea, {
+      target: { value: "draft", selectionStart: 5 },
+    });
+    textarea.setSelectionRange(0, 0);
+    fireEvent.keyDown(textarea, { key: "ArrowUp" });
+    await waitFor(() => expect(textarea.value).toBe("newer"));
+    // Down with the caret not at the end moves the caret, not history.
+    textarea.setSelectionRange(1, 1);
+    fireEvent.keyDown(textarea, { key: "ArrowDown" });
+    await Promise.resolve();
+    expect(textarea.value).toBe("newer");
+    // Editing resets browsing: Down no longer restores the stashed draft.
+    fireEvent.change(textarea, {
+      target: { value: "newer!", selectionStart: 6 },
+    });
+    textarea.setSelectionRange(6, 6);
+    fireEvent.keyDown(textarea, { key: "ArrowDown" });
+    await Promise.resolve();
+    expect(textarea.value).toBe("newer!");
+  });
+
   it("the `@` menu is a combobox with a described active option", async () => {
     const relay = new FakeRelay();
     relay.emitAll(b.sessionReady());
@@ -519,7 +571,7 @@ describe("R2-T25 composer", () => {
     const relay = new FakeRelay();
     relay.emitAll(b.sessionReady());
     current = await renderRelay(relay, "session", {
-      history: { list: async () => ["older", "newer"], add: async () => {} },
+      history: { list: async () => ["newer", "older"], add: async () => {} },
     });
     await waitFor(() => expect(composer()).toBeTruthy());
     const textarea = field() as HTMLTextAreaElement;

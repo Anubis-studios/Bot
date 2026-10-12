@@ -21,6 +21,7 @@ import {
 } from "#renderer/lib/continuity/composer-drafts";
 import { creditsTier } from "#renderer/lib/credits";
 import { useAppNavigate } from "#renderer/lib/navigation/use-app-navigate";
+import { showError } from "#renderer/lib/toast";
 import { openUpgrade } from "#renderer/lib/upgrade";
 import { useCreditsAccount } from "#renderer/lib/use-credits-account";
 
@@ -48,7 +49,6 @@ export const useSessionComposerModel = (row?: SessionRow, draftId?: string) => {
     enabled: !!row,
   });
   const [draftModel, setDraftModel] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const models = catalog.data ?? [];
   const savedModel = useSelector(draftStore, (state) =>
     draftId ? state[draftId]?.model : undefined
@@ -59,22 +59,21 @@ export const useSessionComposerModel = (row?: SessionRow, draftId?: string) => {
     defaultModel: settings.data?.defaultModel,
     catalog: models,
   });
+  // A refused or unsaved switch is said out loud; the chat stays on its model.
+  const failed = () => showError(t("workspace.modelSwitchFailed"));
   const changeModel = (id: string | null) => {
     if (!row) {
       if (draftId) updateDraft(draftId, (d) => ({ ...d, model: id }));
       else setDraftModel(id);
       return;
     }
-    if (id)
-      void setSessionModel(db, transport.client, row, id).catch((e) =>
-        setError(String(e))
-      );
+    if (id) void setSessionModel(db, transport.client, row, id).catch(failed);
     else
       void db.collections.sessions
         .update(row.id, (d) => {
           d.model = null;
         })
-        .isPersisted.promise.catch((e) => setError(String(e)));
+        .isPersisted.promise.catch(failed);
   };
   const other = otherProviderModel(value, settings.data?.defaultModel, models);
   const setup = useModelSetup({
@@ -84,7 +83,6 @@ export const useSessionComposerModel = (row?: SessionRow, draftId?: string) => {
     select: changeModel,
   });
   return {
-    error,
     onResumeOnFreePool: async () => {
       if (!row) return;
       await setSessionModel(db, transport.client, row, "abacus/openllm");
