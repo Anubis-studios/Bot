@@ -42,6 +42,7 @@ import {
   runningTools,
   Typing,
 } from "../kit/status/status";
+import { UpgradeTriggers } from "../kit/upgrade-triggers";
 import { useHost, useThreadStore } from "../store/selectors";
 import type { RunOutcomeRecord } from "../store/thread-store";
 import { toolRows, ToolWindowProvider } from "./row-context";
@@ -782,6 +783,10 @@ export const Transcript = ({ messages, Message }: TranscriptProps) => {
           ))}
           {rows}
           <RunTail messages={messages} />
+          <UpgradeTriggers
+            messages={messages}
+            outcome={active ? undefined : outcomes.at(-1)}
+          />
         </MessageScrollerContent>{" "}
         {end < visible.length ? (
           <Placeholder
