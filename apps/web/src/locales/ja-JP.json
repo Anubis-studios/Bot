@@ -954,7 +954,9 @@
     "levelUpTitle": "Ready for your next level?",
     "restTitle": "A little rest, then more adventures",
     "progress": "{{remaining}} of {{total}} credits left",
-    "used": "Credits used"
+    "used": "Credits used",
+    "pitchSessions": "Build with top models: longer runs, bigger projects",
+    "pitchBots": "Keep your bots working: daily routines, always on Telegram and WhatsApp"
   },
   "execBackends": {
     "daytona": {

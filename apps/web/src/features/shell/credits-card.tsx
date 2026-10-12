@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 
 import { usePrefs } from "#renderer/data/db/prefs";
 import { useHasContextualUpsell } from "#renderer/lib/contextual-upsell";
-import { creditsTier } from "#renderer/lib/credits";
+import { creditsTier, upgradePitch } from "#renderer/lib/credits";
 import {
   durations,
   easings,
@@ -79,6 +79,7 @@ export const UpgradePromo = () => {
     : promoState(account.data, prefs.creditsExhaustedAt, now);
   const [excited, setExcited] = useState(false);
   const tier = creditsTier(account.data);
+  const pitch = upgradePitch(account.data);
   const remaining =
     account.data?.credits_granted != null && account.data.credits_used != null
       ? Math.max(0, account.data.credits_granted - account.data.credits_used)
@@ -121,6 +122,15 @@ export const UpgradePromo = () => {
                     : "creditsCard.levelUpTitle"
                 )}
               </p>
+              {pitch != null ? (
+                <p className="text-muted-foreground mt-0.5 text-xs">
+                  {t(
+                    pitch === "sessions"
+                      ? "creditsCard.pitchSessions"
+                      : "creditsCard.pitchBots"
+                  )}
+                </p>
+              ) : null}
               {remaining != null ? (
                 <p className="text-muted-foreground mt-1 text-xs">
                   {t("creditsCard.progress", {

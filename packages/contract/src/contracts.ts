@@ -1573,7 +1573,17 @@ export interface AbacusAccountInfo {
   credits_granted: number | null;
   /** The account was created on the website, before the app was installed. */
   web_signup?: boolean;
+  /** Where the user mostly works, from the platform's nightly read of their turns. */
+  focus?: AbacusAccountFocus | null;
 }
+
+export const ABACUS_ACCOUNT_FOCI = [
+  "sessions",
+  "bots",
+  "mixed",
+  "new",
+] as const;
+export type AbacusAccountFocus = (typeof ABACUS_ACCOUNT_FOCI)[number];
 
 /** The invite-friends loop as the platform reports it for this account. */
 export interface ReferralSummary {

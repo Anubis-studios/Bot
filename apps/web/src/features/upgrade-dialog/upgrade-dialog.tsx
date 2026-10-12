@@ -12,7 +12,11 @@ import {
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
-import { creditsTier } from "#renderer/lib/credits";
+import {
+  creditsTier,
+  upgradePitch,
+  type UpgradePitch,
+} from "#renderer/lib/credits";
 import { openUpgrade } from "#renderer/lib/upgrade";
 import {
   closeUpgradeDialog,
@@ -41,6 +45,24 @@ export const spentFreeAccount = (
 const paying = (account: AbacusAccountInfo | null | undefined): boolean => {
   const tier = creditsTier(account);
   return tier === "basic" || tier === "paid";
+};
+
+type PlanFeature = "credits" | "models" | "routines" | "apps" | "media";
+
+const FEATURE_KEYS = {
+  models: "upgradeDialog.featureModels",
+  routines: "upgradeDialog.featureRoutines",
+  apps: "upgradeDialog.featureApps",
+  media: "upgradeDialog.featureMedia",
+} as const;
+
+/** The plan's features, led by what the person's side gains (upgradePitch). */
+const featureOrder = (pitch: UpgradePitch | null): PlanFeature[] => {
+  if (pitch === "sessions")
+    return ["models", "apps", "media", "credits", "routines"];
+  if (pitch === "bots")
+    return ["credits", "routines", "models", "apps", "media"];
+  return ["credits", "models", "routines", "apps", "media"];
 };
 
 const Feature = ({ lead, rest }: { lead?: string; rest: string }) => (
@@ -73,7 +95,7 @@ const DialogBody = ({
 }) => {
   const { t } = useTranslation();
   const { transport } = useAppContext();
-  const { refetch: refetchAccount } = useAccount();
+  const { data: account, refetch: refetchAccount } = useAccount();
   const [waiting, setWaiting] = useState(false);
   const checkNow = useRef<() => void>(() => {});
   const connectors = request.kind === "connectors";
@@ -231,14 +253,17 @@ const DialogBody = ({
             rest={t("upgradeDialog.featureConnectorsRest")}
           />
         )}
-        <Feature
-          lead={t("upgradeDialog.featureCreditsLead")}
-          rest={t("upgradeDialog.featureCreditsRest")}
-        />
-        <Feature rest={t("upgradeDialog.featureModels")} />
-        <Feature rest={t("upgradeDialog.featureRoutines")} />
-        <Feature rest={t("upgradeDialog.featureApps")} />
-        <Feature rest={t("upgradeDialog.featureMedia")} />
+        {featureOrder(upgradePitch(account)).map((feature) =>
+          feature === "credits" ? (
+            <Feature
+              key={feature}
+              lead={t("upgradeDialog.featureCreditsLead")}
+              rest={t("upgradeDialog.featureCreditsRest")}
+            />
+          ) : (
+            <Feature key={feature} rest={t(FEATURE_KEYS[feature])} />
+          )
+        )}
       </ul>
       <div className="flex flex-col gap-1.5 pt-1">
         <Button

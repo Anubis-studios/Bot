@@ -22,6 +22,20 @@ export const creditsTier = (
     : "unknown";
 };
 
+/**
+ * Which side an upgrade prompt leads with: what Sessions gain (models, apps) or
+ * what bots gain (routines, channels); null (mixed) keeps the general pitch. A
+ * new or unread account is pitched bots: every account starts with a bot.
+ */
+export type UpgradePitch = "sessions" | "bots";
+
+export const upgradePitch = (
+  account: AbacusAccountInfo | null | undefined
+): UpgradePitch | null => {
+  if (account?.focus === "sessions") return "sessions";
+  return account?.focus === "mixed" ? null : "bots";
+};
+
 export const CREDITS_EXHAUSTED_TTL_MS = 24 * 60 * 60 * 1000;
 export const creditMarkState = (
   account: AbacusAccountInfo | null | undefined,
