@@ -18,6 +18,9 @@
       "creditsExhaustedAt": "legacy",
       "defaultMode": "legacy",
       "dismissals.referralCardUntil": "legacy",
+      "dismissals.routeLlmNudgeAt": "legacy",
+      "dismissals.routeLlmNudges": "legacy",
+      "dismissals.routeLlmSwitched": "legacy",
       "dismissals.upsell": "legacy",
       "dismissals.whatsappIntroAt": "legacy",
       "keymap": "default",
@@ -73,6 +76,9 @@
       "defaultMode": "PLAN",
       "dismissals": {
         "referralCardUntil": 1790604800000,
+        "routeLlmNudgeAt": null,
+        "routeLlmNudges": 0,
+        "routeLlmSwitched": false,
         "upsell": true,
         "whatsappIntroAt": null
       },

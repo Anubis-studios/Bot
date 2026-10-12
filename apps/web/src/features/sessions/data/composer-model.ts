@@ -1,6 +1,6 @@
 import { AgentMode } from "@abacus-ai/contract/agent-types";
 import type { SessionRow } from "@abacus-ai/contract/contract/rows";
-import { resolveConfiguredModel } from "@abacus-ai/contract/models";
+import { OPENLLM_ID, resolveConfiguredModel } from "@abacus-ai/contract/models";
 import { useQuery } from "@tanstack/react-query";
 import { useSelector } from "@tanstack/react-store";
 import { useState } from "react";
@@ -10,6 +10,7 @@ import { confirmFreePoolModel } from "#renderer/components/credits-card/actions"
 import {
   botModelGroups,
   effectiveModelLabel,
+  otherProviderModel,
 } from "#renderer/components/model-groups";
 import { useModelSetup } from "#renderer/components/model-setup/use-model-setup";
 import { useDb } from "#renderer/data/db";
@@ -75,6 +76,7 @@ export const useSessionComposerModel = (row?: SessionRow, draftId?: string) => {
         })
         .isPersisted.promise.catch((e) => setError(String(e)));
   };
+  const other = otherProviderModel(value, settings.data?.defaultModel, models);
   const setup = useModelSetup({
     models,
     loading: catalog.isPending || settings.isPending,
@@ -121,6 +123,15 @@ export const useSessionComposerModel = (row?: SessionRow, draftId?: string) => {
         void navigate({ to: "/settings/models", transition: "settings-in" }),
       ...(creditsTier(account.data) === "free"
         ? { onUpgrade: () => void openUpgrade(transport.client) }
+        : {}),
+      ...(other != null && creditsTier(account.data) === "free"
+        ? {
+            otherProvider: {
+              ...other,
+              model: other.label,
+              onSwitch: () => changeModel(OPENLLM_ID),
+            },
+          }
         : {}),
       value,
       label:

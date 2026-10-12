@@ -164,6 +164,9 @@ export interface PrefsRow {
     referralCardUntil: number | null;
     upsell: boolean;
     whatsappIntroAt: number | null;
+    routeLlmNudges: number;
+    routeLlmNudgeAt: number | null;
+    routeLlmSwitched: boolean;
   };
   /** Panel widths. */
   panes: Record<string, number>;

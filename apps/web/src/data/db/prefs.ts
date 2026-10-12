@@ -29,7 +29,14 @@ export const DEFAULT_PREFS: Required<PrefsRow> & {
   browserHomepage: null,
   showLinkPreviews: true,
   onboardingStep: null,
-  dismissals: { referralCardUntil: null, upsell: false, whatsappIntroAt: null },
+  dismissals: {
+    referralCardUntil: null,
+    upsell: false,
+    whatsappIntroAt: null,
+    routeLlmNudges: 0,
+    routeLlmNudgeAt: null,
+    routeLlmSwitched: false,
+  },
   panes: {},
   motion: { reduce: "system" },
   sounds: {

@@ -180,6 +180,10 @@ export const PREFS_GROUP_ENTRIES = {
     upsell: v.boolean(),
     /** The browser's WhatsApp chat intro, seen (linked or skipped). */
     whatsappIntroAt: NullableTimestamp,
+    /** The RouteLLM notice on another provider's model: times shown, when last, switched to RouteLLM. */
+    routeLlmNudges: v.pipe(v.number(), v.integer(), v.minValue(0)),
+    routeLlmNudgeAt: NullableTimestamp,
+    routeLlmSwitched: v.boolean(),
   },
   motion: { reduce: v.picklist(["system", "on", "off"]) },
   sounds: {

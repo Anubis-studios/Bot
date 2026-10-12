@@ -18,6 +18,9 @@
       "creditsExhaustedAt": "default",
       "defaultMode": "legacy",
       "dismissals.referralCardUntil": "default",
+      "dismissals.routeLlmNudgeAt": "default",
+      "dismissals.routeLlmNudges": "default",
+      "dismissals.routeLlmSwitched": "default",
       "dismissals.upsell": "default",
       "dismissals.whatsappIntroAt": "default",
       "keymap": "default",
@@ -73,6 +76,9 @@
       "defaultMode": "DEFAULT",
       "dismissals": {
         "referralCardUntil": null,
+        "routeLlmNudgeAt": null,
+        "routeLlmNudges": 0,
+        "routeLlmSwitched": false,
         "upsell": false,
         "whatsappIntroAt": null
       },

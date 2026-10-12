@@ -27,6 +27,10 @@ export const FUNNEL_STEPS = [
   "first_bot_kept",
   "first_bot_cancelled",
   "first_bot_skipped",
+  // A free account's chat on another provider's model: the RouteLLM notice.
+  "routellm_nudge_shown",
+  "routellm_nudge_switched",
+  "routellm_nudge_kept",
 ] as const;
 
 export type FunnelStep = (typeof FUNNEL_STEPS)[number];

@@ -39,6 +39,13 @@ export interface ModelChipBinding {
   onConfigureProviders?(): void;
   /** Free accounts only: the picker offers the top models behind an upgrade. */
   onUpgrade?(): void;
+  /** Free accounts on another provider's model: the chat offers RouteLLM. */
+  otherProvider?: {
+    model: string;
+    provider: string;
+    free: boolean;
+    onSwitch(): void;
+  };
   value: string | null;
   label: string;
   onChange(id: string | null): void;

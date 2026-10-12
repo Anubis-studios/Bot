@@ -1,3 +1,4 @@
+import { OPENLLM_ID } from "@abacus-ai/contract/models";
 import { useQuery } from "@tanstack/react-query";
 import { Settings2 } from "lucide-react";
 import { motion } from "motion/react";
@@ -25,6 +26,7 @@ import { useBotsTransport } from "../data/transport";
 import {
   botModelGroups,
   effectiveModelLabel,
+  otherProviderModel,
   toggleFavorite,
 } from "./model-groups";
 export const useBotModelBinding = (
@@ -65,6 +67,7 @@ export const useBotModelBinding = (
         search: (previous) => ({ ...previous, provider }),
       }),
   });
+  const other = otherProviderModel(value, settings.data?.defaultModel, catalog);
   const setup = useModelSetup({
     models: catalog,
     loading: models.isPending || settings.isPending,
@@ -78,6 +81,15 @@ export const useBotModelBinding = (
       void navigate({ to: "/settings/models", transition: "settings-in" }),
     ...(accountTier(account.data) === "free"
       ? { onUpgrade: () => void openUpgrade(transport.client) }
+      : {}),
+    ...(other != null && accountTier(account.data) === "free"
+      ? {
+          otherProvider: {
+            ...other,
+            model: other.label,
+            onSwitch: () => onChange(OPENLLM_ID),
+          },
+        }
       : {}),
     label:
       effectiveModelLabel(value, settings.data?.defaultModel, catalog) ??

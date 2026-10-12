@@ -112,6 +112,35 @@ export const effectiveModelLabel = (
     : (catalog.find((model) => model.id === id)?.label ?? id);
 };
 
+/**
+ * The model a chat will run when it comes from another provider (not Abacus,
+ * not RouteLLM, not a model on this computer): its label, its provider's name
+ * and whether it is free. Null otherwise.
+ */
+export const otherProviderModel = (
+  botModel: string | null,
+  defaultModel: string | null | undefined,
+  catalog: readonly ModelAvailability[]
+): { label: string; provider: string; free: boolean } | null => {
+  const id = resolveConfiguredModel({
+    requested: botModel,
+    defaultModel,
+    catalog,
+  });
+  const model = catalog.find((item) => item.id === id);
+  if (
+    model == null ||
+    modelProviderGroup(model.provider) === "abacus" ||
+    model.provider === LOCAL_PROVIDER_ID
+  )
+    return null;
+  return {
+    label: model.label,
+    provider: modelProviderLabel(model.provider, model.provider),
+    free: model.tier === "free",
+  };
+};
+
 /** What App default resolves to now ("RouteLLM" …), or null. */
 export const appDefaultLabel = (
   defaultModel: string | null | undefined,

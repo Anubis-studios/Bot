@@ -78,6 +78,7 @@ import {
   retryAttachment,
 } from "./attachments";
 import { ModeChip, ModelChip, type ModelChipHandle } from "./chips";
+import { OtherProviderNotice } from "./other-provider-notice";
 import { setQueueEditing } from "./queue-editing";
 import { TriggerMenu, triggerAt, type TriggerState } from "./triggers";
 
@@ -591,6 +592,7 @@ export const ThreadComposer = () => {
   );
   const [menuOpen, setMenuOpen] = useState(false);
   const modelChip = useRef<ModelChipHandle>(null);
+
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [trigger, setTrigger] = useState<TriggerState | null>(() =>
@@ -1027,6 +1029,13 @@ export const ThreadComposer = () => {
         ) : null}
         {!config.preStart && <SendError error={error} />}
         {view.slots.composerNotice}
+        {config.model?.otherProvider != null && (
+          <OtherProviderNotice
+            key={threadId}
+            threadId={threadId}
+            notice={config.model.otherProvider}
+          />
+        )}
         <label htmlFor={fieldId} className="sr-only">
           {config.placeholder}
         </label>
