@@ -397,7 +397,7 @@ describe.skipIf(!ready.runnable)("chat kit gates (Electron)", () => {
     /**
      * Activates `find()`'s control 20 times, away from the end: after each,
      * mounted rows ≤ MAX_ROWS, the first fully visible row keeps its offset
-     * (±1 px), and the activations' median commit took < 50 ms.
+     * (±1 px), and the activations' median commit stays within the budget below.
      */
     const activate = async (find: string, label: string) => {
       const commits: number[] = [];
@@ -453,12 +453,14 @@ describe.skipIf(!ready.runnable)("chat kit gates (Electron)", () => {
       };
       expect(commits.length, `${label}: activations`).toBe(20);
       for (const drift of drifts) expect(drift).toBeLessThanOrEqual(1);
-      // The typical commit stays under the 50 ms long-task line, or, on a
-      // slower runner, under 30% of the same run's first paint in (a): every
-      // runner so far commits "Show earlier" in 22-25% of it, so a heavier
-      // commit still fails while a slower CPU does not. None may stall.
+      // The typical commit stays under 60 ms, or, on a slower runner, under
+      // 45% of the same run's first paint in (a). Since #408 dropped the
+      // transcript's content-visibility skipping, "Show earlier" lays out every
+      // row it mounts: runners commit it in 31-40% of first paint (22-25%
+      // before), so a heavier commit still fails while a slower CPU does not.
+      // None may stall.
       const firstPaint = Number(numbers.a_firstPaintMs ?? 0);
-      const budget = Math.max(50, firstPaint * 0.3);
+      const budget = Math.max(60, firstPaint * 0.45);
       const commitMs = stats(commits);
       const times = `${label}: all commit times ${JSON.stringify(commits)}, budget ${budget}`;
       expect(commitMs.median, times).toBeLessThan(budget);
