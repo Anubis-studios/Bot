@@ -27,7 +27,10 @@ import {
 import { useTranslation } from "react-i18next";
 
 import { BotAvatar } from "#renderer/components/bot-avatar";
-import type { DockColumn } from "#renderer/components/panel-workspace/columns";
+import {
+  columnStripWidth,
+  type DockColumn,
+} from "#renderer/components/panel-workspace/columns";
 import { TitleBarIconButton } from "#renderer/components/title-bar";
 import { usePrefs } from "#renderer/data/db/prefs";
 import { defaultLook } from "#renderer/lib/bots/avatar";
@@ -484,7 +487,7 @@ const RailSegment = ({
       data-rail-mode={compact ? "overflow" : layout.mode}
       data-rail-rows={layout.rows}
       className={cn(
-        "titlebar-nodrag mr-2 flex w-full max-w-full min-w-0 flex-1 items-center gap-1 self-stretch",
+        "titlebar-drag mr-2 flex w-full max-w-full min-w-0 flex-1 items-center gap-1 self-stretch",
         className
       )}
       style={style}
@@ -883,7 +886,7 @@ const GroupedRail = ({
     <div
       ref={root}
       data-slot="topbar-panel-tabs-groups"
-      className="titlebar-nodrag mr-2 flex w-full max-w-full min-w-0 flex-1 items-center gap-1 self-stretch"
+      className="titlebar-drag mr-2 flex w-full max-w-full min-w-0 flex-1 items-center gap-0 self-stretch"
     >
       {columns.map((column, index) => {
         const last = index === columns.length - 1;
@@ -892,7 +895,7 @@ const GroupedRail = ({
             column.ids.includes(tab.id) ||
             (index === 0 && orphans.includes(tab))
         );
-        const width = last ? 0 : columns[index + 1]!.left - column.left;
+        const width = columnStripWidth(columns, index);
         const segmentIds = members.map((tab) => tab.id);
         return (
           <RailSegment
@@ -909,8 +912,10 @@ const GroupedRail = ({
             shortcuts={false}
             measureToolbar={false}
             allowTwoRows={false}
-            className={cn("mr-0", index > 0 && "pl-2")}
-            style={last ? undefined : { flex: `0 1 ${width}px`, width }}
+            className="mr-0"
+            style={
+              last ? undefined : { flex: `0 0 ${width}`, width, minWidth: 0 }
+            }
             onReorder={(order) => onReorder(mergeOrder(ids, order))}
           />
         );

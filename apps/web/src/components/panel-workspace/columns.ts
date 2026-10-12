@@ -75,4 +75,21 @@ export const measureColumns = (api: DockviewApi): DockColumn[] => {
   });
 };
 
+/**
+ * Width of a non-last column's title strip, as CSS. The strip starts at the
+ * title region's left edge (`--workspace-title-left`, viewport px, set by
+ * `WorkspaceTitleRegion`), which the leading controls can push right of the
+ * first pane's edge; each strip then ends where the next pane begins, so
+ * every strip lines up with its own pane whatever the clamp.
+ */
+export const columnStripWidth = (
+  columns: readonly DockColumn[],
+  index: number
+): string => {
+  const column = columns[index]!;
+  const next = columns[index + 1];
+  if (!next) return "auto";
+  return `max(0px, calc(${next.left}px - max(${column.left}px, var(--workspace-title-left, ${column.left}px))))`;
+};
+
 export const useDockColumns = () => useStore(dockColumns);

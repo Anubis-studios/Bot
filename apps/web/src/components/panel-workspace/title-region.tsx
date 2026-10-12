@@ -81,15 +81,18 @@ export const WorkspaceTitleRegion = ({ children }: { children: ReactNode }) => {
         barRect.right - end
       );
       report(next.width);
+      // Positioned inside the bar, so relative to its left edge.
+      const local = { left: next.left - barRect.left, width: next.width };
       setRegion((previous) =>
-        previous.left === next.left && previous.width === next.width
+        previous.left === local.left && previous.width === local.width
           ? previous
-          : next
+          : local
       );
       bar.style.setProperty(
         "--workspace-title-start",
         `${next.left - barRect.left}px`
       );
+      bar.style.setProperty("--workspace-title-left", `${next.left}px`);
     };
     const schedule = () => {
       cancelAnimationFrame(frame);
@@ -130,13 +133,14 @@ export const WorkspaceTitleRegion = ({ children }: { children: ReactNode }) => {
       window.removeEventListener("resize", schedule);
       bar.style.removeProperty("--workspace-title-start");
       bar.style.removeProperty("--workspace-context-start");
+      bar.style.removeProperty("--workspace-title-left");
     };
   }, []);
   return (
     <div
       ref={ref}
       data-slot="workspace-title-region"
-      className="titlebar-nodrag absolute top-0 flex min-w-0 items-start"
+      className="titlebar-drag absolute top-0 flex min-w-0 items-start"
       style={{ left: region.left, width: region.width }}
     >
       {children}

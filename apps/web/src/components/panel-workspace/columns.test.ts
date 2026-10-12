@@ -1,7 +1,7 @@
 import type { DockviewApi } from "dockview-react";
 import { expect, it } from "vitest";
 
-import { measureColumns } from "./columns";
+import { columnStripWidth, measureColumns } from "./columns";
 
 const group = (
   box: { left: number; top: number; right: number; bottom: number },
@@ -39,4 +39,17 @@ it("is empty while the dock is hidden", () => {
     groups: [group({ left: 0, top: 0, right: 0, bottom: 0 }, ["chat"])],
   } as unknown as DockviewApi;
   expect(measureColumns(api)).toEqual([]);
+});
+
+it("sizes each strip from its own pane edge, clamped to the title region", () => {
+  const columns = [
+    { ids: ["a"], active: "a", left: 100, right: 400 },
+    { ids: ["b"], active: "b", left: 408, right: 700 },
+    { ids: ["c"], active: "c", left: 708, right: 1000 },
+  ];
+  expect(columnStripWidth(columns, 0)).toBe(
+    "max(0px, calc(408px - max(100px, var(--workspace-title-left, 100px))))"
+  );
+  expect(columnStripWidth(columns, 1)).toContain("calc(708px - max(408px");
+  expect(columnStripWidth(columns, 2)).toBe("auto");
 });

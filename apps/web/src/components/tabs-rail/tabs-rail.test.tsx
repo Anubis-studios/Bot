@@ -207,3 +207,45 @@ it("merges one pane's new order back into the full tab order", () => {
     "chat,b,files,a"
   );
 });
+
+it("keeps the grouped strips flush and the title bar draggable between tabs", async () => {
+  await initI18n();
+  const columns = [
+    { ids: ["chat"], active: "chat", left: 0, right: 300 },
+    { ids: ["terminal:one"], active: "terminal:one", left: 308, right: 600 },
+  ];
+  const { container } = render(
+    <header data-slot="topbar">
+      <TabsRail
+        columns={columns}
+        tabs={[
+          { id: "chat", kind: "thread", title: "Chat" },
+          { id: "terminal:one", kind: "terminal", title: "Terminal" },
+        ]}
+        active="chat"
+        title={(tab) => tab.title!}
+        kinds={[]}
+        onChange={() => {}}
+        onClose={() => {}}
+        onReorder={() => {}}
+        onAdd={() => {}}
+      />
+    </header>
+  );
+  const groups = container.querySelector(
+    '[data-slot="topbar-panel-tabs-groups"]'
+  )!;
+  expect(groups.className).toContain("titlebar-drag");
+  expect(groups.className).toContain("gap-0");
+  const strips = [
+    ...container.querySelectorAll('[data-slot="topbar-panel-tabs"]'),
+  ];
+  expect(strips).toHaveLength(2);
+  for (const strip of strips) {
+    expect(strip.className).toContain("titlebar-drag");
+    expect(strip.className).not.toContain("pl-2");
+    expect(strip.className).not.toContain("titlebar-nodrag");
+  }
+  for (const tab of screen.getAllByRole("tab"))
+    expect(tab.className).toContain("titlebar-nodrag");
+});
