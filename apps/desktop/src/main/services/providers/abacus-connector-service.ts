@@ -34,7 +34,8 @@ const abacusApiKey = (): string => credentialFor("ABACUS_API_KEY");
 export const abacusApiCall = async (
   method: string,
   httpMethod: "POST" | "DELETE" | "GET",
-  body?: Record<string, unknown>
+  body?: Record<string, unknown>,
+  timeoutMs?: number
 ): Promise<{ ok: boolean; result: unknown }> => {
   const key = abacusApiKey();
   if (key.length === 0) return { ok: false, result: null };
@@ -56,6 +57,7 @@ export const abacusApiCall = async (
           : {}),
       },
       ...(httpMethod === "POST" ? { body: JSON.stringify(body ?? {}) } : {}),
+      ...(timeoutMs != null ? { signal: AbortSignal.timeout(timeoutMs) } : {}),
     });
     const payload = (await response.json().catch(() => null)) as {
       success?: unknown;
@@ -81,13 +83,16 @@ export const abacusApiCall = async (
   }
 };
 
+/** A listing past this is failed like any other: screens wait on it. */
+const LISTING_TIMEOUT_MS = 8000;
+
 /** The payload alone, for the two listing calls that only care about that. */
 const abacusApi = async (
   method: string,
   httpMethod: "POST" | "DELETE" | "GET",
   body?: Record<string, unknown>
 ): Promise<unknown | null> =>
-  (await abacusApiCall(method, httpMethod, body)).result;
+  (await abacusApiCall(method, httpMethod, body, LISTING_TIMEOUT_MS)).result;
 
 /**
  * Shape the two platform responses into the snapshot the app consumes. Only

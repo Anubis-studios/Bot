@@ -362,12 +362,13 @@ export const Route = createFileRoute("/_bare/onboarding/$step")({
         ...context.transport.orpc.localModels.state.queryOptions({ input: {} }),
         retry: false,
       });
+    // A network read: the step shows at once, its tiles waiting on it.
     if (params.step === "connectors")
-      await warm(
+      void warm(
         context.queryClient.ensureQueryData(
           context.transport.orpc.connectors.statuses.queryOptions({ input: {} })
         )
-      );
+      ).catch(() => undefined);
     if (params.step === "first-bot")
       await context.db.collections.routines.preload();
     return { facts: await factsOf(context, signal) };
