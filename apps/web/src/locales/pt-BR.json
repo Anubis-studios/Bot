@@ -3060,7 +3060,8 @@
       "message": "Mensagem",
       "call": "Falar",
       "pause": "Pause check-ins",
-      "resume": "Resume check-ins"
+      "resume": "Resume check-ins",
+      "settings": "Configurações do notch"
     },
     "wings": {
       "idle": "Pronto quando você estiver",

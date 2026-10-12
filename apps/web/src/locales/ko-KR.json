@@ -3060,7 +3060,8 @@
       "message": "메시지",
       "call": "말하기",
       "pause": "Pause check-ins",
-      "resume": "Resume check-ins"
+      "resume": "Resume check-ins",
+      "settings": "노치 설정"
     },
     "wings": {
       "idle": "언제든 준비 완료",

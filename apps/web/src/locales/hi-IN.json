@@ -3060,7 +3060,8 @@
       "message": "संदेश",
       "call": "बात करें",
       "pause": "Pause check-ins",
-      "resume": "Resume check-ins"
+      "resume": "Resume check-ins",
+      "settings": "नॉच सेटिंग्स"
     },
     "wings": {
       "idle": "आपके तैयार होते ही तैयार",

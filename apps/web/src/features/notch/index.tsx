@@ -1,7 +1,15 @@
 import "./notch.css";
 import type { OpenTarget } from "@abacus-ai/contract/contract";
 import { NOTCH_SPACING as spacing } from "@abacus-ai/contract/contract/notch-spacing";
-import { ArrowUp, ExternalLink, Mic, Square, X, Clock } from "lucide-react";
+import {
+  ArrowUp,
+  Clock,
+  Ellipsis,
+  ExternalLink,
+  Mic,
+  Square,
+  X,
+} from "lucide-react";
 import {
   AnimatePresence,
   LayoutGroup,
@@ -738,6 +746,20 @@ export const NotchShell = ({
                               key="close"
                             >
                               <X aria-hidden />
+                            </NotchAction>
+                          )}
+                          {shown.expanded && (
+                            <NotchAction
+                              label={t("notch.actions.settings")}
+                              variant="ghost"
+                              onClick={() =>
+                                void transport.client.notch.openInApp({
+                                  kind: "settings",
+                                })
+                              }
+                              key="settings"
+                            >
+                              <Ellipsis aria-hidden />
                             </NotchAction>
                           )}
                         </AnimatePresence>

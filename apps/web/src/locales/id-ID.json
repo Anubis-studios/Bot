@@ -3060,7 +3060,8 @@
       "message": "Pesan",
       "call": "Bicara",
       "pause": "Pause check-ins",
-      "resume": "Resume check-ins"
+      "resume": "Resume check-ins",
+      "settings": "Pengaturan notch"
     },
     "wings": {
       "idle": "Siap kapan pun Anda siap",

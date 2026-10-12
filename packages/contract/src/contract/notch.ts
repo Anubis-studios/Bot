@@ -25,6 +25,7 @@ export const OpenTargetSchema = v.variant("kind", [
   v.object({ kind: v.literal("bot"), botId: id, sessionId: v.optional(id) }),
   v.object({ kind: v.literal("session"), sessionId: id }),
   v.object({ kind: v.literal("routine-run"), routineId: id, sessionId: id }),
+  v.object({ kind: v.literal("settings") }),
 ]);
 export type OpenTarget = v.InferOutput<typeof OpenTargetSchema>;
 export interface OpenCommand {

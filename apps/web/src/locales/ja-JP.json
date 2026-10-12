@@ -3060,7 +3060,8 @@
       "message": "メッセージ",
       "call": "話す",
       "pause": "Pause check-ins",
-      "resume": "Resume check-ins"
+      "resume": "Resume check-ins",
+      "settings": "ノッチの設定"
     },
     "wings": {
       "idle": "いつでも準備完了",

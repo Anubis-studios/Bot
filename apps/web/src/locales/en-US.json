@@ -3060,7 +3060,8 @@
       "message": "Message",
       "call": "Call",
       "pause": "Pause check-ins",
-      "resume": "Resume check-ins"
+      "resume": "Resume check-ins",
+      "settings": "Notch settings"
     },
     "wings": {
       "idle": "Ready when you are",

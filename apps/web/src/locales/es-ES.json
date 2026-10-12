@@ -3060,7 +3060,8 @@
       "message": "Mensaje",
       "call": "Hablar",
       "pause": "Pause check-ins",
-      "resume": "Resume check-ins"
+      "resume": "Resume check-ins",
+      "settings": "Ajustes de la muesca"
     },
     "wings": {
       "idle": "Listo cuando tú lo estés",

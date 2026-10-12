@@ -10,6 +10,8 @@ export const openTargetOptions = (target: OpenTarget) => {
       } as const;
     return { to: "/bots/$botId", params: { botId: target.botId } } as const;
   }
+  // The notch's own switch lives on General.
+  if (target.kind === "settings") return { to: "/settings/general" } as const;
   if (target.kind === "routine-run")
     return {
       to: "/routines/$routineId",
