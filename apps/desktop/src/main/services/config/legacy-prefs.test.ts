@@ -191,6 +191,9 @@ describe("composeLegacyPrefs", () => {
       referralCardUntil: null,
       upsell: true,
       whatsappIntroAt: null,
+      routeLlmNudges: 0,
+      routeLlmNudgeAt: null,
+      routeLlmSwitched: false,
     });
     expect(legacy.patch.models).toEqual(PREFS_DEFAULTS.models);
     expect(legacy.absent).toContain("theme");
@@ -234,6 +237,9 @@ describe("composeLegacyPrefs", () => {
       referralCardUntil: null,
       upsell: true,
       whatsappIntroAt: null,
+      routeLlmNudges: 0,
+      routeLlmNudgeAt: null,
+      routeLlmSwitched: false,
     });
     // A corrupt code store reads as its defaults there; the accordion holds.
     expect(legacy.patch.sidebar).toEqual({
