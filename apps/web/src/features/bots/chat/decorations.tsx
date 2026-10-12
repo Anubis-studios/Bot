@@ -184,10 +184,13 @@ export const botMessageDecorations = (
           }
         />
       ) : null;
-    decoration.actions = feedback;
-    if (view.deliverables != null)
+    // Always visible under the reply, as the old bot list's rating row was.
+    if (feedback != null || view.deliverables != null)
       decoration.after = (
-        <>{view.deliverables != null && card(view.deliverables)}</>
+        <>
+          {feedback}
+          {view.deliverables != null && card(view.deliverables)}
+        </>
       );
     return decoration;
   };

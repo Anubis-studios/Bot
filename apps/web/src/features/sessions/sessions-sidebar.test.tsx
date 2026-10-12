@@ -1,5 +1,11 @@
 /** R1-T4 (sessions): filtering, workspace grouping, pinned group, live updates. */
-import { act, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
@@ -74,5 +80,25 @@ describe("SessionsSidebar", () => {
     await waitFor(() =>
       expect(sidebar.queryByText("Clean up a spreadsheet")).toBeNull()
     );
+  });
+
+  it("says when a search matches nothing, and recovers when cleared", async () => {
+    app = await renderApp("/sessions/new", {
+      seed: {
+        prefs: fixturePrefs(),
+        sessions: fixtureSessions(NOW),
+        workspaces: fixtureWorkspaces(),
+      },
+    });
+    const sidebar = within(
+      screen.getByRole("navigation", { name: "Sessions" })
+    );
+    await sidebar.findByText("Review my pull requests");
+    const search = sidebar.getByPlaceholderText("Search sessions…");
+    fireEvent.change(search, { target: { value: "zzzz-no-such" } });
+    await sidebar.findByText("No sessions match");
+    expect(sidebar.queryByText("No sessions yet")).toBeNull();
+    fireEvent.change(search, { target: { value: "" } });
+    await sidebar.findByText("Review my pull requests");
   });
 });

@@ -150,7 +150,7 @@ describe("botMessageDecorations", () => {
       msg("u2", "user", [text("more")]),
       msg("a3", "assistant", [text("Third")]),
     ]);
-    expect(d.map((x) => x?.actions != null)).toEqual([
+    expect(d.map((x) => x?.after != null)).toEqual([
       false,
       false,
       true,
@@ -177,7 +177,7 @@ describe("botMessageDecorations", () => {
       }),
     ];
     const d = decorateAll(botMessageDecorations(opts), messages);
-    show(d[1]!.actions);
+    show(d[1]!.after);
     fireEvent.click(
       await screen.findByRole("button", { name: "Good response" })
     );
@@ -206,7 +206,7 @@ describe("botMessageDecorations", () => {
       msg("a", "assistant", [text("Hello")]),
     ];
     const d = decorateAll(botMessageDecorations(opts), messages);
-    show(d[1]!.actions);
+    show(d[1]!.after);
     fireEvent.click(
       await screen.findByRole("button", { name: "Bad response" })
     );

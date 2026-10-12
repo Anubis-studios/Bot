@@ -3,10 +3,11 @@
  * start of the field) menus (spec 02 §8.4). The menu owns the keyboard
  * while open: arrows move, Enter/Tab pick, Escape closes.
  */
-import { useEffect, useState, type RefObject } from "react";
+import { useEffect, useId, useRef, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 
 import { cn } from "#renderer/lib/cn";
+import { Spinner } from "#renderer/ui/spinner";
 
 import type { MentionSource } from "../kit/context";
 import type { SkillMetadata } from "../store/thread-store";
@@ -59,19 +60,34 @@ export const TriggerMenu = ({
   field: RefObject<HTMLTextAreaElement | null>;
 }) => {
   const { t } = useTranslation();
-  const [files, setFiles] = useState<string[]>([]);
+  const [result, setResult] = useState<{
+    query: string;
+    files: string[];
+  } | null>(null);
   const [active, setActive] = useState(0);
+  const listId = useId();
+  const list = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (trigger.kind !== "mention" || mentions == null) return;
     let live = true;
+    const settle = (files: string[]) => {
+      if (!live) return;
+      setResult({ query: trigger.query, files });
+      setActive(0);
+    };
     mentions
       .search(trigger.query)
-      .then((found) => live && setFiles(found.slice(0, 8)))
-      .catch(() => live && setFiles([]));
+      .then((found) => settle(found.slice(0, 8)))
+      .catch(() => settle([]));
     return () => {
       live = false;
     };
   }, [trigger.kind, trigger.query, mentions]);
+  const files = result?.files ?? [];
+  const loading =
+    trigger.kind === "mention" &&
+    mentions != null &&
+    result?.query !== trigger.query;
   const options =
     trigger.kind === "skill"
       ? skills
@@ -121,9 +137,39 @@ export const TriggerMenu = ({
     element?.addEventListener("keydown", onKey, true);
     return () => element?.removeEventListener("keydown", onKey, true);
   }, [options, active, onPick, onClose, field]);
-  if (options.length === 0) return null;
+  const showing = options.length > 0 || (trigger.kind === "mention" && loading);
+  const activeId = options.length > 0 ? `${listId}-${active}` : undefined;
+  useEffect(() => {
+    const element = field.current;
+    if (element == null || !showing) return;
+    element.setAttribute("role", "combobox");
+    element.setAttribute("aria-expanded", "true");
+    element.setAttribute("aria-controls", listId);
+    element.setAttribute("aria-autocomplete", "list");
+    if (activeId != null)
+      element.setAttribute("aria-activedescendant", activeId);
+    else element.removeAttribute("aria-activedescendant");
+    return () => {
+      for (const name of [
+        "role",
+        "aria-expanded",
+        "aria-controls",
+        "aria-autocomplete",
+        "aria-activedescendant",
+      ])
+        element.removeAttribute(name);
+    };
+  }, [showing, activeId, listId, field]);
+  useEffect(() => {
+    list.current
+      ?.querySelector<HTMLElement>(`[id="${listId}-${active}"]`)
+      ?.scrollIntoView?.({ block: "nearest" });
+  }, [active, listId, options.length]);
+  if (!showing) return null;
   return (
     <div
+      ref={list}
+      id={listId}
       role="listbox"
       aria-label={
         trigger.kind === "skill"
@@ -138,6 +184,7 @@ export const TriggerMenu = ({
       {options.map((option, index) => (
         <button
           key={option.id}
+          id={`${listId}-${index}`}
           type="button"
           role="option"
           aria-selected={index === active}
@@ -156,6 +203,15 @@ export const TriggerMenu = ({
           ) : null}
         </button>
       ))}
+      {loading && trigger.kind === "mention" ? (
+        <div
+          role="status"
+          className="text-muted-foreground flex h-8 items-center gap-2 px-2.5 text-xs"
+        >
+          <Spinner aria-hidden />
+          <span>{t("common.loading")}</span>
+        </div>
+      ) : null}
     </div>
   );
 };

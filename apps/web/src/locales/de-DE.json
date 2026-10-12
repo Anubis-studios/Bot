@@ -255,14 +255,7 @@
       }
     },
     "page": {
-      "newTitle": "Make a bot",
-      "newDescription": "Give it a name and a mission, and it keeps one chat that remembers.",
-      "chatTitle": "Chat arrives soon",
-      "chatDescription": "This bot's conversation opens here in a coming update.",
-      "editTitle": "Edit bot",
-      "editDescription": "Mission, persona and model settings arrive here soon.",
-      "detailsTitle": "Details",
-      "detailsDescription": "Mission, persona, model and memory."
+      "newTitle": "Make a bot"
     },
     "sidebar": {
       "new": "Neuer Bot",
@@ -288,8 +281,7 @@
       "pinned": "Pinned",
       "edit": "Bot bearbeiten",
       "delete": "Bot löschen",
-      "emptyTitle": "Noch keine Bots",
-      "label": "Bots"
+      "emptyTitle": "Noch keine Bots"
     },
     "avatar": {
       "shapes": {
@@ -351,11 +343,6 @@
       "free": "Free",
       "search": "Search models",
       "favorite": "Favourite {{name}}",
-      "defaultGroup": "Default",
-      "appDefault": "App default",
-      "localProvider": "On this machine",
-      "tierFree": "Free",
-      "tierLocal": "Local",
       "configureProviders": "Configure providers"
     },
     "checkIn": {
@@ -416,8 +403,7 @@
         "openExternally": "Open with default app",
         "noViewer": "There is no preview for this kind of file here.",
         "failed": "Couldn't read this file.",
-        "truncated": "Showing the start of a long file.",
-        "slide": "Slide {{n}}"
+        "truncated": "Showing the start of a long file."
       },
       "feedback": {
         "helpful": "Good response",
@@ -437,9 +423,7 @@
         "connect": "Connect {{provider}}",
         "connecting": "Connecting…",
         "decline": "Not now",
-        "stop": "Verbindung abbrechen",
-        "failed": "Could not connect {{provider}}.",
-        "refreshFailed": "Connected, but the agent couldn't load it: {{error}}"
+        "stop": "Verbindung abbrechen"
       },
       "placeholder": "Nachricht an {{name}}",
       "openApp": "Open {{app}}",
@@ -512,8 +496,7 @@
         "required": "Enter a name",
         "too-long": "This is too long",
         "color": "Choose a valid colour"
-      },
-      "accessoryUnavailable": "Accessories are not available yet."
+      }
     },
     "panel": {
       "detailsFor": "Details for {{name}}",
@@ -545,89 +528,11 @@
       "bot": "This bot was deleted",
       "make": "Make a bot"
     },
-    "avatarColor": "Color",
-    "avatarLabel": "Avatar variant",
-    "botOptions": "Bot options",
-    "cancel": "Abbrechen",
-    "changeAvatar": "Try another avatar",
     "create": "Erstellen",
     "delete": "Löschen",
-    "deleteBody": "Dies löscht {{name}} und seinen Chat. Das kann nicht rückgängig gemacht werden.",
-    "deleteBot": "Bot löschen",
-    "deleteError": "Der Bot konnte nicht gelöscht werden.",
-    "deleteTitle": "Bot löschen",
-    "descriptionLabel": "Mission",
-    "descriptionPlaceholder": "Was soll dieser Bot für dich tun?",
-    "descriptionRequired": "Eine Mission ist erforderlich.",
-    "editBot": "Bot bearbeiten",
-    "editTitle": "Bot bearbeiten",
-    "emptyDescription": "Erstelle einen benannten Bot mit eigener Mission und einem Chat, der seinen Verlauf behält.",
-    "emptyTitle": "Noch keine Bots",
-    "home": {
-      "categories": {
-        "featured": "Featured",
-        "finance": "Finance",
-        "marketing": "Marketing",
-        "personal-assistant": "Personal Assistant",
-        "productivity": "Productivity",
-        "recruiting": "Recruiting",
-        "research": "Research",
-        "social-media": "Social Media"
-      },
-      "categoriesLabel": "Template categories",
-      "createCta": "Create Bot",
-      "getStarted": "Los geht's",
-      "heading": "Create your",
-      "headingAccent": "Bot",
-      "namePlaceholder": "Neuer Bot",
-      "subtitle": "Name your bot and get started in seconds.",
-      "suggestions": "Vorschläge",
-      "templatesDivider": "Or start with a template"
-    },
-    "modelDefault": "App default",
-    "modelHelp": "The model this bot's chat runs on. Bots do well on cheap models: the bot loop is built for them.",
-    "modelLabel": "Model",
-    "nameLabel": "Name",
-    "namePlaceholder": "z. B. Scout",
-    "nameRequired": "Ein Name ist erforderlich.",
-    "newBot": "Neuer Bot",
-    "newDialog": {
-      "checkIn": {
-        "daily": "Daily",
-        "hourly": "Hourly",
-        "off": "Off",
-        "weekdays": "Weekdays",
-        "weekly": "Weekly"
-      },
-      "checkInDayLabel": "Day",
-      "checkInError": "The bot was created, but its check-in could not be scheduled. Add one under Routines.",
-      "checkInHelp": "The bot wakes up on this schedule and messages you proactively.",
-      "checkInLabel": "Scheduled check-ins",
-      "checkInRoutineName": "{{name}} check-in",
-      "checkInTimeLabel": "Time",
-      "descriptionLabel": "Description (optional)",
-      "descriptionPlaceholder": "Keeps track of my research topics",
-      "instructionsLabel": "Instructions",
-      "instructionsPlaceholder": "You are a sharp, concise research assistant. Track topics I mention and proactively surface updates.",
-      "moreOptions": "More options: description, scheduled check-ins, model",
-      "namePlaceholder": "Research Buddy",
-      "title": "New bot"
-    },
-    "personaLabel": "Persona",
-    "personaPlaceholder": "Dry wit, brutally concise, calls me \"boss\", opens with a single emoji",
     "pin": "Pin",
-    "pinned": "Pinned",
-    "saveError": "Der Bot konnte nicht gespeichert werden.",
     "senderChat": "Auto-Antwort-Chat mit {{sender}} auf {{platform}}",
-    "senderChatReadOnly": "Auto-Antwort-Unterhaltung: {{bot}} antwortet {{sender}} hier in Ihrem Namen. Sie können mitlesen, aber nicht schreiben; Anweisungen geben Sie {{bot}} im eigenen Chat.",
     "title": "Bots",
-    "titleLabel": "Rolle",
-    "titlePlaceholder": "z. B. Research Scout",
-    "unpin": "Unpin",
-    "viewBots": "Bots",
-    "viewSessions": "Sitzungen",
-    "channelChatReadOnly": "This conversation lives in {{app}}. Message the Abacus AI bot there. Everything you and the bot say shows up here.",
-    "channelChatReadOnlyWhatsapp": "This conversation lives in WhatsApp. Message yourself there, from your “Message yourself” chat. Everything you and the bot say shows up here.",
     "wallpaper": {
       "title": "Chat-Hintergrund",
       "none": "Keiner",
@@ -1652,18 +1557,14 @@
   "sessions": {
     "yesterday": "Yesterday",
     "page": {
-      "newTitle": "Neue Sitzung",
-      "newDescription": "Pick a folder and tell the agent what to do.",
-      "sessionTitle": "Session",
-      "sessionDescription": "The conversation opens here in a coming update.",
-      "reviewTitle": "Review changes",
-      "reviewDescription": "Keep or undo what the agent changed."
+      "newTitle": "Neue Sitzung"
     },
     "sidebar": {
       "label": "Sitzungen",
       "new": "Neue Sitzung",
       "pinned": "Angeheftet",
       "empty": "Noch keine Sitzungen",
+      "noMatches": "No sessions match",
       "search": "Sitzungen durchsuchen…",
       "actions": "Session actions for {{name}}",
       "rename": "Rename session",
@@ -1889,19 +1790,7 @@
       "openTerminal": "Open in Terminal"
     },
     "delete": "Delete session",
-    "deleteBody": "“{{label}}” and its transcript are deleted. This cannot be undone.",
-    "deleteError": "Could not delete that session. Try again.",
-    "deleteTitle": "Delete this session?",
-    "emptyDescription": "Starte eine Sitzung, um mit dem Agenten in einem Ordner deiner Wahl zu arbeiten.",
-    "emptyTitle": "Noch keine Sitzungen",
-    "newSession": "New session",
-    "pin": "Pin",
-    "pinned": "Pinned",
-    "sessionOptions": "Session options",
     "title": "Sessions",
-    "unpin": "Unpin",
-    "today": "Today",
-    "daysAgo": "{{count}} days ago",
     "drafts": {
       "heading": "Drafts",
       "untitled": "Untitled draft",
@@ -2797,8 +2686,6 @@
       "stop": "Stoppen",
       "uploading": "Wait for the attachments to finish saving",
       "pasteUnavailable": "Pasting files isn't available here",
-      "botPlaceholder": "Nachricht an {{name}}",
-      "dictateSoon": "Dictation arrives soon",
       "modes": "Berechtigungsmodi",
       "noModels": "Keine passenden Modelle",
       "onThisMachine": "Auf diesem Gerät",
@@ -2834,9 +2721,7 @@
       "discard": "Discard",
       "notSent": "Not sent",
       "retry": "Erneut versuchen",
-      "sending": "Sending",
-      "workedThrough_one": "Worked through {{count}} step",
-      "workedThrough_other": "Worked through {{count}} steps"
+      "sending": "Sending"
     },
     "mode": {
       "ACCEPTEDITS": "Auto-accept edits",
@@ -3041,8 +2926,42 @@
       "summaryOther_other": "Used {{count}} tools",
       "summaryOtherActive_one": "Using {{count}} tool",
       "summaryOtherActive_other": "Using {{count}} tools",
+      "summaryBrowser_one": "Used the browser",
+      "summaryBrowser_other": "Used the browser {{count}} times",
+      "summaryBrowserActive_one": "Using the browser",
+      "summaryBrowserActive_other": "Using the browser {{count}} times",
+      "summaryMcp_one": "Called {{count}} connected tool",
+      "summaryMcp_other": "Called {{count}} connected tools",
+      "summaryMcpActive_one": "Calling {{count}} connected tool",
+      "summaryMcpActive_other": "Calling {{count}} connected tools",
+      "summaryPlan_one": "Updated the plan",
+      "summaryPlan_other": "Updated the plan {{count}} times",
+      "summaryPlanActive_one": "Updating the plan",
+      "summaryPlanActive_other": "Updating the plan {{count}} times",
+      "summaryAsk_one": "Asked {{count}} question",
+      "summaryAsk_other": "Asked {{count}} questions",
+      "summaryAskActive_one": "Asking {{count}} question",
+      "summaryAskActive_other": "Asking {{count}} questions",
+      "summarySubagent_one": "Delegated {{count}} task",
+      "summarySubagent_other": "Delegated {{count}} tasks",
+      "summarySubagentActive_one": "Delegating {{count}} task",
+      "summarySubagentActive_other": "Delegating {{count}} tasks",
+      "summaryPresent_one": "Presented {{count}} deliverable",
+      "summaryPresent_other": "Presented {{count}} deliverables",
+      "summaryPresentActive_one": "Presenting {{count}} deliverable",
+      "summaryPresentActive_other": "Presenting {{count}} deliverables",
+      "summaryCreate_one": "Built {{count}} file",
+      "summaryCreate_other": "Built {{count}} files",
+      "summaryCreateActive_one": "Building {{count}} file",
+      "summaryCreateActive_other": "Building {{count}} files",
       "summaryFailed_one": "{{count}} failed",
       "summaryFailed_other": "{{count}} failed",
+      "summaryNeedsYou_one": "{{count}} needs approval",
+      "summaryNeedsYou_other": "{{count}} need approval",
+      "summaryStopped_one": "{{count}} stopped",
+      "summaryStopped_other": "{{count}} stopped",
+      "summaryRefused_one": "{{count}} refused",
+      "summaryRefused_other": "{{count}} refused",
       "bashEarlierHidden_one": "{{count}} earlier line hidden",
       "bashEarlierHidden_other": "{{count}} earlier lines hidden",
       "bashNoOutput": "(no output)",

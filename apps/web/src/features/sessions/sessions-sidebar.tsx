@@ -237,18 +237,27 @@ export const SessionsSidebar = () => {
         ) : status === "loading" ? (
           <NavList.Skeleton />
         ) : pinned.length === 0 && groups.length === 0 && needs.length === 0 ? (
-          <NavList.Empty
-            media={<AppIcon name="sessions" size={28} />}
-            title={t("sessions.sidebar.empty")}
-            description={t("sessions.sidebar.emptyDescription", {
-              key:
-                uiPlatform(
-                  document.documentElement.dataset.platform ?? "linux"
-                ) === "mac"
-                  ? "⌘N"
-                  : "Ctrl+N",
-            })}
-          />
+          query.trim() !== "" ? (
+            <p
+              role="status"
+              className="text-muted-foreground px-2 pt-4 text-center text-xs"
+            >
+              {t("sessions.sidebar.noMatches")}
+            </p>
+          ) : (
+            <NavList.Empty
+              media={<AppIcon name="sessions" size={28} />}
+              title={t("sessions.sidebar.empty")}
+              description={t("sessions.sidebar.emptyDescription", {
+                key:
+                  uiPlatform(
+                    document.documentElement.dataset.platform ?? "linux"
+                  ) === "mac"
+                    ? "⌘N"
+                    : "Ctrl+N",
+              })}
+            />
+          )
         ) : (
           <div className="ui-list flex flex-col gap-0.5">
             {needs.length ? (

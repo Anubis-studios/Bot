@@ -473,6 +473,74 @@ describe("R2-T25 composer", () => {
     ).toBeTruthy();
   });
 
+  it("Enter with an open but empty `@` menu sends instead of inserting a newline", async () => {
+    const relay = new FakeRelay();
+    relay.emitAll(b.sessionReady());
+    current = await renderRelay(relay, "session", {
+      mentions: { search: async () => [] },
+    });
+    await waitFor(() => expect(composer()).toBeTruthy());
+    const textarea = field() as HTMLTextAreaElement;
+    fireEvent.change(textarea, {
+      target: { value: "look @zzz", selectionStart: 9 },
+    });
+    fireEvent.keyDown(textarea, { key: "Enter" });
+    await waitFor(() => expect(relay.stats.send).toHaveLength(1));
+  });
+
+  it("the `@` menu is a combobox with a described active option", async () => {
+    const relay = new FakeRelay();
+    relay.emitAll(b.sessionReady());
+    current = await renderRelay(relay, "session", {
+      mentions: { search: async () => ["src/a.ts", "src/b.ts"] },
+    });
+    await waitFor(() => expect(composer()).toBeTruthy());
+    const textarea = field() as HTMLTextAreaElement;
+    fireEvent.change(textarea, {
+      target: { value: "@src", selectionStart: 4 },
+    });
+    const options = await screen.findAllByRole("option");
+    expect(options).toHaveLength(2);
+    await waitFor(() =>
+      expect(textarea.getAttribute("aria-activedescendant")).toBe(
+        options[0]!.id
+      )
+    );
+    expect(textarea.getAttribute("role")).toBe("combobox");
+    fireEvent.keyDown(textarea, { key: "ArrowDown" });
+    await waitFor(() =>
+      expect(textarea.getAttribute("aria-activedescendant")).toBe(
+        options[1]!.id
+      )
+    );
+  });
+
+  it("prompt history keeps the typed draft and restores it past the newest entry", async () => {
+    const relay = new FakeRelay();
+    relay.emitAll(b.sessionReady());
+    current = await renderRelay(relay, "session", {
+      history: { list: async () => ["older", "newer"], add: async () => {} },
+    });
+    await waitFor(() => expect(composer()).toBeTruthy());
+    const textarea = field() as HTMLTextAreaElement;
+    // Up with a typed draft but the caret mid-text moves the caret, not history.
+    fireEvent.change(textarea, {
+      target: { value: "draft", selectionStart: 5 },
+    });
+    textarea.setSelectionRange(2, 2);
+    fireEvent.keyDown(textarea, { key: "ArrowUp" });
+    expect(textarea.value).toBe("draft");
+    textarea.setSelectionRange(0, 0);
+    fireEvent.keyDown(textarea, { key: "ArrowUp" });
+    await waitFor(() => expect(textarea.value).toBe("newer"));
+    fireEvent.keyDown(textarea, { key: "ArrowUp" });
+    await waitFor(() => expect(textarea.value).toBe("older"));
+    fireEvent.keyDown(textarea, { key: "ArrowDown" });
+    await waitFor(() => expect(textarea.value).toBe("newer"));
+    fireEvent.keyDown(textarea, { key: "ArrowDown" });
+    await waitFor(() => expect(textarea.value).toBe("draft"));
+  });
+
   it("pasted files are saved under the attachments base", async () => {
     const relay = new FakeRelay();
     relay.emitAll(b.sessionReady());
