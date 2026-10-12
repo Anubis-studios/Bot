@@ -118,6 +118,7 @@ export const SessionStartResources = ({
             <div className="flex min-h-0 flex-1 flex-col">
               {active.path ? (
                 <SessionFilePreview
+                  inTab
                   root={workspace.path}
                   path={active.path}
                   renderLocal={(file) => (

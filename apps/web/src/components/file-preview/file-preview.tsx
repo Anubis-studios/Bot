@@ -2,8 +2,18 @@ import type { PptxDeck } from "@abacus-ai/contract/pptx";
 /** Read-only file preview. PPTX uses authored slide geometry; local PDF/HTML
  * URLs come from the caller's host file boundary before the viewer loads. */
 import { TextPart } from "@tanstack/ai-react/ui";
-import { ExternalLink, FolderOpen } from "lucide-react";
-import { useEffect, useEffectEvent, useState } from "react";
+import {
+  Check,
+  Code,
+  Copy,
+  Download,
+  ExternalLink,
+  Eye,
+  FolderOpen,
+  MoreHorizontal,
+  type LucideIcon,
+} from "lucide-react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -12,9 +22,21 @@ import {
   previewSize,
   downloadFile,
 } from "#platform/preview-files";
+import {
+  ACTION_BUTTON_CLASS,
+  ACTION_ICON_CLASS,
+  ACTION_ICON_STROKE,
+} from "#renderer/components/message-feedback";
 import { highlightFile, toFileUrl } from "#renderer/lib/file-highlight";
 import { Button } from "#renderer/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "#renderer/ui/dropdown-menu";
 import { Skeleton } from "#renderer/ui/skeleton";
+import { Tooltip, TooltipContent, TooltipTrigger } from "#renderer/ui/tooltip";
 
 import { previewKind } from "./paths";
 import { PptxSlides } from "./pptx-slides";
@@ -38,6 +60,8 @@ export interface FilePreviewProps {
   onOpenExternally?(path: string): void;
   onReveal?(path: string): void;
   showActions?: boolean;
+  /** The surrounding tab already shows the file name. */
+  hideTitle?: boolean;
   initialView?: "source" | "preview";
 }
 
@@ -51,6 +75,17 @@ type Loaded =
   | { state: "slides"; deck: PptxDeck }
   | { state: "local"; url: string };
 
+interface HeaderAction {
+  key: string;
+  label: string;
+  icon: LucideIcon;
+  run(): void;
+}
+
+/** Below this pane width the header actions collapse into one menu. */
+const COMPACT_WIDTH = 240;
+const noop = () => undefined;
+
 const baseName = (path: string): string => path.split(/[\\/]/).pop() ?? path;
 
 export const FilePreview = ({
@@ -60,6 +95,7 @@ export const FilePreview = ({
   onOpenExternally,
   onReveal,
   showActions = true,
+  hideTitle = false,
   initialView = "source",
 }: FilePreviewProps) => {
   const { t } = useTranslation();
@@ -72,6 +108,23 @@ export const FilePreview = ({
     htmlChoice?.key === htmlKey
       ? htmlChoice.preview
       : initialView === "preview";
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [compact, setCompact] = useState(false);
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(([entry]) =>
+      setCompact((entry?.contentRect.width ?? COMPACT_WIDTH) < COMPACT_WIDTH)
+    );
+    observer.observe(root);
+    return () => observer.disconnect();
+  }, []);
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 1500);
+    return () => clearTimeout(timer);
+  }, [copied]);
   const [attempt, setAttempt] = useState(0);
   const [downloadFailure, setDownloadFailure] = useState<string | null>(null);
   const kind =
@@ -168,70 +221,133 @@ export const FilePreview = ({
     };
   }, [key, kind]);
 
-  const actions = (
-    <div className="flex shrink-0 flex-wrap items-center gap-1">
-      {browserPreview && (
-        <>
-          {previewKind(path) === "html" && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() =>
-                setHtmlChoice({ key: htmlKey, preview: !htmlPreview })
-              }
-            >
-              {t(htmlPreview ? "web.files.source" : "web.files.preview")}
-            </Button>
-          )}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              setDownloadFailure(null);
-              void downloadFile({ filePath: path, hostRoot }).catch(() =>
-                setDownloadFailure(key)
-              );
-            }}
-          >
-            {t("web.files.download")}
-          </Button>
-        </>
-      )}
-      {onReveal != null && (
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label={t("bots.chat.deliverables.showInFolder")}
-          onClick={() => onReveal(path)}
-        >
-          <FolderOpen />
-        </Button>
-      )}
-      {onOpenExternally && (
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label={t("bots.chat.preview.openExternally")}
-          onClick={() => onOpenExternally?.(path)}
-        >
-          <ExternalLink />
-        </Button>
-      )}
-    </div>
-  );
+  const actions: HeaderAction[] = [];
+  if (browserPreview && previewKind(path) === "html")
+    actions.push({
+      key: "html",
+      label: t(htmlPreview ? "web.files.source" : "web.files.preview"),
+      icon: htmlPreview ? Code : Eye,
+      run: () => setHtmlChoice({ key: htmlKey, preview: !htmlPreview }),
+    });
+  if (browserPreview)
+    actions.push({
+      key: "download",
+      label: t("web.files.download"),
+      icon: Download,
+      run: () => {
+        setDownloadFailure(null);
+        void downloadFile({ filePath: path, hostRoot }).catch(() =>
+          setDownloadFailure(key)
+        );
+      },
+    });
+  if (showActions) {
+    if (onOpenExternally)
+      actions.push({
+        key: "open",
+        label: t("bots.chat.preview.openExternally"),
+        icon: ExternalLink,
+        run: () => onOpenExternally(path),
+      });
+    if (onReveal)
+      actions.push({
+        key: "reveal",
+        label: t("bots.chat.deliverables.showInFolder"),
+        icon: FolderOpen,
+        run: () => onReveal(path),
+      });
+    if (typeof navigator !== "undefined" && navigator.clipboard)
+      actions.push({
+        key: "copy",
+        label: t(copied ? "artifacts.copied" : "artifacts.copyPath"),
+        icon: copied ? Check : Copy,
+        run: () =>
+          void navigator.clipboard
+            .writeText(path)
+            .then(() => setCopied(true), noop),
+      });
+  }
+  const name = baseName(path);
+  const dir = path.slice(0, path.length - name.length);
 
   return (
     <div
+      ref={rootRef}
       className="flex h-full min-h-0 min-w-0 flex-1 flex-col"
       data-slot="file-preview"
       data-kind={kind}
     >
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b px-3 py-2">
-        <span className="w-full truncate text-sm font-medium" title={path}>
-          {baseName(path)}
-        </span>
-        {(showActions || browserPreview) && actions}
-      </div>
+      {(!hideTitle || actions.length > 0) && (
+        <div
+          data-slot="file-preview-header"
+          className="flex h-9 shrink-0 items-center gap-1 border-b ps-3 pe-1.5"
+        >
+          {!hideTitle && (
+            <span
+              className="flex min-w-0 flex-1 items-baseline gap-1.5 text-sm"
+              title={path}
+            >
+              <span className="truncate font-medium">{name}</span>
+              {dir !== "" && (
+                <bdi className="text-muted-foreground min-w-0 truncate text-xs">
+                  {dir}
+                </bdi>
+              )}
+            </span>
+          )}
+          {hideTitle && <span className="flex-1" />}
+          {actions.length > 0 &&
+            (compact ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={ACTION_BUTTON_CLASS}
+                      aria-label={t("workspace.preview.moreActions")}
+                    />
+                  }
+                >
+                  <MoreHorizontal aria-hidden className={ACTION_ICON_CLASS} />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {actions.map(({ key: id, label, icon: Icon, run }) => (
+                    <DropdownMenuItem key={id} onClick={run}>
+                      <Icon aria-hidden />
+                      {label}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <div className="flex shrink-0 items-center gap-0.5">
+                {actions.map(({ key: id, label, icon: Icon, run }) => (
+                  <Tooltip key={id}>
+                    <TooltipTrigger
+                      render={
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className={ACTION_BUTTON_CLASS}
+                          aria-label={label}
+                          onClick={run}
+                        />
+                      }
+                    >
+                      <Icon
+                        aria-hidden
+                        className={ACTION_ICON_CLASS}
+                        strokeWidth={ACTION_ICON_STROKE}
+                      />
+                    </TooltipTrigger>
+                    <TooltipContent>{label}</TooltipContent>
+                  </Tooltip>
+                ))}
+              </div>
+            ))}
+        </div>
+      )}
       <div
         className={
           loaded.state === "local"
@@ -286,13 +402,35 @@ export const FilePreview = ({
             )}
           </div>
         ) : loaded.state === "unsupported" ? (
-          <p role="status" className="text-muted-foreground">
-            {t("bots.chat.preview.noViewer")}
-          </p>
+          <div className="flex flex-col items-start gap-2" role="status">
+            <p className="text-muted-foreground">
+              {t("bots.chat.preview.noViewer")}
+            </p>
+            {onOpenExternally && (
+              <Button
+                variant="secondary"
+                onClick={() => onOpenExternally(path)}
+              >
+                {t("bots.chat.preview.openExternally")}
+              </Button>
+            )}
+          </div>
         ) : loaded.state === "binary" ? (
-          <p role="status" className="text-muted-foreground">
-            {t("web.files.binary", { size: loaded.sizeBytes.toLocaleString() })}
-          </p>
+          <div className="flex flex-col items-start gap-2" role="status">
+            <p className="text-muted-foreground">
+              {t("web.files.binary", {
+                size: loaded.sizeBytes.toLocaleString(),
+              })}
+            </p>
+            {onOpenExternally && (
+              <Button
+                variant="secondary"
+                onClick={() => onOpenExternally(path)}
+              >
+                {t("bots.chat.preview.openExternally")}
+              </Button>
+            )}
+          </div>
         ) : loaded.state === "image" ? (
           <img
             src={loaded.src}

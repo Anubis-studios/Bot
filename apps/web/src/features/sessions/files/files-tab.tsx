@@ -53,8 +53,11 @@ export const SessionFilePreview = ({
   path,
   renderLocal,
   preview = false,
+  inTab = preview,
 }: {
   preview?: boolean;
+  /** Rendered in a dock tab that already shows the file name. */
+  inTab?: boolean;
   root: string;
   path: string;
   renderLocal: (path: string) => ReactNode;
@@ -75,6 +78,7 @@ export const SessionFilePreview = ({
     return <>{renderLocal(absolute)}</>;
   return (
     <FilePreview
+      hideTitle={inTab}
       initialView={preview ? "preview" : "source"}
       path={absolute}
       hostRoot={hostRoot}
@@ -98,6 +102,11 @@ export const SessionFilePreview = ({
       onOpenExternally={
         IS_ELECTRON
           ? (path) => void transport.client.system.openPath({ path })
+          : undefined
+      }
+      onReveal={
+        IS_ELECTRON
+          ? (path) => void transport.client.system.showItemInFolder({ path })
           : undefined
       }
     />

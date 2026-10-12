@@ -273,3 +273,73 @@ describe("DeliverablesCard", () => {
     expect(open).toHaveBeenCalledWith(items[1]);
   });
 });
+
+describe("FilePreview header", () => {
+  const read = {
+    text: async () => ({ content: "hi", truncated: false }),
+    image: async () => "data:",
+  };
+
+  it("is one row with the name, its directory and icon actions", async () => {
+    const open = vi.fn();
+    const reveal = vi.fn();
+    vi.stubGlobal("navigator", {
+      ...navigator,
+      clipboard: { writeText: vi.fn(async () => undefined) },
+    });
+    const { container } = render(
+      <FilePreview
+        path="/w/dir/theme.scss"
+        hostRoot="/w"
+        read={read}
+        onOpenExternally={open}
+        onReveal={reveal}
+      />
+    );
+    await screen.findByText("hi");
+    const header = container.querySelector("[data-slot=file-preview-header]")!;
+    expect(header.textContent).toContain("theme.scss");
+    expect(header.textContent).toContain("/w/dir/");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open with default app" })
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Show in folder" }));
+    expect(open).toHaveBeenCalledWith("/w/dir/theme.scss");
+    expect(reveal).toHaveBeenCalledWith("/w/dir/theme.scss");
+    expect(screen.getByRole("button", { name: "Copy path" })).toBeTruthy();
+    vi.unstubAllGlobals();
+  });
+
+  it("hides the title in a tab but keeps the actions", async () => {
+    render(
+      <FilePreview
+        path="/w/theme.scss"
+        hostRoot="/w"
+        read={read}
+        hideTitle
+        onOpenExternally={vi.fn()}
+      />
+    );
+    await screen.findByText("hi");
+    expect(screen.queryByText("theme.scss")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Open with default app" })
+    ).toBeTruthy();
+  });
+
+  it("renders no header when a tab has nothing to act on", async () => {
+    const { container } = render(
+      <FilePreview
+        path="/w/a.txt"
+        hostRoot="/w"
+        read={read}
+        hideTitle
+        showActions={false}
+      />
+    );
+    await screen.findByText("hi");
+    expect(
+      container.querySelector("[data-slot=file-preview-header]")
+    ).toBeNull();
+  });
+});
