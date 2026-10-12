@@ -7,7 +7,7 @@
 import type { UIMessage } from "@tanstack/ai-client";
 import type { SubagentProps } from "@tanstack/ai-react/ui";
 import { ChevronRight, ExternalLink, Square } from "lucide-react";
-import { type ComponentType } from "react";
+import { type ComponentType, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { cn } from "#renderer/lib/cn";
@@ -19,21 +19,22 @@ import {
 } from "#renderer/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "#renderer/ui/tooltip";
 
+import { Markdown } from "../../markdown/markdown";
 import { useToolWindow } from "../../scroller/row-context";
 import { useThreadStore } from "../../store/selectors";
 import { formatElapsed, useSeconds } from "../clock";
 import { SubagentScope, useChatView } from "../context";
 import { toolTitle } from "../tools/tool-line";
-import { narrationLines, subagentEnding } from "./summary";
+import { narrationLines, subagentEnding, subagentReport } from "./summary";
 
-const stepsOf = (messages: readonly UIMessage[]): number =>
+export const stepsOf = (messages: readonly UIMessage[]): number =>
   messages.reduce(
     (count, message) =>
       count + message.parts.filter((part) => part.type === "tool-call").length,
     0
   );
 
-const latestTool = (messages: readonly UIMessage[]): string | null => {
+export const latestTool = (messages: readonly UIMessage[]): string | null => {
   for (let m = messages.length - 1; m >= 0; m -= 1) {
     const parts = messages[m]!.parts;
     for (let p = parts.length - 1; p >= 0; p -= 1) {
@@ -48,7 +49,7 @@ const latestTool = (messages: readonly UIMessage[]): string | null => {
   return null;
 };
 
-const KIND_KEYS: Record<string, string> = {
+export const KIND_KEYS: Record<string, string> = {
   delegate: "chat.subagent.kind.delegate",
   browser: "chat.subagent.kind.browser",
   component: "chat.subagent.kind.component",
@@ -67,7 +68,11 @@ export const SubagentCard = (props: SubagentProps<unknown>) => {
 };
 const MountedSubagentCard = ({ subagent, Parts }: SubagentProps<unknown>) => {
   const { t } = useTranslation();
-  const { runtime, threadId, session, onOpenSubagent } = useChatView();
+  const { runtime, threadId, session, onOpenSubagent, skin, workspaceRoot } =
+    useChatView();
+  // A bot has no Agents surface: its sub-agent works in the thread, open, as
+  // the old BotSubtaskThread did. A session card starts collapsed.
+  const [open, setOpen] = useState(skin === "bot");
   const running =
     subagent.status === "running" || subagent.status === "suspended";
   const now = useSeconds(running);
@@ -83,7 +88,10 @@ const MountedSubagentCard = ({ subagent, Parts }: SubagentProps<unknown>) => {
   const ending = subagentEnding(
     subagent as Parameters<typeof subagentEnding>[0]
   );
-  const narration = running ? narrationLines(subagent.messages) : [];
+  const narration = running && !open ? narrationLines(subagent.messages) : [];
+  const report = open
+    ? null
+    : subagentReport(subagent as Parameters<typeof subagentReport>[0]);
   const sub = running
     ? [
         latestTool(subagent.messages),
@@ -104,6 +112,8 @@ const MountedSubagentCard = ({ subagent, Parts }: SubagentProps<unknown>) => {
     <Collapsible
       data-slot="subagent-row"
       data-status={subagent.status}
+      open={open}
+      onOpenChange={setOpen}
       className="rounded-xl bg-[var(--chat-surface-2)] [&+[data-slot=subagent-row]]:-mt-1"
     >
       <div className="flex min-h-13 items-center gap-3 px-3">
@@ -176,6 +186,15 @@ const MountedSubagentCard = ({ subagent, Parts }: SubagentProps<unknown>) => {
             </li>
           ))}
         </ul>
+      ) : null}
+      {report != null ? (
+        <div data-slot="subagent-report" className="min-w-0 px-4 pb-3 text-sm">
+          <Markdown
+            content={report}
+            role="assistant"
+            workspaceRoot={workspaceRoot}
+          />
+        </div>
       ) : null}
       <CollapsibleContent className="flex flex-col gap-1 px-4 pb-3">
         <SubagentScope value={subagent.id}>

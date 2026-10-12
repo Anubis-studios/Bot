@@ -84,7 +84,10 @@ const PATH_TOOLS = new Set([
   "write",
   "edit",
   "ast_edit",
+  "batch_edit",
   "notebook_edit",
+  "delete",
+  "apply_patch",
   "ls",
 ]);
 

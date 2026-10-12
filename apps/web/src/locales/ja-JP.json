@@ -3070,6 +3070,9 @@
       "componentPreviewActive": "Opening preview",
       "componentPreviewDone": "Opened preview",
       "componentOpenFile": "Open {{name}} in preview",
+      "componentServeActive": "Serving",
+      "componentServeDone": "Served",
+      "showMoreOutput": "Show {{count}} more characters",
       "askWaiting": "Waiting for a response…",
       "askSkipped": "Skipped"
     },
@@ -3115,7 +3118,11 @@
       "connected": "接続しました。モデルを選択してください",
       "storedOnHost": "キーはホストの仮想マシンに保存されます。"
     },
-    "imageEnlarge": "拡大表示"
+    "imageEnlarge": "拡大表示",
+    "visualizer": {
+      "title": "Interactive visual",
+      "drawing": "Drawing the visual"
+    }
   },
   "notch": {
     "a11y": {

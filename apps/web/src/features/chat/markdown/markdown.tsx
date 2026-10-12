@@ -22,18 +22,22 @@ import {
 import { useTranslation } from "react-i18next";
 
 import { cn } from "#renderer/lib/cn";
+import { updateDraft } from "#renderer/lib/continuity/composer-drafts";
 import { IS_ELECTRON } from "#renderer/lib/platform";
 import { Button } from "#renderer/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "#renderer/ui/tooltip";
 
+import { useOptionalChatView } from "../kit/context";
 import { ZoomableImage } from "../kit/image-lightbox";
 import { useMessageScope } from "../kit/message-scope";
 import { useCodeHighlighter } from "./highlighter";
+import { linkifyKnownFiles, useKnownFiles } from "./known-files";
 import { AUTOLINK_TITLE, replyLinks } from "./links";
 import { renderMath, useMathVersion } from "./math";
 import { MATH_SENTINEL, pathFromHref, prepass } from "./prepass";
 import { ReplyLink } from "./reply-link";
 import { SelectableText } from "./selection";
+import { Visualizer } from "./visualizer";
 
 interface MarkdownLinks {
   openFile(absPath: string): void;
@@ -115,6 +119,9 @@ export const ChatLink = ({ href, children, ...rest }: ComponentProps<"a">) => {
   );
 };
 
+const escapeHtml = (text: string): string =>
+  text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
 const safeDecode = (value: string): string => {
   try {
     return decodeURIComponent(value);
@@ -144,6 +151,35 @@ const innerHtmlOf = (children: ReactNode): string | null => {
   return html ?? null;
 };
 
+/** The highlighter returns the escaped source; decode it back to HTML text. */
+const unescapeHtml = (html: string): string =>
+  new DOMParser().parseFromString(html, "text/html").documentElement
+    .textContent ?? "";
+
+const VisualizerBlock = ({
+  html,
+  streaming,
+}: {
+  html: string;
+  streaming: boolean;
+}) => {
+  const links = use(LinksContext);
+  const threadId = useOptionalChatView()?.threadId;
+  const code = unescapeHtml(html).replace(/\n$/, "");
+  return (
+    <Visualizer
+      code={code}
+      streaming={streaming}
+      onOpenLink={links.openExternal}
+      // The widget proposes a prompt; the user reviews and sends it.
+      onPrompt={(text) => {
+        if (threadId != null)
+          updateDraft(threadId, (current) => ({ ...current, text }));
+      }}
+    />
+  );
+};
+
 const CodeBlock = (props: ComponentProps<"pre"> & { "data-lang"?: string }) => {
   const { t } = useTranslation();
   const streaming = use(StreamingContext);
@@ -168,6 +204,8 @@ const CodeBlock = (props: ComponentProps<"pre"> & { "data-lang"?: string }) => {
         dangerouslySetInnerHTML={{ __html: html ?? "" }}
       />
     );
+  if (lang === "visualizer")
+    return <VisualizerBlock html={html ?? ""} streaming={streaming} />;
   const lines = (html ?? "").split("\n").length;
   const collapsible = lines > COLLAPSE_LINES + 1;
   const copy = () => {
@@ -286,13 +324,20 @@ export const Markdown = ({
   const mathVersion = useMathVersion();
   const codeHighlighter = useCodeHighlighter();
   const highlight = (...args: Parameters<typeof codeHighlighter>) =>
-    args[1] === "math" ? renderMath(args[0], true) : codeHighlighter(...args);
+    args[1] === "math"
+      ? renderMath(args[0], true)
+      : args[1] === "visualizer"
+        ? escapeHtml(args[0])
+        : codeHighlighter(...args);
   const [selecting, setSelecting] = useState(false);
   const [retained, setRetained] = useState(content);
   if (!selecting && retained !== content) setRetained(content);
-  const source = prepass(selecting ? retained : content, {
-    workspaceRoot,
-  });
+  const knownFiles = useKnownFiles(useOptionalChatView()?.threadId);
+  const text = selecting ? retained : content;
+  const source = prepass(
+    role === "assistant" ? linkifyKnownFiles(text, knownFiles) : text,
+    { workspaceRoot }
+  );
   const rendered = (
     <ReplyContext value={reply && role === "assistant"}>
       <StreamingContext value={streaming}>

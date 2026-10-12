@@ -3,11 +3,13 @@ import {
   type ConversationKey,
 } from "@abacus-ai/contract/conversation-scope";
 
+import { hasInAppViewer } from "#renderer/components/file-preview";
 import type { Db } from "#renderer/data/db";
 import { isListedSession } from "#renderer/data/db/filters";
 
 import { isRelativePath } from "../data/search";
 import { markSessionUnread } from "../data/unread-store";
+import { hasAgentBrowserTab } from "../dock/agent-browser";
 import { openTab, panelTabsStore } from "../dock/panel-tabs-store";
 export const recordBackgroundPreview = (
   db: Db,
@@ -30,6 +32,10 @@ export const recordBackgroundPreview = (
       ? event.path.slice(root.length + 1)
       : event.path;
   if (path && !isRelativePath(path)) return;
+  // Never a tab for what the panel cannot show; never a second view of the
+  // agent's own browser.
+  if (path && !hasInAppViewer(path)) return;
+  if (!path && (!url || hasAgentBrowserTab(event.conversationKey))) return;
   const existing = panelTabsStore.state[event.conversationKey]?.tabs.find(
     (tab) => (path ? tab.path === path : tab.url === url)
   );

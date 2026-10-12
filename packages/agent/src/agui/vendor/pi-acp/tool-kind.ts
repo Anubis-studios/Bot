@@ -24,13 +24,19 @@ export function toToolKind(toolName: string): ToolKind {
     case "read":
     case "batch_file_read":
     case "ls":
+    case "read_output":
+    case "fetch_background_output":
       return "read";
     case "write":
     case "edit":
     case "ast_edit":
     case "batch_edit":
+    case "apply_patch":
       return "edit";
+    case "delete":
+      return "delete";
     case "bash":
+    case "kill_process":
       return "execute";
     case "grep":
     case "find":

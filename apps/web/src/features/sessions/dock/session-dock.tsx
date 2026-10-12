@@ -211,6 +211,7 @@ export const SessionDock = ({
       transition: "none",
     });
   };
+  const normalizeSelection = useEffectEvent(select);
   const close = (ref: string) => {
     if (ref === "chat") return;
     if (ref.startsWith("terminal:")) {
@@ -253,11 +254,20 @@ export const SessionDock = ({
         if (event.type === "snapshot") {
           reconcileTerminals(key, event.states, t("sessions.dock.terminal"));
           setTerminalSnapshot(key);
-        } else
+        } else {
+          // An agent's terminal appears without taking the focus.
+          const previous = panelTabsStore.state[key]?.last;
           openTab(key, {
             ref: `terminal:${event.state.terminalId}`,
             title: t("sessions.dock.terminal"),
           });
+          if (previous)
+            updateTabs(key, (s) =>
+              s.tabs.some((tab) => tab.ref === previous)
+                ? { ...s, last: previous }
+                : s
+            );
+        }
       },
       abort.signal
     );
@@ -267,18 +277,15 @@ export const SessionDock = ({
         ({ signal }) =>
           transport.client.browser.events({ conversationKey: key }, { signal }),
         (event) => {
+          // The tab itself is adopted app-wide (SessionsGlobals); here the
+          // chat on screen shows it.
           if (event.type === "runtime-materialized")
-            openTab(key, {
-              ref: `browser:${event.resourceId}`,
-              title: event.url,
-              url: event.url,
-            });
+            void normalizeSelection(`browser:${event.resourceId}`);
         },
         abort.signal
       );
     return () => abort.abort();
   }, [transport, key, t]);
-  const normalizeSelection = useEffectEvent(select);
   useEffect(() => {
     if (
       active &&

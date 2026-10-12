@@ -42,3 +42,30 @@ export const narrationLines = (
   }
   return lines.slice(-max);
 };
+
+/**
+ * A finished sub-agent's report: the host's `result` when it sent one, else
+ * the text of the child's last assistant message. The parent is told not to
+ * restate it, so the thread must show it (old `SubtaskReport`).
+ */
+export const subagentReport = (subagent: {
+  status: string;
+  result?: unknown;
+  messages: readonly UIMessage[];
+}): string | null => {
+  if (subagent.status === "running" || subagent.status === "suspended")
+    return null;
+  if (typeof subagent.result === "string" && subagent.result.trim() !== "")
+    return subagent.result.trim();
+  for (let m = subagent.messages.length - 1; m >= 0; m -= 1) {
+    const message = subagent.messages[m]!;
+    if (message.role !== "assistant") continue;
+    const text = message.parts
+      .filter((part) => part.type === "text")
+      .map((part) => (part as { content: string }).content)
+      .join("")
+      .trim();
+    if (text !== "") return text;
+  }
+  return null;
+};

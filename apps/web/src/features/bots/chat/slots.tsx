@@ -2,7 +2,6 @@ import { AgentMode } from "@abacus-ai/contract/agent-types";
 import type { BotRow } from "@abacus-ai/contract/contract/rows";
 import { sessionConversationKey } from "@abacus-ai/contract/conversation-scope";
 import type { MessagingPlatformId } from "@abacus-ai/contract/messaging";
-import { detectRememberRequest } from "@abacus-ai/contract/remember";
 import { eq } from "@tanstack/db";
 import { useLiveQuery } from "@tanstack/react-db";
 import { useQuery } from "@tanstack/react-query";
@@ -16,7 +15,7 @@ import { useVisibleThread } from "#renderer/lib/navigation/visible-thread";
 import { IS_ELECTRON } from "#renderer/lib/platform";
 import { platformSystem, openSharedLink } from "#renderer/lib/platform-system";
 import { openPanelTab, panelScopeKey } from "#renderer/lib/side-panel/store";
-import { showError, showInfo } from "#renderer/lib/toast";
+import { showError } from "#renderer/lib/toast";
 import { Button } from "#renderer/ui/button";
 
 import { react } from "../avatar";
@@ -271,9 +270,7 @@ export const useBotChatSlots = (
             },
           }
         : {}),
-      onFirstSend: (text: string) => {
-        if (detectRememberRequest(text) != null)
-          showInfo(t("memory.rememberedToast"));
+      onFirstSend: () => {
         react(bot.id, "wink");
       },
       ...(readOnly

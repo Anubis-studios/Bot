@@ -20,6 +20,7 @@ import { subscribeRunFinished } from "#renderer/lib/run-finished";
 import { followSessionsSources } from "./data/live";
 import { useSessionsTransport } from "./data/queries";
 import { markSessionUnread } from "./data/unread-store";
+import { adoptAgentBrowser } from "./dock/agent-browser";
 import { recordBackgroundPreview } from "./files/preview-bridge";
 import { handleSessionRunFinished, notifySessionAsk } from "./notify";
 export const SessionsGlobals = ({
@@ -104,7 +105,13 @@ export const SessionsGlobals = ({
     const snapshots = ready();
     const unsub = subscribeRunFinished(transport, async (notice) => {
       await snapshots;
-      if (!abort.signal.aborted) finished(notice);
+      if (abort.signal.aborted) return;
+      finished(notice);
+      // The turn spent credits: refresh the pill now, not on the next poll.
+      if (notice.outcome !== "cancelled")
+        void qc.invalidateQueries({
+          queryKey: transport.orpc.account.abacus.queryKey(),
+        });
     });
     let first = true;
     const waiting = new Set<string>();
@@ -156,6 +163,8 @@ export const SessionsGlobals = ({
         (event) => {
           if (event.type === "open-preview")
             show({ conversationKey: event.conversationKey, url: event.url });
+          else if (event.type === "runtime-materialized")
+            adoptAgentBrowser(db, event, isThreadSeen);
         },
         abort.signal
       );

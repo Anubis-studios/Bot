@@ -69,7 +69,30 @@ describe("componentLine", () => {
     ).toEqual({
       action: "chat.tool.componentOpenDone",
       chip: "http://localhost:3000/app",
+      targetPath: "http://localhost:3000/app",
     });
+  });
+
+  it("labels serve with the URL from its result and opens it", () => {
+    const result = "Serving /w/site at http://127.0.0.1:4100\n\nHand it over";
+    expect(
+      componentLine(
+        "serve",
+        { action: "start", directory: "site" },
+        false,
+        t,
+        result
+      )
+    ).toEqual({
+      action: "chat.tool.componentServeDone",
+      chip: "http://127.0.0.1:4100",
+      targetPath: "http://127.0.0.1:4100",
+    });
+    expect(
+      componentLine("serve", { action: "start" }, true, t)?.targetPath
+    ).toBeUndefined();
+    expect(componentLine("serve", { action: "list" }, false, t)).toBeNull();
+    expect(isComponentTool("agent-tools_serve")).toBe(true);
   });
 
   it("recognises component tools and leaves others alone", () => {

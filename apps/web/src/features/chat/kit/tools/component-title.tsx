@@ -23,7 +23,12 @@ export const ComponentTitle = ({
   const target = line.targetPath;
   const open =
     target != null && onOpenFile != null
-      ? () => onOpenFile(resolveWorkspacePath(target, workspaceRoot))
+      ? () =>
+          onOpenFile(
+            /^https?:\/\//i.test(target)
+              ? target
+              : resolveWorkspacePath(target, workspaceRoot)
+          )
       : null;
   return (
     <span className="flex min-w-0 items-center gap-1.5">

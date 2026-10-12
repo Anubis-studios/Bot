@@ -1,4 +1,5 @@
 import type { AgentMode } from "@abacus-ai/contract/agent-types";
+import { detectRememberRequest } from "@abacus-ai/contract/remember";
 /**
  * The composer (spec 02 §8): a compound around the draft store. The bot pill
  * grows into a box on focus, text or attachments; the session box has two
@@ -41,6 +42,7 @@ import {
 import { documentSoundPlayer } from "#renderer/lib/document-sound";
 import { useMotionPreference } from "#renderer/lib/motion";
 import { useSharedElementName } from "#renderer/lib/navigation/shared-element";
+import { showInfo } from "#renderer/lib/toast";
 import { useMediaQuery } from "#renderer/lib/use-media-query";
 import type { VoiceState } from "#renderer/lib/voice/operation";
 import { useConnectedDictation } from "#renderer/lib/voice/use-dictation";
@@ -743,6 +745,8 @@ export const ThreadComposer = () => {
               )
                 clearDraft(threadId);
               config.onFirstSend?.(route.text);
+              if (detectRememberRequest(route.text) != null)
+                showInfo(t("memory.rememberedToast"));
             }
           })
           .catch((thrown: unknown) => {
@@ -1039,6 +1043,16 @@ export const ThreadComposer = () => {
         <label htmlFor={fieldId} className="sr-only">
           {config.placeholder}
         </label>
+        {view.slots.composerTasks != null ? (
+          // The tab rises from the box's top edge: centred, inset past the
+          // box's rounded corners, one px under the box so no seam shows.
+          <div
+            data-slot="composer-tab"
+            className="relative z-20 mx-auto -mb-px w-[90%] empty:hidden"
+          >
+            {view.slots.composerTasks}
+          </div>
+        ) : null}
         <motion.div
           {...morph}
           transition={surfaceTransition}

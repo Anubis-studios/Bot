@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
+import { parseImageRead } from "./image-read";
 import { humanToolName, stripLineNumbers, todoItems } from "./normalize";
+import { expanderFor } from "./tool-line";
 import { resolveWorkspacePath, toolOpenPath } from "./tool-meta";
 
 describe("tool helpers", () => {
@@ -35,5 +37,37 @@ describe("tool helpers", () => {
       "/ws/a.ts"
     );
     expect(toolOpenPath("bash", { path: "x" }, "/ws")).toBeNull();
+  });
+
+  it("opens a file chip for batch_edit, delete and apply_patch", () => {
+    for (const name of ["batch_edit", "delete", "apply_patch"])
+      expect(toolOpenPath(name, { path: "a.ts" }, "/w")).toBe("/w/a.ts");
+  });
+
+  it("hides the body of present_deliverable", () => {
+    expect(expanderFor("present_deliverable")).toBe("none");
+    expect(expanderFor("agent-tools_present_deliverable")).toBe("none");
+    expect(expanderFor("web_search")).toBe("generic");
+  });
+
+  it("recognises an image read envelope only", () => {
+    const envelope = JSON.stringify({
+      type: "read",
+      status: "success",
+      mimeType: "image/png",
+      filePath: "/w/a.png",
+      filename: "a.png",
+      size: 2048,
+    });
+    expect(parseImageRead(envelope)).toEqual({
+      filePath: "/w/a.png",
+      filename: "a.png",
+      size: 2048,
+      mimeType: "image/png",
+    });
+    expect(parseImageRead(envelope.replace("image/png", "text/plain"))).toBe(
+      null
+    );
+    expect(parseImageRead("plain text")).toBe(null);
   });
 });

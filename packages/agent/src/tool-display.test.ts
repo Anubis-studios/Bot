@@ -83,6 +83,22 @@ describe("tool-display entry", () => {
     expect(toToolKind("delegate_task")).toBe("think");
     expect(toToolKind("exit_plan_mode")).toBe("switch_mode");
     expect(toToolKind("mystery")).toBe("other");
+    expect(buildToolTitle("fetch_background_output", { id: "bg-1" })).toBe(
+      "Read background output bg-1"
+    );
+    expect(buildToolTitle("fetch_background_output", {})).toBe(
+      "List background processes"
+    );
+    expect(buildToolTitle("kill_process", { id: "bg-2" })).toBe("Stop bg-2");
+    expect(buildToolTitle("read_output", { id: "out-1" })).toBe(
+      "Read saved output out-1"
+    );
+    expect(
+      buildToolTitle("serve", { action: "start", directory: "site" })
+    ).toBe("Serve site");
+    expect(toToolKind("kill_process")).toBe("execute");
+    expect(toToolKind("read_output")).toBe("read");
+    expect(toToolKind("delete")).toBe("delete");
   });
 
   it("formats results as markdown", () => {

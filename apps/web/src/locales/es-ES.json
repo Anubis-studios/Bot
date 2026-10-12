@@ -3070,6 +3070,9 @@
       "componentPreviewActive": "Opening preview",
       "componentPreviewDone": "Opened preview",
       "componentOpenFile": "Open {{name}} in preview",
+      "componentServeActive": "Serving",
+      "componentServeDone": "Served",
+      "showMoreOutput": "Show {{count}} more characters",
       "askWaiting": "Waiting for a response…",
       "askSkipped": "Skipped"
     },
@@ -3115,7 +3118,11 @@
       "connected": "Conectado. Elige un modelo",
       "storedOnHost": "Las claves se guardan en la máquina virtual del host."
     },
-    "imageEnlarge": "Ver más grande"
+    "imageEnlarge": "Ver más grande",
+    "visualizer": {
+      "title": "Interactive visual",
+      "drawing": "Drawing the visual"
+    }
   },
   "notch": {
     "a11y": {

@@ -337,6 +337,8 @@ html[data-reduce-motion="on"] [data-message-target][data-highlighted] { animatio
 }
 @media not (prefers-reduced-transparency: reduce) {
   html:is([data-platform="darwin"], [data-platform="win32"])[data-titlebar="overlay"]:not([data-translucency="off"])
+    [data-slot="composer-tasks"],
+  html:is([data-platform="darwin"], [data-platform="win32"])[data-titlebar="overlay"]:not([data-translucency="off"])
     [data-slot="composer-surface"] {
     background-color: color-mix(in oklab, var(--chat-surface) 72%, transparent);
     -webkit-backdrop-filter: blur(20px) saturate(1.4);
@@ -410,6 +412,11 @@ html[data-reduce-motion="on"] [data-message-target][data-highlighted] { animatio
   scroll-padding-bottom: calc(var(--transcript-bottom) + var(--transcript-fade-size) + var(--composer-dock-gap, 16px));
 }
 [data-slot="composer-surface"] { box-shadow: 0 -2px 16px color-mix(in oklab, var(--foreground) 6%, transparent); }
+/* The tasks tab grows out of the box: the same lift, clipped at its flat bottom edge so it never shades the box. */
+[data-slot="composer-tasks"] {
+  box-shadow: 0 -2px 16px color-mix(in oklab, var(--foreground) 6%, transparent);
+  clip-path: inset(-24px -24px 0 -24px);
+}
 @media (prefers-reduced-transparency: reduce) {
   [data-slot="chat-layout"] { --transcript-fade-size: 0px; }
   [data-transcript-fade] { --scroll-fade-t: 0px; animation: none; }

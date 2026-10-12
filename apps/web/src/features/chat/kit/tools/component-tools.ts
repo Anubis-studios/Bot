@@ -36,12 +36,22 @@ const isPreviewTool = (name: string): boolean => {
   return bare === "open_preview" || bare === "preview" || bare === "app";
 };
 
+/** `serve` (a directory over http): its URL arrives in the result text. */
+const isServeTool = (name: string): boolean => {
+  const bare = name.startsWith(MCP_PREFIX)
+    ? name.slice(MCP_PREFIX.length)
+    : name;
+  return bare === "serve";
+};
+
+const SERVED_URL_RE = /\bhttps?:\/\/[^\s"'<>)]+/i;
+
 const truncate = (value: string, max = 50): string =>
   value.length <= max ? value : `${value.slice(0, max - 1)}…`;
 
 /** True for a component tool that opens a file or URL, for gating the row. */
 export const isComponentTool = (name: string): boolean =>
-  componentToolBase(name) != null || isPreviewTool(name);
+  componentToolBase(name) != null || isPreviewTool(name) || isServeTool(name);
 
 const lineFor = (
   base: ComponentToolBase,
@@ -108,10 +118,24 @@ export const componentLine = (
   name: string,
   input: Record<string, unknown>,
   running: boolean,
-  t: Translate
+  t: Translate,
+  resultText = ""
 ): ComponentLine | null => {
   const base = componentToolBase(name);
   if (base != null) return lineFor(base, input, running, t);
+  if (isServeTool(name)) {
+    // Only `start` hands back something to open; stop and list stay generic.
+    if (String(input.action ?? "").trim() !== "start") return null;
+    const url = SERVED_URL_RE.exec(resultText)?.[0];
+    return {
+      action: t(
+        running
+          ? "chat.tool.componentServeActive"
+          : "chat.tool.componentServeDone"
+      ),
+      ...(url != null ? { chip: truncate(url), targetPath: url } : {}),
+    };
+  }
   if (!isPreviewTool(name)) return null;
   const target = String(input.path ?? "").trim();
   if (target.length === 0)
@@ -128,6 +152,6 @@ export const componentLine = (
       running ? "chat.tool.componentOpenActive" : "chat.tool.componentOpenDone"
     ),
     chip: isUrl ? truncate(target) : basename(target),
-    ...(isUrl ? {} : { targetPath: target }),
+    targetPath: target,
   };
 };

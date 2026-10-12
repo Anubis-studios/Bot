@@ -3070,6 +3070,9 @@
       "componentPreviewActive": "Opening preview",
       "componentPreviewDone": "Opened preview",
       "componentOpenFile": "Open {{name}} in preview",
+      "componentServeActive": "Serving",
+      "componentServeDone": "Served",
+      "showMoreOutput": "Show {{count}} more characters",
       "askWaiting": "Waiting for a response…",
       "askSkipped": "Skipped"
     },
@@ -3115,7 +3118,11 @@
       "connected": "कनेक्ट हो गया। मॉडल चुनें",
       "storedOnHost": "कुंजियाँ आपकी होस्ट VM पर सेव होती हैं।"
     },
-    "imageEnlarge": "बड़ा देखें"
+    "imageEnlarge": "बड़ा देखें",
+    "visualizer": {
+      "title": "Interactive visual",
+      "drawing": "Drawing the visual"
+    }
   },
   "notch": {
     "a11y": {

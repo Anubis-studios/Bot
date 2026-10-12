@@ -14,7 +14,12 @@ import { ComposerUpdateNotice } from "#platform/updates";
 import { useCollections } from "#renderer/data/db";
 import { loadFixtureRuntime } from "#renderer/features/chat/fixture-runtime";
 import { ChatView } from "#renderer/features/chat/kit/lazy-view";
+import { AgentsList } from "#renderer/features/chat/kit/subagents/agents-list";
 import { useSubagents } from "#renderer/features/chat/kit/subagents/use-subagents";
+import {
+  AGENT_BROWSER_TAB,
+  hasAgentBrowserTab,
+} from "#renderer/features/sessions/dock/agent-browser";
 import { openStartDraft } from "#renderer/features/sessions/start/start-session";
 import { updateDraft } from "#renderer/lib/continuity/composer-drafts";
 import { IS_ELECTRON } from "#renderer/lib/platform";
@@ -42,6 +47,7 @@ import {
   deliverablesAfter,
   sessionDeliverablesCard,
 } from "#renderer/features/sessions/chat/deliverables";
+import { SessionKnownFiles } from "#renderer/features/sessions/chat/known-files";
 import { SessionContextTray } from "#renderer/features/sessions/context/context-tray";
 import { SessionPermissionAction } from "#renderer/features/sessions/context/permission-terminal-action";
 import { SessionTasks } from "#renderer/features/sessions/context/tasks";
@@ -96,25 +102,19 @@ const SessionAgents = ({
           className="my-auto [&_[data-slot=empty-title]]:text-sm"
         />
       ) : (
-        agents.map((agent) => (
-          <Button
-            key={agent.id}
-            variant={selected === agent.id ? "secondary" : "ghost"}
-            onClick={() =>
-              void navigate({
-                to: ".",
-                search: (p: Record<string, unknown>) => ({
-                  ...p,
-                  agent: agent.id,
-                }),
-                replace: true,
-                transition: "none",
-              })
-            }
-          >
-            {agent.name} · {agent.status}
-          </Button>
-        ))
+        <AgentsList
+          runtime={runtime}
+          threadId={threadId}
+          selected={selected}
+          onSelect={(id) =>
+            void navigate({
+              to: ".",
+              search: (p: Record<string, unknown>) => ({ ...p, agent: id }),
+              replace: true,
+              transition: "none",
+            })
+          }
+        />
       )}
       {selected ? (
         <>
@@ -322,7 +322,11 @@ const SessionRoute = () => {
           else if (path) {
             if (root && path.startsWith(`${root}/`) && hasInAppViewer(path))
               openFile(path);
-          } else openUrl(url);
+          } else if (hasAgentBrowserTab(key)) {
+            // The agent's own browser follows the agent; a second view
+            // of the URL would not.
+            select(AGENT_BROWSER_TAB);
+          } else if (url) openUrl(url);
         }}
       />
       <TopBarSlot>
@@ -378,7 +382,12 @@ const SessionRoute = () => {
               })
             }
             slots={{
-              composerNotice: <ComposerUpdateNotice />,
+              composerNotice: (
+                <>
+                  <SessionKnownFiles sessionId={sessionId} />
+                  <ComposerUpdateNotice />
+                </>
+              ),
               decorateMessage: (message, context) => {
                 if (message.role !== "assistant") return null;
                 let at = context.index;
@@ -456,19 +465,17 @@ const SessionRoute = () => {
                   review={() => select("changes")}
                 />
               ),
+              composerTasks: <SessionTasks messages={host.messages} />,
               composerContext: (
-                <>
-                  <SessionTasks messages={host.messages} />
-                  <SessionContextTray
-                    workspaceId={row.workspaceId}
-                    sessionId={sessionId}
-                    mode={row.mode}
-                    busy={row.turn?.isBusy === true}
-                    agentRunning={
-                      row.status === "running" || row.status === "starting"
-                    }
-                  />
-                </>
+                <SessionContextTray
+                  workspaceId={row.workspaceId}
+                  sessionId={sessionId}
+                  mode={row.mode}
+                  busy={row.turn?.isBusy === true}
+                  agentRunning={
+                    row.status === "running" || row.status === "starting"
+                  }
+                />
               ),
             }}
             composer={{

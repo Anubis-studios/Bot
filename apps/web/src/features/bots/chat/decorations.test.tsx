@@ -142,6 +142,23 @@ describe("botMessageDecorations", () => {
     expect(d[1]?.after).toBeUndefined();
   });
 
+  it("offers one rating per turn, on its last spoken reply", () => {
+    const d = decorateAll(botMessageDecorations(options()), [
+      msg("u1", "user", [text("hi")]),
+      msg("a1", "assistant", [text("First")]),
+      msg("a2", "assistant", [text("Second")]),
+      msg("u2", "user", [text("more")]),
+      msg("a3", "assistant", [text("Third")]),
+    ]);
+    expect(d.map((x) => x?.actions != null)).toEqual([
+      false,
+      false,
+      true,
+      false,
+      true,
+    ]);
+  });
+
   it("never on the live run", () => {
     const messages = [
       msg("u", "user", [text("hi")]),

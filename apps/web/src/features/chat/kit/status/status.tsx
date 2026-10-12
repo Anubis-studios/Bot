@@ -270,7 +270,7 @@ export const ErrorCard = ({
     void session
       .retry(
         composer.fixedMode ? { mode: composer.fixedMode } : undefined,
-        skin === "bot" ? t("workspace.retryMessage") : undefined
+        t("workspace.retryMessage")
       )
       .catch(() => {});
   if (wantsUpgradeCard(actions)) {
@@ -327,7 +327,7 @@ export const ErrorCard = ({
                         ? { mode: composer.fixedMode }
                         : {}),
                     },
-                    skin === "bot" ? t("workspace.retryMessage") : undefined
+                    t("workspace.retryMessage")
                   );
                 }
               : undefined
@@ -574,10 +574,7 @@ export const NoticeRow = ({
             onClick={(event) => {
               if (action.type === "retry")
                 void session
-                  .retry(
-                    undefined,
-                    skin === "bot" ? t("workspace.retryMessage") : undefined
-                  )
+                  .retry(undefined, t("workspace.retryMessage"))
                   .catch(() => {});
               else if (action.type === "switch-model") {
                 if (action.model != null)

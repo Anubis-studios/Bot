@@ -42,6 +42,35 @@ export function buildToolTitle(toolName: string, args: ToolArgs): string {
       return "Edit files";
     case "batch_file_read":
       return "Read files";
+    case "delete":
+      return p !== undefined ? `Delete ${p}` : "Delete";
+    case "apply_patch":
+      return "Apply patch";
+    case "read_output": {
+      const id = str(args.id);
+      return id !== undefined ? `Read saved output ${id}` : "Read saved output";
+    }
+    case "fetch_background_output": {
+      const id = str(args.id);
+      return id !== undefined
+        ? `Read background output ${id}`
+        : "List background processes";
+    }
+    case "kill_process": {
+      const id = str(args.id);
+      return id !== undefined ? `Stop ${id}` : "Stop background processes";
+    }
+    case "serve": {
+      const dir = str(args.directory);
+      switch (args.action) {
+        case "stop":
+          return dir !== undefined ? `Stop serving ${dir}` : "Stop serving";
+        case "list":
+          return "List served pages";
+        default:
+          return dir !== undefined ? truncateTitle(`Serve ${dir}`) : "Serve";
+      }
+    }
     case "ls":
       return p !== undefined ? `List ${p}` : "List files";
     case "bash": {

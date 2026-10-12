@@ -150,7 +150,10 @@ export interface ChatViewSlots {
   wallpaper?: string | null;
   /** Route-owned notice directly above the input, after send errors. */
   composerNotice?: ReactNode;
+  /** Lives in the composer's toolbar row, between the chips (workspace, branch). */
   composerContext?: ReactNode;
+  /** The tab that grows out of the composer's top edge (sessions: the tasks). */
+  composerTasks?: ReactNode;
   /** The route's pieces after the last run's outcome (the Changes card, phase 4). */
   runTail?: ReactNode;
   /** Route-owned actions beside the permission card (sessions §17.1). */

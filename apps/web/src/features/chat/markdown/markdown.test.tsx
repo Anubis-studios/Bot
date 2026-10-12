@@ -187,3 +187,44 @@ describe("R2-T18 whole-document rendering", () => {
     expect(container.textContent).toContain("The footnote.");
   });
 });
+
+describe("visualizer blocks", () => {
+  const widget =
+    "```visualizer\n<svg><text>a < b</text></svg><script>1</script>\n```";
+
+  it("renders a script-only sandboxed iframe with the source in srcdoc", () => {
+    const { container } = renderMd(widget);
+    const frame = container.querySelector("iframe");
+    expect(frame).not.toBeNull();
+    expect(frame!.getAttribute("sandbox")).toBe("allow-scripts");
+    const doc = frame!.getAttribute("srcdoc") ?? "";
+    expect(doc).toContain("<svg><text>a < b</text></svg>");
+    expect(doc).toContain("Content-Security-Policy");
+    expect(doc).toContain("connect-src 'none'");
+    expect(container.querySelector("pre")).toBeNull();
+  });
+
+  it("draws a placeholder, not the frame, while streaming", () => {
+    const { container } = renderMd(widget, { streaming: true });
+    expect(container.querySelector("iframe")).toBeNull();
+  });
+});
+
+describe("prose filenames", () => {
+  it("link to a session artifact registered for the thread", async () => {
+    const { setKnownFiles } = await import("./known-files");
+    const { ChatViewProvider } = await import("../kit/context");
+    setKnownFiles("t1", new Map([["report.pdf", "/repo/report.pdf"]]));
+    const links = { openFile: vi.fn(), openExternal: vi.fn() };
+    render(
+      <ChatViewProvider value={{ threadId: "t1" } as never}>
+        <MarkdownLinksProvider value={links}>
+          <Markdown content="Wrote report.pdf." role="assistant" />
+        </MarkdownLinksProvider>
+      </ChatViewProvider>
+    );
+    fireEvent.click(screen.getByRole("link", { name: "report.pdf" }));
+    expect(links.openFile).toHaveBeenCalledWith("/repo/report.pdf");
+    setKnownFiles("t1", new Map());
+  });
+});

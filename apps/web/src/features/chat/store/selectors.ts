@@ -62,3 +62,15 @@ export const questionPending = (state: ThreadStoreState): boolean =>
   state.permissions.items.some(
     (item) => item.metadata.abacus.request.type === "ask_user_question"
   );
+
+const NO_PLAN: readonly never[] = [];
+
+/**
+ * The agent's own task list (`state.agent.plan`, wire.ts PlanItem): the
+ * authoritative source for the tasks strip. Unlike scanning the last `todo`
+ * call, it never picks up a sub-agent's todos.
+ */
+export const planOf = (state: ThreadStoreState) => state.agent?.plan ?? NO_PLAN;
+
+export const usePlan = (session: ThreadSession) =>
+  useThreadStore(session, planOf);

@@ -53,6 +53,7 @@ import {
 } from "#renderer/ui/collapsible";
 
 import { Markdown } from "../markdown/markdown";
+import { coalescedIds } from "../scroller/coalesce";
 import { useToolWindow } from "../scroller/row-context";
 import { useHost, useThreadStore } from "../store/selectors";
 import {
@@ -64,6 +65,7 @@ import {
   MessageActions,
   MessageMenu,
   MessageReactionPills,
+  TurnActions,
 } from "./message-actions";
 import { useKitParts, useMessageScope, MessageScope } from "./message-scope";
 import { ReplyQuote, jumpToMessage } from "./reply";
@@ -247,7 +249,7 @@ const UserMessage = ({
   tint: boolean;
   badge?: ReactNode;
 }) => {
-  const { workspaceRoot, threadId } = useChatView();
+  const { workspaceRoot, threadId, skin } = useChatView();
   const { hidden, body, paths } = userView(message);
   if (hidden) return null;
   const reacted = (message.metadata?.abacus?.reactions?.length ?? 0) > 0;
@@ -289,7 +291,9 @@ const UserMessage = ({
             ) : (
               <MessageReactionPills message={message} />
             )}
-            <MessageMenu message={message} text={body} />
+            {skin === "session" ? null : (
+              <MessageMenu message={message} text={body} />
+            )}
           </div>
         ) : null}
         {paths.length > 0 ? (
@@ -381,6 +385,55 @@ const useDecoration = (message: UIMessage): MessageDecoration | null => {
   if (decorate == null) return null;
   const index = messages.findIndex((item) => item.id === message.id);
   return decorate(message, { messages, index, runActive });
+};
+
+/**
+ * The assistant turn this row closes: the prose of every assistant message
+ * since the last user message, when this row is the turn's last (no other
+ * assistant message follows before the next user message, or the end) and
+ * the turn is finished. Otherwise none, so a turn carries exactly one row.
+ */
+const useTurnEnd = (
+  message: UIMessage
+): { text: string; id: string } | null => {
+  const { session } = useChatView();
+  const messages = useHost(session, (state) => state.messages);
+  const runActive = useThreadStore(
+    session,
+    (state) => state.runs.active != null
+  );
+  if (message.role !== "assistant") return null;
+  const index = messages.findIndex((item) => item.id === message.id);
+  if (index < 0) return null;
+  const folded = new Set(coalescedIds(message));
+  let next = index + 1;
+  while (
+    next < messages.length &&
+    (folded.has(messages[next]!.id) || messages[next]!.role === "system")
+  )
+    next++;
+  const following = messages[next];
+  if (following?.role === "assistant") return null;
+  if (following == null && runActive) return null;
+  let start = index;
+  while (start > 0 && messages[start - 1]!.role !== "user") start--;
+  const text = messages
+    .slice(start, index + 1)
+    .filter((item) => item.role === "assistant")
+    .map((item) =>
+      item.parts
+        .filter(
+          (part) =>
+            part.type === "text" &&
+            (part as { metadata?: { abacus?: { kind?: string } } }).metadata
+              ?.abacus?.kind == null
+        )
+        .map((part) => (part as { content: string }).content)
+        .join("")
+    )
+    .filter((chunk) => chunk.trim() !== "")
+    .join("\n\n");
+  return { text, id: message.id };
 };
 
 export const BotMessage = ({ message, Parts }: MessageProps<unknown>) => {
@@ -654,6 +707,7 @@ const GroupedParts = ({ message }: { message: UIMessage }) => {
 export const SessionMessage = ({ message }: MessageProps<unknown>) => {
   const decoration = useDecoration(message);
   const streaming = useStreaming(message);
+  const turn = useTurnEnd(message);
   if (isEmptyAssistant(message)) return null;
   if (message.role === "user")
     return <UserMessage message={message} tint={false} />;
@@ -664,18 +718,23 @@ export const SessionMessage = ({ message }: MessageProps<unknown>) => {
     <MessageScope
       value={{ id: message.id, role: "assistant", streaming, message }}
     >
-      <MessageActions message={message} feedback={decoration?.actions}>
-        <div
-          className="flex flex-col gap-2"
-          data-role="assistant"
-          data-grouped={grouped ? "" : undefined}
-        >
-          <StepControls side="earlier" />
-          <GroupedParts message={message} />
-          <StepControls side="more" />
-          <Credits message={message} />
-        </div>
-      </MessageActions>
+      <div
+        className="flex flex-col gap-2"
+        data-role="assistant"
+        data-grouped={grouped ? "" : undefined}
+      >
+        <StepControls side="earlier" />
+        <GroupedParts message={message} />
+        <StepControls side="more" />
+        <Credits message={message} />
+        {turn != null && !streaming ? (
+          <TurnActions
+            messageId={turn.id}
+            text={turn.text}
+            feedback={decoration?.actions}
+          />
+        ) : null}
+      </div>
     </MessageScope>
   );
 };

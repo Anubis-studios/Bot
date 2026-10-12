@@ -84,6 +84,13 @@ describe("ChatView over scenarios", () => {
       "error",
     ]);
     expect(screen.getByText("Stopped at its limit")).toBeTruthy();
+    // A finished sub-agent's report shows under its collapsed card.
+    expect(
+      within(rows[0] as HTMLElement).getByText("No issues.", {
+        selector: '[data-slot="subagent-report"] *',
+      })
+    ).toBeTruthy();
+    expect(rows[1]!.querySelector('[data-slot="subagent-report"]')).toBeNull();
     expect(
       warn.mock.calls.filter((call) => String(call[0]).includes("Missing"))
     ).toEqual([]);

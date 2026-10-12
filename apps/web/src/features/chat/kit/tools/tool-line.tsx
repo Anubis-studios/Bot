@@ -46,12 +46,14 @@ import { descriptorFor, useHost, useThreadStore } from "../../store/selectors";
 import { toolKey } from "../../store/thread-store";
 import { formatElapsed, useSeconds } from "../clock";
 import { useChatView, useSubagentScope } from "../context";
+import { ZoomableImage } from "../image-lightbox";
 import { useMessageScope } from "../message-scope";
 import { selectPermission } from "../permissions/selection";
 import { parseAnsi, tailLines } from "./ansi";
 import { AskRecapBody } from "./ask-recap";
 import { ComponentTitle } from "./component-title";
 import { componentLine } from "./component-tools";
+import { formatBytes, parseImageRead, type ImageRead } from "./image-read";
 import {
   diffLines,
   humanToolName,
@@ -114,6 +116,9 @@ export type Expander =
   | "none";
 
 export const expanderFor = (name: string): Expander => {
+  // The files card restates what it delivered; the input JSON adds nothing.
+  if (name === "present_deliverable" || name.endsWith("_present_deliverable"))
+    return "none";
   if (name === "bash") return "bash";
   if (name === "read" || name === "batch_file_read") return "read";
   if (
@@ -437,7 +442,99 @@ const TodoBody = ({ input }: { input: Record<string, unknown> }) => (
   </ul>
 );
 
+const OUTPUT_CAP = 3000;
+
+/** Tool output in a <pre>, cut at 3000 characters behind a "show more". */
+const CappedOutput = ({ text }: { text: string }) => {
+  const { t } = useTranslation();
+  const [all, setAll] = useState(false);
+  const cut = !all && text.length > OUTPUT_CAP;
+  return (
+    <div className="flex flex-col gap-1">
+      <pre className="chat-terminal">
+        {cut ? `${text.slice(0, OUTPUT_CAP)}\n…` : text}
+      </pre>
+      {cut ? (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="self-start"
+          onClick={() => setAll(true)}
+        >
+          {t("chat.tool.showMoreOutput", {
+            count: text.length - OUTPUT_CAP,
+          })}
+        </Button>
+      ) : null}
+    </div>
+  );
+};
+
 const READ_LINES = 80;
+
+const ImageReadCard = ({ image }: { image: ImageRead }) => {
+  const { runtime, workspaceRoot } = useChatView();
+  const [thumb, setThumb] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let live = true;
+    const path = image.filePath;
+    runtime.host
+      .readImage(
+        path,
+        workspaceRoot ??
+          path.slice(0, Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\")))
+      )
+      .then((url) => {
+        if (!live) return;
+        if (url === "") setFailed(true);
+        else setThumb(url);
+      })
+      .catch(() => live && setFailed(true));
+    return () => {
+      live = false;
+    };
+  }, [image.filePath, runtime, workspaceRoot]);
+  const name = image.filename || (image.filePath.split(/[\\/]/).at(-1) ?? "");
+  const subtitle = [
+    image.mimeType,
+    image.size > 0 ? formatBytes(image.size) : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  return (
+    <div
+      className="bg-muted/50 flex items-center gap-3 rounded-lg px-2.5 py-2"
+      data-image-read
+    >
+      <div className="bg-muted flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-md">
+        {thumb != null ? (
+          <ZoomableImage
+            src={thumb}
+            alt={name}
+            className="size-12 object-cover"
+          />
+        ) : (
+          <FileText
+            aria-hidden
+            className={cn(
+              "size-4",
+              failed ? "text-destructive" : "text-muted-foreground opacity-50"
+            )}
+          />
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-xs" title={name}>
+          {name}
+        </div>
+        {subtitle === "" ? null : (
+          <div className="text-muted-foreground text-xs">{subtitle}</div>
+        )}
+      </div>
+    </div>
+  );
+};
 
 const ReadBody = ({
   tool,
@@ -449,6 +546,8 @@ const ReadBody = ({
   const { t } = useTranslation();
   const { onOpenFile, workspaceRoot } = useChatView();
   const highlightCode = useCodeHighlighter();
+  const image = parseImageRead(tool.text);
+  if (image != null) return <ImageReadCard image={image} />;
   const raw = tool.read?.content ?? tool.text;
   const stripped = stripLineNumbers(raw);
   const path =
@@ -581,7 +680,7 @@ const Body = ({
               workspaceRoot={workspaceRoot}
             />
           ) : tool.text === "" ? null : (
-            <pre className="chat-terminal">{tool.text}</pre>
+            <CappedOutput text={tool.text} />
           )}
         </div>
       );
@@ -639,7 +738,8 @@ export const ToolLine = (props: ToolLineProps) => {
 };
 const MountedToolLine = ({ part, result, expander: fixed }: ToolLineProps) => {
   const { t } = useTranslation();
-  const { threadId, skin, session, onOpenFile, workspaceRoot } = useChatView();
+  const { threadId, skin, session, onOpenFile, workspaceRoot, runtime } =
+    useChatView();
   const [open, setOpen] = useState(false);
   const message = useMessageScope().message;
   const runStart = useThreadStore(
@@ -659,7 +759,8 @@ const MountedToolLine = ({ part, result, expander: fixed }: ToolLineProps) => {
     part.name,
     input,
     tool.status === "running",
-    t
+    t,
+    tool.text
   );
   const meta = toolMeta(
     part.name,
@@ -669,7 +770,10 @@ const MountedToolLine = ({ part, result, expander: fixed }: ToolLineProps) => {
   );
   const bodyId = useId();
   const openPath = toolOpenPath(part.name, input, workspaceRoot);
-  const expandable = component == null && hasBody(expander, tool, input);
+  const expandable =
+    component == null &&
+    tool.status !== "refused" &&
+    hasBody(expander, tool, input);
   const row = (
     <>
       <span
@@ -716,14 +820,19 @@ const MountedToolLine = ({ part, result, expander: fixed }: ToolLineProps) => {
         ) : (
           <div className="flex min-w-0 flex-1 items-center gap-2">{row}</div>
         )}
-        {openPath != null && onOpenFile != null ? (
+        {openPath != null && (onOpenFile != null || part.name === "ls") ? (
           <button
             type="button"
             data-open-path={openPath}
             title={openPath}
             aria-label={t("chat.tool.openPath", { path: openPath })}
             className="focus-visible:ring-ring hover:text-foreground max-w-[40%] shrink-0 truncate rounded-md underline-offset-2 outline-none hover:underline focus-visible:ring-2"
-            onClick={() => onOpenFile(openPath)}
+            onClick={() =>
+              // A folder is revealed, not opened as a preview tab.
+              part.name === "ls"
+                ? void runtime.host.showItemInFolder(openPath)
+                : onOpenFile?.(openPath)
+            }
           >
             {openPath
               .replace(/[\\/]+$/, "")

@@ -166,7 +166,12 @@ describe("R2-T25 composer", () => {
       relay,
       "session",
       {},
-      { slots: { composerContext: <span>abacusai-bot · main</span> } }
+      {
+        slots: {
+          composerContext: <span>abacusai-bot · main</span>,
+          composerTasks: <span>Tasks 0 of 8</span>,
+        },
+      }
     );
     await waitFor(() =>
       expect(composer().hasAttribute("data-expanded")).toBe(true)
@@ -194,6 +199,14 @@ describe("R2-T25 composer", () => {
     expect(within(context).getByText("abacusai-bot · main")).toBeTruthy();
     for (const cls of ["mx-3", "-mt-4", "min-h-12", "pt-4", "rounded-b-[14px]"])
       expect(context.className.split(" ")).toContain(cls);
+    // The tasks tab sits directly above the box, tucked 1 px under its edge.
+    const tab = document.querySelector<HTMLElement>(
+      '[data-slot="composer-tab"]'
+    )!;
+    expect(tab.nextElementSibling).toBe(surface);
+    expect(within(tab).getByText("Tasks 0 of 8")).toBeTruthy();
+    for (const cls of ["-mb-px", "mx-auto", "w-[90%]", "empty:hidden"])
+      expect(tab.className.split(" ")).toContain(cls);
   });
 
   it("session: two rows at rest with the mode chip; Enter sends; Stop while busy; busy submit enqueues", async () => {

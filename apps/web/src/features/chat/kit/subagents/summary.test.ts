@@ -1,7 +1,7 @@
 import type { UIMessage } from "@tanstack/ai-client";
 import { describe, expect, it } from "vitest";
 
-import { narrationLines, subagentEnding } from "./summary";
+import { narrationLines, subagentEnding, subagentReport } from "./summary";
 
 describe("subagentEnding", () => {
   it("flags an unsuccessful stop, and nothing for success", () => {
@@ -29,5 +29,35 @@ describe("narrationLines", () => {
       },
     ] as unknown as UIMessage[];
     expect(narrationLines(messages, 3)).toEqual(["two", "three", "four"]);
+  });
+});
+
+describe("subagentReport", () => {
+  const messages = [
+    {
+      id: "m",
+      role: "assistant",
+      parts: [
+        { type: "text", content: "Working" },
+        { type: "tool-call", name: "ls" },
+      ],
+    },
+    {
+      id: "n",
+      role: "assistant",
+      parts: [{ type: "text", content: "All **good**." }],
+    },
+  ] as unknown as UIMessage[];
+  it("is hidden while running", () => {
+    expect(subagentReport({ status: "running", messages })).toBeNull();
+  });
+  it("prefers the host result, else the last assistant text", () => {
+    expect(
+      subagentReport({ status: "finished", result: " Done. ", messages })
+    ).toBe("Done.");
+    expect(subagentReport({ status: "finished", messages })).toBe(
+      "All **good**."
+    );
+    expect(subagentReport({ status: "finished", messages: [] })).toBeNull();
   });
 });
