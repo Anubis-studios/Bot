@@ -57,7 +57,7 @@ export interface NotchControllerOptions {
   wire(contents: WebContents): void;
   unregister(id: number): void;
   revealMain(): void;
-  mainState(): { visible: boolean; focused: boolean };
+  mainState(): { visible: boolean; focused: boolean; signedIn: boolean };
   publish(id: number, event: NotchEvent): void;
   command(command: OpenCommand): void;
 }
@@ -439,7 +439,12 @@ export class NotchController {
     const app = this.#o.mainState();
     return [
       { type: "layout", layout: this.layout(id) },
-      { type: "app", mainVisible: app.visible, mainFocused: app.focused },
+      {
+        type: "app",
+        mainVisible: app.visible,
+        mainFocused: app.focused,
+        signedIn: app.signedIn,
+      },
       { type: "visibility-request", epoch: this.#spaceEpoch },
     ];
   }
@@ -549,6 +554,7 @@ export class NotchController {
       type: "app",
       mainVisible: app.visible,
       mainFocused: app.focused,
+      signedIn: app.signedIn,
     });
   }
   broadcast(event: NotchEvent): void {
@@ -575,6 +581,10 @@ export class NotchController {
       this.#pending.delete(this.#pending.keys().next().value!);
     this.#o.command(command);
     return { id: command.id };
+  }
+  reveal(id: number): void {
+    this.#entry(id);
+    this.#o.revealMain();
   }
   ack(id: string): void {
     if (!this.#pending.has(id)) return;

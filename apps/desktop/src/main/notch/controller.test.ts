@@ -160,7 +160,7 @@ const setup = async (overrides: Partial<NotchControllerOptions> = {}) => {
     wire: vi.fn(),
     unregister: vi.fn(),
     revealMain: vi.fn(),
-    mainState: () => ({ visible: true, focused: false }),
+    mainState: () => ({ visible: true, focused: false, signedIn: true }),
     publish: vi.fn(),
     command: vi.fn(),
     ...overrides,
@@ -212,7 +212,7 @@ describe("R6-T25/T28 controller lifecycle and ownership", () => {
     }
   );
   it("waits for readiness, fits changes and closes every contents once", async () => {
-    const app = { visible: false, focused: false };
+    const app = { visible: false, focused: false, signedIn: true };
     const main = new EventEmitter();
     const x = await setup({ mainState: () => app });
     wireMainNotchEvents(main, () => x.controller.appChanged());
@@ -221,6 +221,8 @@ describe("R6-T25/T28 controller lifecycle and ownership", () => {
       ["focus", true, true],
       ["blur", true, false],
       ["hide", false, false],
+      ["restore", true, false],
+      ["minimize", false, false],
       ["closed", false, false],
     ] as const) {
       Object.assign(app, { visible, focused });
@@ -229,6 +231,7 @@ describe("R6-T25/T28 controller lifecycle and ownership", () => {
         type: "app",
         mainVisible: visible,
         mainFocused: focused,
+        signedIn: true,
       });
     }
     x.controller.setShape(1, shape);
@@ -297,6 +300,13 @@ describe("R6-T25/T28 controller lifecycle and ownership", () => {
     x.controller.ack(b.id);
     expect(x.controller.commands()).toEqual([]);
     expect(x.options.command).toHaveBeenCalledTimes(2);
+  });
+  it("reveals the app without queuing a command the shell would replay", async () => {
+    const x = await setup();
+    x.controller.reveal(1);
+    expect(x.options.revealMain).toHaveBeenCalledOnce();
+    expect(x.controller.commands()).toEqual([]);
+    expect(() => x.controller.reveal(99)).toThrow();
   });
   it("invalidates seen state on macOS active-Space notification", async () => {
     const x = await setup({ platform: "darwin" });

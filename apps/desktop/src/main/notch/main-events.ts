@@ -5,6 +5,14 @@ export const wireMainNotchEvents = (
   window: Pick<EventEmitter, "on">,
   changed: () => void
 ): void => {
-  for (const event of ["focus", "blur", "show", "hide", "closed"])
+  for (const event of [
+    "focus",
+    "blur",
+    "show",
+    "hide",
+    "minimize",
+    "restore",
+    "closed",
+  ])
     window.on(event, changed);
 };
