@@ -11,7 +11,7 @@ import { fixturePrefs } from "#renderer/data/fixture-db/rows";
 import { initI18n } from "#renderer/lib/i18n";
 import { TooltipProvider } from "#renderer/ui/tooltip";
 
-import { dropOrder, TabsRail } from ".";
+import { dropOrder, mergeOrder, TabsRail } from ".";
 vi.mock("#renderer/data/db/prefs", () => ({
   usePrefs: () => ({ ...fixturePrefs(), motion: { reduce: "on" } }),
 }));
@@ -160,4 +160,50 @@ it("native drag keeps a dimmed placeholder, draws an unclipped preview and marks
   fireEvent.dragEnd(items[0]!, { dataTransfer });
   expect(items[0]!.hasAttribute("data-dragging")).toBe(false);
   expect(items[1]!.hasAttribute("data-drop")).toBe(false);
+});
+
+it("puts each pane's tabs over that pane, with one shared set of menus and shortcuts", async () => {
+  await initI18n();
+  const change = vi.fn();
+  render(
+    <header data-slot="topbar">
+      <TooltipProvider>
+        <TabsRail
+          columns={[
+            { ids: ["terminal:a"], active: "terminal:a", left: 0, right: 500 },
+            { ids: ["chat", "files"], active: "chat", left: 508, right: 1000 },
+          ]}
+          tabs={[
+            { id: "chat", kind: "thread", title: "Chat" },
+            { id: "files", kind: "files", title: "Files" },
+            { id: "terminal:a", kind: "terminal", title: "Terminal" },
+          ]}
+          active="chat"
+          title={(tab) => tab.title!}
+          kinds={["terminal", "files"]}
+          onChange={change}
+          onClose={() => {}}
+          onReorder={() => {}}
+          onAdd={() => {}}
+          onMove={() => {}}
+        />
+      </TooltipProvider>
+    </header>
+  );
+  const lists = screen.getAllByRole("tablist");
+  expect(lists).toHaveLength(2);
+  expect(lists[0]!.textContent).toContain("Terminal");
+  expect(lists[1]!.textContent).toContain("Chat");
+  expect(lists[1]!.textContent).toContain("Files");
+  expect(screen.getAllByTestId("panel-add-tab")).toHaveLength(1);
+  // ⌘N counts across every pane, in rail order, and is handled once.
+  fireEvent.keyDown(window, { key: "3", ctrlKey: true });
+  expect(change).toHaveBeenCalledTimes(1);
+  expect(change).toHaveBeenCalledWith("terminal:a");
+});
+
+it("merges one pane's new order back into the full tab order", () => {
+  expect(mergeOrder(["chat", "a", "files", "b"], ["b", "a"]).join()).toBe(
+    "chat,b,files,a"
+  );
 });

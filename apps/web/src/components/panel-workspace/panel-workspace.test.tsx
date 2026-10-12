@@ -323,3 +323,60 @@ it("does not detach pane DOM (reloading iframes, resetting focus) when its paren
   expect(moved).not.toHaveBeenCalled();
   expect(screen.getByTitle("deliverable")).toBe(frame);
 });
+it("does not re-render pane content when only the workspace's own size state changes", async () => {
+  const callbacks: ResizeObserverCallback[] = [];
+  const original = globalThis.ResizeObserver;
+  globalThis.ResizeObserver = class {
+    constructor(private callback: ResizeObserverCallback) {}
+    observe(element: Element) {
+      if (element.getAttribute("data-slot") === "panel-workspace")
+        callbacks.push(this.callback);
+    }
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver;
+  try {
+    const apiRef: { current: DockviewApi | null } = { current: null };
+    const content = vi.fn(() => <div>Pane</div>);
+    const tabs = [
+      { id: "chat", title: "Chat", content },
+      { id: "files", title: "Files", content },
+    ];
+    render(
+      <PanelWorkspace
+        scope="render-count"
+        active="files"
+        open
+        expanded
+        onSelect={() => {}}
+        apiRef={apiRef}
+        tabs={tabs}
+      />
+    );
+    await waitFor(() => expect(apiRef.current?.panels).toHaveLength(2));
+    const resize = (width: number) =>
+      act(() => {
+        for (const callback of callbacks)
+          try {
+            callback(
+              [
+                { contentRect: { width, height: 600 } },
+              ] as ResizeObserverEntry[],
+              {} as ResizeObserver
+            );
+          } catch {
+            // Other libraries' observers expect real entries.
+          }
+      });
+    expect(callbacks.length).toBeGreaterThan(0);
+    resize(1000);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const settled = content.mock.calls.length;
+    resize(1001);
+    resize(1002);
+    resize(1003);
+    expect(content.mock.calls.length).toBe(settled);
+  } finally {
+    globalThis.ResizeObserver = original;
+  }
+});

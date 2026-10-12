@@ -34,11 +34,13 @@ export const TabsRailPlacementProvider = ({
   placement: TabsRailPlacement;
   reportWidth: (width: number) => void;
   children: ReactNode;
-}) => (
-  <PlacementContext value={{ placement, reportWidth }}>
-    {children}
-  </PlacementContext>
-);
+}) => {
+  return (
+    <PlacementContext value={{ placement, reportWidth }}>
+      {children}
+    </PlacementContext>
+  );
+};
 
 export const useTabsRailPlacement = () =>
   useContext(PlacementContext).placement;

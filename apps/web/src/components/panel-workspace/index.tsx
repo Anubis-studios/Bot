@@ -35,6 +35,7 @@ import {
 } from "#renderer/lib/side-panel/geometry";
 import { ResizablePanelGroup, ResizablePanel } from "#renderer/ui/resizable";
 
+import { measureColumns, publishDockColumns } from "./columns";
 import { PanelResizeHandle } from "./resize-handle";
 import { enhanceDockSplitters } from "./splitters";
 
@@ -100,6 +101,43 @@ export const moveDockTab = (
 };
 export const PANEL_DRAG_TYPE = "application/x-abacus-panel";
 
+/**
+ * Pane content, as its own component: the workspace's own state (resize
+ * frames, dock layout publishes) re-renders it only when these props change.
+ */
+const Portals = ({
+  tabs,
+  scope,
+  targets,
+  docked,
+  visible,
+  folded,
+  open,
+  active,
+}: {
+  tabs: WorkspaceTab[];
+  scope: string;
+  targets: Map<string, HTMLDivElement>;
+  docked: boolean;
+  visible: string[];
+  folded: boolean;
+  open: boolean;
+  active: string | null;
+}) =>
+  tabs.map((tab) =>
+    createPortal(
+      tab.content(
+        docked
+          ? visible.includes(tab.id)
+          : tab.id === "chat"
+            ? !folded
+            : open && active === tab.id
+      ),
+      targets.get(tab.id)!,
+      `${scope}:${tab.id}`
+    )
+  );
+
 /** Stable portal targets preserve chat, editor and terminal state across dock moves. */
 export const PanelWorkspace = ({
   scope,
@@ -124,7 +162,20 @@ export const PanelWorkspace = ({
   const [api, setApi] = useState<DockviewApi | null>(null);
   const [visible, setVisible] = useState<string[]>([]);
   const [minimum, setMinimum] = useState({ width: 0, height: 0 });
+  const groupObserver = useRef<ResizeObserver | null>(null);
+  const publishColumns = useEffectEvent((dock: DockviewApi) => {
+    // Group boxes move on sash drags and window resizes without any dock
+    // event, so the title bar's columns follow them through an observer.
+    for (const group of dock.groups)
+      groupObserver.current?.observe(group.element);
+    publishDockColumns(measureColumns(dock));
+  });
   const publishLayout = useEffectEvent((dock: DockviewApi) => {
+    // Group boxes move on sash drags and window resizes without any dock
+    // event, so the title bar's columns follow them through an observer.
+    for (const group of dock.groups)
+      groupObserver.current?.observe(group.element);
+    publishDockColumns(measureColumns(dock));
     setVisible((previous) => retainVisible(previous, visiblePanels(dock)));
     setMinimum((previous) =>
       previous.width === dock.minimumWidth &&
@@ -182,6 +233,24 @@ export const PanelWorkspace = ({
     return () => observer.disconnect();
   }, [apiRef]);
   useEffect(() => () => writer.flush(), [writer]);
+  useEffect(() => {
+    if (!api) return;
+    let frame = 0;
+    const observer = new ResizeObserver(() => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() =>
+        publishDockColumns(measureColumns(api))
+      );
+    });
+    groupObserver.current = observer;
+    publishColumns(api);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+      groupObserver.current = null;
+      publishDockColumns([]);
+    };
+  }, [api]);
   const synchronize = useEffectEvent(() => {
     if (!api) return;
     const ids = tabs.map((tab) => tab.id);
@@ -283,6 +352,10 @@ export const PanelWorkspace = ({
     expanded &&
     width >= Math.max(SPLIT_MIN_PX, minimum.width) &&
     height >= minimum.height;
+  useEffect(() => {
+    // Showing or hiding the dock moves every group box at once.
+    if (api) publishColumns(api);
+  }, [api, docked]);
   const showTool = open && active != null && active !== "chat";
   const split = showTool && !expanded && width >= SPLIT_MIN_PX;
   const folded = showTool && !split && !docked;
@@ -304,13 +377,7 @@ export const PanelWorkspace = ({
       element.append(target);
   };
   return (
-    <Context
-      value={{
-        expanded: docked,
-        visible,
-        targets,
-      }}
-    >
+    <Context value={{ expanded: docked, visible, targets }}>
       <div
         ref={container}
         data-slot="panel-workspace"
@@ -390,19 +457,16 @@ export const PanelWorkspace = ({
             />
           ) : null}
         </div>
-        {tabs.map((tab) =>
-          createPortal(
-            tab.content(
-              docked
-                ? visible.includes(tab.id)
-                : tab.id === "chat"
-                  ? !folded
-                  : open && active === tab.id
-            ),
-            targets.get(tab.id)!,
-            `${scope}:${tab.id}`
-          )
-        )}
+        <Portals
+          tabs={tabs}
+          scope={scope}
+          targets={targets}
+          docked={docked}
+          visible={visible}
+          folded={folded}
+          open={open}
+          active={active}
+        />
       </div>
     </Context>
   );

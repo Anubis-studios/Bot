@@ -35,6 +35,7 @@ import {
   PANEL_DRAG_TYPE,
   moveDockTab,
 } from "#renderer/components/panel-workspace";
+import { useDockColumns } from "#renderer/components/panel-workspace/columns";
 import { useTabsRailPlacement } from "#renderer/components/tabs-rail/placement";
 import { usePrefs } from "#renderer/data/db/prefs";
 import { followNotices } from "#renderer/data/queries/notices";
@@ -42,8 +43,10 @@ import { TopBar } from "#renderer/features/shell/top-bar";
 import { TopBarPanelSlot } from "#renderer/features/shell/top-bar-slots";
 import { useAppNavigate } from "#renderer/lib/navigation/use-app-navigate";
 import { IS_ELECTRON } from "#renderer/lib/platform";
-import { useShellWidth } from "#renderer/lib/shell-breakpoints";
-import { shellLayout } from "#renderer/lib/shell-layout";
+import {
+  useShellLayout,
+  useShellWidthSelect,
+} from "#renderer/lib/shell-breakpoints";
 import type { PanelTabKind } from "#renderer/lib/side-panel/store";
 import { Button } from "#renderer/ui/button";
 import {
@@ -176,15 +179,14 @@ export const SessionDock = ({
   const active =
     search.tab ?? (entries.open ? (entries.last ?? undefined) : undefined);
   const prefs = usePrefs();
-  const width = useShellWidth();
+  const narrow = useShellWidthSelect((width) => width < 600);
   const expanded =
     entries.open === true &&
     (search.view === "full" ||
       (!IS_ELECTRON &&
-        width < 600 &&
+        narrow &&
         (active === "files" || !!active?.startsWith("preview:"))));
-  const layout = shellLayout({
-    width,
+  const layout = useShellLayout({
     area: "sessions",
     pinned: prefs.sidebar.pinned,
     panelOpen: entries.open === true,
@@ -432,11 +434,15 @@ export const SessionDock = ({
     </TopBar.Group>
   );
   const railPlacement = useTabsRailPlacement();
+  const dockColumns = useDockColumns();
   const rail =
     entries.open && active ? (
       <>
         {
           <TopBar.PanelTabs
+            columns={
+              expanded && railPlacement === "titlebar" ? dockColumns : undefined
+            }
             tabs={[
               ...(!split
                 ? [

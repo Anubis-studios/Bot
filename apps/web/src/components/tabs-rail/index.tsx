@@ -27,6 +27,7 @@ import {
 import { useTranslation } from "react-i18next";
 
 import { BotAvatar } from "#renderer/components/bot-avatar";
+import type { DockColumn } from "#renderer/components/panel-workspace/columns";
 import { TitleBarIconButton } from "#renderer/components/title-bar";
 import { usePrefs } from "#renderer/data/db/prefs";
 import { defaultLook } from "#renderer/lib/bots/avatar";
@@ -126,160 +127,25 @@ export const nativeDragImage = (event: React.DragEvent<HTMLElement>) => {
 const TAB_CLASS =
   "titlebar-nodrag text-muted-foreground hover:text-sidebar-foreground data-active:bg-transparent data-active:text-sidebar-foreground dark:data-active:bg-transparent dark:data-active:text-sidebar-foreground group/tab relative flex h-7 [&>svg]:relative [&>span:not([aria-hidden])]:relative max-w-44 min-w-0 flex-none items-center gap-1 rounded-lg border-0 pr-1.5 pl-3 text-[13px] font-medium shadow-none transition-[background-color,color] duration-150 ease-out select-none data-active:pr-1";
 
-/**
- * The panel's tab strip (canvas `BotChatPanel`, `SplitView`, `TitleMac`):
- * compact tabs with a reachable add button and overflow list. Dockview owns
- * expanded tab dragging; Motion animates rail geometry and the active marker.
- */
-export const TabsRail = ({
-  tabs,
-  active,
-  title,
-  kinds,
-  onChange,
-  onClose,
-  onReorder,
-  onAdd,
-  onDragStart,
-  onMove,
-  workspaceApi,
-  onReopen,
-  renderIcon,
-  onRename,
-}: {
-  tabs: readonly PanelTab[];
-  active: string | null;
-  title(tab: PanelTab): string;
-  /** The kinds "+" offers; empty hides it. */
-  kinds: readonly PanelTabKind[];
-  onChange(id: string): void;
-  onClose(id: string): void;
-  onReorder(ids: string[]): void;
-  onAdd(kind: PanelTabKind): void;
-  onDragStart?(id: string, event: React.DragEvent): void;
-  renderIcon?(tab: PanelTab): ReactNode;
-  onReopen?(): void;
-  onRename?(id: string, title: string): void;
-  workspaceApi?: React.RefObject<DockviewApi | null>;
-  onMove?(id: string, position: "left" | "right" | "top" | "bottom"): void;
-}) => {
-  const { t } = useTranslation();
-  const indicator = useId();
-  const [rename, setRename] = useState<{ id: string; title: string } | null>(
-    null
-  );
-  const motionPref = useMotionPreference();
-  const [moveGroups, setMoveGroups] = useState<{ id: string; title: string }[]>(
-    []
-  );
-  const root = useRef<HTMLDivElement>(null);
-  const list = useRef<HTMLDivElement>(null);
-  const [width, setWidth] = useState(600);
-  const [overflow, setOverflow] = useState(false);
-  const [compact, setCompact] = useState(false);
+const useTabShortcuts = (
+  root: React.RefObject<HTMLElement | null>,
+  enabled: boolean,
+  {
+    tabs,
+    active,
+    onChange,
+    onClose,
+    onReopen,
+  }: {
+    tabs: readonly PanelTab[];
+    active: string | null;
+    onChange(id: string): void;
+    onClose(id: string): void;
+    onReopen?(): void;
+  }
+) => {
   useEffect(() => {
-    const element = root.current;
-    if (!element) return;
-    const observer = new ResizeObserver(() => {
-      if (element.clientWidth > 0)
-        setCompact(element.clientWidth < MIN_TITLE_RAIL_WIDTH);
-    });
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, []);
-  const [allOpen, setAllOpen] = useState(false);
-  // Native (dock) drag: the source stays in flow as a dimmed placeholder, and
-  // the insertion point is an inset edge, so nothing reflows mid-drag.
-  const [dragging, setDragging] = useState<string | null>(null);
-  const [dropAt, setDropAt] = useState<{ id: string; after: boolean } | null>(
-    null
-  );
-  const prefs = usePrefs();
-  const layout = railLayout(
-    tabs.length,
-    width,
-    prefs.appearance?.allowTwoTabRows === true
-  );
-  const restoreFocus = useRef(false);
-  useEffect(() => {
-    const selected = list.current?.querySelector<HTMLElement>(
-      '[role="tab"][aria-selected="true"]'
-    );
-    selected?.scrollIntoView({ block: "nearest", inline: "nearest" });
-    if (restoreFocus.current && selected) {
-      restoreFocus.current = false;
-      selected.focus();
-    }
-  }, [active]);
-  useEffect(() => {
-    const element = list.current;
-    if (!element) return;
-    const observer = new ResizeObserver(() => {
-      setWidth(element.clientWidth);
-      setOverflow(element.scrollWidth > element.clientWidth + 1);
-      element
-        .querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')
-        ?.scrollIntoView({ block: "nearest", inline: "nearest" });
-    });
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [tabs.length, layout.mode]);
-  useEffect(() => {
-    if (!root.current?.closest('[data-slot="topbar"]')) return;
-    const html = document.documentElement;
-    let controls: ReturnType<typeof animate> | null = null;
-    const resize = () => {
-      const style = getComputedStyle(html);
-      const base =
-        Number.parseFloat(style.getPropertyValue("--titlebar-row-h")) || 40;
-      const current =
-        Number.parseFloat(style.getPropertyValue("--toolbar-h")) || base;
-      controls?.stop();
-      if (motionPref === "reduced")
-        html.style.setProperty("--toolbar-h", `${base * layout.rows}px`);
-      else
-        controls = animate(current, base * layout.rows, {
-          ...springs.panel,
-          onUpdate: (value) =>
-            html.style.setProperty("--toolbar-h", `${value}px`),
-        });
-    };
-    resize();
-    const observer = new MutationObserver(resize);
-    observer.observe(html, {
-      attributes: true,
-      attributeFilter: ["data-density"],
-    });
-    return () => {
-      controls?.stop();
-      observer.disconnect();
-    };
-  }, [layout.rows, motionPref]);
-  useLayoutEffect(() => {
-    const titlebar = !!root.current?.closest('[data-slot="topbar"]');
-    return () => {
-      if (titlebar) {
-        const html = document.documentElement;
-        html.style.setProperty(
-          "--toolbar-h",
-          getComputedStyle(html).getPropertyValue("--titlebar-row-h") || "40px"
-        );
-      }
-    };
-  }, []);
-  useEffect(() => {
-    const element = list.current;
-    if (!element || !overflow) return;
-    const wheel = (event: WheelEvent) => {
-      if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
-        element.scrollLeft += event.deltaY;
-        event.preventDefault();
-      }
-    };
-    element.addEventListener("wheel", wheel, { passive: false });
-    return () => element.removeEventListener("wheel", wheel);
-  }, [overflow]);
-  useEffect(() => {
+    if (!enabled) return;
     const keydown = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
       const rail = root.current;
@@ -313,7 +179,301 @@ export const TabsRail = ({
     };
     window.addEventListener("keydown", keydown, true);
     return () => window.removeEventListener("keydown", keydown, true);
-  }, [active, tabs, onChange, onClose, onReopen]);
+  }, [enabled, root, active, tabs, onChange, onClose, onReopen]);
+};
+
+/** Move and add menus: shared by every strip of a grouped rail. */
+const RailControls = ({
+  active,
+  kinds,
+  onAdd,
+  onMove,
+  workspaceApi,
+}: {
+  active: string | null;
+  kinds: readonly PanelTabKind[];
+  onAdd(kind: PanelTabKind): void;
+  onMove?(id: string, position: "left" | "right" | "top" | "bottom"): void;
+  workspaceApi?: React.RefObject<DockviewApi | null>;
+}) => {
+  const { t } = useTranslation();
+  const [moveGroups, setMoveGroups] = useState<{ id: string; title: string }[]>(
+    []
+  );
+  return (
+    <>
+      {onMove && active ? (
+        <DropdownMenu
+          onOpenChange={(open) => {
+            if (open)
+              setMoveGroups(
+                workspaceApi?.current?.groups
+                  .filter(
+                    (group) =>
+                      group.id !==
+                      workspaceApi.current?.getPanel(active)?.group.id
+                  )
+                  .map((group) => ({
+                    id: group.id,
+                    title: group.activePanel?.title ?? group.id,
+                  })) ?? []
+              );
+          }}
+        >
+          <DropdownMenuTrigger
+            render={<BarButton label={t("sessions.dock.move")} />}
+          >
+            <Ellipsis />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {(["left", "right", "top", "bottom"] as const).map((position) => (
+              <DropdownMenuItem
+                key={position}
+                onClick={() => onMove(active, position)}
+              >
+                {position === "left" || position === "right" ? (
+                  <LayoutPanelLeft />
+                ) : (
+                  <LayoutPanelTop />
+                )}
+                {t(`sessions.dock.moveDirections.${position}`)}
+              </DropdownMenuItem>
+            ))}
+            {moveGroups.map((group) => (
+              <DropdownMenuItem
+                key={group.id}
+                onClick={() => {
+                  const api = workspaceApi?.current;
+                  const target = api?.groups.find(
+                    (pane) => pane.id === group.id
+                  );
+                  if (target)
+                    api
+                      ?.getPanel(active)
+                      ?.api.moveTo({ group: target, position: "center" });
+                }}
+              >
+                <LayoutPanelLeft />
+                <span className="min-w-0 truncate">
+                  {t("sessions.dock.movePane", { name: group.title })}
+                </span>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
+      {kinds.length > 0 && (
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={<BarButton label={t("shell.panel.addTab")} />}
+            data-testid="panel-add-tab"
+          >
+            <Plus />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="titlebar-nodrag">
+            {kinds.map((kind) => (
+              <DropdownMenuItem key={kind} onClick={() => onAdd(kind)}>
+                {kind === "browser" ? (
+                  <Globe />
+                ) : kind === "terminal" ? (
+                  <Terminal />
+                ) : kind === "files" ? (
+                  <Folder />
+                ) : kind === "changes" ? (
+                  <GitCompare />
+                ) : kind === "memory" ? (
+                  <Brain />
+                ) : kind === "agent" ? (
+                  <Bot />
+                ) : (
+                  <FileText />
+                )}
+                <span className="min-w-0 truncate">
+                  {t(`shell.panel.tabs.${kind}`)}
+                </span>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+    </>
+  );
+};
+
+/**
+ * The panel's tab strip (canvas `BotChatPanel`, `SplitView`, `TitleMac`):
+ * compact tabs with a reachable add button and overflow list. Dockview owns
+ * expanded tab dragging; Motion animates rail geometry and the active marker.
+ */
+const RailSegment = ({
+  tabs,
+  active,
+  title,
+  kinds,
+  onChange,
+  onClose,
+  onReorder,
+  onAdd,
+  onDragStart,
+  onMove,
+  workspaceApi,
+  onReopen,
+  renderIcon,
+  onRename,
+  controls = true,
+  shortcuts = true,
+  measureToolbar = true,
+  allowTwoRows,
+  className,
+  style,
+}: {
+  /** Menus for moving and adding tabs; a grouped rail shares one set. */
+  controls?: boolean;
+  /** ⌘1-9 / ⌘W / ⇧⌘T; a grouped rail registers them once for all tabs. */
+  shortcuts?: boolean;
+  /** Whether this strip drives the title bar's `--toolbar-h` row spring. */
+  measureToolbar?: boolean;
+  allowTwoRows?: boolean;
+  className?: string;
+  style?: React.CSSProperties;
+  tabs: readonly PanelTab[];
+  active: string | null;
+  title(tab: PanelTab): string;
+  /** The kinds "+" offers; empty hides it. */
+  kinds: readonly PanelTabKind[];
+  onChange(id: string): void;
+  onClose(id: string): void;
+  onReorder(ids: string[]): void;
+  onAdd(kind: PanelTabKind): void;
+  onDragStart?(id: string, event: React.DragEvent): void;
+  renderIcon?(tab: PanelTab): ReactNode;
+  onReopen?(): void;
+  onRename?(id: string, title: string): void;
+  workspaceApi?: React.RefObject<DockviewApi | null>;
+  onMove?(id: string, position: "left" | "right" | "top" | "bottom"): void;
+}) => {
+  const { t } = useTranslation();
+  const indicator = useId();
+  const [rename, setRename] = useState<{ id: string; title: string } | null>(
+    null
+  );
+  const motionPref = useMotionPreference();
+  const root = useRef<HTMLDivElement>(null);
+  const list = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(600);
+  const [overflow, setOverflow] = useState(false);
+  const [compact, setCompact] = useState(false);
+  useEffect(() => {
+    const element = root.current;
+    if (!element) return;
+    const observer = new ResizeObserver(() => {
+      if (element.clientWidth > 0)
+        setCompact(element.clientWidth < MIN_TITLE_RAIL_WIDTH);
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  const [allOpen, setAllOpen] = useState(false);
+  // Native (dock) drag: the source stays in flow as a dimmed placeholder, and
+  // the insertion point is an inset edge, so nothing reflows mid-drag.
+  const [dragging, setDragging] = useState<string | null>(null);
+  const [dropAt, setDropAt] = useState<{ id: string; after: boolean } | null>(
+    null
+  );
+  const prefs = usePrefs();
+  const layout = railLayout(
+    tabs.length,
+    width,
+    allowTwoRows ?? prefs.appearance?.allowTwoTabRows === true
+  );
+  const restoreFocus = useRef(false);
+  useEffect(() => {
+    const selected = list.current?.querySelector<HTMLElement>(
+      '[role="tab"][aria-selected="true"]'
+    );
+    selected?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    if (restoreFocus.current && selected) {
+      restoreFocus.current = false;
+      selected.focus();
+    }
+  }, [active]);
+  useEffect(() => {
+    const element = list.current;
+    if (!element) return;
+    const observer = new ResizeObserver(() => {
+      setWidth(element.clientWidth);
+      setOverflow(element.scrollWidth > element.clientWidth + 1);
+      element
+        .querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')
+        ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [tabs.length, layout.mode]);
+  useEffect(() => {
+    if (!measureToolbar || !root.current?.closest('[data-slot="topbar"]'))
+      return;
+    const html = document.documentElement;
+    let controls: ReturnType<typeof animate> | null = null;
+    const resize = () => {
+      const style = getComputedStyle(html);
+      const base =
+        Number.parseFloat(style.getPropertyValue("--titlebar-row-h")) || 40;
+      const current =
+        Number.parseFloat(style.getPropertyValue("--toolbar-h")) || base;
+      controls?.stop();
+      if (motionPref === "reduced")
+        html.style.setProperty("--toolbar-h", `${base * layout.rows}px`);
+      else
+        controls = animate(current, base * layout.rows, {
+          ...springs.panel,
+          onUpdate: (value) =>
+            html.style.setProperty("--toolbar-h", `${value}px`),
+        });
+    };
+    resize();
+    const observer = new MutationObserver(resize);
+    observer.observe(html, {
+      attributes: true,
+      attributeFilter: ["data-density"],
+    });
+    return () => {
+      controls?.stop();
+      observer.disconnect();
+    };
+  }, [layout.rows, motionPref, measureToolbar]);
+  useLayoutEffect(() => {
+    const titlebar =
+      measureToolbar && !!root.current?.closest('[data-slot="topbar"]');
+    return () => {
+      if (titlebar) {
+        const html = document.documentElement;
+        html.style.setProperty(
+          "--toolbar-h",
+          getComputedStyle(html).getPropertyValue("--titlebar-row-h") || "40px"
+        );
+      }
+    };
+  }, [measureToolbar]);
+  useEffect(() => {
+    const element = list.current;
+    if (!element || !overflow) return;
+    const wheel = (event: WheelEvent) => {
+      if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
+        element.scrollLeft += event.deltaY;
+        event.preventDefault();
+      }
+    };
+    element.addEventListener("wheel", wheel, { passive: false });
+    return () => element.removeEventListener("wheel", wheel);
+  }, [overflow]);
+  useTabShortcuts(root, shortcuts, {
+    tabs,
+    active,
+    onChange,
+    onClose,
+    onReopen,
+  });
   if (tabs.length === 0 && kinds.length === 0) return null;
   const ids = tabs.map((tab) => tab.id);
   return (
@@ -323,7 +483,11 @@ export const TabsRail = ({
       data-rail-chat={tabs.some((tab) => tab.id === "chat") ? "" : undefined}
       data-rail-mode={compact ? "overflow" : layout.mode}
       data-rail-rows={layout.rows}
-      className="titlebar-nodrag mr-2 flex w-full max-w-full min-w-0 flex-1 items-center gap-1 self-stretch"
+      className={cn(
+        "titlebar-nodrag mr-2 flex w-full max-w-full min-w-0 flex-1 items-center gap-1 self-stretch",
+        className
+      )}
+      style={style}
     >
       <Tabs
         value={active ?? undefined}
@@ -633,99 +797,14 @@ export const TabsRail = ({
           </PopoverContent>
         </Popover>
       )}
-      {onMove && active ? (
-        <DropdownMenu
-          onOpenChange={(open) => {
-            if (open)
-              setMoveGroups(
-                workspaceApi?.current?.groups
-                  .filter(
-                    (group) =>
-                      group.id !==
-                      workspaceApi.current?.getPanel(active)?.group.id
-                  )
-                  .map((group) => ({
-                    id: group.id,
-                    title: group.activePanel?.title ?? group.id,
-                  })) ?? []
-              );
-          }}
-        >
-          <DropdownMenuTrigger
-            render={<BarButton label={t("sessions.dock.move")} />}
-          >
-            <Ellipsis />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            {(["left", "right", "top", "bottom"] as const).map((position) => (
-              <DropdownMenuItem
-                key={position}
-                onClick={() => onMove(active, position)}
-              >
-                {position === "left" || position === "right" ? (
-                  <LayoutPanelLeft />
-                ) : (
-                  <LayoutPanelTop />
-                )}
-                {t(`sessions.dock.moveDirections.${position}`)}
-              </DropdownMenuItem>
-            ))}
-            {moveGroups.map((group) => (
-              <DropdownMenuItem
-                key={group.id}
-                onClick={() => {
-                  const api = workspaceApi?.current;
-                  const target = api?.groups.find(
-                    (pane) => pane.id === group.id
-                  );
-                  if (target)
-                    api
-                      ?.getPanel(active)
-                      ?.api.moveTo({ group: target, position: "center" });
-                }}
-              >
-                <LayoutPanelLeft />
-                <span className="min-w-0 truncate">
-                  {t("sessions.dock.movePane", { name: group.title })}
-                </span>
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      ) : null}
-      {kinds.length > 0 && (
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={<BarButton label={t("shell.panel.addTab")} />}
-            data-testid="panel-add-tab"
-          >
-            <Plus />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="titlebar-nodrag">
-            {kinds.map((kind) => (
-              <DropdownMenuItem key={kind} onClick={() => onAdd(kind)}>
-                {kind === "browser" ? (
-                  <Globe />
-                ) : kind === "terminal" ? (
-                  <Terminal />
-                ) : kind === "files" ? (
-                  <Folder />
-                ) : kind === "changes" ? (
-                  <GitCompare />
-                ) : kind === "memory" ? (
-                  <Brain />
-                ) : kind === "agent" ? (
-                  <Bot />
-                ) : (
-                  <FileText />
-                )}
-                <span className="min-w-0 truncate">
-                  {t(`shell.panel.tabs.${kind}`)}
-                </span>
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+      {controls && (
+        <RailControls
+          active={active}
+          kinds={kinds}
+          onAdd={onAdd}
+          onMove={onMove}
+          workspaceApi={workspaceApi}
+        />
       )}
       <Dialog
         open={rename != null}
@@ -761,6 +840,88 @@ export const TabsRail = ({
           </form>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+};
+
+type RailProps = React.ComponentProps<typeof RailSegment>;
+
+/** `full` with the segment's new order slotted into the places it held. */
+export const mergeOrder = (
+  full: readonly string[],
+  segment: readonly string[]
+): string[] => {
+  const members = new Set(segment);
+  let next = 0;
+  return full.map((id) => (members.has(id) ? segment[next++]! : id));
+};
+
+/**
+ * The title bar's tab strip. Docked into several panes, each pane's tabs sit
+ * over that pane and the menus share the right edge; otherwise one strip.
+ */
+export const TabsRail = ({
+  columns,
+  ...props
+}: RailProps & { columns?: readonly DockColumn[] }) => {
+  if (columns && columns.length > 1)
+    return <GroupedRail columns={columns} {...props} />;
+  return <RailSegment {...props} />;
+};
+
+const GroupedRail = ({
+  columns,
+  ...props
+}: RailProps & { columns: readonly DockColumn[] }) => {
+  const { tabs, active, onChange, onClose, onReopen, onReorder } = props;
+  const root = useRef<HTMLDivElement>(null);
+  useTabShortcuts(root, true, { tabs, active, onChange, onClose, onReopen });
+  const known = new Set(columns.flatMap((column) => column.ids));
+  const orphans = tabs.filter((tab) => !known.has(tab.id));
+  const ids = tabs.map((tab) => tab.id);
+  return (
+    <div
+      ref={root}
+      data-slot="topbar-panel-tabs-groups"
+      className="titlebar-nodrag mr-2 flex w-full max-w-full min-w-0 flex-1 items-center gap-1 self-stretch"
+    >
+      {columns.map((column, index) => {
+        const last = index === columns.length - 1;
+        const members = tabs.filter(
+          (tab) =>
+            column.ids.includes(tab.id) ||
+            (index === 0 && orphans.includes(tab))
+        );
+        const width = last ? 0 : columns[index + 1]!.left - column.left;
+        const segmentIds = members.map((tab) => tab.id);
+        return (
+          <RailSegment
+            key={index}
+            {...props}
+            tabs={members}
+            active={
+              active && segmentIds.includes(active)
+                ? active
+                : (column.active ?? segmentIds[0] ?? null)
+            }
+            kinds={[]}
+            controls={false}
+            shortcuts={false}
+            measureToolbar={false}
+            allowTwoRows={false}
+            className={cn("mr-0", index > 0 && "pl-2")}
+            style={last ? undefined : { flex: `0 1 ${width}px`, width }}
+            onReorder={(order) => onReorder(mergeOrder(ids, order))}
+          />
+        );
+      })}
+      <RailControls
+        active={active}
+        kinds={props.kinds}
+        onAdd={props.onAdd}
+        onMove={props.onMove}
+        workspaceApi={props.workspaceApi}
+      />
     </div>
   );
 };

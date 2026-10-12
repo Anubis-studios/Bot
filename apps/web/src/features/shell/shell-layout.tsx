@@ -41,19 +41,21 @@ import {
  * 1100 px adds or removes a sibling, never re-parents the route subtree, so
  * its state and scroll survive.
  */
+import { useDockColumns } from "#renderer/components/panel-workspace/columns";
 import { WorkspaceTitleRegion } from "#renderer/components/panel-workspace/title-region";
 import {
+  MIN_TITLE_RAIL_WIDTH,
   tabsRailPlacement,
   TabsRailPlacementProvider,
 } from "#renderer/components/tabs-rail/placement";
 import { usePrefs } from "#renderer/data/db/prefs";
 import { cn } from "#renderer/lib/cn";
 
-import { useShellWidth, useShellBand } from "./breakpoints";
+import { useShellLayout, useShellBand } from "./breakpoints";
 import { UpgradePromo } from "./credits-card";
 import { FloatingIntentContext } from "./floating-intent";
 import { APP_HOTKEYS, useAppHotkey } from "./hotkeys";
-import { shellLayout, type ShellArea } from "./layout";
+import type { ShellArea } from "./layout";
 import {
   activatePanelTab,
   AREA_PANEL_KINDS,
@@ -165,7 +167,6 @@ export const ShellLayout = ({
 }: ShellLayoutProps) => {
   const { t } = useTranslation();
   const band = useShellBand();
-  const width = useShellWidth();
   const prefs = usePrefs();
   const { area, sidebar } = useShellMatch();
   const panel = usePanel(area);
@@ -177,9 +178,9 @@ export const ShellLayout = ({
   const sidebarToggle = useSidebarToggle(panel);
   const [intent] = useState(() => createFloatingIntent(focusInsideFloating));
 
+  const dockColumns = useDockColumns();
   const tabTitle = usePanelTabTitle();
-  const layout = shellLayout({
-    width,
+  const layout = useShellLayout({
     area,
     pinned: prefs.sidebar.pinned,
     panelOpen: area === "sessions" ? panel.sessionOpen : panel.open,
@@ -198,12 +199,16 @@ export const ShellLayout = ({
   const expanded = panelShown && panel.scope.expanded === true;
   const botId = scopeKey?.startsWith("bots:") ? scopeKey.slice(5) : undefined;
   const dockApi = useRef<import("dockview-react").DockviewApi | null>(null);
-  const [titleWidth, setTitleWidth] = useState(Infinity);
+  // Only whether the title region is too narrow for the rail matters, so a
+  // resize drag re-renders the shell when that flips, not on every frame.
+  const [titleNarrow, setTitleNarrow] = useState(false);
+  const reportTitleWidth = (width: number) =>
+    setTitleNarrow(width < MIN_TITLE_RAIL_WIDTH);
   const railPlacement = tabsRailPlacement({
     available: area === "sessions" ? panel.sessionOpen : panelShown,
     floating: layout.sidePanel === "drawer",
     phone: band === "xs",
-    titleWidth,
+    titleWidth: titleNarrow ? 0 : Infinity,
   });
   const railTabs: readonly PanelTab[] = expanded
     ? [
@@ -217,6 +222,7 @@ export const ShellLayout = ({
         {
           <TopBar.PanelTabs
             tabs={railTabs}
+            columns={expanded ? dockColumns : undefined}
             active={panel.scope.active}
             renderIcon={(tab) =>
               tab.id === "chat" ? <BotTabAvatar botId={botId} /> : undefined
@@ -298,7 +304,7 @@ export const ShellLayout = ({
   return (
     <TabsRailPlacementProvider
       placement={railPlacement}
-      reportWidth={setTitleWidth}
+      reportWidth={reportTitleWidth}
     >
       <FloatingIntentContext value={intent}>
         <PanelScopeContext value={scopeKey}>
