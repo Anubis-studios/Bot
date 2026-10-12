@@ -424,6 +424,10 @@ export const fetchAbacusAccount = async (
   }
 };
 
+/** The account as last read, without a fetch: null before the first read or once signed out. */
+export const cachedAbacusAccount = (): AbacusAccountInfo | null =>
+  accountCache?.value ?? null;
+
 /** Whether the account is on the free plan: its tier, else its plan, reads "free". */
 export const onFreePlan = (
   account: Pick<AbacusAccountInfo, "plan" | "subscription_tier"> | null

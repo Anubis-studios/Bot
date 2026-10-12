@@ -1,3 +1,4 @@
+import { cachedAbacusAccount, onFreePlan } from "../../providers/abacus";
 import {
   type BillingPlan,
   type BillingPlanTier,
@@ -92,6 +93,12 @@ export const BILLING_TOOLS: ToolDefinition[] = [
     name: "billing_plan",
     toolsets: "always",
     botAlways: true,
+    // Free accounts only: a paid account the app has read is never offered it.
+    // Before the first account read it is listed, and its answer still fits.
+    ready: () => {
+      const account = cachedAbacusAccount();
+      return account == null || onFreePlan(account);
+    },
     description: [
       "The user's Abacus AI plan and credits, every plan with its price, any first-month discount and what it gives,",
       "and the links to upgrade or buy credits. Call it whenever they ask about their plan, credits or balance, prices,",
