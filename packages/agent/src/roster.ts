@@ -48,6 +48,7 @@ import {
 } from "./session-search-tool.js";
 import { buildSkillAddTool, skillAddEnabled } from "./skill-add-tool.js";
 import { buildTodoTool } from "./todo-tool.js";
+import { buildSetUserLanguageTool } from "./user-language.js";
 
 /** What a session hands the table; everything a builder may need. */
 export interface RosterContext {
@@ -171,10 +172,13 @@ const withLiveModel = <T extends object>(
  *
  * `exit_plan_mode` is a mode's only exit, and must not depend on which
  * toolsets are on. `current_time` is a clock, not a capability.
+ * `set_user_language` saves the language the user asked for; switched off,
+ * that request would be silently dropped.
  */
 export const NOT_SWITCHABLE: readonly string[] = [
   "exit_plan_mode",
   "current_time",
+  "set_user_language",
 ];
 
 /**
@@ -212,6 +216,8 @@ export const OWN_TOOLS: readonly RosterEntry[] = [
   },
   { name: "todo", unlessProvided: true, build: () => buildTodoTool() },
   { name: "memory", unlessProvided: true, build: () => buildMemoryTool() },
+  // The language every reply is in, for all conversations; see user-language.ts.
+  { name: "set_user_language", build: () => buildSetUserLanguageTool() },
   // The tool every handover instruction names; there must always be one.
   {
     name: "present_deliverable",

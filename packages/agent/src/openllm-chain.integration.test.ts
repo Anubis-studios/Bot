@@ -171,6 +171,11 @@ beforeAll(async () => {
     path.join(home, "config.json"),
     JSON.stringify({ defaultModel: "openllm/auto", customProviders: [] })
   );
+  // A saved language: detecting one would be one more call to the fake pool.
+  fs.writeFileSync(
+    path.join(home, "user-language.json"),
+    JSON.stringify({ language: { name: "English", source: "user" } })
+  );
   process.env.ABACUSAI_BOT_HOME = home;
   process.env.ABACUS_API_KEY = "test-abacus-key";
 }, 60_000);

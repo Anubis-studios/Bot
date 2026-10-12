@@ -153,6 +153,7 @@ import { ToolHeartbeat } from "./tool-heartbeat.js";
 import { type ToolOrigin, type UnattendedPolicy } from "./tool-policy.js";
 import { TOOLS_ARRIVED_TYPE, toolsArrivedPrompt } from "./tools-arrived.js";
 import { turnUsage, type TurnUsage } from "./turn-usage.js";
+import { learnUserLanguage, userLanguagePrompt } from "./user-language.js";
 import { webHostPrompt } from "./web-host-prompt.js";
 import { desktopXSearchAvailable, searchAvailable } from "./web/search.js";
 import webTools from "./web/tools.js";
@@ -765,6 +766,8 @@ export class AbacusBotSession {
   private resourceLoader: DefaultResourceLoader | undefined;
   /** The instructions the current prompt was built with; compared per turn. */
   private promptInstructions = "";
+  /** The user-language line the prompt was built with. */
+  private promptUserLanguage: string | null = null;
   private promptPersona = "";
   /** The MCP roster the prompt was last built against. */
   private promptMcpRoster = "";
@@ -854,6 +857,8 @@ export class AbacusBotSession {
         const persona = personaPrompt();
         const instructions = unattended ? null : customInstructionsPrompt();
         const remember = unattended ? null : rememberPrompt();
+        const language = userLanguagePrompt();
+        this.promptUserLanguage = language;
 
         // Live statuses, so a connector added mid-chat updates the line.
         const mcp = mcpPrompt(this.mcp.statuses);
@@ -866,6 +871,8 @@ export class AbacusBotSession {
           ...(mcp == null ? [] : [mcp]),
           ...(remember == null ? [] : [remember]),
           ...(instructions == null ? [] : [instructions]),
+          // Last of all, so it outweighs a template or routine written in English.
+          ...(language == null ? [] : [language]),
         ];
       },
       // The permission gate runs before the guardrails: a call the user will
@@ -1221,6 +1228,9 @@ export class AbacusBotSession {
 
     // Edited instructions apply to this turn, not the next session.
     await this.refreshCustomInstructions();
+    // Only the user's own words name their language; a routine's prompt does not.
+    if (this.mode !== AgentMode.Unattended)
+      void learnUserLanguage(text, (process.env.ABACUS_API_KEY ?? "").trim());
 
     // Per turn: the same provider failing next turn is news again.
     this.retriedCalls = 0;
@@ -3303,11 +3313,13 @@ export class AbacusBotSession {
     // The bot persona and the MCP roster ride the same rebuild.
     const persona = readPersona();
     const roster = mcpRosterFingerprint(this.mcp.statuses);
+    const language = userLanguagePrompt();
 
     if (
       current === this.promptInstructions &&
       persona === this.promptPersona &&
-      roster === this.promptMcpRoster
+      roster === this.promptMcpRoster &&
+      language === this.promptUserLanguage
     )
       return;
 

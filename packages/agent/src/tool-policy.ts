@@ -215,6 +215,8 @@ const NO_OUTPUT = "a run's only output is its answer to its owner";
 
 /** The built-in tools an unattended run never gets, each with why. */
 export const UNATTENDED_EXCLUDED_TOOLS: Readonly<Record<string, string>> = {
+  set_user_language:
+    "only the user's own words set their language, never a routine's",
   bash: NO_CODE,
   write: NO_CODE,
   edit: NO_CODE,
