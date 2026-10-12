@@ -274,8 +274,10 @@ const InlineCode = (props: ComponentProps<"code">) => {
 };
 
 const Table = (props: ComponentProps<"table">) => (
-  <div className="chat-table scroll-fade-x" tabIndex={0}>
-    <table {...props} />
+  <div className="chat-table">
+    <div className="chat-table-scroll scroll-fade-x" tabIndex={0}>
+      <table {...props} />
+    </div>
   </div>
 );
 

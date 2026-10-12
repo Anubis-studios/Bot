@@ -115,6 +115,13 @@ describe("chat CSS reduced motion", () => {
   });
 });
 
+// The scale is the :root tokens; resolve var(--chat-space-N) from them.
+const scale = (value: string) =>
+  value.replace(/var\(--chat-space-(\d+)\)/g, (_, n: string) => {
+    const token = new RegExp(`--chat-space-${n}:\\s*(\\d+px)`).exec(css);
+    return token?.[1] ?? value;
+  });
+
 describe("tool cluster geometry", () => {
   it("keeps consecutive calls tight and separates other rows", () => {
     const style = document.createElement("style");
@@ -129,16 +136,20 @@ describe("tool cluster geometry", () => {
         <div id="after-text" data-tool-gap="same"></div>
       </div><div id="cluster" data-slot="tool-cluster"></div>`;
       expect(
-        getComputedStyle(document.querySelector("#same")!).paddingTop
+        scale(getComputedStyle(document.querySelector("#same")!).paddingTop)
       ).toBe("2px");
       expect(
-        getComputedStyle(document.querySelector("#different")!).paddingTop
+        scale(
+          getComputedStyle(document.querySelector("#different")!).paddingTop
+        )
       ).toBe("8px");
       expect(
-        getComputedStyle(document.querySelector("#text")!).paddingTop
+        scale(getComputedStyle(document.querySelector("#text")!).paddingTop)
       ).toBe("12px");
       expect(
-        getComputedStyle(document.querySelector("#after-text")!).paddingTop
+        scale(
+          getComputedStyle(document.querySelector("#after-text")!).paddingTop
+        )
       ).toBe("12px");
       expect(getComputedStyle(document.querySelector("#cluster")!).gap).toBe(
         "2px"
@@ -147,33 +158,55 @@ describe("tool cluster geometry", () => {
       style.remove();
     }
   });
-  it("steps the sessions transcript by hierarchy and hugs prose to its group", () => {
+  it("steps the sessions transcript on one scale, one owner per boundary", () => {
     const style = document.createElement("style");
     style.textContent = css;
     document.head.append(style);
     document.body.innerHTML = `
-      <div data-slot="message-scroller-content">
+      <div data-skin="session"><div data-slot="message-scroller-content">
         <div id="u1" data-turn="user"></div>
         <div id="a1" data-turn="assistant">
           <div data-slot="assistant-parts">
-            <p id="prose"></p><div id="group" data-slot="tool-group"></div><p id="after"></p>
+            <p id="prose" class="chat-prose"></p><div id="group" data-slot="tool-group"></div><p id="after" class="chat-prose"></p><div id="card" data-slot="deliverables-card"></div><div id="actions" data-slot="turn-actions"></div>
           </div>
         </div>
+        <div id="marker" data-outcome></div>
         <div id="a2" data-turn="assistant"></div>
+        <div id="day" data-slot="day-separator"></div>
         <div id="u2" data-turn="user"></div>
+        <div id="day2" data-slot="day-separator"></div>
+        <div id="a3" data-turn="assistant"></div>
         <div id="busy" data-slot="busy-line"></div>
-      </div>`;
+        <div id="u3" data-turn="user"></div>
+        <div id="busy2" data-slot="busy-line"></div>
+        <div id="error"></div>
+      </div></div>`;
     try {
       const pad = (id: string) =>
-        getComputedStyle(document.querySelector(id)!).paddingTop;
+        scale(getComputedStyle(document.querySelector(id)!).paddingTop);
       const margin = (id: string) =>
-        getComputedStyle(document.querySelector(id)!).marginTop;
-      expect(pad("#a1")).toBe("16px");
-      expect(pad("#a2")).toBe("14px");
-      expect(pad("#u2")).toBe("28px");
-      expect(pad("#busy")).toBe("2px");
+        scale(getComputedStyle(document.querySelector(id)!).marginTop);
+      // Turn boundaries: 24 around a user message, 12 between replies.
+      expect(pad("#a1")).toBe("24px");
+      expect(pad("#a2")).toBe("12px");
+      expect(pad("#u2")).toBe("16px"); // after a day separator
+      expect(pad("#a3")).toBe("16px");
+      // Day separator: 16 above and below, 24 after a user message.
+      expect(pad("#day")).toBe("16px");
+      expect(pad("#day2")).toBe("24px");
+      // Live row and run marker hug what is above; after a user message they
+      // keep the turn gap.
+      expect(pad("#marker")).toBe("4px");
+      expect(pad("#busy")).toBe("4px");
+      expect(pad("#busy2")).toBe("24px");
+      expect(pad("#error")).toBe("12px");
+      expect(pad("#u3")).toBe("24px");
+      // Within a turn: prose and group hug both ways; other parts 4 / 8;
+      // the footer is a 12 card then a 4 actions row.
       expect(margin("#group")).toBe("0px");
-      expect(margin("#after")).toBe("4px");
+      expect(margin("#after")).toBe("0px");
+      expect(margin("#card")).toBe("12px");
+      expect(margin("#actions")).toBe("4px");
     } finally {
       style.remove();
       document.body.innerHTML = "";

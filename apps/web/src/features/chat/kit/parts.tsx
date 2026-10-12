@@ -292,7 +292,7 @@ export const ThinkingView = ({ part }: PartProps<unknown, "thinking">) => {
             : (title ?? t("chat.part.thoughts"))}
         </MarkerContent>
       </Marker>
-      <CollapsibleContent className="text-muted-foreground ps-5 pt-1">
+      <CollapsibleContent className="text-muted-foreground ps-5.5 pt-1">
         <Markdown
           content={content}
           role="assistant"

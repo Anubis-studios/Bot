@@ -114,7 +114,12 @@ const OutcomeRow = ({
   const { skin } = useChatView();
   if (!outcomeShown(outcome, latest, skin)) return null;
   return (
-    <MessageScrollerItem className="[content-visibility:visible]">
+    <MessageScrollerItem
+      className="[content-visibility:visible]"
+      // A run marker closes its turn (chat.css: 4 px under the actions row);
+      // an error card is a block of its own and keeps the row gap.
+      data-outcome={outcome.kind === "error" ? undefined : ""}
+    >
       <Outcome outcome={outcome} latest={latest} />
     </MessageScrollerItem>
   );

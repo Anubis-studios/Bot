@@ -75,11 +75,32 @@ describe("R2-T17 markdown", () => {
     expect(container.querySelector("h1")?.textContent).toBe("Title");
     expect(container.querySelectorAll("li")).toHaveLength(2);
     expect(container.querySelector(".chat-table table")).toBeTruthy();
+    const scroller = container.querySelector(
+      ".chat-table > .chat-table-scroll"
+    );
+    expect(scroller?.classList.contains("scroll-fade-x")).toBe(true);
+    expect(scroller?.querySelector(":scope > table thead th")).toBeTruthy();
     expect(container.querySelector(".chat-code-lang")?.textContent).toBe("ts");
     expect(screen.getByRole("button", { name: "Copy code" })).toBeTruthy();
     const code = container.querySelector("pre")!;
     code.focus();
     expect(document.activeElement).toBe(code);
+  });
+
+  it("table keeps alignment, inline code and a stable structure while streaming", () => {
+    const md =
+      "| name | n |\n|:--|--:|\n| `a.scss` | **1** |\n| x | [l](https://e.com) |";
+    const { container } = renderMd(md);
+    const cells = container.querySelectorAll("tbody tr:first-child td");
+    expect((cells[1] as HTMLElement | undefined)?.style.textAlign).toBe(
+      "right"
+    );
+    expect(cells[0]?.querySelector("code")?.textContent).toBe("a.scss");
+    expect(container.querySelectorAll(".chat-table")).toHaveLength(1);
+    const partial = renderMd("| name | n |\n|:--|--:|\n| `a.sc", {
+      streaming: true,
+    });
+    expect(partial.container.querySelectorAll(".chat-table")).toHaveLength(1);
   });
 
   it("an unclosed fence renders as a block without Copy while streaming", () => {

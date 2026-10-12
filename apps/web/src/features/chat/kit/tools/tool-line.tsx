@@ -320,7 +320,7 @@ const LivePreview = ({ output }: { output: string }) => {
   const tail = tailLines(output, 4).text;
   return tail === "" ? null : (
     <pre
-      className="chat-terminal ms-5 mt-1 max-h-16 text-xs"
+      className="chat-terminal ms-5.5 mt-1 max-h-16 text-xs"
       data-live-output
       aria-live="off"
     >
@@ -939,7 +939,7 @@ const MountedToolLine = ({ part, result, expander: fixed }: ToolLineProps) => {
         <LivePreview output={tool.terminal?.output ?? ""} />
       ) : null}
       {expandable ? (
-        <CollapsibleContent id={bodyId} className="ps-5 pt-1 pb-2">
+        <CollapsibleContent id={bodyId} className="ps-5.5 pt-1 pb-1">
           <Body
             expander={expander}
             tool={tool}

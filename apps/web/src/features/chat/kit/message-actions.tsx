@@ -925,11 +925,11 @@ const CopyButton = ({ text, onFail }: { text: string; onFail: () => void }) => {
 };
 
 /**
- * The sessions skin's user message: its Copy sits in a row of their
- * own directly under the bubble, aligned to its edge. The row is in flow (its
- * height is reserved, nothing floats and no gap separates it from the
- * bubble), appears on hover or focus anywhere in the message, and is always
- * visible on touch screens.
+ * The sessions skin's user message: its Copy sits directly under the bubble,
+ * aligned to its edge. The row has no layout height: the button hangs into
+ * the 24 px turn gap the transcript puts after a user message (chat.css), so
+ * the message takes no dead space for a control that shows on hover or focus
+ * anywhere in the message (always visible on touch screens).
  */
 const SessionActions = ({
   message,
@@ -951,13 +951,15 @@ const SessionActions = ({
       {text.trim() !== "" ? (
         <div
           data-slot="session-message-actions"
-          className="flex h-7 items-center justify-end gap-0.5 opacity-0 transition-opacity duration-150 group-focus-within/message:opacity-100 group-hover/message:opacity-100 motion-reduce:transition-none [@media(hover:none)]:opacity-100"
+          className="relative h-0 opacity-0 transition-opacity duration-150 group-focus-within/message:opacity-100 group-hover/message:opacity-100 motion-reduce:transition-none [@media(hover:none)]:opacity-100"
         >
-          <CopyButton text={text} onFail={() => setFailed(true)} />
+          <div className="absolute inset-x-0 top-0 flex h-7 items-center justify-end gap-0.5">
+            <CopyButton text={text} onFail={() => setFailed(true)} />
+          </div>
         </div>
       ) : null}
       {failed ? (
-        <p role="alert" className="text-destructive text-end text-xs">
+        <p role="alert" className="text-destructive mt-7 text-end text-xs">
           <FailedCopy />
         </p>
       ) : null}
@@ -989,10 +991,10 @@ export const TurnActions = ({
   const rateable = !composer.readOnly && !composer.turnBusy;
   if (text.trim() === "") return null;
   return (
-    <div className="mt-1 flex flex-col items-start" data-slot="turn-actions">
+    <div className="flex flex-col items-start" data-slot="turn-actions">
       <div
         data-slot="session-message-actions"
-        className="flex h-8 items-center gap-0.5 opacity-50 transition-opacity duration-150 focus-within:opacity-100 hover:opacity-100 motion-reduce:transition-none [@media(hover:none)]:opacity-100"
+        className="flex h-7 items-center gap-0.5 opacity-50 transition-opacity duration-150 focus-within:opacity-100 hover:opacity-100 motion-reduce:transition-none [@media(hover:none)]:opacity-100"
       >
         <CopyButton text={text} onFail={() => setFailed(true)} />
         {rateable ? feedback : null}

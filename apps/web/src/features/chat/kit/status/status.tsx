@@ -166,14 +166,16 @@ export const RunMarker = ({ outcome }: { outcome: RunOutcomeRecord }) => {
   if (outcome.kind === "cancelled")
     return (
       <div
-        className="text-muted-foreground flex items-center gap-2 text-[13px]"
+        className="text-muted-foreground flex min-h-7 items-center gap-2 text-xs"
         data-slot="run-marker"
         data-kind="cancelled"
       >
         <span
           aria-hidden
-          className="size-1.5 rounded-full bg-[var(--chat-status-muted)]"
-        />
+          className="flex size-3.5 shrink-0 items-center justify-center"
+        >
+          <span className="size-1.5 rounded-full bg-[var(--chat-status-muted)]" />
+        </span>
         {t("chat.run.stopped")}
       </div>
     );
@@ -183,14 +185,16 @@ export const RunMarker = ({ outcome }: { outcome: RunOutcomeRecord }) => {
   });
   const marker = (
     <div
-      className="text-muted-foreground flex items-center gap-2 text-[13px]"
+      className="text-muted-foreground flex min-h-7 items-center gap-2 text-xs"
       data-slot="run-marker"
       data-kind="success"
     >
       <span
         aria-hidden
-        className="size-1.5 rounded-full bg-[var(--chat-status-done)]"
-      />
+        className="flex size-3.5 shrink-0 items-center justify-center"
+      >
+        <span className="size-1.5 rounded-full bg-[var(--chat-status-done)]" />
+      </span>
       {label}
     </div>
   );

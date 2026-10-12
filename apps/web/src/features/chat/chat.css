@@ -14,6 +14,12 @@
   --chat-diff-del-bg: oklch(0.95 0.04 20);
   --chat-diff-del-fg: oklch(0.45 0.16 25);
   --chat-user-bubble: oklch(0.93 0 0);
+  /* The transcript's one spacing scale; every vertical gap is a step of it. */
+  --chat-space-1: 4px;
+  --chat-space-2: 8px;
+  --chat-space-3: 12px;
+  --chat-space-4: 16px;
+  --chat-space-6: 24px;
   --chat-font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
@@ -41,6 +47,7 @@
   line-height: 1.3;
   margin-top: 1.1em;
 }
+.chat-prose > :first-child { margin-top: 0; }
 .chat-prose h1 { font-size: 1.15em; }
 .chat-prose h2 { font-size: 1.07em; }
 .chat-prose h3, .chat-prose h4 { font-size: 1em; }
@@ -48,6 +55,8 @@
 .chat-prose ul { list-style: disc; }
 .chat-prose ol { list-style: decimal; }
 .chat-prose li + li { margin-top: 0.25em; }
+.chat-prose li > :is(ul, ol, p) + *, .chat-prose li > :is(ul, ol) { margin-top: 0.25em; }
+.chat-prose li > :first-child { margin-top: 0; }
 .chat-prose a { text-decoration: underline; text-underline-offset: 3px; }
 .chat-prose a[data-file] { font-family: var(--chat-font-mono); font-size: 0.92em; }
 .chat-prose blockquote {
@@ -63,14 +72,51 @@
   border-radius: 0.35em;
   background: var(--chat-surface);
 }
-.chat-prose .chat-table { overflow-x: auto; }
-.chat-prose table { border-collapse: collapse; font-size: 0.93em; }
-.chat-prose th, .chat-prose td {
+/* tables: rounded card, scrolls inside instead of crushing columns */
+.chat-prose .chat-table {
   border: 1px solid var(--border);
-  padding: 0.35em 0.7em;
-  text-align: start;
+  border-radius: 12px;
+  overflow: hidden;
+  max-width: 100%;
 }
-.chat-prose th { font-weight: 600; background: var(--chat-surface-2); }
+.chat-prose .chat-table-scroll {
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.chat-prose .chat-table-scroll:hover, .chat-prose .chat-table-scroll:focus-visible {
+  scrollbar-color: var(--border) transparent;
+}
+.chat-prose .chat-table-scroll:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+.chat-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.93em;
+  font-variant-numeric: tabular-nums;
+}
+.chat-prose th, .chat-prose td {
+  padding: 8px 12px;
+  text-align: start;
+  vertical-align: top;
+  min-width: 5.5em;
+  overflow-wrap: break-word;
+}
+.chat-prose th {
+  font-size: 0.86em;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--muted-foreground);
+  background: color-mix(in oklab, var(--chat-surface-2) 70%, transparent);
+  border-bottom: 1px solid var(--border);
+}
+.chat-prose tbody tr + tr > td { border-top: 1px solid color-mix(in oklab, var(--border) 60%, transparent); }
+.chat-prose tbody tr:hover > td { background: color-mix(in oklab, var(--chat-surface-2) 45%, transparent); }
+.chat-prose td:first-child { min-width: 0; }
+.chat-prose td :not(pre) > code, .chat-prose td > code { white-space: nowrap; }
+@media print {
+  .chat-prose .chat-table, .chat-prose .chat-table-scroll { overflow: visible; }
+  .chat-prose td :not(pre) > code, .chat-prose td > code { white-space: normal; }
+}
 .chat-prose .chat-image { max-width: 100%; border-radius: 0.6rem; }
 .chat-prose-streaming > :last-child { animation: chat-fade-in 80ms ease-out; }
 
@@ -389,27 +435,46 @@ html[data-reduce-motion="on"] [data-message-target][data-highlighted] { animatio
 }
 
 /*
- * Transcript rhythm. Every gap is one padding-top on the row it precedes
- * (never a margin on top of a flex gap). Bot rows keep 12 px; the sessions
- * skin marks its rows `data-turn` and steps by hierarchy: 14 px between
- * assistant rows, 16 px from a user message to the reply, 28 px before a
- * new user message. A tool group header is 28 px tall around 16 px of text
- * (6 px of air each side), so the visible gap beside a group is its margin
- * plus that air.
+ * Transcript rhythm, one scale (--chat-space-*: 4 / 8 / 12 / 16 / 24) and one
+ * owner per boundary. Between rows the owner is the padding-top of the row
+ * that follows (never a margin on top of a flex gap); within an assistant
+ * turn it is the margin-top of the part that follows. Bot rows keep 12 px.
+ * The sessions skin marks its rows `data-turn`:
+ *   assistant after anything   12   (the reply is the row's default)
+ *   anything around a user msg 24   (a turn boundary; also hosts the hanging
+ *                                    copy button, which has no layout height)
+ *   day separator              16 above and below (24 after a user message)
+ * A tool group header, the busy line and a run marker are 28 px tall around
+ * 12 px type (6 px of air each side), so they hug what they belong to.
  */
-[data-slot="message-scroller-content"] > * + * { --transcript-row-gap: 12px; padding-top: 12px; }
+[data-slot="message-scroller-content"] > * + * { --transcript-row-gap: 12px; padding-top: var(--chat-space-3); }
 [data-slot="message-scroller-content"] > [data-tool-only] + [data-tool-gap="same"] { --transcript-row-gap: 2px; padding-top: 2px; }
 [data-slot="message-scroller-content"] > [data-tool-only] + [data-tool-gap="different"] { --transcript-row-gap: 8px; padding-top: 8px; }
-[data-slot="message-scroller-content"] > * + [data-turn="assistant"] { --transcript-row-gap: 14px; padding-top: 14px; }
-[data-slot="message-scroller-content"] > * + [data-turn="user"] { --transcript-row-gap: 28px; padding-top: 28px; }
-[data-slot="message-scroller-content"] > [data-turn="user"] + [data-turn="assistant"] { --transcript-row-gap: 16px; padding-top: 16px; }
-/* The live row reads as the open end of the group above it. */
-[data-slot="message-scroller-content"] > [data-slot="busy-line"] { --transcript-row-gap: 2px; padding-top: 2px; }
+[data-slot="message-scroller-content"] > * + [data-turn="assistant"] { --transcript-row-gap: 12px; padding-top: var(--chat-space-3); }
+[data-slot="message-scroller-content"] > * + [data-turn="user"] { --transcript-row-gap: 24px; padding-top: var(--chat-space-6); }
+[data-slot="message-scroller-content"] > [data-turn="user"] + * { --transcript-row-gap: 24px; padding-top: var(--chat-space-6); }
+/* The live row and a run marker read as the open end of what is above them. */
+[data-slot="message-scroller-content"] > [data-slot="busy-line"],
+[data-slot="message-scroller-content"] > [data-outcome] { --transcript-row-gap: 4px; padding-top: var(--chat-space-1); }
+[data-skin="session"] [data-slot="message-scroller-content"] > [data-slot="day-separator"],
+[data-skin="session"] [data-slot="message-scroller-content"] > [data-slot="day-separator"] + *,
+[data-skin="session"] [data-slot="message-scroller-content"] > [data-slot="new-marker"],
+[data-skin="session"] [data-slot="message-scroller-content"] > [data-slot="new-marker"] + * { --transcript-row-gap: 16px; padding-top: var(--chat-space-4); }
+[data-skin="session"] [data-slot="message-scroller-content"] > [data-slot="new-marker"] { padding-block: var(--chat-space-4) 0; }
+[data-skin="session"] [data-slot="message-scroller-content"] > [data-turn="user"] + :is([data-slot="day-separator"], [data-slot="new-marker"], [data-slot="busy-line"], [data-outcome]) { --transcript-row-gap: 24px; padding-top: var(--chat-space-6); }
 
-/* Within one assistant turn: prose, then its group hugging it, then the rest. */
-[data-slot="assistant-parts"] > * + * { margin-top: 8px; }
+/*
+ * Within one assistant turn. Prose and a tool group hug each other (the
+ * group's own 6 px of air is the seam, so it does not depend on how long the
+ * prose is); any other part is a step apart; the footer (files card, then the
+ * action row) closes the turn.
+ */
+[data-slot="assistant-parts"] > * + * { margin-top: var(--chat-space-2); }
 [data-slot="assistant-parts"] > * + [data-slot="tool-group"] { margin-top: 0; }
-[data-slot="assistant-parts"] > [data-slot="tool-group"] + * { margin-top: 4px; }
+[data-slot="assistant-parts"] > [data-slot="tool-group"] + * { margin-top: var(--chat-space-1); }
+[data-slot="assistant-parts"] > [data-slot="tool-group"] + .chat-prose { margin-top: 0; }
+[data-slot="assistant-parts"] > [data-slot="deliverables-card"] { margin-top: var(--chat-space-3); }
+[data-slot="assistant-parts"] > [data-slot="turn-actions"] { margin-top: var(--chat-space-1); }
 /* Opened group: rows hang under the header's label (14 px icon + 8 px gap). */
 [data-slot="tool-cluster"] { display: flex; flex-direction: column; gap: 2px; padding-inline-start: 22px; }
 
