@@ -96,6 +96,33 @@ export const dropOrder = (
   );
   return order;
 };
+/**
+ * Draws the native drag preview from a detached copy in `<body>`: the strip
+ * scrolls (`overflow-x-auto` clips on both axes) and masks its edges, so the
+ * browser's own snapshot of the in-strip element came out clipped.
+ */
+export const nativeDragImage = (event: React.DragEvent<HTMLElement>) => {
+  const { dataTransfer, currentTarget, clientX, clientY } = event;
+  if (typeof dataTransfer?.setDragImage !== "function") return;
+  const box = currentTarget.getBoundingClientRect();
+  const ghost = currentTarget.cloneNode(true) as HTMLElement;
+  ghost.removeAttribute("data-dragging");
+  ghost.removeAttribute("data-drop");
+  Object.assign(ghost.style, {
+    position: "fixed",
+    top: "-1000px",
+    left: "-1000px",
+    width: `${box.width}px`,
+    height: `${box.height}px`,
+    opacity: "1",
+    transform: "none",
+    pointerEvents: "none",
+  });
+  ghost.classList.add("bg-sidebar-accent", "rounded-lg");
+  document.body.append(ghost);
+  dataTransfer.setDragImage(ghost, clientX - box.left, clientY - box.top);
+  setTimeout(() => ghost.remove(), 0);
+};
 const TAB_CLASS =
   "titlebar-nodrag text-muted-foreground hover:text-sidebar-foreground data-active:bg-transparent data-active:text-sidebar-foreground dark:data-active:bg-transparent dark:data-active:text-sidebar-foreground group/tab relative flex h-7 [&>svg]:relative [&>span:not([aria-hidden])]:relative max-w-44 min-w-0 flex-none items-center gap-1 rounded-lg border-0 pr-1.5 pl-3 text-[13px] font-medium shadow-none transition-[background-color,color] duration-150 ease-out select-none data-active:pr-1";
 
@@ -161,6 +188,12 @@ export const TabsRail = ({
     return () => observer.disconnect();
   }, []);
   const [allOpen, setAllOpen] = useState(false);
+  // Native (dock) drag: the source stays in flow as a dimmed placeholder, and
+  // the insertion point is an inset edge, so nothing reflows mid-drag.
+  const [dragging, setDragging] = useState<string | null>(null);
+  const [dropAt, setDropAt] = useState<{ id: string; after: boolean } | null>(
+    null
+  );
   const prefs = usePrefs();
   const layout = railLayout(
     tabs.length,
@@ -347,7 +380,15 @@ export const TabsRail = ({
                   key={tab.id}
                   as="div"
                   value={tab.id}
-                  layout
+                  layout={onDragStart ? "position" : true}
+                  data-dragging={dragging === tab.id ? "" : undefined}
+                  data-drop={
+                    dropAt?.id === tab.id
+                      ? dropAt.after
+                        ? "after"
+                        : "before"
+                      : undefined
+                  }
                   initial={motionPref === "reduced" ? false : { opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={
@@ -360,16 +401,46 @@ export const TabsRail = ({
                   dragElastic={0.05}
                   dragListener={onDragStart == null}
                   draggable={onDragStart != null}
-                  onDragStartCapture={(event) => onDragStart?.(tab.id, event)}
+                  onDragStartCapture={(event) => {
+                    if (!onDragStart) return;
+                    onDragStart(tab.id, event);
+                    setDragging(tab.id);
+                    nativeDragImage(event);
+                  }}
+                  onDragEnd={() => {
+                    setDragging(null);
+                    setDropAt(null);
+                  }}
+                  onDragLeave={(event) => {
+                    if (
+                      !event.currentTarget.contains(event.relatedTarget as Node)
+                    )
+                      setDropAt((value) =>
+                        value?.id === tab.id ? null : value
+                      );
+                  }}
                   onDragOver={(event) => {
                     if (
-                      event.dataTransfer.types.includes(
+                      !event.dataTransfer.types.includes(
                         "application/x-abacus-panel"
                       )
                     )
-                      event.preventDefault();
+                      return;
+                    event.preventDefault();
+                    if (dragging === tab.id) return;
+                    const box = event.currentTarget.getBoundingClientRect();
+                    const after =
+                      tab.id === "chat" ||
+                      event.clientX > box.left + box.width / 2;
+                    setDropAt((value) =>
+                      value?.id === tab.id && value.after === after
+                        ? value
+                        : { id: tab.id, after }
+                    );
                   }}
                   onDrop={(event) => {
+                    setDragging(null);
+                    setDropAt(null);
                     const id = event.dataTransfer.getData(
                       "application/x-abacus-panel"
                     );
@@ -390,7 +461,8 @@ export const TabsRail = ({
                       onReorder(dropOrder(ids, id, tab.id, after));
                   }}
                   className={cn(
-                    "min-w-0",
+                    "min-w-0 rounded-lg",
+                    "data-dragging:opacity-40 data-[drop=after]:shadow-[inset_-2px_0_0_var(--primary)] data-[drop=before]:shadow-[inset_2px_0_0_var(--primary)]",
                     layout.mode === "scroll"
                       ? "w-28 shrink-0"
                       : layout.mode === "single"

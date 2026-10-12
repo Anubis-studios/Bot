@@ -123,3 +123,41 @@ it("does not snap the strip, so a dragged tab moves alone", async () => {
   for (const element of [strip, ...strip.children])
     expect(element.className).not.toMatch(/\bsnap-/);
 });
+
+it("native drag keeps a dimmed placeholder, draws an unclipped preview and marks the drop edge", async () => {
+  await initI18n();
+  render(
+    <TabsRail
+      tabs={[
+        { id: "files", kind: "files", title: "Files" },
+        { id: "changes", kind: "changes", title: "Changes" },
+      ]}
+      active="files"
+      title={(tab) => tab.title!}
+      kinds={[]}
+      onChange={() => {}}
+      onClose={() => {}}
+      onReorder={() => {}}
+      onAdd={() => {}}
+      onDragStart={(id, event) =>
+        event.dataTransfer.setData("application/x-abacus-panel", id)
+      }
+    />
+  );
+  const items = [...document.querySelectorAll<HTMLElement>("[draggable]")];
+  const setDragImage = vi.fn();
+  const dataTransfer = {
+    setData: vi.fn(),
+    setDragImage,
+    types: ["application/x-abacus-panel"],
+  };
+  fireEvent.dragStart(items[0]!, { dataTransfer });
+  expect(items[0]!.hasAttribute("data-dragging")).toBe(true);
+  const ghost = setDragImage.mock.calls[0]![0] as HTMLElement;
+  expect(ghost.parentElement).toBe(document.body);
+  fireEvent.dragOver(items[1]!, { dataTransfer });
+  expect(items[1]!.getAttribute("data-drop")).toMatch(/^(before|after)$/);
+  fireEvent.dragEnd(items[0]!, { dataTransfer });
+  expect(items[0]!.hasAttribute("data-dragging")).toBe(false);
+  expect(items[1]!.hasAttribute("data-drop")).toBe(false);
+});
