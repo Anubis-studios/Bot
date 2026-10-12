@@ -90,6 +90,11 @@ export interface ToolDefinition {
    */
   botsOnly?: boolean;
   /**
+   * Only a bot's own chat in the app, where a card can be clicked: never a
+   * bot that lives in a chat app, a sender's chat or a routine's run.
+   */
+  appBotChatOnly?: boolean;
+  /**
    * Never shown to the model: the cross-platform originals the per-platform
    * tools delegate to. Callable still, but one platform's contacts and
    * messages must never appear beside another's in one result.

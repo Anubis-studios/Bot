@@ -629,6 +629,13 @@ export class BotService {
     return botForSession(sessionId)?.id ?? null;
   }
 
+  /** A bot's forever chat that lives in the app, not behind a chat app's bot. */
+  isAppBotChat(sessionId: string): boolean {
+    const bot = botForSession(sessionId);
+    // A sender's chat runs the same bot but is that person's, not the owner's.
+    return bot != null && bot.sessionId === sessionId && bot.channel == null;
+  }
+
   /**
    * Extra agent env when this session is a bot's chat. ABACUSAI_BOT_BOT_DIR is
    * what flips the agent process into the bot loop.

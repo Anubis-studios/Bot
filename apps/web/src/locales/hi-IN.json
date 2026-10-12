@@ -450,7 +450,10 @@
       "channelReadOnlyWhatsapp": "This conversation lives in WhatsApp. Message yourself there, from your “Message yourself” chat. Everything you and the bot say shows up here.",
       "senderReadOnly": "स्वतः-उत्तर वार्तालाप: {{bot}} यहाँ आपकी ओर से {{sender}} को उत्तर देता है। आप देख सकते हैं पर लिख नहीं सकते; बदलाव के लिए {{bot}} को उसकी अपनी चैट में बताएँ।",
       "openError": "बॉट की चैट नहीं खुल सकी।",
-      "senderReadOnlyFallback": "{{bot}} इस बातचीत में जवाब देता है।"
+      "senderReadOnlyFallback": "{{bot}} इस बातचीत में जवाब देता है।",
+      "sessionOfferHeading": "इसे एक सेशन में बनाएं",
+      "sessionOfferOpen": "सेशन खोलें",
+      "sessionOfferDismiss": "यहीं बात जारी रखें"
     },
     "deleteDialog": {
       "checkIn": "Its check-in keeps running as an ordinary routine.",

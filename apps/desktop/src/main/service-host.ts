@@ -1130,6 +1130,7 @@ export class ServiceHost {
     runCronJob: (jobId, trigger) => this.runRoutine(jobId, trigger ?? "manual"),
     // A routine's run is its bot's work too: a routine made from inside one
     // belongs to the bot, and `list` shows the bot its own.
+    isAppBotChat: (sessionId) => this.botService.isAppBotChat(sessionId),
     botIdForSession: (sessionId) =>
       this.botService.botIdForSession(sessionId) ??
       (() => {

@@ -206,3 +206,43 @@ describe("which pane it lands in", () => {
     expect(payload).not.toHaveProperty("conversationKey");
   });
 });
+
+describe("offer_session", () => {
+  // "app" is a bot's own chat in the app, "linked" a bot that lives in a chat
+  // app, "session" no bot at all.
+  const server = () =>
+    new McpAgentToolsServer({
+      skillsService: {} as never,
+      enabledToolsets: () => new Set<string>(),
+      workspacePath: () => null,
+      botIdForSession: (sessionId: string) =>
+        sessionId === "session" ? null : "bot-1",
+      isAppBotChat: (sessionId: string) => sessionId === "app",
+    } as never) as unknown as {
+      listTools: (session?: string) => { name: string }[];
+      executeTool: (
+        name: string,
+        args: Record<string, unknown>,
+        session?: string
+      ) => Promise<{ isError?: boolean; content: { text?: string }[] }>;
+    };
+  const listed = (session: string) =>
+    server()
+      .listTools(session)
+      .some((tool) => tool.name === "offer_session");
+
+  it("is offered only in a bot's own chat in the app", () => {
+    expect(listed("app")).toBe(true);
+    expect(listed("linked")).toBe(false);
+    expect(listed("session")).toBe(false);
+  });
+
+  it("answers the bot, and refuses a caller it is not listed for", async () => {
+    const args = { title: "Landing page", prompt: "Build me a landing page" };
+    const ok = await server().executeTool("offer_session", args, "app");
+    expect(ok.isError).not.toBe(true);
+    expect(ok.content[0]?.text).toContain("button");
+    const refused = await server().executeTool("offer_session", args, "linked");
+    expect(refused.isError).toBe(true);
+  });
+});

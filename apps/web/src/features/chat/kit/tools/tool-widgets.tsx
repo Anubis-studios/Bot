@@ -12,6 +12,7 @@ import { descriptorFor, useThreadStore } from "../../store/selectors";
 import { toolKey } from "../../store/thread-store";
 import { useChatView, useSubagentScope } from "../context";
 import { PermissionCard } from "../permissions/permission-card";
+import { isSessionOfferTool, SessionOfferCard } from "./session-offer";
 import { expanderFor, ToolLine } from "./tool-line";
 
 type Widget = ComponentType<ToolProps<unknown>>;
@@ -67,5 +68,10 @@ const BotToolSlot = ({ part }: ToolProps<unknown>) => {
 };
 
 export const botToolWidgets = new Proxy({} as Record<string, Widget>, {
-  get: (_known, name) => (typeof name === "string" ? BotToolSlot : undefined),
+  get: (_known, name) =>
+    typeof name !== "string"
+      ? undefined
+      : isSessionOfferTool(name)
+        ? SessionOfferCard
+        : BotToolSlot,
 }) as Record<string, Widget>;

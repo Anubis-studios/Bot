@@ -209,6 +209,8 @@ export interface McpAgentToolsServerOptions {
    * routine gets the fires delivered back into its chat.
    */
   botIdForSession?: (sessionId: string) => string | null;
+  /** The session is a bot's own chat in the app (no chat app behind it), where a card can be clicked. */
+  isAppBotChat?: (sessionId: string) => boolean;
   /**
    * The conversation a deliverable from this session belongs to, so the
    * renderer opens it in that pane and no other. Null for an unknown session.
@@ -457,7 +459,8 @@ export class McpAgentToolsServer extends McpHttpServer {
           ? false
           : forEditor
             ? definition.name === "cronjob"
-            : this.isListedTool(definition, enabled, forBot)
+            : this.isListedTool(definition, enabled, forBot) &&
+              this.reachesCaller(definition, callerSession)
       )
       .map((definition) => ({
         name: definition.name,
@@ -544,6 +547,19 @@ export class McpAgentToolsServer extends McpHttpServer {
    * Is the caller a bot's chat rather than a session? An absent session
    * counts as a session: the restricted answer is the safe one.
    */
+  /** A tool for a bot's own app chat reaches no other caller. */
+  private reachesCaller(
+    definition: ListedTool,
+    callerSession?: string
+  ): boolean {
+    if (!("appBotChatOnly" in definition) || definition.appBotChatOnly !== true)
+      return true;
+    return (
+      callerSession != null &&
+      this.options.isAppBotChat?.(callerSession) === true
+    );
+  }
+
   private isBotCaller(callerSession?: string): boolean {
     if (callerSession == null) return false;
 
@@ -596,6 +612,12 @@ export class McpAgentToolsServer extends McpHttpServer {
     ) {
       return this.err(
         `${name} is only available in a bot's chat. Carry on and use your best judgement.`
+      );
+    }
+
+    if (!this.reachesCaller(definition, callerSession)) {
+      return this.err(
+        `${name} is only available in a bot's chat in the app. Carry on and use your best judgement.`
       );
     }
 

@@ -450,7 +450,10 @@
       "channelReadOnlyWhatsapp": "This conversation lives in WhatsApp. Message yourself there, from your “Message yourself” chat. Everything you and the bot say shows up here.",
       "senderReadOnly": "Conversa de resposta automática: {{bot}} responde a {{sender}} aqui em seu nome. Você pode acompanhar, mas não digitar; para mudar as respostas, fale com {{bot}} no chat dele.",
       "openError": "Não foi possível abrir o chat do bot.",
-      "senderReadOnlyFallback": "{{bot}} responde nesta conversa."
+      "senderReadOnlyFallback": "{{bot}} responde nesta conversa.",
+      "sessionOfferHeading": "Crie isso em uma sessão",
+      "sessionOfferOpen": "Abrir sessão",
+      "sessionOfferDismiss": "Continuar conversando aqui"
     },
     "deleteDialog": {
       "checkIn": "Its check-in keeps running as an ordinary routine.",

@@ -63,6 +63,12 @@ export const BotSearch = v.object({
 export const NewSessionSearch = v.object({
   workspace: optionalField(WorkspaceId),
   draft: optionalField(v.pipe(v.string(), v.uuid())),
+  /**
+   * A task handed over from a bot's chat (`offer_session`): a fresh draft
+   * starts with it in the message box, once per `offer`, the card's call id.
+   */
+  prompt: optionalField(v.pipe(v.string(), v.maxLength(20_000))),
+  offer: optionalField(v.pipe(v.string(), v.maxLength(200))),
 });
 
 export const SESSION_DEFAULTS = { view: "split" } as const;

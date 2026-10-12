@@ -9,6 +9,7 @@ import { INTEGRATIONS_TOOLS } from "./integrations";
 import { MEDIA_TOOLS } from "./media";
 import { MEMORY_TOOLS } from "./memory";
 import { MESSAGING_TOOLS } from "./messaging";
+import { SESSIONS_TOOLS } from "./sessions";
 import { SKILLS_TOOLS } from "./skills";
 import { TODO_TOOLS } from "./todo";
 
@@ -32,6 +33,7 @@ export const AGENT_TOOLS: readonly ToolDefinition[] = [
   ...BOTS_TOOLS,
   ...BILLING_TOOLS,
   ...MESSAGING_TOOLS,
+  ...SESSIONS_TOOLS,
 ];
 
 const byName = new Map<string, ToolDefinition>();

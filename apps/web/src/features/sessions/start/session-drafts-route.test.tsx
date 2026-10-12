@@ -114,3 +114,38 @@ it("keeps, orders, deep-links and discards drafts with keyboard-accessible undo"
     "First draft\nMore detail"
   );
 });
+
+it("a task handed over from a bot's chat starts a fresh draft with it, once", async () => {
+  sessionDraftsStore.setState(() => ({ activeId: null, drafts: {} }));
+  startDraftStore.setState(newStartDraft);
+  const before = startDraftStore.state.id;
+  const prompt = "Build me a landing page for a candle shop";
+  app = await renderApp(
+    `/sessions/new?${new URLSearchParams({ prompt, offer: "call-1" })}`
+  );
+  const input = (await screen.findByRole("textbox", {
+    name: "Tell the agent what to do…",
+  })) as HTMLTextAreaElement;
+  await waitFor(() => expect(input.value).toBe(prompt));
+  expect(startDraftStore.state.id).not.toBe(before);
+  // The task left the address: the draft holds it now.
+  await waitFor(() =>
+    expect(app!.router.state.location.search).not.toHaveProperty("prompt")
+  );
+  const handed = startDraftStore.state.id;
+  fireEvent.change(input, { target: { value: "edited" } });
+  await act(() =>
+    app!.router.navigate({
+      to: "/sessions/new",
+      search: { prompt, offer: "call-1" },
+    })
+  );
+  expect(startDraftStore.state.id).toBe(handed);
+  expect(
+    (
+      screen.getByRole("textbox", {
+        name: "Tell the agent what to do…",
+      }) as HTMLTextAreaElement
+    ).value
+  ).toBe("edited");
+});

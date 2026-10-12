@@ -29,6 +29,9 @@ export const FUNNEL_STEPS = [
   "first_bot_skipped",
   // The first-bot screen's other choice: straight to a session to build.
   "first_build_chosen",
+  // A bot asked to build offers a session (offer_session's card).
+  "session_offer_shown",
+  "session_offer_opened",
   // A free account's chat on another provider's model: the RouteLLM notice.
   "routellm_nudge_shown",
   "routellm_nudge_switched",

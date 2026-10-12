@@ -450,7 +450,10 @@
       "channelReadOnlyWhatsapp": "This bot replies on WhatsApp.",
       "senderReadOnly": "{{bot}} replies to {{sender}} here.",
       "openError": "Couldn't open this bot",
-      "senderReadOnlyFallback": "{{bot}} replies in this conversation."
+      "senderReadOnlyFallback": "{{bot}} replies in this conversation.",
+      "sessionOfferHeading": "Build this in a session",
+      "sessionOfferOpen": "Open session",
+      "sessionOfferDismiss": "Keep chatting here"
     },
     "deleteDialog": {
       "checkIn": "Its check-in keeps running as an ordinary routine.",

@@ -11,6 +11,7 @@ import { restoreSessionDraft } from "#renderer/features/sessions/start/session-d
 import { SessionStartPage } from "#renderer/features/sessions/start/session-start-page";
 import { SessionStartResources } from "#renderer/features/sessions/start/start-resources";
 import {
+  newStartDraft,
   prepareStartDraft,
   rejectStartSubmission,
   startDraftStore,
@@ -25,6 +26,8 @@ import { TopBarSlot } from "#renderer/features/shell/top-bar-slots";
 import { updateDraft } from "#renderer/lib/continuity/composer-drafts";
 import { NewSessionSearch } from "#renderer/lib/navigation/search";
 import { useAppNavigate } from "#renderer/lib/navigation/use-app-navigate";
+/** Offers already turned into a draft: a reload or a revisit never starts another. */
+const offersTaken = new Set<string>();
 const SessionsNewRoute = () => {
   const { t } = useTranslation();
   const { transport, chat } = Route.useRouteContext();
@@ -34,10 +37,14 @@ const SessionsNewRoute = () => {
   const navigate = useAppNavigate();
   const model = useSessionComposerModel(undefined, `draft:${draft.id}`);
   useEffect(() => {
-    if (draftId === startDraftStore.state.id && search.draft !== draftId)
+    if (
+      draftId === startDraftStore.state.id &&
+      (search.draft !== draftId || search.prompt != null)
+    )
       void navigate({
         to: "/sessions/new",
-        search: { ...search, draft: draftId },
+        // The handed-over task now lives in the draft, not the URL.
+        search: { workspace: search.workspace, draft: draftId },
         replace: true,
         transition: "none",
       });
@@ -158,6 +165,8 @@ export const Route = createFileRoute("/_shell/(sessions)/sessions/new")({
   loaderDeps: ({ search }) => ({
     workspace: search.workspace,
     draft: search.draft,
+    prompt: search.prompt,
+    offer: search.offer,
   }),
   loader: async ({ context, deps, preload }) => {
     const { sessions, workspaces } = context.db.collections;
@@ -183,7 +192,16 @@ export const Route = createFileRoute("/_shell/(sessions)/sessions/new")({
       workspaceId = result.workspaceId;
     }
     if (!preload) {
-      if (deps.draft && deps.draft !== startDraftStore.state.id) {
+      if (deps.prompt && deps.offer && !offersTaken.has(deps.offer)) {
+        // A fresh draft, so a half-written one is never overwritten.
+        offersTaken.add(deps.offer);
+        startDraftStore.setState(newStartDraft);
+        const text = deps.prompt;
+        updateDraft(`draft:${startDraftStore.state.id}`, (d) => ({
+          ...d,
+          text,
+        }));
+      } else if (deps.draft && deps.draft !== startDraftStore.state.id) {
         const saved = restoreSessionDraft(deps.draft);
         if (saved) startDraftStore.setState(() => saved);
       }
