@@ -56,6 +56,7 @@ import {
 } from "./message-actions";
 import { useKitParts, MessageScope } from "./message-scope";
 import { ReplyQuote, jumpToMessage } from "./reply";
+import { toolRunCounts } from "./tool-run";
 
 type Loose = Record<string, unknown>;
 
@@ -446,6 +447,7 @@ const StepControls = ({ side }: { side: "earlier" | "more" }) => {
 };
 
 const GroupedParts = ({ message }: { message: UIMessage }) => {
+  const { t } = useTranslation();
   const SessionUI = useKitParts();
   const window = useToolWindow();
   const scope = useSubagentScope() ?? "";
@@ -496,8 +498,7 @@ const GroupedParts = ({ message }: { message: UIMessage }) => {
             previous?.id === id &&
             (id != null ||
               (part.part.type === "tool-call" &&
-                previousPart?.type === "tool-call" &&
-                previousPart.name === part.part.name))
+                previousPart?.type === "tool-call"))
           )
             previous.parts.push(part);
           else blocks.push({ id, parts: [part] });
@@ -506,6 +507,38 @@ const GroupedParts = ({ message }: { message: UIMessage }) => {
           const content = block.parts.map((part) => (
             <SessionUI.Part key={indexed.parts.get(part.part)} part={part} />
           ));
+          const calls = block.parts.flatMap((p) =>
+            p.part.type === "tool-call" ? [p.part] : []
+          );
+          if (block.id == null && calls.length > 1) {
+            const settled = new Set(
+              selectedMessage.parts.flatMap((p) =>
+                p.type === "tool-result" ? [p.toolCallId] : []
+              )
+            );
+            const running = calls.some((call) => !settled.has(call.id));
+            return (
+              <Collapsible
+                key={indexed.parts.get(block.parts[0]!.part)}
+                defaultOpen={running}
+                data-slot="tool-group"
+              >
+                <CollapsibleTrigger className="text-muted-foreground flex items-center gap-2 text-xs">
+                  <ChevronRight aria-hidden className="size-3" />
+                  {running
+                    ? t("chat.tool.runRunning")
+                    : toolRunCounts(calls.map((call) => call.name))
+                        .map(([action, count]) =>
+                          t(`chat.tool.run${action}`, { count })
+                        )
+                        .join(", ")}
+                </CollapsibleTrigger>
+                <CollapsibleContent data-slot="tool-cluster">
+                  {content}
+                </CollapsibleContent>
+              </Collapsible>
+            );
+          }
           if (block.id == null)
             return (
               <div

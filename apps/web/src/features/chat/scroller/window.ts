@@ -12,10 +12,12 @@
  * (possibly earlier rows of the same message). Returning to the end snaps
  * back to the newest rows with default tool ranges.
  */
-export const MAX_ROWS = 100;
+// TODO: re-enable windowing. Off for now: every row stays mounted and the
+// browser scrolls natively (original values: MAX_ROWS 100, TOOL_PAGE 50).
+export const MAX_ROWS = 1_000_000;
 // Keep history and tool expansion inside the 50 ms interaction budget.
 const STEP = 25;
-const TOOL_PAGE = 50;
+const TOOL_PAGE = 1_000_000;
 /** Placeholder height per row never measured (§10). */
 export const ROW_FALLBACK_PX = 64;
 

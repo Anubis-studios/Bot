@@ -210,14 +210,16 @@ it("clusters consecutive tools while dropping blank prose wrappers", async () =>
     b.textEnd("calls"),
   ]);
   current = await renderRelay(relay, "session");
+  const summary = await screen.findByText("2 commands run, 1 file read");
+  expect(document.querySelectorAll('[data-slot="tool-group"]')).toHaveLength(1);
+  fireEvent.click(summary);
   await screen.findByText("Run npm test");
   const clusters = document.querySelectorAll('[data-slot="tool-cluster"]');
-  expect(clusters).toHaveLength(2);
-  expect(clusters[0]!.querySelectorAll("[data-tool]")).toHaveLength(2);
-  expect(clusters[1]!.querySelectorAll("[data-tool]")).toHaveLength(1);
+  expect(clusters).toHaveLength(1);
+  expect(clusters[0]!.querySelectorAll("[data-tool]")).toHaveLength(3);
   expect(
     document.querySelectorAll('[data-role="assistant"] > div')
-  ).toHaveLength(2);
+  ).toHaveLength(1);
   expect(
     document.querySelector('[data-slot="session-message-actions"]')
   ).toBeNull();

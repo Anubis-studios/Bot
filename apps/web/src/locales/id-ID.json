@@ -3015,7 +3015,20 @@
         "stopped": "stopped"
       },
       "earlierSteps_one": "{{count}} earlier step",
-      "earlierSteps_other": "{{count}} earlier steps"
+      "earlierSteps_other": "{{count}} earlier steps",
+      "runRead_one": "{{count}} file read",
+      "runRead_other": "{{count}} files read",
+      "runEdit_one": "{{count}} file changed",
+      "runEdit_other": "{{count}} files changed",
+      "runCommand_one": "{{count}} command run",
+      "runCommand_other": "{{count}} commands run",
+      "runCodeSearch_one": "{{count}} code search",
+      "runCodeSearch_other": "{{count}} code searches",
+      "runWebSearch_one": "{{count}} web search",
+      "runWebSearch_other": "{{count}} web searches",
+      "runOther_one": "{{count}} other tool",
+      "runOther_other": "{{count}} other tools",
+      "runRunning": "Working…"
     },
     "transcript": {
       "jump": "Jump to the end",
