@@ -16,12 +16,13 @@ import { emptyThreadState } from "#renderer/features/chat/store/thread-store";
 import { initI18n } from "#renderer/lib/i18n";
 import { useNotch, type NotchRouterContext } from "#renderer/notch-context";
 
-import { NotchShell, ReplyView, CallView } from "./index";
+import { NotchShell, ReplyView, CallView, IdleView } from "./index";
 import type { NotchInputs } from "./presenter";
 const f = vi.hoisted(() => ({
   inputs: null as unknown as NotchInputs,
   cancel: vi.fn(),
   receive: null as any,
+  reveal: vi.fn(async () => {}),
 }));
 vi.mock("./inputs", () => ({
   useNotchInputs: (
@@ -80,6 +81,7 @@ const Controls = ({
         <ReplyView text="Reply" submit={submit} />
       )}
       {n.presentation.route === "/call" && <CallView />}
+      {!n.signedIn && <IdleView />}
       {n.presentation.route === "/approval/$id" && (
         <PermissionList runtime={n.chat} threadId="s" variant="notch" />
       )}
@@ -149,7 +151,7 @@ const mount = (kind = "started") => {
     chat: { session: () => session },
     transport: {
       client: {
-        notch,
+        notch: { ...notch, revealApp: f.reveal },
         bots: { openChat: async () => ({ sessionId: "manual" }) },
         window: { ready: async () => {} },
       },
@@ -164,6 +166,14 @@ const mount = (kind = "started") => {
     </NotchShell>
   );
   const view = render(tree());
+  act(() =>
+    f.receive({
+      type: "app",
+      mainVisible: true,
+      mainFocused: false,
+      signedIn: true,
+    })
+  );
   return {
     ...view,
     notch,
@@ -358,7 +368,12 @@ it.each(["started", "queued"])(
         .some((image) => image.getAttribute("data-mood") === "wink")
     ).toBe(true);
     await act(async () =>
-      f.receive({ type: "app", mainVisible: false, mainFocused: false })
+      f.receive({
+        type: "app",
+        mainVisible: false,
+        mainFocused: false,
+        signedIn: true,
+      })
     );
   }
 );
@@ -424,7 +439,7 @@ it("approval keeps mouse interaction without taking typing focus", async () => {
 it("the fixed surface stays the same size when a reply expands and closes", async () => {
   f.inputs = { ...f.inputs, sessions: [] };
   const view = mount();
-  const surface = screen.getByRole("region");
+  const surface = await screen.findByRole("region");
   const size = [surface.style.width, surface.style.height];
   act(() => f.receive({ type: "shortcut" }));
   fireEvent.click(await screen.findByRole("button", { name: "Launch reply" }));
@@ -489,4 +504,36 @@ it("a rejected reply keeps editable text below one alert and clears it on edit",
   ).toBe(true);
   fireEvent.change(input, { target: { value: "Retry this reply" } });
   await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+});
+
+it("signed out, the notch shows nothing while the app is in view and only a sign-in that reveals it otherwise", async () => {
+  mount();
+  fireEvent.click(await screen.findByRole("button", { name: "Launch reply" }));
+  await screen.findByRole("textbox");
+  const signedOut = (mainVisible: boolean) =>
+    act(() =>
+      f.receive({
+        type: "app",
+        mainVisible,
+        mainFocused: false,
+        signedIn: false,
+      })
+    );
+  signedOut(true);
+  await waitFor(() => expect(screen.queryByRole("textbox")).toBeNull());
+  await waitFor(() =>
+    expect(
+      document.querySelector<HTMLElement>(".notch-surface")!.style.visibility
+    ).toBe("hidden")
+  );
+  signedOut(false);
+  await waitFor(() =>
+    expect(
+      document.querySelector<HTMLElement>(".notch-surface")!.style.visibility
+    ).toBe("visible")
+  );
+  expect(screen.queryByRole("button", { name: "Notch settings" })).toBeNull();
+  act(() => f.receive({ type: "shortcut" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Sign in" }));
+  expect(f.reveal).toHaveBeenCalledOnce();
 });

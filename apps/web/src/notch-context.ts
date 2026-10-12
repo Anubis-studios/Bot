@@ -16,6 +16,7 @@ export interface NotchRouterContext {
 }
 export interface NotchViewContext extends NotchRouterContext {
   presentation: NotchPresentation;
+  signedIn: boolean;
   open(): void;
   snooze(): void;
   focused: boolean;

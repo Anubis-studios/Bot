@@ -42,7 +42,13 @@ vi.mock("./inputs", () => ({
     hovered: boolean,
     acks: ReadonlySet<string>
   ) => ({ ...f.inputs, mainFocused: app.mainFocused, hovered, acks }),
-  followNotchEvents: async () => {},
+  followNotchEvents: async (_t: unknown, receive: (event: unknown) => void) =>
+    receive({
+      type: "app",
+      mainVisible: true,
+      mainFocused: false,
+      signedIn: true,
+    }),
 }));
 vi.mock("#renderer/lib/motion", () => ({
   useMotionPreference: () => "reduced",
@@ -214,7 +220,7 @@ const mount = async () => {
   const cache = new QueryClient();
   const view = render(tree());
   fireEvent.pointerDown(document);
-  fireEvent.pointerDown(screen.getByRole("region"));
+  fireEvent.pointerDown(await screen.findByRole("region"));
   await act(async () => {});
   await waitFor(() => expect(f.streams.size).toBe(3));
   return {
