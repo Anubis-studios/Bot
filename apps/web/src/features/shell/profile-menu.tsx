@@ -30,6 +30,7 @@ import {
 import { useAppNavigate } from "#renderer/lib/navigation/use-app-navigate";
 import { IS_ELECTRON } from "#renderer/lib/platform";
 import { sidebarAccount } from "#renderer/lib/sidebar-account";
+import { openUpgrade } from "#renderer/lib/upgrade";
 import { useAccount } from "#renderer/lib/use-account";
 import { useAppContext } from "#renderer/lib/use-app-context";
 import { Avatar, AvatarFallback, AvatarImage } from "#renderer/ui/avatar";
@@ -173,7 +174,11 @@ export const ProfileMenu = () => {
           {policy.billing && (
             <DropdownMenuItem
               className={row}
-              onClick={() => go("/settings/account")}
+              onClick={() =>
+                policy.billing === "upgrade"
+                  ? void openUpgrade(transport.client)
+                  : go("/settings/account")
+              }
             >
               <CreditCard aria-hidden />
               <span className="truncate">
