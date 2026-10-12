@@ -4,15 +4,26 @@ import { AnimatePresence, motion } from "motion/react";
 import { durations, easings, useMotionPreference } from "#renderer/lib/motion";
 import { Alert, AlertDescription } from "#renderer/ui/alert";
 
-export const SendError = ({ error }: { error: string | null }) => {
+export const SendError = ({
+  error,
+  reserve = true,
+}: {
+  error: string | null;
+  /** Hold the row's height while empty so a form below does not jump. */
+  reserve?: boolean;
+}) => {
   const reduced = useMotionPreference() === "reduced";
+  if (!reserve && !error) return null;
   return (
-    <div className="relative h-12 w-full shrink-0" data-slot="send-error">
+    <div
+      className={reserve ? "relative h-12 w-full shrink-0" : "w-full shrink-0"}
+      data-slot="send-error"
+    >
       <AnimatePresence initial={false}>
         {error && (
           <motion.div
             key={error}
-            className="absolute inset-x-0 top-0"
+            className={reserve ? "absolute inset-x-0 top-0" : undefined}
             initial={{ opacity: reduced ? 1 : 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}

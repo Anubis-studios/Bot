@@ -1031,7 +1031,7 @@ export const ThreadComposer = () => {
             onClose={() => setTrigger(null)}
           />
         ) : null}
-        {!config.preStart && <SendError error={error} />}
+        {!config.preStart && <SendError error={error} reserve={false} />}
         {view.slots.composerNotice}
         {config.model?.otherProvider != null && (
           <OtherProviderNotice

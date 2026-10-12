@@ -259,6 +259,7 @@ const SessionRoute = () => {
   const host = useSelector(session.hostStore, (s) => s);
   const incarnation = useSelector(host.store, (s) => s.incarnation);
   const outcomes = useSelector(host.store, (s) => s.runs.outcomes);
+  const plan = useSelector(host.store, (s) => s.agent?.plan);
   const completed = useSelector(
     host.store,
     (s) => s.runs.active === null && s.runs.outcomes.at(-1)?.kind === "success"
@@ -465,7 +466,9 @@ const SessionRoute = () => {
                   review={() => select("changes")}
                 />
               ),
-              composerTasks: <SessionTasks messages={host.messages} />,
+              composerTasks: (
+                <SessionTasks messages={host.messages} plan={plan} />
+              ),
               composerContext: (
                 <SessionContextTray
                   workspaceId={row.workspaceId}

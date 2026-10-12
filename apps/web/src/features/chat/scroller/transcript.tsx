@@ -79,8 +79,13 @@ const Outcome = ({
   latest: boolean;
 }) => {
   const { skin } = useChatView();
-  if (outcome.kind === "error")
+  if (outcome.kind === "error") {
+    // A crash is stale once a retry has started (or any later run exists).
+    const code = outcome.error?.code;
+    if (!latest && (code === "agent_exit" || code === "agent_crashed"))
+      return null;
     return <ErrorCard outcome={outcome} latest={latest} />;
+  }
   // The bot skin renders no RunMarker (03-bots §24.2).
   return skin === "bot" ? null : <RunMarker outcome={outcome} />;
 };

@@ -85,14 +85,17 @@ const Ring = ({
  */
 export const SessionTasks = ({
   messages,
+  plan,
 }: {
   messages: readonly UIMessage[];
+  /** The agent's own plan: sub-agent todos never reach it. */
+  plan?: readonly SessionTask[];
 }) => {
   const { t } = useTranslation();
   const pref = useMotionPreference();
   const [open, setOpen] = useState(false);
   const panelId = useId();
-  const tasks = sessionTasks(messages);
+  const tasks = plan?.length ? [...plan] : sessionTasks(messages);
   if (!tasks.length) return null;
   const done = tasks.filter((task) => task.status === "completed").length;
   const current = currentTask(tasks);
