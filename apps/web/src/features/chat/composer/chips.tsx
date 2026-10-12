@@ -191,7 +191,7 @@ export const ModeChip = ({
           label={t("chat.composer.modes")}
           className="bg-transparent p-0"
         >
-          <CommandList className="max-h-none">
+          <CommandList className="flex max-h-none flex-col gap-0.5">
             {MODE_ORDER.filter(
               (mode) => availableModes == null || availableModes.includes(mode)
             ).map((mode) => (
@@ -684,7 +684,11 @@ export const ModelChip = ({
               className="scroll-fade-y min-h-0 flex-1 p-0 pt-1"
             >
               {sections.map(({ group, rows: groupRows }) => (
-                <ComboboxGroup key={group.id} items={groupRows}>
+                <ComboboxGroup
+                  key={group.id}
+                  items={groupRows}
+                  className="flex flex-col gap-0.5"
+                >
                   <ComboboxLabel className="px-2 py-1 text-xs">
                     {group.label}
                   </ComboboxLabel>
@@ -741,6 +745,7 @@ export const ModelChip = ({
               {onUseLocalModel != null && q === "" ? (
                 <ComboboxGroup
                   items={rows.filter((row) => row.kind === "local")}
+                  className="flex flex-col gap-0.5"
                 >
                   {rail === "local" ? (
                     <ComboboxLabel className="px-2 py-1 text-xs">
