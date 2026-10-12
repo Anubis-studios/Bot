@@ -297,6 +297,9 @@ const TranscriptMessage = memo(function TranscriptMessage({
   const ids = toolRows(message);
   return (
     <MessageScrollerItem
+      // The window bounds mounted rows; real heights keep rows above the
+      // reader from resizing as they scroll in.
+      className="[content-visibility:visible]"
       messageId={message.id}
       data-fresh={fresh ? "" : undefined}
       data-tool-gap={toolGap}
