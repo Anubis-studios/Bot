@@ -1,4 +1,4 @@
-import { Sparkles } from "lucide-react";
+import { Bot, MessageSquare, Sparkles } from "lucide-react";
 import { AnimatePresence, motion, animate } from "motion/react";
 import { useEffect, useLayoutEffect, useState, useRef } from "react";
 import { createPortal } from "react-dom";
@@ -24,6 +24,13 @@ import { Button } from "#renderer/ui/button";
 import { PromoCharacter } from "./promo-character";
 import { usePromoHost, consumePromoRect } from "./promo-host";
 import { promoAccountKey, promoState } from "./promo-state";
+
+/** Under this share of the month's credits left, the card says they are running low. */
+const LOW_CREDITS_SHARE = 0.2;
+const SIDES = [
+  { key: "creditsCard.sideSessions", icon: MessageSquare },
+  { key: "creditsCard.sideBots", icon: Bot },
+] as const;
 
 /** One portal, shown only inside the sidebar (pinned or peeked): a collapsed sidebar hides it. */
 export const UpgradePromo = () => {
@@ -84,6 +91,18 @@ export const UpgradePromo = () => {
     account.data?.credits_granted != null && account.data.credits_used != null
       ? Math.max(0, account.data.credits_granted - account.data.credits_used)
       : null;
+  const granted = account.data?.credits_granted ?? null;
+  const title =
+    remaining === 0
+      ? "creditsCard.outTitle"
+      : remaining != null &&
+          granted != null &&
+          granted > 0 &&
+          remaining / granted < LOW_CREDITS_SHARE
+        ? "creditsCard.lowTitle"
+        : "creditsCard.levelUpTitle";
+  // Both sides' gains, the person's own first; new accounts lead with Sessions.
+  const sides = pitch === "bots" ? SIDES.slice().reverse() : SIDES;
   if (tier !== "free" || contextualUpsell || !host)
     return createPortal(null, target);
   return createPortal(
@@ -115,22 +134,15 @@ export const UpgradePromo = () => {
               upgraded={false}
             />
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold">
-                {t(
-                  remaining === 0
-                    ? "creditsCard.restTitle"
-                    : "creditsCard.levelUpTitle"
-                )}
-              </p>
-              {pitch != null ? (
-                <p className="text-muted-foreground mt-0.5 text-xs">
-                  {t(
-                    pitch === "sessions"
-                      ? "creditsCard.pitchSessions"
-                      : "creditsCard.pitchBots"
-                  )}
-                </p>
-              ) : null}
+              <p className="text-sm font-semibold">{t(title)}</p>
+              <ul className="text-muted-foreground mt-0.5 flex flex-col gap-0.5 text-xs">
+                {sides.map(({ key, icon: Icon }) => (
+                  <li key={key} className="flex gap-1.5">
+                    <Icon aria-hidden className="mt-0.5 size-3 shrink-0" />
+                    <span>{t(key)}</span>
+                  </li>
+                ))}
+              </ul>
               {remaining != null ? (
                 <p className="text-muted-foreground mt-1 text-xs">
                   {t("creditsCard.progress", {

@@ -952,11 +952,12 @@
     "cta": "Upgrade",
     "upsellTitle": "Go further with Pro",
     "levelUpTitle": "Ready for your next level?",
-    "restTitle": "A little rest, then more adventures",
     "progress": "{{remaining}} of {{total}} credits left",
     "used": "Credits used",
-    "pitchSessions": "Build with top models: longer runs, bigger projects",
-    "pitchBots": "Keep your bots working: daily routines, always on Telegram and WhatsApp"
+    "lowTitle": "Running low on credits",
+    "outTitle": "You've used your free credits",
+    "sideSessions": "Sessions: top models, longer runs, bigger projects",
+    "sideBots": "Bots: daily routines, always on Telegram and WhatsApp"
   },
   "execBackends": {
     "daytona": {
