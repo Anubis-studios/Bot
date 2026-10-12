@@ -1,17 +1,10 @@
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, expect, it, vi } from "vitest";
 
 import { initI18n } from "#renderer/lib/i18n";
 
 import { UpgradePromo } from "./credits-card";
 import { PromoOutlet } from "./promo-host";
-import { promoAccountKey } from "./promo-state";
 import { openFloating, closeFloating } from "./shell-store";
 
 const state = vi.hoisted(() => ({
@@ -44,9 +37,6 @@ vi.mock("@tanstack/react-query", () => ({
     };
   },
 }));
-vi.mock("@tanstack/react-router", () => ({
-  useLocation: () => ({ href: "/sessions/example" }),
-}));
 vi.mock("#renderer/data/db/prefs", () => ({
   usePrefs: () => ({ creditsExhaustedAt: state.exhaustedAt }),
   useUpdatePrefs: () => state.update,
@@ -75,6 +65,13 @@ vi.mock("./promo-character", () => ({
     <span data-testid="character">{excited ? "excited" : "worried"}</span>
   ),
 }));
+// The card lives in the sidebar: render it with a pinned sidebar's outlet.
+const promo = () => (
+  <>
+    <UpgradePromo />
+    <PromoOutlet floating={false} />
+  </>
+);
 beforeEach(async () => {
   await initI18n();
   localStorage.clear();
@@ -87,26 +84,21 @@ beforeEach(async () => {
   state.account.user_id = "dummy";
   state.account.credits_used = 95;
 });
-it("shows actual credit progress, reacts to CTA focus and persists snooze across remount", () => {
-  const first = render(<UpgradePromo />);
+it("shows actual credit progress and reacts to CTA focus", () => {
+  render(promo());
   expect(screen.getByText("5 of 100 credits left")).toBeTruthy();
   expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe(
     "95"
   );
   fireEvent.focus(screen.getByRole("button", { name: "Upgrade" }));
   expect(screen.getByTestId("character").textContent).toBe("excited");
-  fireEvent.click(
-    screen.getByRole("button", { name: "Remind me in 10 minutes" })
-  );
-  expect(localStorage.getItem(promoAccountKey(state.account))).not.toBeNull();
-  first.unmount();
-  const second = render(<UpgradePromo />);
-  expect(screen.queryByRole("button", { name: "Upgrade" })).toBeNull();
-  second.unmount();
+  expect(
+    screen.queryByRole("button", { name: "Remind me in 10 minutes" })
+  ).toBeNull();
 });
 it("does not show the promo for an account already on a paid tier", async () => {
   state.account.subscription_tier = "pro";
-  render(<UpgradePromo />);
+  render(promo());
   await waitFor(() =>
     expect(screen.queryByRole("button", { name: "Upgrade" })).toBeNull()
   );
@@ -114,7 +106,7 @@ it("does not show the promo for an account already on a paid tier", async () => 
 
 it("rounds floating point credit balances without changing progress", () => {
   state.account.credits_used = 95.36000000000001;
-  render(<UpgradePromo />);
+  render(promo());
   expect(screen.getByText("4.64 of 100 credits left")).toBeTruthy();
   expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe(
     "95.36000000000001"
@@ -122,77 +114,17 @@ it("rounds floating point credit balances without changing progress", () => {
 });
 
 it("removes the promo immediately on upgrade and restores it on downgrade", () => {
-  const view = render(<UpgradePromo />);
+  const view = render(promo());
   state.account = { ...state.account, subscription_tier: "pro" };
-  view.rerender(<UpgradePromo />);
+  view.rerender(promo());
   expect(screen.queryByRole("button", { name: "Upgrade" })).toBeNull();
   expect(screen.queryByTestId("character")).toBeNull();
   state.account = { ...state.account, subscription_tier: "free" };
-  view.rerender(<UpgradePromo />);
+  view.rerender(promo());
   expect(screen.getByRole("button", { name: "Upgrade" })).toBeTruthy();
 });
 
-afterEach(() => vi.useRealTimers());
-it("expires a persisted snooze after ten minutes while mounted", async () => {
-  vi.useFakeTimers();
-  vi.setSystemTime(new Date("2030-01-01T00:00:00Z"));
-  const first = render(<UpgradePromo />);
-  fireEvent.click(
-    screen.getByRole("button", { name: "Remind me in 10 minutes" })
-  );
-  first.unmount();
-  render(<UpgradePromo />);
-  expect(screen.queryByRole("button", { name: "Upgrade" })).toBeNull();
-  await act(async () => {
-    vi.advanceTimersByTime(10 * 60 * 1000 + 1);
-  });
-  expect(screen.getByRole("button", { name: "Upgrade" })).toBeTruthy();
-});
-it("refreshes snooze on window focus and isolates accounts", () => {
-  vi.useFakeTimers();
-  vi.setSystemTime(new Date("2030-01-01T00:00:00Z"));
-  const first = render(<UpgradePromo />);
-  fireEvent.click(
-    screen.getByRole("button", { name: "Remind me in 10 minutes" })
-  );
-  first.unmount();
-  const second = render(<UpgradePromo />);
-  expect(screen.queryByRole("button", { name: "Upgrade" })).toBeNull();
-  vi.setSystemTime(new Date("2030-01-01T00:10:01Z"));
-  fireEvent(window, new Event("focus"));
-  expect(screen.getByRole("button", { name: "Upgrade" })).toBeTruthy();
-  second.unmount();
-  state.account.user_id = "another-dummy";
-  render(<UpgradePromo />);
-  expect(screen.getByRole("button", { name: "Upgrade" })).toBeTruthy();
-});
-it("reappears immediately when a snoozed free account exhausts its credits", () => {
-  const first = render(<UpgradePromo />);
-  fireEvent.click(
-    screen.getByRole("button", { name: "Remind me in 10 minutes" })
-  );
-  first.unmount();
-  state.account.credits_used = 100;
-  render(<UpgradePromo />);
-  expect(screen.getByRole("button", { name: "Upgrade" })).toBeTruthy();
-});
-
-it("does not apply one account's active snooze to another account", () => {
-  const first = render(<UpgradePromo />);
-  fireEvent.click(
-    screen.getByRole("button", { name: "Remind me in 10 minutes" })
-  );
-  first.unmount();
-  state.account.user_id = "another-dummy";
-  const second = render(<UpgradePromo />);
-  expect(screen.getByRole("button", { name: "Upgrade" })).toBeTruthy();
-  second.unmount();
-  state.account.user_id = "dummy";
-  render(<UpgradePromo />);
-  expect(screen.queryByRole("button", { name: "Upgrade" })).toBeNull();
-});
-
-it("hands one mounted mascot between pinned, peek and collapsed presentations", async () => {
+it("hands one mounted mascot between pinned and peek sidebars, and hides it when collapsed", () => {
   const App = ({ mode }: { mode: "pinned" | "peek" | "collapsed" }) => (
     <>
       <UpgradePromo />
@@ -201,8 +133,6 @@ it("hands one mounted mascot between pinned, peek and collapsed presentations", 
   );
   const view = render(<App mode="pinned" />);
   const mascot = screen.getByTestId("character");
-  const card = mascot.closest('[data-slot="upgrade-promo"]')!;
-  expect(card.getAttribute("data-presentation")).toBe("sidebar");
   fireEvent.focus(screen.getByRole("button", { name: "Upgrade" }));
   openFloating("peek");
   view.rerender(<App mode="peek" />);
@@ -210,27 +140,18 @@ it("hands one mounted mascot between pinned, peek and collapsed presentations", 
   expect(mascot.textContent).toBe("excited");
   closeFloating();
   view.rerender(<App mode="collapsed" />);
-  expect(screen.getByTestId("character")).toBe(mascot);
-  expect(card.getAttribute("data-presentation")).toBe("floating");
-  expect(document.querySelectorAll('[data-slot="upgrade-promo"]')).toHaveLength(
-    1
-  );
-  fireEvent.click(
-    screen.getByRole("button", { name: "Remind me in 10 minutes" })
-  );
+  expect(document.querySelector('[data-slot="upgrade-promo"]')).toBeNull();
   view.rerender(<App mode="pinned" />);
-  await waitFor(() =>
-    expect(screen.queryByRole("button", { name: "Upgrade" })).toBeNull()
-  );
+  expect(screen.getByRole("button", { name: "Upgrade" })).toBeTruthy();
 });
 
 it("keeps one account cache when an exhaustion notice is cleared", () => {
-  const view = render(<UpgradePromo />);
+  const view = render(promo());
   state.exhaustedAt = Date.now();
-  view.rerender(<UpgradePromo />);
+  view.rerender(promo());
   expect(state.refetch).toHaveBeenCalledOnce();
   state.exhaustedAt = null;
-  view.rerender(<UpgradePromo />);
+  view.rerender(promo());
   for (const [options] of state.query.mock.calls)
     expect(options.queryKey).toEqual(["account"]);
 });
