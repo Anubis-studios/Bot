@@ -3153,7 +3153,6 @@
     "runGone": "This run was removed.",
     "routineGone": "This routine is gone.",
     "allRoutines": "All routines",
-    "pickRoutine": "Pick a routine, or make a new one",
     "runReport": "Run report",
     "openSession": "Open as a session",
     "closeRun": "Close run",

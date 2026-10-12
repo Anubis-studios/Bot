@@ -96,7 +96,7 @@ export const RoutinesLanding = () => {
                   {t(`routines.templates.${template.id}.description`)}
                 </span>
                 {template.works != null && (
-                  <span className="text-muted-foreground/80 text-[11px]">
+                  <span className="text-muted-foreground text-[11px]">
                     {t("routines.page.templateReads", {
                       names: template.works.join(" · "),
                     })}
