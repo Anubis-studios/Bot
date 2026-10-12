@@ -205,7 +205,7 @@ describe("R2-T25 composer", () => {
     )!;
     expect(tab.nextElementSibling).toBe(surface);
     expect(within(tab).getByText("Tasks 0 of 8")).toBeTruthy();
-    for (const cls of ["-mb-px", "mx-auto", "w-[90%]", "empty:hidden"])
+    for (const cls of ["-mb-px", "mx-3", "empty:hidden"])
       expect(tab.className.split(" ")).toContain(cls);
   });
 

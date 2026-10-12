@@ -1048,7 +1048,7 @@ export const ThreadComposer = () => {
           // box's rounded corners, one px under the box so no seam shows.
           <div
             data-slot="composer-tab"
-            className="relative z-20 mx-auto -mb-px w-[90%] empty:hidden"
+            className="phone:mx-0 relative z-20 mx-3 -mb-px empty:hidden"
           >
             {view.slots.composerTasks}
           </div>

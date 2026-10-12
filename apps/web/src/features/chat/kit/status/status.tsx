@@ -107,14 +107,18 @@ export const BusyLine = ({
   const now = useSeconds(true);
   return (
     <div
-      className="text-muted-foreground flex items-center gap-2 text-[13px] font-medium"
+      // The live twin of a tool group's header: same height, same left edge
+      // (a 14 px icon cell), same type.
+      className="text-muted-foreground flex min-h-7 items-center gap-2 text-xs"
       data-slot="busy-line"
     >
       <span
         aria-hidden
-        className="size-1.5 rounded-full bg-[var(--chat-status-running)]"
-      />
-      <span className="min-w-0 truncate">{label}</span>
+        className="flex size-3.5 shrink-0 items-center justify-center"
+      >
+        <span className="size-1.5 rounded-full bg-[var(--chat-status-running)]" />
+      </span>
+      <span className="shimmer min-w-0 truncate">{label}</span>
       <span className="chat-mono font-normal">
         {formatElapsed(now - startedAt)}
       </span>

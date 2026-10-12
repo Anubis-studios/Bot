@@ -147,4 +147,36 @@ describe("tool cluster geometry", () => {
       style.remove();
     }
   });
+  it("steps the sessions transcript by hierarchy and hugs prose to its group", () => {
+    const style = document.createElement("style");
+    style.textContent = css;
+    document.head.append(style);
+    document.body.innerHTML = `
+      <div data-slot="message-scroller-content">
+        <div id="u1" data-turn="user"></div>
+        <div id="a1" data-turn="assistant">
+          <div data-slot="assistant-parts">
+            <p id="prose"></p><div id="group" data-slot="tool-group"></div><p id="after"></p>
+          </div>
+        </div>
+        <div id="a2" data-turn="assistant"></div>
+        <div id="u2" data-turn="user"></div>
+        <div id="busy" data-slot="busy-line"></div>
+      </div>`;
+    try {
+      const pad = (id: string) =>
+        getComputedStyle(document.querySelector(id)!).paddingTop;
+      const margin = (id: string) =>
+        getComputedStyle(document.querySelector(id)!).marginTop;
+      expect(pad("#a1")).toBe("16px");
+      expect(pad("#a2")).toBe("14px");
+      expect(pad("#u2")).toBe("28px");
+      expect(pad("#busy")).toBe("2px");
+      expect(margin("#group")).toBe("0px");
+      expect(margin("#after")).toBe("4px");
+    } finally {
+      style.remove();
+      document.body.innerHTML = "";
+    }
+  });
 });

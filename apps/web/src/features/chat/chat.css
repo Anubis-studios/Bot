@@ -388,10 +388,30 @@ html[data-reduce-motion="on"] [data-message-target][data-highlighted] { animatio
   background-color: color-mix(in oklab, var(--bot-accent, var(--primary)) 88%, transparent);
 }
 
+/*
+ * Transcript rhythm. Every gap is one padding-top on the row it precedes
+ * (never a margin on top of a flex gap). Bot rows keep 12 px; the sessions
+ * skin marks its rows `data-turn` and steps by hierarchy: 14 px between
+ * assistant rows, 16 px from a user message to the reply, 28 px before a
+ * new user message. A tool group header is 28 px tall around 16 px of text
+ * (6 px of air each side), so the visible gap beside a group is its margin
+ * plus that air.
+ */
 [data-slot="message-scroller-content"] > * + * { --transcript-row-gap: 12px; padding-top: 12px; }
 [data-slot="message-scroller-content"] > [data-tool-only] + [data-tool-gap="same"] { --transcript-row-gap: 2px; padding-top: 2px; }
 [data-slot="message-scroller-content"] > [data-tool-only] + [data-tool-gap="different"] { --transcript-row-gap: 8px; padding-top: 8px; }
-[data-slot="tool-cluster"] { display: flex; flex-direction: column; gap: 2px; }
+[data-slot="message-scroller-content"] > * + [data-turn="assistant"] { --transcript-row-gap: 14px; padding-top: 14px; }
+[data-slot="message-scroller-content"] > * + [data-turn="user"] { --transcript-row-gap: 28px; padding-top: 28px; }
+[data-slot="message-scroller-content"] > [data-turn="user"] + [data-turn="assistant"] { --transcript-row-gap: 16px; padding-top: 16px; }
+/* The live row reads as the open end of the group above it. */
+[data-slot="message-scroller-content"] > [data-slot="busy-line"] { --transcript-row-gap: 2px; padding-top: 2px; }
+
+/* Within one assistant turn: prose, then its group hugging it, then the rest. */
+[data-slot="assistant-parts"] > * + * { margin-top: 8px; }
+[data-slot="assistant-parts"] > * + [data-slot="tool-group"] { margin-top: 0; }
+[data-slot="assistant-parts"] > [data-slot="tool-group"] + * { margin-top: 4px; }
+/* Opened group: rows hang under the header's label (14 px icon + 8 px gap). */
+[data-slot="tool-cluster"] { display: flex; flex-direction: column; gap: 2px; padding-inline-start: 22px; }
 
 [data-slot="chat-layout"] { --transcript-fade-size: 80px; }
 [data-transcript-fade] {

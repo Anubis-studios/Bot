@@ -578,7 +578,7 @@ const ToolRun = ({
   const Icon = RUN_ICONS[toolRunKind(runCalls)];
   return (
     <Collapsible data-slot="tool-group" data-running={running ? "" : undefined}>
-      <CollapsibleTrigger className="group/run text-muted-foreground hover:text-foreground flex w-full items-center gap-2 text-xs transition-colors">
+      <CollapsibleTrigger className="group/run text-muted-foreground hover:text-foreground focus-visible:ring-ring flex min-h-7 w-full items-center gap-2 rounded-md text-xs transition-colors outline-none focus-visible:ring-2">
         <Icon aria-hidden className="size-3.5 shrink-0" />
         <span className={cn("min-w-0 truncate", running && "shimmer")}>
           {label}
@@ -719,7 +719,10 @@ export const SessionMessage = ({ message }: MessageProps<unknown>) => {
       value={{ id: message.id, role: "assistant", streaming, message }}
     >
       <div
-        className="flex flex-col gap-2"
+        // Part spacing lives in chat.css (assistant-parts): prose hugs its
+        // tool group, the group leaves room before what follows.
+        className="flex flex-col"
+        data-slot="assistant-parts"
         data-role="assistant"
         data-grouped={grouped ? "" : undefined}
       >
