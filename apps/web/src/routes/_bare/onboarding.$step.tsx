@@ -329,13 +329,15 @@ export const Route = createFileRoute("/_bare/onboarding/$step")({
         context.queryClient.ensureQueryData(
           context.transport.orpc.models.list.queryOptions({ input: {} })
         ),
-        // A local runtime is optional; the pane presents its unavailable state.
-        context.queryClient
-          .ensureQueryData(
-            context.transport.orpc.localModels.state.queryOptions({ input: {} })
-          )
-          .catch(() => undefined),
       ]);
+    // A local runtime is optional and may be down: warm it without holding the
+    // step (the query's default retries back off for ~7s) and let the pane
+    // present its unavailable state.
+    if (params.step === "models")
+      void context.queryClient.prefetchQuery({
+        ...context.transport.orpc.localModels.state.queryOptions({ input: {} }),
+        retry: false,
+      });
     if (params.step === "connectors")
       await context.queryClient.ensureQueryData(
         context.transport.orpc.connectors.statuses.queryOptions({ input: {} })
