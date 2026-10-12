@@ -2,6 +2,7 @@ import { connectorById } from "@abacus-ai/connectors/registry";
 import type { MessagingPlatformId } from "@abacus-ai/contract/messaging";
 import { isPayingAbacusTier } from "@abacus-ai/contract/models";
 import { canSignOutOfAbacus } from "@abacus-ai/contract/settings";
+import { isCancelledError } from "@tanstack/react-query";
 import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -280,6 +281,18 @@ const factsOf = async (
   };
 };
 /**
+ * Warms a step's query without failing the load when it is cancelled. The
+ * pending skeleton unmounts the outgoing step, whose observer may be the
+ * query's last, and that cancels the fetch; the step's own query refetches.
+ */
+const warm = (load: Promise<unknown>) =>
+  load.then(
+    () => undefined,
+    (error: unknown) => {
+      if (!isCancelledError(error)) throw error;
+    }
+  );
+/**
  * While onboarding renders provisionally (the browser's host is still
  * connecting, spec 09 D12) nothing is known: the step renders as asked,
  * acts on no fact and redirects nowhere. Once the host answers, the
@@ -314,10 +327,12 @@ export const Route = createFileRoute("/_bare/onboarding/$step")({
     const { signal } = abortController;
     if (cause === "preload") return { facts: await factsOf(context, signal) };
     if (IS_ELECTRON && params.step === "welcome")
-      await context.queryClient.ensureQueryData(
-        context.transport.orpc.auth.abacus.browserProfiles.queryOptions({
-          input: {},
-        })
+      await warm(
+        context.queryClient.ensureQueryData(
+          context.transport.orpc.auth.abacus.browserProfiles.queryOptions({
+            input: {},
+          })
+        )
       );
     if (params.step === "connected")
       await context.transport.client.account.abacus(
@@ -326,13 +341,17 @@ export const Route = createFileRoute("/_bare/onboarding/$step")({
       );
     if (params.step === "models")
       await Promise.all([
-        context.queryClient.ensureQueryData(
-          context.transport.orpc.settings.keys.listProviders.queryOptions({
-            input: {},
-          })
+        warm(
+          context.queryClient.ensureQueryData(
+            context.transport.orpc.settings.keys.listProviders.queryOptions({
+              input: {},
+            })
+          )
         ),
-        context.queryClient.ensureQueryData(
-          context.transport.orpc.models.list.queryOptions({ input: {} })
+        warm(
+          context.queryClient.ensureQueryData(
+            context.transport.orpc.models.list.queryOptions({ input: {} })
+          )
         ),
         // A local runtime is optional; the pane presents its unavailable state.
         context.queryClient
@@ -342,8 +361,10 @@ export const Route = createFileRoute("/_bare/onboarding/$step")({
           .catch(() => undefined),
       ]);
     if (params.step === "connectors")
-      await context.queryClient.ensureQueryData(
-        context.transport.orpc.connectors.statuses.queryOptions({ input: {} })
+      await warm(
+        context.queryClient.ensureQueryData(
+          context.transport.orpc.connectors.statuses.queryOptions({ input: {} })
+        )
       );
     if (params.step === "first-bot")
       await context.db.collections.routines.preload();

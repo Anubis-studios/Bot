@@ -546,3 +546,32 @@ it.each(["whatsapp", "telegram", "discord"] as const)(
     ).toEqual([]);
   }
 );
+it("a slow connectors read past the pending skeleton still opens the connectors step", async () => {
+  const os = implement(contract);
+  // Slower than defaultPendingMs: the skeleton unmounts the models step,
+  // whose statuses observer was the query's last, while the loader waits.
+  const slow = () =>
+    new Promise<Record<string, never>>((resolve) =>
+      setTimeout(() => resolve({}), 800)
+    );
+  harness = await renderApp("/onboarding/models", {
+    onboarded: false,
+    signedIn: true,
+    procedures: {
+      connectors: { statuses: os.connectors.statuses.handler(slow) },
+    },
+  });
+  const continueModels = await screen.findByRole("button", {
+    name: "Continue",
+  });
+  await waitFor(() =>
+    expect((continueModels as HTMLButtonElement).disabled).toBe(false)
+  );
+  fireEvent.click(continueModels);
+  await screen.findByRole(
+    "heading",
+    { name: /Connect with your tools & services\./ },
+    { timeout: 4_000 }
+  );
+  expect(screen.queryByText("Something went wrong")).toBeNull();
+});
