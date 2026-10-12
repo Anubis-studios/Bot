@@ -1,5 +1,5 @@
 import { useLocation } from "@tanstack/react-router";
-import { Sparkles, Minus } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { AnimatePresence, motion, animate } from "motion/react";
 import { useEffect, useLayoutEffect, useState, useRef } from "react";
 import { createPortal } from "react-dom";
@@ -26,13 +26,7 @@ import { Button } from "#renderer/ui/button";
 import { PromoCharacter } from "./promo-character";
 import { usePromoHost, consumePromoRect } from "./promo-host";
 import { promoPlacement } from "./promo-placement";
-import {
-  PROMO_SNOOZE_MS,
-  promoAccountKey,
-  promoState,
-  readPromoSnooze,
-  type PromoSnooze,
-} from "./promo-state";
+import { promoAccountKey, promoState } from "./promo-state";
 
 /** The boxes of visible text below `top`, which the floating card must not cover. */
 const textRects = (root: Element | null, top: number): DOMRect[] => {
@@ -50,7 +44,7 @@ const textRects = (root: Element | null, top: number): DOMRect[] => {
   return rects;
 };
 
-/** One portal and snooze state, shared by sidebar and floating presentations. */
+/** One portal, shared by sidebar and floating presentations. */
 export const UpgradePromo = () => {
   const { transport } = useAppContext();
   const host = usePromoHost();
@@ -62,9 +56,7 @@ export const UpgradePromo = () => {
   });
   const { t, i18n } = useTranslation();
   const prefs = usePrefs();
-  const minuteNow = useNow();
-  const [deadlineNow, setDeadlineNow] = useState(() => Date.now());
-  const now = Math.max(minuteNow, deadlineNow);
+  const now = useNow();
   const preference = useMotionPreference();
   const location = useLocation();
   useLayoutEffect(() => {
@@ -102,25 +94,10 @@ export const UpgradePromo = () => {
   useEffect(() => () => target.remove(), [target]);
   const account = useCreditsAccount();
   const key = promoAccountKey(account.data);
-  const [snooze, setSnooze] = useState<{
-    key: string;
-    value: PromoSnooze | null;
-  } | null>(null);
-  const savedSnooze = snooze?.key === key ? snooze.value : readPromoSnooze(key);
-  useEffect(() => {
-    const refresh = () => setDeadlineNow(Date.now());
-    const delay = (savedSnooze?.until ?? 0) - Date.now();
-    const timer = delay > 0 ? window.setTimeout(refresh, delay) : undefined;
-    window.addEventListener("focus", refresh);
-    return () => {
-      window.clearTimeout(timer);
-      window.removeEventListener("focus", refresh);
-    };
-  }, [key, savedSnooze?.until]);
   const contextualUpsell = useHasContextualUpsell();
   const state = contextualUpsell
     ? null
-    : promoState(account.data, prefs.creditsExhaustedAt, savedSnooze, now);
+    : promoState(account.data, prefs.creditsExhaustedAt, now);
   const [position, setPosition] = useState<ReturnType<typeof promoPlacement>>({
     left: 72,
     bottom: 24,
@@ -254,30 +231,7 @@ export const UpgradePromo = () => {
           }
         >
           <div className="phone-glow pointer-events-none -z-10" aria-hidden />
-          <Button
-            size="icon-sm"
-            variant="ghost"
-            className={compact ? "order-3 shrink-0" : "absolute top-1 right-1"}
-            aria-label={t("creditsCard.remindLater")}
-            title={t("creditsCard.remindLater")}
-            onClick={() => {
-              const value: PromoSnooze = {
-                until: Date.now() + PROMO_SNOOZE_MS,
-                situation: state ?? "upsell",
-              };
-              try {
-                localStorage.setItem(key, JSON.stringify(value));
-              } catch {
-                /* Keep this window’s snooze. */
-              }
-              setSnooze({ key, value });
-            }}
-          >
-            <Minus />
-          </Button>
-          <div
-            className={compact ? "contents" : "flex items-center gap-3 pr-3"}
-          >
+          <div className={compact ? "contents" : "flex items-center gap-3"}>
             <PromoCharacter
               remaining={remaining}
               total={account.data?.credits_granted ?? null}
