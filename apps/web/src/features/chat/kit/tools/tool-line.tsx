@@ -330,6 +330,23 @@ const LivePreview = ({ output }: { output: string }) => {
   );
 };
 
+/**
+ * A running command's latest output, for the group header while the group is
+ * closed (the rows inside unmount, so their own preview is out of reach).
+ */
+export const RunLiveOutput = ({
+  part,
+  result,
+}: {
+  part: ToolCallPart;
+  result: ToolResultPart | undefined;
+}) => {
+  const { tool } = useNormalizedTool(part, result);
+  return tool.status === "running" ? (
+    <LivePreview output={tool.terminal?.output ?? ""} />
+  ) : null;
+};
+
 const BashBody = ({ tool }: { tool: NormalizedTool }) => {
   const { t } = useTranslation();
   const ref = useRef<HTMLPreElement>(null);

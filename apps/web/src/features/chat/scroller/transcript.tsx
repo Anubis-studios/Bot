@@ -592,7 +592,12 @@ export const Transcript = ({ messages, Message }: TranscriptProps) => {
     const target = viewportRef.current?.querySelector<HTMLElement>(
       `[data-message-target="${CSS.escape(row)}"]`
     );
-    if (!target) return;
+    if (!target) {
+      // The row is there but carries no anchor: nothing to scroll to, and
+      // the request must not linger for the next row that mounts.
+      setJump(null);
+      return;
+    }
     handledJump.current = jump;
     if (highlight.current) {
       globalThis.clearTimeout(highlight.current.timer);

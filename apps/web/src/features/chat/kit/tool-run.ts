@@ -3,34 +3,78 @@
  * did ("Read 3 files, ran 2 commands and searched the web"): action and count,
  * never raw arguments.
  */
+import { toToolKind, type ToolKind } from "@abacus-ai/agent/tool-display";
+
+import { componentToolBase } from "#renderer/lib/bot-turns/component-tools";
+
 export type Action =
   | "Read"
   | "Edit"
   | "Command"
   | "CodeSearch"
   | "WebSearch"
+  | "Browser"
+  | "Mcp"
+  | "Plan"
+  | "Ask"
+  | "Subagent"
+  | "Present"
+  | "Create"
   | "Other";
 
-const ACTIONS: Array<[Action, ReadonlySet<string>]> = [
-  ["Read", new Set(["read", "ls", "image_view"])],
-  [
-    "Edit",
-    new Set([
-      "write",
-      "edit",
-      "batch_edit",
-      "notebook_edit",
-      "delete",
-      "apply_patch",
-    ]),
-  ],
-  ["Command", new Set(["bash", "bash_output", "kill_shell", "exec_command"])],
-  ["CodeSearch", new Set(["glob", "grep", "codebase_search"])],
-  ["WebSearch", new Set(["web_search", "web_fetch"])],
-];
+/** Background-shell tools read like commands, whatever their wire kind. */
+const COMMAND_TOOLS = new Set([
+  "read_output",
+  "fetch_background_output",
+  "kill_process",
+]);
+const CODE_SEARCH_TOOLS = new Set(["code_map"]);
+const PLAN_TOOLS = new Set(["todo", "todo_write", "exit_plan_mode"]);
 
-const actionOf = (name: string): Action =>
-  ACTIONS.find(([, names]) => names.has(name))?.[0] ?? "Other";
+const kindOf = (name: string): ToolKind => {
+  try {
+    return toToolKind(name);
+  } catch {
+    return "other";
+  }
+};
+
+/**
+ * The header's class for one call. The agent's own `toToolKind` is the one
+ * table for file/command/search tools (the tool rows use it for their icon);
+ * the rest are named by what the call is for.
+ */
+export const actionOf = (name: string): Action => {
+  if (COMMAND_TOOLS.has(name)) return "Command";
+  if (name === "present_deliverable" || name.endsWith("_present_deliverable"))
+    return "Present";
+  if (componentToolBase(name) != null) return "Create";
+  if (name === "ask_user_question") return "Ask";
+  if (name.startsWith("browser")) return "Browser";
+  if (name.startsWith("mcp__")) return "Mcp";
+  if (PLAN_TOOLS.has(name)) return "Plan";
+  if (CODE_SEARCH_TOOLS.has(name)) return "CodeSearch";
+  switch (kindOf(name)) {
+    case "read":
+      return "Read";
+    case "edit":
+    case "delete":
+    case "move":
+      return "Edit";
+    case "execute":
+      return "Command";
+    case "search":
+      return name === "web_search" ? "WebSearch" : "CodeSearch";
+    case "fetch":
+      return "WebSearch";
+    case "think":
+      return "Subagent";
+    case "switch_mode":
+      return "Plan";
+    default:
+      return "Other";
+  }
+};
 
 export interface RunCall {
   name: string;

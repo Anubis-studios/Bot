@@ -51,6 +51,7 @@ import { type ChatRuntime } from "#renderer/features/chat/runtime/runtime";
 import { SessionChangesCard } from "#renderer/features/sessions/changes/changes-card";
 import {
   deliverablesAfter,
+  rowEndIndex,
   sessionDeliverablesCard,
 } from "#renderer/features/sessions/chat/deliverables";
 import { SessionKnownFiles } from "#renderer/features/sessions/chat/known-files";
@@ -425,11 +426,9 @@ const SessionRoute = () => {
               ),
               decorateMessage: (message, context) => {
                 if (message.role !== "assistant") return null;
-                let at = context.index;
-                if (context.messages[at]?.id !== message.id)
-                  at = context.messages.findIndex(
-                    (row) => row.id === message.id
-                  );
+                // A coalesced row is keyed by its host; the turn's carrier
+                // may be any message folded into it, so use the last of them.
+                const at = rowEndIndex(message, context);
                 const files =
                   at < 0
                     ? null
@@ -456,10 +455,7 @@ const SessionRoute = () => {
                               })
                           : undefined,
                       });
-                if (
-                  context.runActive &&
-                  context.index === context.messages.length - 1
-                )
+                if (context.runActive && at === context.messages.length - 1)
                   return after != null ? { after } : null;
                 const source = message.metadata?.abacus?.segmentId;
                 const segmentId =

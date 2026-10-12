@@ -61,7 +61,7 @@ describe("R2-T12/T13 rendered tool rows", () => {
       b.runFinished("r"),
     ]);
     current = await renderRelay(relay, "session");
-    await screen.findByRole("button", { name: /Used 2 tools|Used 1 tool/ });
+    await screen.findByRole("button", { name: /Called [12] connected tools?/ });
     openRuns();
     const parent = await screen.findByRole("button", {
       name: /linear|create.issue/i,

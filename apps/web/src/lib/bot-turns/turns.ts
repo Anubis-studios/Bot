@@ -57,6 +57,27 @@ export type SpokenPart =
   | { kind: "notice" }
   | { kind: "subagent" };
 
+const indexes = new WeakMap<readonly UIMessage[], Map<string, number>>();
+
+/**
+ * Where `id` sits in `messages` (-1 when absent). The id map is built once per
+ * array, so every row asking per stream tick costs O(1), not a rescan.
+ */
+export function messageIndexOf(
+  messages: readonly UIMessage[],
+  id: string
+): number {
+  let map = indexes.get(messages);
+  if (map == null) {
+    map = new Map();
+    messages.forEach((message, index) => {
+      if (!map!.has(message.id)) map!.set(message.id, index);
+    });
+    indexes.set(messages, map);
+  }
+  return map.get(id) ?? -1;
+}
+
 /** The parts of an assistant message the bot skin shows (`spokenItems`). */
 export function spokenParts(message: UIMessage): SpokenPart[] {
   const out: SpokenPart[] = [];
@@ -217,7 +238,7 @@ export function botVisibleMessage(
     };
   }
   if (message.role !== "assistant") return message;
-  const index = messages.findIndex((row) => row.id === message.id);
+  const index = messageIndexOf(messages, message.id);
   const turn = turnsOf(messages).find((row) =>
     row.assistantIndices.includes(index)
   );

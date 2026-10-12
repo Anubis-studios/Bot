@@ -2,7 +2,10 @@
  * Reading a thread (spec 02 §4.4, §6): React hooks over the session's host
  * store and the on-screen generation's thread store, plus pure selectors.
  */
+import type { UIMessage } from "@tanstack/ai-client";
 import { useSelector } from "@tanstack/react-store";
+
+import { messageIndexOf } from "#renderer/lib/bot-turns/turns";
 
 import type { HostState, ThreadSession } from "../runtime/session";
 import {
@@ -21,8 +24,48 @@ export const isBusy = (input: {
 
 export const useHost = <T>(
   session: ThreadSession,
-  selector: (state: HostState) => T
-): T => useSelector(session.hostStore, selector);
+  selector: (state: HostState) => T,
+  compare?: (a: T, b: T) => boolean
+): T =>
+  useSelector(
+    session.hostStore,
+    selector,
+    compare != null ? { compare } : undefined
+  );
+
+export { messageIndexOf } from "#renderer/lib/bot-turns/turns";
+
+/**
+ * The messages one row depends on: the turn it sits in (its user message
+ * through the last message before the next user message) plus the message
+ * before it, and whether that turn is the thread's last. A stream tick in
+ * another turn leaves this equal, so the row does not re-render.
+ */
+export interface TurnWindow {
+  items: readonly UIMessage[];
+  last: boolean;
+}
+
+export const turnWindow = (
+  messages: readonly UIMessage[],
+  id: string
+): TurnWindow => {
+  const at = messageIndexOf(messages, id);
+  if (at < 0) return { items: [], last: false };
+  let start = at;
+  while (start > 0 && messages[start]!.role !== "user") start--;
+  let end = at + 1;
+  while (end < messages.length && messages[end]!.role !== "user") end++;
+  return {
+    items: messages.slice(Math.max(0, start - 1), end),
+    last: end === messages.length,
+  };
+};
+
+export const sameTurnWindow = (a: TurnWindow, b: TurnWindow): boolean =>
+  a.last === b.last &&
+  a.items.length === b.items.length &&
+  a.items.every((item, index) => item === b.items[index]);
 
 /** The on-screen generation's thread store, re-bound after every swap. */
 export const useThreadStore = <T>(

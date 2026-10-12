@@ -9,6 +9,18 @@ import type { UIMessage } from "@tanstack/ai-client";
 
 type Loose = Record<string, unknown>;
 
+type Part = UIMessage["parts"][number];
+
+/** Whitespace-only prose with no server meaning (`abacus.kind`): nothing to show. */
+export const isBlankText = (part: Part): boolean =>
+  part.type === "text" &&
+  part.content.trim() === "" &&
+  !(part as { metadata?: { abacus?: { kind?: string } } }).metadata?.abacus
+    ?.kind;
+
+/** Reasoning between tool calls does not end a run of them. */
+export const isThinking = (part: Part): boolean => part.type === "thinking";
+
 export const isToolOnly = (message: UIMessage | undefined): boolean =>
   message?.role === "assistant" &&
   message.parts.some((part) => part.type === "tool-call") &&
@@ -16,10 +28,8 @@ export const isToolOnly = (message: UIMessage | undefined): boolean =>
     (part) =>
       part.type === "tool-call" ||
       part.type === "tool-result" ||
-      (part.type === "text" &&
-        part.content.trim() === "" &&
-        !(part as { metadata?: { abacus?: { kind?: string } } }).metadata
-          ?.abacus?.kind)
+      isThinking(part) ||
+      isBlankText(part)
   );
 
 interface Cached {

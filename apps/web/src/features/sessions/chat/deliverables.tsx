@@ -90,3 +90,29 @@ export const sessionDeliverablesCard = (
     />
   );
 };
+
+/**
+ * The index of the last message a row stands for: a coalesced row carries its
+ * host's id, but the messages folded into it come later in the thread.
+ * `-1` when the row is not in `context.messages`.
+ */
+export const rowEndIndex = (
+  message: UIMessage,
+  context: { messages: readonly UIMessage[]; index: number }
+): number => {
+  const indexOf = (id: string): number =>
+    context.messages[context.index]?.id === id
+      ? context.index
+      : context.messages.findIndex((row) => row.id === id);
+  const host = indexOf(message.id);
+  if (host < 0) return -1;
+  let end = host;
+  for (const id of (
+    message.metadata as { abacus?: { coalescedIds?: string[] } } | undefined
+  )?.abacus?.coalescedIds ?? [])
+    end = Math.max(
+      end,
+      context.messages.findIndex((row) => row.id === id)
+    );
+  return end;
+};

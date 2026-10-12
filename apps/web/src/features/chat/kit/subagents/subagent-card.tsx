@@ -4,7 +4,7 @@
  * render through the same widget context (no override maps, F7). Stop stops
  * the whole reply (`ai.cancel`, F11); `handle.stop` is never called.
  */
-import type { UIMessage } from "@tanstack/ai-client";
+import { parsePartialJSON, type UIMessage } from "@tanstack/ai-client";
 import type { SubagentProps } from "@tanstack/ai-react/ui";
 import { ChevronRight, ExternalLink, Square } from "lucide-react";
 import { type ComponentType, useState } from "react";
@@ -24,6 +24,7 @@ import { useToolWindow } from "../../scroller/row-context";
 import { useThreadStore } from "../../store/selectors";
 import { formatElapsed, useSeconds } from "../clock";
 import { SubagentScope, useChatView } from "../context";
+import { toolInput } from "../tools/normalize";
 import { toolTitle } from "../tools/tool-line";
 import { narrationLines, subagentEnding, subagentReport } from "./summary";
 
@@ -40,10 +41,7 @@ export const latestTool = (messages: readonly UIMessage[]): string | null => {
     for (let p = parts.length - 1; p >= 0; p -= 1) {
       const part = parts[p]!;
       if (part.type === "tool-call")
-        return toolTitle(
-          part.name,
-          (part.input as Record<string, unknown> | undefined) ?? {}
-        );
+        return toolTitle(part.name, toolInput(part, parsePartialJSON));
     }
   }
   return null;

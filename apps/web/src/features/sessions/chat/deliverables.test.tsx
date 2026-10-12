@@ -4,7 +4,11 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { i18n, initI18n } from "#renderer/lib/i18n";
 
-import { deliverablesAfter, sessionDeliverablesCard } from "./deliverables";
+import {
+  deliverablesAfter,
+  rowEndIndex,
+  sessionDeliverablesCard,
+} from "./deliverables";
 
 beforeAll(async () => {
   await initI18n();
@@ -69,5 +73,23 @@ describe("deliverablesAfter", () => {
     );
     fireEvent.click(screen.getByText("report.md"));
     expect(onOpenFile).toHaveBeenCalledWith("/w/report.md");
+  });
+});
+
+describe("rowEndIndex", () => {
+  it("reaches the carrier folded into a coalesced host row", () => {
+    const messages = [
+      user("u"),
+      writer("a1", "/w/a.ts"),
+      writer("a2", "/w/r.md"),
+    ];
+    const host = {
+      ...messages[1]!,
+      metadata: { abacus: { coalescedIds: ["a2"] } },
+    } as UIMessage;
+    const at = rowEndIndex(host, { messages, index: 1 });
+    expect(at).toBe(2);
+    expect(deliverablesAfter(messages, at, false)?.length).toBe(1);
+    expect(rowEndIndex(messages[1]!, { messages, index: 1 })).toBe(1);
   });
 });

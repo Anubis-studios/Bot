@@ -833,6 +833,64 @@ it("sessions show no turn row while the turn is still running", async () => {
   expect(document.querySelector('[data-slot="turn-actions"]')).toBeNull();
 });
 
+it("sessions render the decoration's before and after around an assistant turn, and anchor it for reply jumps", async () => {
+  const relay = new FakeRelay({
+    history: [
+      { id: "u1", role: "user", parts: [{ type: "text", content: "go" }] },
+      original,
+    ],
+  });
+  relay.emitAll(b.sessionReady());
+  current = await renderRelay(
+    relay,
+    "session",
+    {},
+    {
+      slots: {
+        decorateMessage: (message) =>
+          message.role === "assistant"
+            ? {
+                before: <div data-testid="deco-before" />,
+                after: <div data-testid="deco-after">Files card</div>,
+              }
+            : null,
+      },
+    }
+  );
+  await screen.findByText("Files card");
+  expect(screen.getByTestId("deco-before")).toBeTruthy();
+  expect(host("a").getAttribute("data-role")).toBe("assistant");
+  expect(within(host("a")).getByText("Files card")).toBeTruthy();
+});
+
+it("sessions keep one run header through reasoning between calls", async () => {
+  const toolCall = (id: string, name: string) => ({
+    type: "tool-call" as const,
+    id,
+    name,
+    arguments: "{}",
+    state: "input-complete" as const,
+  });
+  const relay = new FakeRelay({
+    history: [
+      {
+        id: "m1",
+        role: "assistant",
+        parts: [toolCall("c1", "bash"), { type: "thinking", content: "hm" }],
+      },
+      {
+        id: "m2",
+        role: "assistant",
+        parts: [{ type: "thinking", content: "next" }, toolCall("c2", "read")],
+      },
+    ],
+  });
+  relay.emitAll(b.sessionReady());
+  current = await renderRelay(relay, "session");
+  await screen.findByText(/Ran 1 command and read 1 file/);
+  expect(document.querySelectorAll('[data-slot="tool-group"]')).toHaveLength(1);
+});
+
 it("sessions never render Copy or feedback for tool-only messages with blank text", async () => {
   const relay = new FakeRelay({
     history: [

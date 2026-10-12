@@ -11,16 +11,23 @@ import {
  * show "Not sent" with Retry/Discard when they failed. An assistant message
  * with no parts renders nothing (F12).
  */
-import type { UIMessage } from "@tanstack/ai-client";
+import { parsePartialJSON, type UIMessage } from "@tanstack/ai-client";
 import type { MessageProps } from "@tanstack/ai-react/ui";
 import {
+  Bot,
   ChevronRight,
   CircleAlert,
+  Compass,
   Eye,
   FileText,
   Globe,
   Hammer,
+  ListChecks,
+  MessageCircleQuestionMark,
+  PackageCheck,
+  Plug,
   Search,
+  Sparkles,
   SquarePen,
   Terminal,
   Wrench,
@@ -53,9 +60,17 @@ import {
 } from "#renderer/ui/collapsible";
 
 import { Markdown } from "../markdown/markdown";
-import { coalescedIds } from "../scroller/coalesce";
+import { coalescedIds, isBlankText, isThinking } from "../scroller/coalesce";
 import { useToolWindow } from "../scroller/row-context";
-import { useHost, useThreadStore } from "../store/selectors";
+import {
+  descriptorFor,
+  messageIndexOf,
+  sameTurnWindow,
+  turnWindow,
+  useHost,
+  useThreadStore,
+  type TurnWindow,
+} from "../store/selectors";
 import {
   useChatView,
   useSubagentScope,
@@ -70,6 +85,8 @@ import {
 import { useKitParts, useMessageScope, MessageScope } from "./message-scope";
 import { ReplyQuote, jumpToMessage } from "./reply";
 import { joinLabels, toolRunCounts, toolRunKind } from "./tool-run";
+import { toolInput } from "./tools/normalize";
+import { RunLiveOutput } from "./tools/tool-line";
 
 type Loose = Record<string, unknown>;
 
@@ -373,19 +390,39 @@ const messageIndex = (message: UIMessage | undefined) => {
 const isEmptyAssistant = (message: UIMessage): boolean =>
   message.role === "assistant" && message.parts.length === 0;
 
-/** The route's decoration of one message (03-bots §11.3), or none. */
+/**
+ * The route's decoration of one message (03-bots §11.3), or none. Sessions
+ * decorate from the message's own turn, so only that turn's changes re-render
+ * the row; the bot skin's gap stamps and feedback look across the thread.
+ */
 const useDecoration = (message: UIMessage): MessageDecoration | null => {
-  const { session, slots } = useChatView();
-  const messages = useHost(session, (state) => state.messages);
+  const { session, slots, skin } = useChatView();
+  const decorate = slots.decorateMessage;
+  const narrow = skin === "session";
+  const window = useHost(
+    session,
+    (state): TurnWindow =>
+      decorate == null
+        ? NO_WINDOW
+        : narrow
+          ? turnWindow(state.messages, message.id)
+          : { items: state.messages, last: true },
+    sameTurnWindow
+  );
   const runActive = useThreadStore(
     session,
     (state) => state.runs.active != null
   );
-  const decorate = slots.decorateMessage;
   if (decorate == null) return null;
-  const index = messages.findIndex((item) => item.id === message.id);
-  return decorate(message, { messages, index, runActive });
+  const messages = narrow ? session.hostStore.state.messages : window.items;
+  return decorate(message, {
+    messages,
+    index: messageIndexOf(messages, message.id),
+    runActive,
+  });
 };
+
+const NO_WINDOW: TurnWindow = { items: [], last: false };
 
 /**
  * The assistant turn this row closes: the prose of every assistant message
@@ -393,17 +430,13 @@ const useDecoration = (message: UIMessage): MessageDecoration | null => {
  * assistant message follows before the next user message, or the end) and
  * the turn is finished. Otherwise none, so a turn carries exactly one row.
  */
-const useTurnEnd = (
-  message: UIMessage
+export const turnEndOf = (
+  messages: readonly UIMessage[],
+  message: UIMessage,
+  runActive: boolean
 ): { text: string; id: string } | null => {
-  const { session } = useChatView();
-  const messages = useHost(session, (state) => state.messages);
-  const runActive = useThreadStore(
-    session,
-    (state) => state.runs.active != null
-  );
   if (message.role !== "assistant") return null;
-  const index = messages.findIndex((item) => item.id === message.id);
+  const index = messageIndexOf(messages, message.id);
   if (index < 0) return null;
   const folded = new Set(coalescedIds(message));
   let next = index + 1;
@@ -434,6 +467,21 @@ const useTurnEnd = (
     .filter((chunk) => chunk.trim() !== "")
     .join("\n\n");
   return { text, id: message.id };
+};
+
+const useTurnEnd = (
+  message: UIMessage
+): { text: string; id: string } | null => {
+  const { session } = useChatView();
+  const runActive = useThreadStore(
+    session,
+    (state) => state.runs.active != null
+  );
+  return useHost(
+    session,
+    (state) => turnEndOf(state.messages, message, runActive),
+    (a, b) => a?.text === b?.text && a?.id === b?.id
+  );
 };
 
 export const BotMessage = ({ message, Parts }: MessageProps<unknown>) => {
@@ -523,6 +571,13 @@ const RUN_ICONS = {
   Command: Terminal,
   CodeSearch: Search,
   WebSearch: Globe,
+  Browser: Compass,
+  Mcp: Plug,
+  Plan: ListChecks,
+  Ask: MessageCircleQuestionMark,
+  Subagent: Bot,
+  Present: PackageCheck,
+  Create: Sparkles,
   Other: Wrench,
   mixed: Hammer,
 } as const;
@@ -557,15 +612,36 @@ const ToolRun = ({
   children: ReactNode;
 }) => {
   const { t, i18n } = useTranslation();
-  const running =
-    streaming &&
-    calls.some((call) => !results.has(call.id) && call.state !== "error");
+  const { session } = useChatView();
+  const scope = useSubagentScope();
+  const [open, setOpen] = useState(false);
+  // A call the person must approve is waiting, not running.
+  const needsYou = useThreadStore(session, (state) =>
+    calls.reduce(
+      (count, call) =>
+        count +
+        (!results.has(call.id) && descriptorFor(state, scope, call.id) != null
+          ? 1
+          : 0),
+      0
+    )
+  );
+  const pending = calls.filter(
+    (call) => !results.has(call.id) && call.state !== "error"
+  ).length;
+  const running = streaming && pending > needsYou;
   const failed = calls.filter((call) =>
     callFailed(call, results.get(call.id))
   ).length;
+  const stopped = calls.filter(
+    (call) => results.get(call.id)?.outcome === "cancelled"
+  ).length;
+  const refused = calls.filter(
+    (call) => results.get(call.id)?.outcome === "denied"
+  ).length;
   const runCalls = calls.map((call) => ({
     name: call.name,
-    input: call.input,
+    input: toolInput(call, parsePartialJSON),
   }));
   const label =
     (!running ? summary : undefined) ??
@@ -576,17 +652,45 @@ const ToolRun = ({
       i18n.language
     );
   const Icon = RUN_ICONS[toolRunKind(runCalls)];
+  const liveCall = running
+    ? calls.findLast((call) => call.name === "bash" && !results.has(call.id))
+    : undefined;
   return (
-    <Collapsible data-slot="tool-group" data-running={running ? "" : undefined}>
+    <Collapsible
+      data-slot="tool-group"
+      data-running={running ? "" : undefined}
+      data-needs-you={needsYou > 0 ? "" : undefined}
+      open={open}
+      onOpenChange={setOpen}
+    >
       <CollapsibleTrigger className="group/run text-muted-foreground hover:text-foreground focus-visible:ring-ring flex min-h-7 w-full items-center gap-2 rounded-md text-xs transition-colors outline-none focus-visible:ring-2">
         <Icon aria-hidden className="size-3.5 shrink-0" />
         <span className={cn("min-w-0 truncate", running && "shimmer")}>
           {label}
         </span>
+        {needsYou > 0 ? (
+          <span
+            data-slot="run-attention"
+            className="flex shrink-0 items-center gap-1 text-[var(--chat-status-attention)]"
+          >
+            <CircleAlert aria-hidden className="size-3" />
+            {t("chat.tool.summaryNeedsYou", { count: needsYou })}
+          </span>
+        ) : null}
         {failed > 0 ? (
           <span className="text-destructive flex shrink-0 items-center gap-1">
             <CircleAlert aria-hidden className="size-3" />
             {t("chat.tool.summaryFailed", { count: failed })}
+          </span>
+        ) : null}
+        {stopped > 0 ? (
+          <span className="flex shrink-0 items-center gap-1">
+            {t("chat.tool.summaryStopped", { count: stopped })}
+          </span>
+        ) : null}
+        {refused > 0 ? (
+          <span className="flex shrink-0 items-center gap-1">
+            {t("chat.tool.summaryRefused", { count: refused })}
           </span>
         ) : null}
         <ChevronRight
@@ -594,6 +698,9 @@ const ToolRun = ({
           className="size-3 shrink-0 transition-transform duration-150 group-data-[panel-open]/run:rotate-90 motion-reduce:transition-none"
         />
       </CollapsibleTrigger>
+      {!open && liveCall != null ? (
+        <RunLiveOutput part={liveCall} result={results.get(liveCall.id)} />
+      ) : null}
       <CollapsibleContent
         data-slot="tool-cluster"
         className="h-(--collapsible-panel-height) overflow-hidden transition-[height] duration-150 data-[ending-style]:h-0 data-[starting-style]:h-0 motion-reduce:transition-none"
@@ -641,16 +748,22 @@ const GroupedParts = ({ message }: { message: UIMessage }) => {
         const blocks: Array<
           { run: false; part: Item } | { run: true; parts: Item[] }
         > = [];
+        // Reasoning between two calls rides inside their run, in order;
+        // reasoning with no call after it stays where it was.
+        let held: Item[] = [];
+        const flush = () => {
+          for (const part of held) blocks.push({ run: false, part });
+          held = [];
+        };
         for (const part of parts) {
-          if (
-            part.part.type === "tool-result" ||
-            (part.part.type === "text" &&
-              part.part.content.trim() === "" &&
-              !(part.part as { metadata?: { abacus?: { kind?: string } } })
-                .metadata?.abacus?.kind)
-          )
+          if (part.part.type === "tool-result" || isBlankText(part.part))
             continue;
+          if (isThinking(part.part)) {
+            held.push(part);
+            continue;
+          }
           if (part.part.type !== "tool-call") {
+            flush();
             blocks.push({ run: false, part });
             continue;
           }
@@ -660,9 +773,15 @@ const GroupedParts = ({ message }: { message: UIMessage }) => {
           )
             continue;
           const previous = blocks.at(-1);
-          if (previous?.run) previous.parts.push(part);
-          else blocks.push({ run: true, parts: [part] });
+          if (previous?.run) {
+            previous.parts.push(...held, part);
+            held = [];
+          } else {
+            flush();
+            blocks.push({ run: true, parts: [part] });
+          }
         }
+        flush();
         return blocks.map((block) => {
           if (!block.run)
             return (
@@ -671,9 +790,12 @@ const GroupedParts = ({ message }: { message: UIMessage }) => {
                 part={block.part}
               />
             );
-          const calls = block.parts.map((p) => p.part as ToolCall);
+          const callParts = block.parts.filter(
+            (p) => p.part.type === "tool-call"
+          );
+          const calls = callParts.map((p) => p.part as ToolCall);
           const ids = new Set(
-            block.parts.map(
+            callParts.map(
               (p) => indexed.groupIds.get(indexed.parts.get(p.part)!) ?? null
             )
           );
@@ -724,12 +846,15 @@ export const SessionMessage = ({ message }: MessageProps<unknown>) => {
         className="flex flex-col"
         data-slot="assistant-parts"
         data-role="assistant"
+        data-message-target={message.id}
         data-grouped={grouped ? "" : undefined}
       >
+        {decoration?.before}
         <StepControls side="earlier" />
         <GroupedParts message={message} />
         <StepControls side="more" />
         <Credits message={message} />
+        {decoration?.after}
         {turn != null && !streaming ? (
           <TurnActions
             messageId={turn.id}
