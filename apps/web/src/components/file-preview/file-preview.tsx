@@ -222,7 +222,7 @@ export const FilePreview = ({
 
   return (
     <div
-      className="flex min-h-0 min-w-0 flex-1 flex-col"
+      className="flex h-full min-h-0 min-w-0 flex-1 flex-col"
       data-slot="file-preview"
       data-kind={kind}
     >

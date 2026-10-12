@@ -8,7 +8,7 @@
 const GUEST_WORKSPACE_PREFIX = "/workspace";
 
 /** Absolute on POSIX (`/x`) or Windows (`C:\x`, `\\server\x`). */
-const isAbsoluteFilePath = (value: string): boolean =>
+export const isAbsoluteFilePath = (value: string): boolean =>
   value.startsWith("/") ||
   /^[a-zA-Z]:[\\/]/.test(value) ||
   value.startsWith("\\\\");

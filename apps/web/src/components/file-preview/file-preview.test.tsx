@@ -101,6 +101,28 @@ describe("FilePreview", () => {
     expect(read.text).toHaveBeenCalledWith("/w/a.md", "/w");
   });
 
+  it("fills a plain block host and scrolls its body, so a dock tab can scroll long files", async () => {
+    const { container } = render(
+      <div className="size-full">
+        <FilePreview
+          path="/w/a.md"
+          hostRoot="/w"
+          read={reads()}
+          onOpenExternally={() => {}}
+        />
+      </div>
+    );
+    await screen.findByText("Title");
+    const root = container.querySelector('[data-slot="file-preview"]')!;
+    // Not a flex item there: only an explicit height bounds the body.
+    expect(root.className).toMatch(/\bh-full\b/);
+    expect(root.className).toMatch(/\bmin-h-0\b/);
+    const body = root.children[1]!;
+    expect(body.className).toMatch(/\bmin-h-0\b/);
+    expect(body.className).toMatch(/\bflex-1\b/);
+    expect(body.className).toMatch(/\boverflow-auto\b/);
+  });
+
   it("renders code as text and images from a data URL", async () => {
     const read = reads();
     const { unmount } = render(

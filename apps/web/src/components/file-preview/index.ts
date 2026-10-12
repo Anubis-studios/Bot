@@ -3,6 +3,7 @@ export { DeliverablesCard, type DeliverableItem } from "./deliverables-card";
 export {
   containmentRootFor,
   hasInAppViewer,
+  isAbsoluteFilePath,
   isUrl,
   previewKind,
   resolveWorkspacePath,
