@@ -1,5 +1,3 @@
-import type { ConnectorOutcome } from "@abacus-ai/contract/contracts";
-
 import type { Transport } from "#renderer/data/transport";
 import { ConnectAttempt } from "#renderer/lib/connect-page";
 import { IS_ELECTRON } from "#renderer/lib/platform";
@@ -14,78 +12,31 @@ const claim = (key: string): boolean => {
   }
 };
 
-/** The one Gmail consent this page load waits on; dismissing it cancels the wait. */
-let gmail: ConnectAttempt | null = null;
+/** One Google consent covers these: any of them connected means Google is. */
+const GOOGLE_CONNECTORS = [
+  "abacus-gmailuser",
+  "abacus-googlecalendar",
+  "abacus-googledriveuser",
+] as const;
 
-/** Gmail's connect link (minted for the signed-in account), then the wait for it to connect. */
-const connectGmail = (transport: Transport): Promise<ConnectorOutcome> => {
-  gmail?.cancel();
-  const attempt = new ConnectAttempt(transport, "abacus-gmailuser");
-  gmail = attempt;
-  return attempt.result.finally(() => {
-    if (gmail === attempt) gmail = null;
-  });
-};
-
-/** The account's Gmail consent outlives whichever onboarding page starts it. */
+/**
+ * Desktop, once per install: an account that signs in with Google has
+ * Google's consent opened after sign-in, unless Google is connected already
+ * (a website sign-up may have done it). Nobody else is asked.
+ */
 export const startFirstRunGmail = async (
   transport: Transport,
-  email: string
+  googleSignIn: boolean
 ): Promise<void> => {
-  if (!email) return;
-  if (!IS_ELECTRON) {
-    const statuses = await transport.client.connectors.statuses({});
-    if (
-      statuses["abacus-gmailuser"]?.state === "connected" ||
-      statuses["abacus-gmailuser"]?.reason === "not-offered" ||
-      document.getElementById("gmail-consent")
-    )
-      return;
-    const slot = document.getElementById("onboarding-consent");
-    if (!slot) return;
-    const banner = document.createElement("div");
-    banner.className =
-      "flex items-center justify-between gap-3 rounded-lg border p-3";
-    banner.setAttribute("role", "status");
-    const dismiss = document.createElement("button");
-    dismiss.textContent = "Dismiss";
-    dismiss.onclick = () => {
-      gmail?.cancel();
-      banner.remove();
-    };
-    const button = document.createElement("button");
-    button.id = "gmail-consent";
-    button.className =
-      "rounded-lg bg-primary px-4 py-2 text-primary-foreground";
-    button.textContent = "Connect Gmail";
-    button.onclick = () => {
-      button.disabled = true;
-      void connectGmail(transport)
-        .then(async (outcome) => {
-          await transport.client.system.funnelStep({
-            step: outcome.ok ? "gmail_allowed" : "gmail_declined",
-          });
-          if (outcome.ok) {
-            claim("abacusai-bot:onboarding.gmailHop");
-            banner.remove();
-          } else button.disabled = false;
-        })
-        .catch(() => {
-          button.disabled = false;
-        });
-    };
-    banner.append(button, dismiss);
-    slot.append(banner);
-    return;
-  }
+  if (!IS_ELECTRON || !googleSignIn) return;
   const statuses = await transport.client.connectors.statuses({});
   if (
-    statuses["abacus-gmailuser"]?.state === "connected" ||
-    statuses["abacus-gmailuser"]?.reason === "not-offered" ||
+    statuses["abacus-gmailuser"]?.state !== "available" ||
+    GOOGLE_CONNECTORS.some((id) => statuses[id]?.state === "connected") ||
     !claim("abacusai-bot:onboarding.gmailHop")
   )
     return;
-  void connectGmail(transport)
+  void new ConnectAttempt(transport, "abacus-gmailuser").result
     .then((outcome) =>
       transport.client.system.funnelStep({
         step: outcome.ok ? "gmail_allowed" : "gmail_declined",

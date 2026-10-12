@@ -19,6 +19,10 @@ import type { McpServerEntry } from "@abacus-ai/contract/contracts";
 
 import type { McpConnectPlan } from "../connectors/connector-flow-service";
 import {
+  handoffPage,
+  type HandoffPageOptions,
+} from "../providers/handoff-page";
+import {
   exchangeCode,
   forgetMcpTokens,
   oauthLog,
@@ -384,38 +388,28 @@ const sameOwner = (header: unknown, owner: string): boolean =>
   Buffer.byteLength(header) === Buffer.byteLength(owner) &&
   crypto.timingSafeEqual(Buffer.from(header), Buffer.from(owner));
 
-const escapeHtml = (text: string): string =>
-  text.replace(
-    /[&<>"']/g,
-    (ch) =>
-      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
-        ch
-      ] ?? ch
-  );
-
 /** `label` comes from the host's registry or config, never the provider. No script, no form. */
-const page = (status: 200 | 400, body: string): HostedResponse => ({
-  kind: "page",
-  status,
-  html: `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><title>AbacusAI Bot</title>
-<style>body{font-family:system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;margin:0;padding:16px;box-sizing:border-box;background:#fff;color:#111;text-align:center}p{color:#555}@media (prefers-color-scheme:dark){body{background:#111;color:#eee}p{color:#aaa}}</style>
-<main>${body}</main>`,
-});
+const page = (
+  status: 200 | 400,
+  content: Pick<HandoffPageOptions, "title" | "body" | "tone">
+): HostedResponse => ({ kind: "page", status, html: handoffPage(content) });
 
 const connectedPage = (label: string): HostedResponse =>
-  page(
-    200,
-    `<h2>${escapeHtml(label)} is connected.</h2><p>You can go back to AbacusAI Bot or WhatsApp now.</p>`
-  );
+  page(200, {
+    title: `${label} is connected`,
+    body: "You can go back to AbacusAI Bot or WhatsApp now.",
+  });
 
 const needsAppPage = (label: string): HostedResponse =>
-  page(
-    400,
-    `<h2>${escapeHtml(label)} needs a few details first.</h2><p>Open AbacusAI Bot to connect it.</p>`
-  );
+  page(400, {
+    title: `${label} needs a few details first`,
+    body: "Open AbacusAI Bot to connect it.",
+    tone: "warn",
+  });
 
 const failedPage = (label: string | undefined): HostedResponse =>
-  page(
-    400,
-    `<h2>Sign-in did not finish.</h2><p>Close this tab and try connecting${label != null ? ` ${escapeHtml(label)}` : ""} again from AbacusAI Bot.</p>`
-  );
+  page(400, {
+    title: "Sign-in did not finish",
+    body: `Close this tab and try connecting${label != null ? ` ${label}` : ""} again from AbacusAI Bot.`,
+    tone: "warn",
+  });

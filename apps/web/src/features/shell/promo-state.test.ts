@@ -9,8 +9,10 @@ const free = {
   credits_granted: 100,
   credits_used: 10,
 } as AbacusAccountInfo;
-it("preserves free-account eligibility and hides paid or unknown accounts", () => {
-  for (const subscription_tier of ["basic", "pro", "", null])
+it("preserves free-account eligibility, points paid plans at the web and hides unknown accounts", () => {
+  for (const subscription_tier of ["basic", "go", "pro", "max"])
+    expect(promoState({ ...free, subscription_tier }, null, 100)).toBe("web");
+  for (const subscription_tier of ["enterprise", "", null])
     expect(promoState({ ...free, subscription_tier }, null, 100)).toBeNull();
   expect(promoState(null, null, 100)).toBeNull();
   expect(promoState(free, null, 100)).toBe("upsell");

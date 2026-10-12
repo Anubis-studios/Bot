@@ -1573,6 +1573,8 @@ export interface AbacusAccountInfo {
   credits_granted: number | null;
   /** The account was created on the website, before the app was installed. */
   web_signup?: boolean;
+  /** The account signs in with Google: the app opens Google's consent after sign-in. */
+  google_sign_in?: boolean;
   /** Where the user mostly works, from the platform's nightly read of their turns. */
   focus?: AbacusAccountFocus | null;
 }

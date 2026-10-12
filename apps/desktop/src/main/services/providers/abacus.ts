@@ -418,6 +418,7 @@ export const fetchAbacusAccount = async (
       credits_used: body.credits_used ?? null,
       credits_granted: body.credits_granted ?? null,
       web_signup: body.web_signup === true,
+      google_sign_in: body.google_sign_in === true,
       focus: ABACUS_ACCOUNT_FOCI.find((focus) => focus === body.focus) ?? null,
     };
     accountCache = { value, at: Date.now() };

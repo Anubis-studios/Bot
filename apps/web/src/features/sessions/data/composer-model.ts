@@ -92,6 +92,9 @@ export const useSessionComposerModel = (row?: SessionRow, draftId?: string) => {
           sessionId: row.id,
         });
     },
+    onResumeOnModel: async (id: string) => {
+      if (row) await setSessionModel(db, transport.client, row, id);
+    },
     missing: checkout.data?.exists === false,
     availableModes: sandbox.data?.available
       ? [

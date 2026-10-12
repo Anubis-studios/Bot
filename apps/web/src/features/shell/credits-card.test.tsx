@@ -96,12 +96,21 @@ it("shows actual credit progress and reacts to CTA focus", () => {
     screen.queryByRole("button", { name: "Remind me in 10 minutes" })
   ).toBeNull();
 });
-it("does not show the promo for an account already on a paid tier", async () => {
+it("points an account already on a paid tier at AbacusAI Agent on the web", async () => {
   state.account.subscription_tier = "pro";
+  state.open.mockClear();
   render(promo());
   await waitFor(() =>
     expect(screen.queryByRole("button", { name: "Upgrade" })).toBeNull()
   );
+  expect(screen.getByText("Do even more on AbacusAI Agent")).toBeTruthy();
+  expect(screen.getByText("5 of 100 credits left")).toBeTruthy();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Go to AbacusAI Agent on the web" })
+  );
+  expect(state.open).toHaveBeenCalledWith({
+    url: "https://apps.abacus.ai/chatllm",
+  });
 });
 
 it("rounds floating point credit balances without changing progress", () => {
@@ -113,12 +122,14 @@ it("rounds floating point credit balances without changing progress", () => {
   );
 });
 
-it("removes the promo immediately on upgrade and restores it on downgrade", () => {
+it("swaps the promo for the web card immediately on upgrade and restores it on downgrade", () => {
   const view = render(promo());
   state.account = { ...state.account, subscription_tier: "pro" };
   view.rerender(promo());
   expect(screen.queryByRole("button", { name: "Upgrade" })).toBeNull();
-  expect(screen.queryByTestId("character")).toBeNull();
+  expect(
+    screen.getByRole("button", { name: "Go to AbacusAI Agent on the web" })
+  ).toBeTruthy();
   state.account = { ...state.account, subscription_tier: "free" };
   view.rerender(promo());
   expect(screen.getByRole("button", { name: "Upgrade" })).toBeTruthy();

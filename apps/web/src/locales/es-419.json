@@ -851,17 +851,23 @@
     "wrongAccountBrowser": "{{name}} attached to a different Abacus.AI account: your browser is signed into another one. In the browser, sign into the account this app uses, then connect again."
   },
   "creditsCard": {
-    "paidBody": "Top up your account to keep going.",
-    "paidTitle": "You've used all your Pro Abacus.AI credits",
-    "topUpCta": "Top up",
-    "cta": "Upgrade",
+    "paidBody": "Recarga tu cuenta para continuar.",
+    "paidTitle": "Usaste todos tus créditos Pro de Abacus.AI",
+    "topUpCta": "Recargar",
+    "cta": "Mejorar plan",
     "upsellTitle": "Unlock the full potential on desktop and web",
-    "levelUpTitle": "Ready for your next level?",
-    "restTitle": "A little rest, then more adventures",
-    "progress": "{{remaining}} of {{total}} credits left",
-    "used": "Credits used",
-    "pitchSessions": "Build with top models: longer runs, bigger projects",
-    "pitchBots": "Keep your bots working: daily routines, always on Telegram and WhatsApp"
+    "levelUpTitle": "¿Listo para tu siguiente nivel?",
+    "progress": "Te quedan {{remaining}} de {{total}} créditos",
+    "used": "Créditos usados",
+    "lowTitle": "Te quedan pocos créditos",
+    "outTitle": "Usaste tus créditos gratis",
+    "sideSessions": "Sesiones: los mejores modelos, ejecuciones más largas, proyectos más grandes",
+    "sideBots": "Bots: rutinas diarias, siempre en Telegram y WhatsApp",
+    "paidWebTitle": "Do even more on AbacusAI Agent",
+    "paidWebApps": "Build and deploy full apps and websites",
+    "paidWebResearch": "Deep research, slides and docs",
+    "paidWebMedia": "Images and videos with top models",
+    "paidWebCta": "Go to AbacusAI Agent on the web"
   },
   "execBackends": {
     "daytona": {
@@ -1262,7 +1268,11 @@
     "connectedPromiseWorkLead": "Get work done",
     "connectedPromiseWork": "Gets your work done, and connects to all your services",
     "connectedPromiseLocalLead": "Runs locally.",
-    "connectedPromiseLocal": "Chat with it wherever you work."
+    "connectedPromiseLocal": "Chat with it wherever you work.",
+    "pages.buildTitle": "Programa y crea de inmediato",
+    "pages.buildBody": "Escribe código, crea apps, trabaja en tus carpetas",
+    "pages.buildCta": "Empezar a crear",
+    "pages.editBot": "Editar {{name}}"
   },
   "referralCard": {
     "cta": "Invite friends",
@@ -4012,35 +4022,38 @@
     "uploadTitle": "Importar una skill desde tu computadora"
   },
   "upgradeDialog": {
-    "checkAgain": "I've upgraded",
-    "close": "Close",
-    "connectorsBody": "You can keep chatting on your own model key. Reading your email, calendar and other apps runs on AbacusAI credits.",
+    "checkAgain": "Ya mejoré mi plan",
+    "close": "Cerrar",
+    "connectorsBody": "Puedes seguir chateando con tu propia clave de modelo. Leer tu correo, tu calendario y otras apps usa créditos de AbacusAI.",
     "connectorsCount": "100+",
-    "connectorsEyebrow": "Gmail · Calendar · Slack · Drive and more",
-    "connectorsTitle": "Connectors are available with AbacusAI credits",
-    "creditsBody": "Your message is saved. Upgrade and it sends right away.",
-    "creditsBodyNoMessage": "Upgrade to keep going with the top models, connectors and routines.",
-    "creditsEyebrow": "You've used your 2,000 free credits",
-    "creditsTitle": "Keep going with AbacusAI Bot",
-    "featureApps": "Build and deploy apps on the web: 3 projects a month",
-    "featureConnectorsLead": "100+ connectors",
-    "featureConnectorsRest": ": Gmail, Google Calendar, Slack, Drive, Notion and more",
-    "featureCreditsLead": "20,000 credits a month",
-    "featureCreditsRest": " for chats, builds and routines",
-    "featureMedia": "Image and video generation",
-    "featureModels": "Top models: GPT-6.1 Sol, Claude Sonnet 5.5, Claude Opus 5.5, Gemini 3.1 Pro",
-    "featureRoutines": "Up to 5 routines running at once, as often as every hour",
-    "keepChatting": "Keep chatting without connectors",
-    "notNow": "Not now",
-    "plan": "Basic plan · cancel anytime",
-    "price": "$7",
-    "pricePeriod": "for your first month",
-    "startAt": "Start at",
-    "upgradeCta": "Upgrade for $7",
-    "waitingBody": "Your message sends as soon as your plan is active.",
-    "waitingBodyNoMessage": "This closes as soon as your plan is active.",
-    "waitingTitle": "Finish checkout in your browser",
-    "waitingToSend": "Waiting to send: “{{text}}”"
+    "connectorsEyebrow": "Gmail · Calendar · Slack · Drive y más",
+    "connectorsTitle": "Los conectores están disponibles con créditos de AbacusAI",
+    "creditsBody": "Tu mensaje está guardado. Mejora tu plan y se enviará de inmediato.",
+    "creditsBodyNoMessage": "Mejora tu plan para seguir con los mejores modelos, conectores y rutinas.",
+    "creditsEyebrow": "Usaste tus 2,000 créditos gratis",
+    "creditsTitle": "Sigue con AbacusAI Bot",
+    "featureApps": "Crea y publica apps en la web: 3 proyectos al mes",
+    "featureConnectorsLead": "Más de 100 conectores",
+    "featureConnectorsRest": ": Gmail, Google Calendar, Slack, Drive, Notion y más",
+    "featureCreditsLead": "20,000 créditos al mes",
+    "featureCreditsRest": " para chats, creaciones y rutinas",
+    "featureMedia": "Generación de imágenes y videos",
+    "featureModels": "Los mejores modelos: GPT-6.1 Sol, Claude Sonnet 5.5, Claude Opus 5.5, Gemini 3.1 Pro",
+    "featureRoutines": "Hasta 5 rutinas a la vez, incluso cada hora",
+    "keepChatting": "Seguir chateando sin conectores",
+    "notNow": "Ahora no",
+    "ownKeyBody": "No separate API bill. Upgrade and your message sends right away.",
+    "ownKeyBodyNoMessage": "No separate API bill. Upgrade to keep going on the top models.",
+    "ownKeyTitle": "Use any model on AbacusAI",
+    "plan": "Plan Basic · cancela cuando quieras",
+    "price": "US$7",
+    "pricePeriod": "durante tu primer mes",
+    "startAt": "Desde",
+    "upgradeCta": "Mejorar por US$7",
+    "waitingBody": "Tu mensaje se enviará en cuanto tu plan esté activo.",
+    "waitingBodyNoMessage": "Esto se cerrará en cuanto tu plan esté activo.",
+    "waitingTitle": "Termina el pago en tu navegador",
+    "waitingToSend": "Pendiente de enviar: “{{text}}”"
   },
   "visualizer": {
     "loading": "Cargando visualización…"
@@ -4207,5 +4220,13 @@
       "connection": "No pudimos conectar con AbacusAI Bot. Revisa tu conexión y vuelve a intentarlo.",
       "refused": "Esta cuenta no puede usar AbacusAI Bot en este sitio."
     }
+  },
+  "ownKey": {
+    "freeBody": "No separate API bill. Upgrade and keep going on the top models.",
+    "notResponding": "{{provider}} isn't responding right now",
+    "openAgent": "Open AbacusAI Agent",
+    "outOfCredit": "Your {{provider}} key is out of credit",
+    "paidBody": "Use it in AbacusAI Agent on the web: the top models are included in your plan.",
+    "rateLimited": "Your {{provider}} key hit its rate limit"
   }
 }

@@ -41,7 +41,11 @@ it("finishes sign-in when the optional Gmail status lookup fails", async () => {
       account: {
         abacus: os.account.abacus.handler(
           () =>
-            ({ email: "demo@example.test", subscription_tier: "free" }) as never
+            ({
+              email: "demo@example.test",
+              subscription_tier: "free",
+              google_sign_in: true,
+            }) as never
         ),
       },
       connectors: { statuses: os.connectors.statuses.handler(statuses) },

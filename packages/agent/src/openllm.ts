@@ -70,6 +70,57 @@ export function isOutOfCredits(raw: string): boolean {
 }
 
 /**
+ * Balance and billing sentences that never mean a rate limit, whoever relays
+ * them: Anthropic's 400 "credit balance is too low", OpenAI's 429
+ * `insufficient_quota`, DeepSeek's 402 "Insufficient Balance", xAI's "used all
+ * available credits".
+ */
+const OWN_KEY_BALANCE_PATTERN =
+  /credit balance is too low|insufficient_quota|insufficient balance|used all (?:of )?(?:its |your )?available credits/i;
+
+/** A provider's sentence about an empty balance, on any status code. */
+export const namesEmptyBalance = (raw: string): boolean =>
+  OWN_KEY_BALANCE_PATTERN.test(raw);
+
+/**
+ * Gemini answers a per-minute rate limit and a spent quota alike with 429
+ * RESOURCE_EXHAUSTED "exceeded your current quota ... check your plan and
+ * billing details", so only the prepaid wallet's own wording counts.
+ */
+const GEMINI_BALANCE_PATTERN =
+  /prepayment|credits? (?:are |is |have been )?(?:depleted|exhausted)|credit balance/i;
+
+/**
+ * A turn on the user's own key (any provider but Abacus and the router) that
+ * stopped because that key's account has no credit left: what the app can
+ * answer with an Abacus plan rather than a red line. Never a rate limit or a
+ * transient error, so it reads each provider's own phrasing: a 402 anywhere;
+ * Anthropic, DeepSeek, OpenRouter and xAI by their balance sentences; OpenAI
+ * by `insufficient_quota` or "exceeded your current quota"; Gemini only when
+ * the text names its prepaid credits.
+ */
+export function isOwnKeyOutOfCredit(
+  raw: string,
+  provider: string | undefined
+): boolean {
+  if (provider == null || provider === "abacus" || provider === "openllm") {
+    return false;
+  }
+
+  const status = raw.match(/^\s*(\d{3})\b/)?.[1];
+
+  if (status === "402") return true;
+
+  if (provider === "gemini") return GEMINI_BALANCE_PATTERN.test(raw);
+
+  return (
+    namesEmptyBalance(raw) ||
+    (provider === "openai" && /exceeded your current quota/i.test(raw)) ||
+    isOutOfCredits(raw)
+  );
+}
+
+/**
  * The class a provider error condemns, or null when it only condemns the model.
  * An account failure (`free-models-per-day` is one allowance shared by every
  * `:free` model; an empty balance is the same on the paid side) fails the same

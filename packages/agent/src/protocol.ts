@@ -79,6 +79,10 @@ export interface NotificationAction {
   /** `switch-model` with a target: the card offers this model by name. */
   model?: string;
   label?: string;
+  /** `own-key-unavailable`: the provider id whose key failed. */
+  provider?: string;
+  /** `own-key-unavailable`: credit, rate_limit, down or network. */
+  cause?: string;
 }
 
 export interface StreamingNestedToolCall {
@@ -252,7 +256,10 @@ export type AgentEvent =
          * the provider actually sent.
          */
         detail?: string;
-        /** `upgrade-abacus` renders the upgrade card instead of the error. */
+        /**
+         * `upgrade-abacus` renders the upgrade card instead of the error;
+         * `own-key-unavailable` the Abacus offer for a user's own key.
+         */
         actions?: NotificationAction[];
       };
     }

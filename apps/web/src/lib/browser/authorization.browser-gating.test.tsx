@@ -10,7 +10,6 @@ import {
 } from "#renderer/features/chat/markdown/markdown";
 import { createConnectFlow } from "#renderer/features/library/connect-flow";
 import { connectOnboarding } from "#renderer/features/onboarding/connect";
-import { startFirstRunGmail } from "#renderer/features/onboarding/first-run";
 import { ConnectAttempt } from "#renderer/lib/connect-page";
 import { connectRequest } from "#renderer/lib/connector-requests";
 import { connectTarget, platformSystem } from "#renderer/lib/platform-system";
@@ -30,9 +29,6 @@ afterEach(() => {
   window.history.replaceState(null, "", START_PAGE);
   vi.useRealTimers();
   vi.unstubAllGlobals();
-  document
-    .querySelectorAll("#gmail-consent, #onboarding-consent")
-    .forEach((el) => el.remove());
   localStorage.clear();
 });
 
@@ -236,45 +232,6 @@ it("one deadline: a wait gives up after three minutes, and re-reads on focus bef
   expect(streams.open).toBe(0);
 });
 
-it("first-run Gmail waits for a click, then for the connection; dismissing cancels the wait", async () => {
-  const open = opening();
-  vi.stubGlobal("open", open);
-  const { client, changed, streams } = clientFor();
-  client.connectors.statuses
-    .mockReset()
-    .mockResolvedValueOnce({})
-    .mockResolvedValueOnce({})
-    .mockResolvedValue({ "abacus-gmailuser": { state: "connected" } });
-  const slot = document.createElement("div");
-  slot.id = "onboarding-consent";
-  document.body.append(slot);
-  await startFirstRunGmail(hostOf(client), "owner@example.com");
-  expect(open).not.toHaveBeenCalled();
-  expect(slot.querySelector("#gmail-consent")?.className).not.toContain(
-    "fixed"
-  );
-  (document.getElementById("gmail-consent") as HTMLButtonElement).click();
-  expect(open).toHaveBeenCalledExactlyOnceWith(BLANK, "_blank");
-  await vi.waitFor(() => expect(streams.open).toBe(1));
-  expect(client.system.funnelStep).not.toHaveBeenCalled();
-  await changed();
-  await vi.waitFor(() =>
-    expect(client.system.funnelStep).toHaveBeenCalledWith({
-      step: "gmail_allowed",
-    })
-  );
-
-  // Again, then dismissed mid-wait: the wait and its stream go with it.
-  const second = clientFor();
-  second.client.connectors.statuses.mockReset().mockResolvedValue({});
-  await startFirstRunGmail(hostOf(second.client), "owner@example.com");
-  (document.getElementById("gmail-consent") as HTMLButtonElement).click();
-  await vi.waitFor(() => expect(second.streams.open).toBe(1));
-  (slot.querySelector("button:last-child") as HTMLButtonElement).click();
-  await vi.waitFor(() => expect(second.streams.open).toBe(0));
-  expect(slot.children).toHaveLength(0);
-});
-
 it("library opens the page inside the click and settles once connected", async () => {
   const open = opening();
   vi.stubGlobal("open", open);
@@ -335,23 +292,6 @@ it("library cancel stops waiting", async () => {
   expect(await pending).toMatchObject({ ok: false, cancelled: true });
   expect(flow.store.state.phase).toBe("idle");
   await vi.waitFor(() => expect(streams.open).toBe(0));
-});
-
-it("Gmail consent is dismissible and cannot survive leaving its layout slot", async () => {
-  const slot = document.createElement("div");
-  slot.id = "onboarding-consent";
-  document.body.append(slot);
-  const { client } = clientFor();
-  client.connectors.statuses.mockReset().mockResolvedValue({});
-  await startFirstRunGmail(hostOf(client), "owner@example.com");
-  (slot.querySelector("button:last-child") as HTMLButtonElement).click();
-  expect(slot.children).toHaveLength(0);
-  await startFirstRunGmail(hostOf(client), "owner@example.com");
-  slot.remove();
-  expect(document.getElementById("gmail-consent")).toBeNull();
-  await startFirstRunGmail(hostOf(client), "owner@example.com");
-  expect(document.getElementById("gmail-consent")).toBeNull();
-  expect(client.connectors.connect).not.toHaveBeenCalled();
 });
 
 /** This app's page at `path` (under its mount path), as the page the test is on. */

@@ -123,7 +123,6 @@ export const OnboardingFrame = ({
       >
         {sound.enabled ? <Volume2 /> : <VolumeX />}
       </Button>
-      <div id="onboarding-consent" className="shrink-0 px-6" />
       <LayoutGroup id="onboarding">
         <div
           className="onboarding-column"

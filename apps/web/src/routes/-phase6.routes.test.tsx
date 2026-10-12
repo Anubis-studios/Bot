@@ -166,7 +166,7 @@ it.each([false, true])(
   },
   15000
 );
-it("fresh account preserves the explicit new-session destination without creating a default bot", async () => {
+it("Start building keeps the first bot and opens a new session", async () => {
   const seed = defaultSeed();
   seed.bots = [];
   seed.routines = [];
@@ -177,20 +177,20 @@ it("fresh account preserves the explicit new-session destination without creatin
   });
   fireEvent.click(
     await screen.findByRole("button", {
-      name: "New session",
+      name: "Start building",
     })
   );
   await waitFor(() =>
     expect(harness!.router.state.location.pathname).toBe("/sessions/new")
   );
-  expect(harness.collections.bots.toArray).toHaveLength(0);
+  expect(harness.collections.bots.toArray).toHaveLength(1);
   expect(harness.collections.routines.toArray).toHaveLength(0);
   expect(
     harness.calls.filter(([name]) => name === "account.skipOnboarding")
   ).toHaveLength(1);
 });
 
-it("ready final setup automatically opens the Chief chat without another click", async () => {
+it("a ready first bot waits for the pick: its chat, or building", async () => {
   const seed = defaultSeed();
   seed.bots = [];
   seed.routines = [];
@@ -199,8 +199,14 @@ it("ready final setup automatically opens the Chief chat without another click",
     signedIn: true,
     seed,
   });
-  await screen.findByRole("button", { name: "Say hello" });
+  const hello = await screen.findByRole("button", { name: "Say hello" });
+  expect(screen.getByRole("button", { name: "Start building" })).toBeTruthy();
   expect(screen.queryByRole("progressbar")).toBeNull();
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+  });
+  expect(harness.router.state.location.pathname).toBe("/onboarding/first-bot");
+  fireEvent.click(hello);
   await waitFor(
     () =>
       expect(harness!.router.state.location.pathname).toMatch(/^\/bots\/bot-/),
@@ -259,7 +265,7 @@ it("final setup retries a failed completion without duplicating its created Chie
   expect(harness.collections.bots.toArray).toHaveLength(1);
 });
 
-it("automatically completing a website signup still creates the sponsored Chief", async () => {
+it("a website signup is offered its sponsored Chief, or building", async () => {
   const seed = defaultSeed();
   seed.bots = [];
   seed.routines = [];
@@ -287,6 +293,15 @@ it("automatically completing a website signup still creates the sponsored Chief"
       },
     },
   });
+  await waitFor(() =>
+    expect(harness!.router.state.location.pathname).toBe(
+      "/onboarding/first-bot"
+    )
+  );
+  expect(
+    await screen.findByRole("button", { name: "Start building" })
+  ).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Say hello" }));
   await waitFor(() =>
     expect(harness!.router.state.location.pathname).toMatch(/^\/bots\/bot-/)
   );

@@ -9,9 +9,21 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { CreditsCard } from "#renderer/components/credits-card";
+import { GroupCard } from "#renderer/components/form-kit/page";
+import { ABACUS_AGENT_URL } from "#renderer/lib/abacus-links";
 import { cn } from "#renderer/lib/cn";
 import { AppLink } from "#renderer/lib/navigation/app-link";
+import {
+  ownKeyFailure,
+  ownKeyHeadlineKey,
+  providerDisplayName,
+  type OwnKeyFailure,
+} from "#renderer/lib/own-key-unavailable";
 import { IS_ELECTRON } from "#renderer/lib/platform";
+import {
+  lastUserText,
+  requestUpgradeDialog,
+} from "#renderer/lib/upgrade-dialog";
 import { Button } from "#renderer/ui/button";
 import {
   HoverCard,
@@ -28,6 +40,7 @@ import type {
 import { formatElapsed, useSeconds } from "../clock";
 import { useChatView } from "../context";
 import { toolTitle } from "../tools/tool-line";
+import { useUpgradeResume } from "../upgrade-triggers";
 
 export const providerMessage = (raw = ""): string => {
   const start = raw.indexOf("{");
@@ -46,6 +59,8 @@ interface ErrorAction {
   model?: string;
   label?: string;
   link?: string;
+  provider?: string;
+  cause?: string;
 }
 
 /** The running tool calls of the active run (the busy line's label). */
@@ -234,6 +249,81 @@ const exhaustedScope = (actions?: ErrorAction[]): "abacus" | "pool" =>
     ? "abacus"
     : "pool";
 
+/**
+ * A turn on the person's own key that ran out of credit, hit its rate limit
+ * or found its provider silent, in place of the provider's error. A free
+ * account was offered the upgrade dialog, which this card can bring back; a
+ * paid or unread one already has the top models in AbacusAI Agent on the web.
+ */
+const OwnKeyCard = ({
+  failure,
+  tier,
+  runId,
+}: {
+  failure: OwnKeyFailure;
+  tier: NonNullable<ErrorCardProps["tier"]>;
+  runId: string;
+}) => {
+  const { t } = useTranslation();
+  const { session, composer, runtime } = useChatView();
+  const resume = useUpgradeResume();
+  const free = tier === "free";
+  return (
+    <div
+      role="group"
+      aria-label={t("chat.error.label")}
+      className="mx-auto w-full max-w-[calc(var(--composer-max-w)-var(--spacing)*8)]"
+      data-slot="error-card"
+      data-variant="own-key"
+      data-cause={failure.cause}
+    >
+      <GroupCard
+        title={t(ownKeyHeadlineKey(failure.cause), {
+          provider: providerDisplayName(failure.provider),
+        })}
+      >
+        <p className="text-muted-foreground p-3 text-sm">
+          {t(free ? "ownKey.freeBody" : "ownKey.paidBody")}
+        </p>
+        <div className="flex flex-col gap-3 p-3">
+          {free ? (
+            composer.readOnly == null && (
+              <Button
+                size="sm"
+                onClick={() =>
+                  requestUpgradeDialog(
+                    {
+                      kind: "own-key",
+                      key: `own-key-card:${runId}:${Date.now()}`,
+                      threadId: session.threadId,
+                      pendingText: lastUserText(
+                        session.hostStore.state.messages
+                      ),
+                      ownKey: failure,
+                      resume,
+                    },
+                    true
+                  )
+                }
+              >
+                {t("upgradeDialog.upgradeCta")}
+              </Button>
+            )
+          ) : (
+            <Button
+              size="sm"
+              data-action="open-abacus-agent"
+              onClick={() => void runtime.host.openExternal(ABACUS_AGENT_URL)}
+            >
+              {t("ownKey.openAgent")}
+            </Button>
+          )}
+        </div>
+      </GroupCard>
+    </div>
+  );
+};
+
 export interface ErrorCardProps {
   outcome: RunOutcomeRecord;
   /** The latest terminal while the thread is idle (Retry is offered then). */
@@ -281,6 +371,14 @@ export const ErrorCard = ({
         t("workspace.retryMessage")
       )
       .catch(() => {});
+  // A provider that seems silent while the computer is offline is the
+  // connection's fault, not the key's: the plain error says so.
+  const ownKey = ownKeyFailure(actions);
+  if (
+    ownKey != null &&
+    !(ownKey.cause === "network" && globalThis.navigator?.onLine === false)
+  )
+    return <OwnKeyCard failure={ownKey} tier={tier} runId={outcome.runId} />;
   if (wantsUpgradeCard(actions)) {
     return (
       <div

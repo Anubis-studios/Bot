@@ -17,7 +17,11 @@ export interface OnboardingPageProps {
   navigate(step: OnboardingStepId): Promise<void>;
   signIn(intent: "signup" | "signin", profileId?: string): void;
   cancelSignIn(): Promise<void>;
-  complete(exit: OnboardingExit): Promise<void>;
+  /** `keepFirstBot`: save the step's previewed bot even though the exit is not that bot. */
+  complete(
+    exit: OnboardingExit,
+    options?: { keepFirstBot?: boolean }
+  ): Promise<void>;
   createFirstBot(id: string): Promise<FirstBotResult>;
   /** The platform's local-model row (Electron only). */
   localModel?: ReactNode;

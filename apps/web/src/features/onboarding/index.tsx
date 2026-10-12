@@ -187,14 +187,15 @@ export const OnboardingStepPage = (props: OnboardingPageProps) => {
     back: () => go("back"),
   };
   const existingBot = bots?.find((item) => item.channel == null);
+  // A ready bot waits for the person's pick (its chat, or building); only an
+  // account that already has a bot moves on by itself.
   useFinalHandoff(
     !props.preview &&
       !facts.provisional &&
       step === "first-bot" &&
-      (first.state === "ready" ||
-        (first.state === "skipped" &&
-          first.reason !== "create_failed" &&
-          bots != null)),
+      first.state === "skipped" &&
+      first.reason !== "create_failed" &&
+      bots != null,
     () => {
       if (performing.current) return;
       void perform(async () => {
