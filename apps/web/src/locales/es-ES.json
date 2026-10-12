@@ -957,7 +957,12 @@
     "lowTitle": "Te quedan pocos créditos",
     "outTitle": "Has usado tus créditos gratis",
     "sideSessions": "Sesiones: los mejores modelos, ejecuciones más largas, proyectos más grandes",
-    "sideBots": "Bots: rutinas diarias, siempre en Telegram y WhatsApp"
+    "sideBots": "Bots: rutinas diarias, siempre en Telegram y WhatsApp",
+    "paidWebTitle": "Do even more on AbacusAI Agent",
+    "paidWebApps": "Build and deploy full apps and websites",
+    "paidWebResearch": "Deep research, slides and docs",
+    "paidWebMedia": "Images and videos with top models",
+    "paidWebCta": "Go to AbacusAI Agent on the web"
   },
   "execBackends": {
     "daytona": {
@@ -4051,6 +4056,9 @@
     "featureRoutines": "Hasta 5 rutinas a la vez, incluso cada hora",
     "keepChatting": "Seguir chateando sin conectores",
     "notNow": "Ahora no",
+    "ownKeyBody": "No separate API bill. Upgrade and your message sends right away.",
+    "ownKeyBodyNoMessage": "No separate API bill. Upgrade to keep going on the top models.",
+    "ownKeyTitle": "Use any model on AbacusAI",
     "plan": "Plan Basic · cancela cuando quieras",
     "price": "7 $",
     "pricePeriod": "durante tu primer mes",
@@ -4226,5 +4234,13 @@
       "connection": "No hemos podido conectar con AbacusAI Bot. Comprueba tu conexión y vuelve a intentarlo.",
       "refused": "Esta cuenta no puede usar AbacusAI Bot en este sitio."
     }
+  },
+  "ownKey": {
+    "freeBody": "No separate API bill. Upgrade and keep going on the top models.",
+    "notResponding": "{{provider}} isn't responding right now",
+    "openAgent": "Open AbacusAI Agent",
+    "outOfCredit": "Your {{provider}} key is out of credit",
+    "paidBody": "Use it in AbacusAI Agent on the web: the top models are included in your plan.",
+    "rateLimited": "Your {{provider}} key hit its rate limit"
   }
 }

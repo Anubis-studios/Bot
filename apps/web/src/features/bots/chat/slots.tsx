@@ -269,6 +269,15 @@ export const useBotChatSlots = (
                 });
               }
             },
+            onResumeOnModel: async (model: string) => {
+              await setBotModel(collections.bots, bot.id, model);
+              if (session?.workspaceId)
+                await transport.client.agent.setModel({
+                  workspaceId: session.workspaceId,
+                  sessionId,
+                  model,
+                });
+            },
           }
         : {}),
       onFirstSend: (text: string) => {

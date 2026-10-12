@@ -87,7 +87,13 @@ import {
   OPENLLM_CONTINUATION_TYPE,
   OpenLlmRouter,
 } from "./openllm-router.js";
-import { OPENLLM_ID, isOutOfCredits, isOpenLlmReference } from "./openllm.js";
+import {
+  OPENLLM_ID,
+  isOutOfCredits,
+  isOpenLlmReference,
+  isOwnKeyOutOfCredit,
+  namesEmptyBalance,
+} from "./openllm.js";
 import { refreshOpenRouterLive } from "./openrouter-live.js";
 import { PendingSteers } from "./pending-steers.js";
 import {
@@ -1398,7 +1404,9 @@ export class AbacusBotSession {
 
   /**
    * What the app can offer about a failed turn: the upgrade card when out of
-   * credits, a model switch when a pinned model timed out or is overloaded.
+   * Abacus credits, the Abacus offer when the user's own key failed in a way
+   * a plan answers, a model switch when a pinned model timed out or is
+   * overloaded.
    */
   private errorActionsFor(
     raw: string
@@ -1406,6 +1414,14 @@ export class AbacusBotSession {
     const actions: NotificationAction[] = [
       ...(this.upgradeActionsFor(raw).actions ?? []),
     ];
+    // The user's own key failed in a way a plan answers: the app offers
+    // Abacus instead of a switch that leads back to the same key.
+    const provider = this.session?.model?.provider;
+    const cause = this.openLlmActive ? null : ownKeyFailureCause(raw, provider);
+    if (provider != null && cause != null) {
+      actions.push({ type: "own-key-unavailable", provider, cause });
+      return { actions };
+    }
     // The router with every source used up: the card that connects another
     // free source, rather than a switch button leading to the same empty pool.
     if (this.openLlmActive && this.isPoolShut()) {
@@ -3415,6 +3431,10 @@ const CONTEXT_LENGTH_PATTERN =
 const REQUEST_TOO_LARGE_PATTERN =
   /request too large|request entity too large|payload too large|reduce your message size/;
 
+/** A model refusing tools: a 400 with the reason only in the prose. */
+const TOOLS_UNSUPPORTED_PATTERN =
+  /does not support tool|support tool calling|tool use is not supported|does not support function calling/;
+
 /** Marks the continuation in the session log as ours rather than the user's. */
 const MALFORMED_CONTINUATION_TYPE = "abacusai-bot:malformed-tool-call";
 
@@ -3556,6 +3576,70 @@ function isAuthFailure(raw: string): boolean {
   );
 }
 
+/**
+ * Why a turn on the user's own key (any provider but Abacus and the router)
+ * failed, when an Abacus plan answers it: the key's balance is spent, its rate
+ * limit is hit, or its provider is down, overloaded or not answering. Read
+ * only off a terminal error, after the app's own retries. Null for what no
+ * plan fixes (a model without tools, a conversation or request too big, a
+ * rejected key) and for Abacus-served turns, which have their own card.
+ */
+export type OwnKeyFailureCause = "credit" | "rate_limit" | "down" | "network";
+
+export function ownKeyFailureCause(
+  raw: string,
+  provider: string | undefined
+): OwnKeyFailureCause | null {
+  if (provider == null || provider === "abacus" || provider === "openllm") {
+    return null;
+  }
+
+  if (isOwnKeyOutOfCredit(raw, provider)) return "credit";
+
+  const status = Number(raw.match(/^\s*(\d{3})\b/)?.[1] ?? Number.NaN);
+  const text = raw.toLowerCase();
+
+  if (
+    TOOLS_UNSUPPORTED_PATTERN.test(text) ||
+    CONTEXT_LENGTH_PATTERN.test(text) ||
+    status === 413 ||
+    REQUEST_TOO_LARGE_PATTERN.test(text) ||
+    isAuthFailure(raw)
+  ) {
+    return null;
+  }
+
+  // Gemini's RESOURCE_EXHAUSTED and OpenRouter's free daily allowance are
+  // limits on the key, whatever else their sentence says about billing.
+  if (
+    status === 429 ||
+    /rate.?limit|too many requests|resource_exhausted|free-models-per-day/.test(
+      text
+    )
+  ) {
+    return "rate_limit";
+  }
+
+  // Anthropic answers an overloaded fleet with a 529.
+  if (
+    (status >= 500 && status <= 504) ||
+    status === 529 ||
+    /overloaded/.test(text)
+  ) {
+    return "down";
+  }
+
+  if (
+    /timed out|timeout|econnreset|econnrefused|socket hang up|fetch failed|network/.test(
+      text
+    )
+  ) {
+    return "network";
+  }
+
+  return null;
+}
+
 /** A provider error, by its shape: an HTTP status code up front. */
 export function isProviderFailure(raw: string): boolean {
   return /^\s*\d{3}\b/.test(raw);
@@ -3607,6 +3691,15 @@ export function classifyProviderFailure(raw: string): {
     };
   }
 
+  // Before the rate-limit branch too: OpenAI's empty balance answers 429
+  // `insufficient_quota`, and waiting a moment never refills it.
+  if (namesEmptyBalance(raw)) {
+    return {
+      summary: "The model provider is out of quota",
+      remedy: "Add credits with the provider, or switch to a different model.",
+    };
+  }
+
   // Before the rate-limit branch too: Groq's free tier answers a request over
   // its per-minute token cap with a 413 whose sentence mentions "tokens per
   // minute", and no amount of waiting makes the same request smaller.
@@ -3627,11 +3720,7 @@ export function classifyProviderFailure(raw: string): {
 
   // These arrive as a 400 with the reason only in the prose. Behind the rate
   // limit, since a 429 means the rate limit whatever else the sentence says.
-  if (
-    /does not support tool|support tool calling|tool use is not supported|does not support function calling/.test(
-      text
-    )
-  ) {
+  if (TOOLS_UNSUPPORTED_PATTERN.test(text)) {
     return {
       summary: "This model can't use tools",
       remedy: "Switch to a model that supports tool calling.",

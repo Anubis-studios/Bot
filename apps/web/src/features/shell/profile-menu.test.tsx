@@ -192,7 +192,7 @@ it("opens a referral dialog, copies the real link, selects it on clipboard failu
   }
 });
 
-it("swaps the paid link and free promo from the shared account cache without a paid mascot", async () => {
+it("swaps the paid link and web card for the free promo from the shared account cache", async () => {
   let current = account;
   const open = vi.fn();
   const app = await renderApp("/sessions/new", {
@@ -231,7 +231,11 @@ it("swaps the paid link and free promo from the shared account cache without a p
     current = account;
     await refresh();
     await screen.findByRole("link", { name: en.profile.agent });
-    expect(document.querySelector('[data-slot="upgrade-promo"]')).toBeNull();
+    // A paid plan's promo points at the web instead of selling the upgrade.
+    await screen.findByRole("button", { name: en.creditsCard.paidWebCta });
+    expect(
+      screen.queryByRole("button", { name: en.creditsCard.cta })
+    ).toBeNull();
   } finally {
     app.view.unmount();
     await app.cleanup();

@@ -81,6 +81,8 @@ export interface ComposerConfig {
   onUseLocalModel?(): void;
   /** Apply the free router before replaying a dead turn. */
   onResumeOnFreePool?(): Promise<void>;
+  /** Move the chat onto `model` before replaying a dead turn on it. */
+  onResumeOnModel?(model: string): Promise<void>;
   /** 03-bots §24.2: sent as `forwardedProps.mode` on every admission. */
   fixedMode?: AgentMode;
   /** Sessions: `agent.setMode` for a live runtime (the route knows the workspace). */

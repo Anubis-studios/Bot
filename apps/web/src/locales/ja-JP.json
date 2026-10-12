@@ -957,7 +957,12 @@
     "lowTitle": "クレジットが残りわずかです",
     "outTitle": "無料クレジットを使い切りました",
     "sideSessions": "セッション: トップモデル、より長い実行、より大きなプロジェクト",
-    "sideBots": "ボット: 毎日のルーティン、Telegram と WhatsApp で常時稼働"
+    "sideBots": "ボット: 毎日のルーティン、Telegram と WhatsApp で常時稼働",
+    "paidWebTitle": "Do even more on AbacusAI Agent",
+    "paidWebApps": "Build and deploy full apps and websites",
+    "paidWebResearch": "Deep research, slides and docs",
+    "paidWebMedia": "Images and videos with top models",
+    "paidWebCta": "Go to AbacusAI Agent on the web"
   },
   "execBackends": {
     "daytona": {
@@ -4051,6 +4056,9 @@
     "featureRoutines": "最大 5 つのルーティンを同時実行、最短 1 時間ごと",
     "keepChatting": "コネクタなしでチャットを続ける",
     "notNow": "今はしない",
+    "ownKeyBody": "No separate API bill. Upgrade and your message sends right away.",
+    "ownKeyBodyNoMessage": "No separate API bill. Upgrade to keep going on the top models.",
+    "ownKeyTitle": "Use any model on AbacusAI",
     "plan": "Basic プラン · いつでも解約可能",
     "price": "$7",
     "pricePeriod": "初月",
@@ -4226,5 +4234,13 @@
       "connection": "AbacusAI Bot に接続できませんでした。接続を確認してから、もう一度お試しください。",
       "refused": "このアカウントでは、このサイトで AbacusAI Bot を使用できません。"
     }
+  },
+  "ownKey": {
+    "freeBody": "No separate API bill. Upgrade and keep going on the top models.",
+    "notResponding": "{{provider}} isn't responding right now",
+    "openAgent": "Open AbacusAI Agent",
+    "outOfCredit": "Your {{provider}} key is out of credit",
+    "paidBody": "Use it in AbacusAI Agent on the web: the top models are included in your plan.",
+    "rateLimited": "Your {{provider}} key hit its rate limit"
   }
 }

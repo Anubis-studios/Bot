@@ -17,6 +17,11 @@ import {
   upgradePitch,
   type UpgradePitch,
 } from "#renderer/lib/credits";
+import {
+  ownKeyHeadlineKey,
+  ownKeyResumeModel,
+  providerDisplayName,
+} from "#renderer/lib/own-key-unavailable";
 import { openUpgrade } from "#renderer/lib/upgrade";
 import {
   closeUpgradeDialog,
@@ -42,6 +47,15 @@ export const spentFreeAccount = (
   account.credits_used != null &&
   account.credits_used >= account.credits_granted;
 
+/** Who a request is for: own-key asks any free account, spent or not. */
+const askedAccount = (
+  request: UpgradeDialogRequest,
+  account: AbacusAccountInfo | null | undefined
+): boolean =>
+  request.kind === "own-key"
+    ? creditsTier(account) === "free"
+    : spentFreeAccount(account);
+
 const paying = (account: AbacusAccountInfo | null | undefined): boolean => {
   const tier = creditsTier(account);
   return tier === "basic" || tier === "paid";
@@ -56,8 +70,19 @@ const FEATURE_KEYS = {
   media: "upgradeDialog.featureMedia",
 } as const;
 
-/** The plan's features, led by what the person's side gains (upgradePitch). */
-const featureOrder = (pitch: UpgradePitch | null): PlanFeature[] => {
+/**
+ * The plan's features, led by what the person's side gains (upgradePitch);
+ * an own key's offer leads with the models, the reason to switch.
+ */
+const featureOrder = (
+  pitch: UpgradePitch | null,
+  ownKey: boolean
+): PlanFeature[] => {
+  if (ownKey)
+    return [
+      "models",
+      ...featureOrder(pitch, false).filter((feature) => feature !== "models"),
+    ];
   if (pitch === "sessions")
     return ["models", "apps", "media", "credits", "routines"];
   if (pitch === "bots")
@@ -99,6 +124,7 @@ const DialogBody = ({
   const [waiting, setWaiting] = useState(false);
   const checkNow = useRef<() => void>(() => {});
   const connectors = request.kind === "connectors";
+  const ownKey = request.kind === "own-key";
 
   // Checkout runs in the browser: read the account until the plan is active,
   // then send the waiting message and close.
@@ -115,7 +141,15 @@ const DialogBody = ({
         stopped = true;
         void refetchAccount();
         onDone(false);
-        void request.resume?.().catch(() => {});
+        if (request.kind !== "own-key") {
+          void request.resume?.().catch(() => {});
+          return;
+        }
+        // The plan's catalog, not the free one read before checkout.
+        const models = await transport.client.models
+          .list({ refresh: true })
+          .catch(() => []);
+        void request.resume?.(ownKeyResumeModel(models)).catch(() => {});
         return;
       }
       if (Date.now() - started > UPGRADE_POLL_LIMIT_MS) setWaiting(false);
@@ -194,26 +228,36 @@ const DialogBody = ({
           </span>
         )}
         <p className="text-muted-foreground text-xs font-medium tracking-[0.02em]">
-          {t(
-            connectors
-              ? "upgradeDialog.connectorsEyebrow"
-              : "upgradeDialog.creditsEyebrow"
-          )}
+          {request.ownKey != null
+            ? t(ownKeyHeadlineKey(request.ownKey.cause), {
+                provider: providerDisplayName(request.ownKey.provider),
+              })
+            : t(
+                connectors
+                  ? "upgradeDialog.connectorsEyebrow"
+                  : "upgradeDialog.creditsEyebrow"
+              )}
         </p>
         <DialogTitle className="text-[22px]/7 font-semibold tracking-[-0.01em] text-balance">
-          {t(
-            connectors
-              ? "upgradeDialog.connectorsTitle"
-              : "upgradeDialog.creditsTitle"
-          )}
+          {ownKey
+            ? t("upgradeDialog.ownKeyTitle")
+            : t(
+                connectors
+                  ? "upgradeDialog.connectorsTitle"
+                  : "upgradeDialog.creditsTitle"
+              )}
         </DialogTitle>
         <p className="text-muted-foreground text-sm/[21px]">
           {t(
             connectors
               ? "upgradeDialog.connectorsBody"
-              : request.pendingText != null
-                ? "upgradeDialog.creditsBody"
-                : "upgradeDialog.creditsBodyNoMessage"
+              : ownKey
+                ? request.pendingText != null
+                  ? "upgradeDialog.ownKeyBody"
+                  : "upgradeDialog.ownKeyBodyNoMessage"
+                : request.pendingText != null
+                  ? "upgradeDialog.creditsBody"
+                  : "upgradeDialog.creditsBodyNoMessage"
           )}
         </p>
       </div>
@@ -253,7 +297,7 @@ const DialogBody = ({
             rest={t("upgradeDialog.featureConnectorsRest")}
           />
         )}
-        {featureOrder(upgradePitch(account)).map((feature) =>
+        {featureOrder(upgradePitch(account), ownKey).map((feature) =>
           feature === "credits" ? (
             <Feature
               key={feature}
@@ -292,8 +336,9 @@ const DialogBody = ({
 
 /**
  * The window-wide upgrade dialog. It opens for a request only when a fresh
- * account read shows a free account with its credits used up, so another
- * provider's quota error that reads like ours never sells this plan.
+ * account read shows a free account with its credits used up (any free
+ * account, for a failure on its own key), so another provider's quota error
+ * that reads like ours never sells this plan.
  */
 export const UpgradeDialogHost = () => {
   const request = useUpgradeDialogRequest();
@@ -307,7 +352,7 @@ export const UpgradeDialogHost = () => {
       .abacus({ refresh: true })
       .then((account) => {
         if (!live) return;
-        if (spentFreeAccount(account)) setConfirmed(request.key);
+        if (askedAccount(request, account)) setConfirmed(request.key);
         else closeUpgradeDialog();
       })
       .catch(() => {

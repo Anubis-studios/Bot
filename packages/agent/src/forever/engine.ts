@@ -85,6 +85,7 @@ import {
   AgentStatus,
   type AgentEvent,
   type DesktopEvent,
+  type NotificationAction,
   type PermissionDecision,
   type PermissionRequest,
   type ToolRequest,
@@ -116,6 +117,7 @@ import {
   isProviderFailure,
   mcpPrompt,
   mcpRosterFingerprint,
+  ownKeyFailureCause,
   providerDetail,
   reserveContextHeadroom,
   terminalProviderMessage,
@@ -1180,17 +1182,25 @@ export class ForeverEngine {
 
   /**
    * What the app can offer about a failed turn: the upgrade card when out of
-   * credits, the free-source card when the pool is shut, a model switch when
-   * a pinned model timed out or is overloaded.
+   * Abacus credits, the Abacus offer when the user's own key failed in a way
+   * a plan answers, the free-source card when the pool is shut, a model
+   * switch when a pinned model timed out or is overloaded.
    */
   private errorActionsFor(
     raw: string
-  ):
-    | { actions: Array<{ type: string; link?: string }> }
-    | Record<string, never> {
-    const actions = [...(this.upgradeActionsFor(raw).actions ?? [])];
+  ): { actions: NotificationAction[] } | Record<string, never> {
+    const actions: NotificationAction[] = [
+      ...(this.upgradeActionsFor(raw).actions ?? []),
+    ];
     if (actions.some((action) => action.type === "free-pool-out"))
       return { actions };
+    // The user's own key failed in a way a plan answers: a session's offer.
+    const provider = this.session?.model?.provider;
+    const cause = this.openLlmActive ? null : ownKeyFailureCause(raw, provider);
+    if (provider != null && cause != null) {
+      actions.push({ type: "own-key-unavailable", provider, cause });
+      return { actions };
+    }
     if (
       isProviderFailure(raw) &&
       !isOutOfCredits(raw) &&

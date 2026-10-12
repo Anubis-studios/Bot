@@ -1,10 +1,19 @@
-import { Bot, MessageSquare, Sparkles } from "lucide-react";
+import {
+  ArrowUpRight,
+  Bot,
+  FileText,
+  Globe,
+  ImageIcon,
+  MessageSquare,
+  Sparkles,
+} from "lucide-react";
 import { AnimatePresence, motion, animate } from "motion/react";
 import { useEffect, useLayoutEffect, useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 
 import { usePrefs } from "#renderer/data/db/prefs";
+import { ABACUS_AGENT_URL } from "#renderer/lib/abacus-links";
 import { useHasContextualUpsell } from "#renderer/lib/contextual-upsell";
 import { creditsTier, upgradePitch } from "#renderer/lib/credits";
 import {
@@ -15,6 +24,7 @@ import {
   reducedTransition,
   useMotionPreference,
 } from "#renderer/lib/motion";
+import { platformSystem } from "#renderer/lib/platform-system";
 import { openUpgrade } from "#renderer/lib/upgrade";
 import { useAppContext } from "#renderer/lib/use-app-context";
 import { useCreditsAccount } from "#renderer/lib/use-credits-account";
@@ -31,8 +41,18 @@ const SIDES = [
   { key: "creditsCard.sideSessions", icon: MessageSquare },
   { key: "creditsCard.sideBots", icon: Bot },
 ] as const;
+/** What a paid plan does on the web that the app does not. */
+const WEB_LINES = [
+  { key: "creditsCard.paidWebApps", icon: Globe },
+  { key: "creditsCard.paidWebResearch", icon: FileText },
+  { key: "creditsCard.paidWebMedia", icon: ImageIcon },
+] as const;
 
-/** One portal, shown only inside the sidebar (pinned or peeked): a collapsed sidebar hides it. */
+/**
+ * One portal, shown only inside the sidebar (pinned or peeked): a collapsed
+ * sidebar hides it. A free account sees the upgrade card; a paid plan the
+ * card that points at AbacusAI Agent on the web.
+ */
 export const UpgradePromo = () => {
   const { transport } = useAppContext();
   const host = usePromoHost();
@@ -103,7 +123,9 @@ export const UpgradePromo = () => {
         : "creditsCard.levelUpTitle";
   // Both sides' gains, the person's own first; new accounts lead with Sessions.
   const sides = pitch === "bots" ? SIDES.slice().reverse() : SIDES;
-  if (tier !== "free" || contextualUpsell || !host)
+  const web = state === "web";
+  const lines = web ? WEB_LINES : sides;
+  if ((tier !== "free" && !web) || contextualUpsell || !host)
     return createPortal(null, target);
   return createPortal(
     <AnimatePresence>
@@ -111,7 +133,9 @@ export const UpgradePromo = () => {
         <motion.aside
           key={key}
           data-slot="upgrade-promo"
-          aria-label={t("creditsCard.upsellTitle")}
+          aria-label={t(
+            web ? "creditsCard.paidWebTitle" : "creditsCard.upsellTitle"
+          )}
           className="bg-background pointer-events-auto relative isolate w-full overflow-hidden rounded-(--pane-radius) border p-3"
           initial={{
             opacity: 0,
@@ -134,9 +158,11 @@ export const UpgradePromo = () => {
               upgraded={false}
             />
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold">{t(title)}</p>
+              <p className="text-sm font-semibold">
+                {t(web ? "creditsCard.paidWebTitle" : title)}
+              </p>
               <ul className="text-muted-foreground mt-0.5 flex flex-col gap-0.5 text-xs">
-                {sides.map(({ key, icon: Icon }) => (
+                {lines.map(({ key, icon: Icon }) => (
                   <li key={key} className="flex gap-1.5">
                     <Icon aria-hidden className="mt-0.5 size-3 shrink-0" />
                     <span>{t(key)}</span>
@@ -199,10 +225,25 @@ export const UpgradePromo = () => {
             onMouseLeave={() => setExcited(false)}
             onFocus={() => setExcited(true)}
             onBlur={() => setExcited(false)}
-            onClick={() => void openUpgrade(transport.client)}
+            onClick={() =>
+              void (web
+                ? platformSystem(transport.client).openExternal({
+                    url: ABACUS_AGENT_URL,
+                  })
+                : openUpgrade(transport.client))
+            }
           >
-            <Sparkles aria-hidden />
-            {t("creditsCard.cta")}
+            {web ? (
+              <>
+                {t("creditsCard.paidWebCta")}
+                <ArrowUpRight aria-hidden />
+              </>
+            ) : (
+              <>
+                <Sparkles aria-hidden />
+                {t("creditsCard.cta")}
+              </>
+            )}
           </Button>
         </motion.aside>
       ) : null}

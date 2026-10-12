@@ -1,15 +1,18 @@
 import type { UIMessage } from "@tanstack/ai-client";
 import { Store, useStore } from "@tanstack/react-store";
 
+import type { OwnKeyFailure } from "#renderer/lib/own-key-unavailable";
 import { hiddenUserMessage, userMessageText } from "#renderer/lib/user-message";
 
 /**
  * The upgrade dialog over the whole window: `credits` when a free account's
  * turn stopped because its Abacus credits are used up, `connectors` when it
- * still chats on its own model key but a connector call needs Abacus credits.
+ * still chats on its own model key but a connector call needs Abacus credits,
+ * `own-key` when a free account's turn on its own provider key failed for
+ * want of credit, a rate limit, or a provider that stopped answering.
  * Triggers ask; the shell's host confirms on a fresh account read and opens.
  */
-export type UpgradeDialogKind = "credits" | "connectors";
+export type UpgradeDialogKind = "credits" | "connectors" | "own-key";
 
 export interface UpgradeDialogRequest {
   kind: UpgradeDialogKind;
@@ -19,8 +22,10 @@ export interface UpgradeDialogRequest {
   threadId: string;
   /** The user's message that waits for the upgrade, shown in the dialog. */
   pendingText?: string;
-  /** Sends that message again once the plan is active. */
-  resume?: () => Promise<unknown>;
+  /** `own-key`: whose key failed, and how. */
+  ownKey?: OwnKeyFailure;
+  /** Sends that message again once the plan is active, on `model` if given. */
+  resume?: (model?: string) => Promise<unknown>;
 }
 
 interface UpgradeDialogState {
@@ -34,23 +39,37 @@ export const upgradeDialogStore = new Store<UpgradeDialogState>({
 const asked = new Set<string>();
 /** Chats where the person chose to keep chatting without connectors. */
 const connectorsDeclined = new Set<string>();
+/** Chats already offered a plan for their own key: asked once per chat. */
+const ownKeyAsked = new Set<string>();
 /** An ask of the other kind that came while a dialog was open. */
 let queued: UpgradeDialogRequest | null = null;
 
+const show = (request: UpgradeDialogRequest | null): void => {
+  if (request?.kind === "own-key") ownKeyAsked.add(request.threadId);
+  upgradeDialogStore.setState(() => ({ request }));
+};
+
 const wanted = (request: UpgradeDialogRequest): boolean =>
-  !(request.kind === "connectors" && connectorsDeclined.has(request.threadId));
+  !(
+    request.kind === "connectors" && connectorsDeclined.has(request.threadId)
+  ) && !(request.kind === "own-key" && ownKeyAsked.has(request.threadId));
 
 /**
  * Ask for the dialog. A key already asked for is ignored, and so are
- * connector asks from a chat where the person kept chatting without them. An
- * ask of the same kind as the open dialog is dropped (a turn refusing several
- * connectors shows one dialog); one of the other kind waits its turn.
+ * connector asks from a chat where the person kept chatting without them and
+ * own-key asks from a chat already offered one. An ask of the same kind as
+ * the open dialog is dropped (a turn refusing several connectors shows one
+ * dialog); one of the other kind waits its turn. `explicit` is the person
+ * asking (a button in the chat), which no earlier answer holds back.
  */
-export const requestUpgradeDialog = (request: UpgradeDialogRequest): void => {
-  if (asked.has(request.key) || !wanted(request)) return;
+export const requestUpgradeDialog = (
+  request: UpgradeDialogRequest,
+  explicit = false
+): void => {
+  if (!explicit && (asked.has(request.key) || !wanted(request))) return;
   asked.add(request.key);
   const open = upgradeDialogStore.state.request;
-  if (open == null) upgradeDialogStore.setState(() => ({ request }));
+  if (open == null) show(request);
   else if (open.kind !== request.kind) queued = request;
 };
 
@@ -64,7 +83,7 @@ export const closeUpgradeDialog = (dismissed = false): void => {
     connectorsDeclined.add(open.threadId);
   const next = queued != null && wanted(queued) ? queued : null;
   queued = null;
-  upgradeDialogStore.setState(() => ({ request: next }));
+  show(next);
 };
 
 export const useUpgradeDialogRequest = () =>

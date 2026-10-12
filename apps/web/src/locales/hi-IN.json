@@ -957,7 +957,12 @@
     "lowTitle": "क्रेडिट कम हो रहे हैं",
     "outTitle": "आपने अपने मुफ़्त क्रेडिट इस्तेमाल कर लिए हैं",
     "sideSessions": "सेशन: टॉप मॉडल, लंबे रन, बड़े प्रोजेक्ट",
-    "sideBots": "बॉट: रोज़ के रूटीन, हमेशा Telegram और WhatsApp पर"
+    "sideBots": "बॉट: रोज़ के रूटीन, हमेशा Telegram और WhatsApp पर",
+    "paidWebTitle": "Do even more on AbacusAI Agent",
+    "paidWebApps": "Build and deploy full apps and websites",
+    "paidWebResearch": "Deep research, slides and docs",
+    "paidWebMedia": "Images and videos with top models",
+    "paidWebCta": "Go to AbacusAI Agent on the web"
   },
   "execBackends": {
     "daytona": {
@@ -4051,6 +4056,9 @@
     "featureRoutines": "एक साथ 5 रूटीन तक, हर घंटे जितनी बार",
     "keepChatting": "कनेक्टर के बिना चैट जारी रखें",
     "notNow": "अभी नहीं",
+    "ownKeyBody": "No separate API bill. Upgrade and your message sends right away.",
+    "ownKeyBodyNoMessage": "No separate API bill. Upgrade to keep going on the top models.",
+    "ownKeyTitle": "Use any model on AbacusAI",
     "plan": "Basic प्लान · कभी भी रद्द करें",
     "price": "$7",
     "pricePeriod": "पहले महीने के लिए",
@@ -4226,5 +4234,13 @@
       "connection": "We couldn't reach AbacusAI Bot. Check your connection, then try again.",
       "refused": "This account can't use AbacusAI Bot on this site."
     }
+  },
+  "ownKey": {
+    "freeBody": "No separate API bill. Upgrade and keep going on the top models.",
+    "notResponding": "{{provider}} isn't responding right now",
+    "openAgent": "Open AbacusAI Agent",
+    "outOfCredit": "Your {{provider}} key is out of credit",
+    "paidBody": "Use it in AbacusAI Agent on the web: the top models are included in your plan.",
+    "rateLimited": "Your {{provider}} key hit its rate limit"
   }
 }
