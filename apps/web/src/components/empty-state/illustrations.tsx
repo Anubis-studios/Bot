@@ -17,48 +17,6 @@ const Frame = (props: ComponentProps<"svg">) => (
   />
 );
 
-const DAYS = [32, 50, 68, 86].flatMap((x) =>
-  [44, 60, 76].map((y) => ({ x, y }))
-);
-
-export const RoutinesIllustration = () => (
-  <Frame>
-    <rect
-      x="20"
-      y="14"
-      width="96"
-      height="84"
-      rx="10"
-      className="fill-background"
-    />
-    <path d="M20 34h96 M44 8v12 M92 8v12" />
-    {DAYS.map(({ x, y }) => (
-      <rect
-        key={`${x}-${y}`}
-        x={x}
-        y={y}
-        width="10"
-        height="10"
-        rx="3"
-        fill="currentColor"
-        {...(x === 50
-          ? { fillOpacity: 0.22 }
-          : { stroke: "none", opacity: 0.12 })}
-      />
-    ))}
-    <circle cx="118" cy="78" r="24" className="fill-background" stroke="none" />
-    <circle
-      cx="118"
-      cy="78"
-      r="24"
-      fill="currentColor"
-      stroke="none"
-      opacity="0.22"
-    />
-    <path d="M142 78a24 24 0 1 1-6.9-17.1 M142 54v10.5h-10.5 M118 64.5V78l7.5 6" />
-  </Frame>
-);
-
 export const ArtifactsIllustration = () => (
   <Frame>
     <rect

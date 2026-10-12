@@ -5,7 +5,6 @@ import { useTranslation } from "react-i18next";
 import { usePanelRef } from "react-resizable-panels";
 
 import { EmptyState } from "#renderer/components/empty-state";
-import { RoutinesIllustration } from "#renderer/components/empty-state/illustrations";
 import { ConfirmAction } from "#renderer/components/form-kit/confirm";
 import { PageToolbar } from "#renderer/components/form-kit/page";
 import { createPaneWidthWriter, usePrefs } from "#renderer/data/db/prefs";
@@ -30,33 +29,15 @@ import {
 } from "#renderer/ui/resizable";
 import { Switch } from "#renderer/ui/switch";
 
-import { RoutineCreateAction } from "./create-action";
 import { runsView, scheduleLabel, routineState, useRoutinesData } from "./data";
 import { isHosted } from "./hosted";
 import { HostedResults } from "./hosted-results";
 import { runRoutineNow, showSaveFailure, useHostedOff } from "./hosted-sync";
+import { RoutinesLanding } from "./landing";
 import { RoutineReachPanel } from "./reach-panel";
 import { RoutineIdentity } from "./row";
-export const RoutinesListBody = () => {
-  const { t } = useTranslation();
-  const { routines } = useRoutinesData();
-  return (
-    <div
-      className="flex size-full items-center justify-center"
-      data-testid="routines-list-body"
-    >
-      <EmptyState
-        icon="routines"
-        illustration={<RoutinesIllustration />}
-        title={t(
-          routines.length ? "phase5.pickRoutine" : "routines.page.emptyTitle"
-        )}
-        description={t("routines.page.emptyDescription")}
-        action={<RoutineCreateAction />}
-      />
-    </div>
-  );
-};
+/** No routine open: the way to make one, with the templates (landing.tsx). */
+export const RoutinesListBody = RoutinesLanding;
 
 export const RoutineGone = () => {
   const { t } = useTranslation();

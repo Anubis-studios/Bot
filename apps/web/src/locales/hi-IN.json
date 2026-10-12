@@ -1538,7 +1538,11 @@
       "routineTitle": "Routine",
       "routineDescription": "इस रूटीन का शेड्यूल, निर्देश और पिछले रन देखें।",
       "createTitle": "नया रूटीन",
-      "createDescription": "Say what it should do and when."
+      "createDescription": "Say what it should do and when.",
+      "landingTitle": "Put your bots on a schedule",
+      "landingDescription": "A routine runs a prompt on its own: every morning, every few hours, or when a webhook calls it. It runs on this computer while the app is open.",
+      "templatesLead": "Or start from one of these",
+      "templateReads": "Reads {{names}}"
     },
     "sidebar": {
       "label": "रूटीन",
