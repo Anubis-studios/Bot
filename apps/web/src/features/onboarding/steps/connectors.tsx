@@ -69,7 +69,11 @@ export const ConnectorsStep = ({
     const token = (attempts.current.get(id) ?? 0) + 1;
     attempts.current.set(id, token);
     setPending((current) => new Set(current).add(id));
-    setFailed(({ [id]: _cleared, ...rest }) => rest);
+    setFailed((current) => {
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
     void Promise.resolve()
       .then(() => props.connect?.(id))
       .then(
