@@ -1280,7 +1280,6 @@
     "pages.checkIn": "कार्यदिवसों में सुबह 8:00 बजे चेक-इन · Gmail, Calendar",
     "pages.noCheckIn": "कोई तय अपडेट नहीं",
     "pages.hello": "नमस्ते कहें",
-    "pages.scratch": "शुरुआत से बनाएँ",
     "pages.message": "{{name}} को संदेश",
     "pages.addKey": "API कुंजी जोड़ें",
     "pages.pairing": "{{platform}} से कनेक्शन पूरा करें",

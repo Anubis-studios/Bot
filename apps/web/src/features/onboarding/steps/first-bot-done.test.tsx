@@ -15,20 +15,14 @@ vi.mock("#renderer/lib/motion", async (original) => ({
   useMotionPreference: () => "none",
 }));
 
-const discard = vi.fn(async () => {});
 // The avatar reads the motion preference from prefs; no DbProvider here.
 vi.mock("#renderer/lib/motion", async (original) => ({
   ...(await original<typeof import("#renderer/lib/motion")>()),
   useMotionPreference: () => "full",
 }));
-vi.mock("../first-bot", async (original) => ({
-  ...(await original<typeof import("../first-bot")>()),
-  discardFirstBot: (...args: unknown[]) => discard(...(args as [])),
-}));
 vi.mock("#renderer/data/db/prefs", () => ({
   usePrefs: () => ({ ...fixturePrefs(), motion: { reduce: "on" } }),
 }));
-vi.mock("#renderer/data/db", () => ({ useDb: () => ({ db: true }) }));
 
 const bot = fixtureBots()[0]!;
 const ctx = () => {
@@ -107,13 +101,9 @@ describe("FirstBotStep", () => {
         edit: true,
       })
     );
-
-    fireEvent.click(screen.getByRole("button", { name: "Start from scratch" }));
-    await vi.waitFor(() =>
-      expect(funnelStep).toHaveBeenCalledWith({ step: "first_bot_cancelled" })
-    );
-    expect(discard).toHaveBeenCalledWith({ db: true }, ready("routine").result);
-    expect(context.props.complete).toHaveBeenLastCalledWith({ to: "new-bot" });
+    expect(
+      screen.queryByRole("button", { name: "Start from scratch" })
+    ).toBeNull();
   });
 
   it("reads No check-ins when the routine was not created, and continues once removed", async () => {

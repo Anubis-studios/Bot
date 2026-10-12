@@ -4,10 +4,9 @@ import type { Ref } from "react";
 
 import { BotAvatar } from "#renderer/components/bot-avatar";
 import { Spinner } from "#renderer/components/spinner";
-import { useDb } from "#renderer/data/db";
 import { resolveLook } from "#renderer/lib/bots/avatar";
 
-import { discardFirstBot, type FirstBotState } from "../first-bot";
+import type { FirstBotState } from "../first-bot";
 import type { StepContext } from "./context";
 import { StepBody, StepButton, StepLink, StepTitle } from "./kit";
 
@@ -26,8 +25,7 @@ export const FirstBotStep = ({
   heading: Ref<HTMLHeadingElement>;
 }) => {
   const { t, busy, props, perform } = ctx;
-  const db = useDb();
-  const funnel = (step: "first_bot_kept" | "first_bot_cancelled") =>
+  const funnel = (step: "first_bot_kept") =>
     props.transport.client.system.funnelStep({ step });
   return (
     <>
@@ -120,21 +118,6 @@ export const FirstBotStep = ({
             >
               {t("tour.replay")}
             </StepButton>
-          </div>
-          <div className="mt-3">
-            <StepLink
-              disabled={busy}
-              onClick={() =>
-                void perform(async () => {
-                  if (first.state !== "ready") return;
-                  await discardFirstBot(db, first.result);
-                  await funnel("first_bot_cancelled");
-                  await props.complete({ to: "new-bot" });
-                })
-              }
-            >
-              {t("onboarding.pages.scratch")}
-            </StepLink>
           </div>
         </>
       )}

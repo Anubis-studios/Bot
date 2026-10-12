@@ -1280,7 +1280,6 @@
     "pages.checkIn": "Fait le point en semaine à 8h00 · Gmail, Agenda",
     "pages.noCheckIn": "Aucun point régulier",
     "pages.hello": "Dites bonjour",
-    "pages.scratch": "Partir de zéro",
     "pages.message": "Message à {{name}}",
     "pages.addKey": "Ajouter une clé API",
     "pages.pairing": "Terminer la connexion à {{platform}}",

@@ -1,8 +1,6 @@
 import type { BotRow } from "@abacus-ai/contract/contract";
-import { DeleteKeyNotFoundError } from "@tanstack/db";
 import { Store } from "@tanstack/react-store";
 
-import type { Db } from "#renderer/data/db";
 import { isRpcError } from "#renderer/data/query-client";
 import { resolveLook } from "#renderer/lib/bots/avatar";
 import { BOT_TEMPLATES } from "#renderer/lib/bots/templates";
@@ -82,36 +80,4 @@ export const ensureFirstBot = (
   });
   firstBotStore.setState(() => ({ state: "pending", promise }));
   begin();
-};
-const deletePersisted = async (
-  collection: {
-    has(id: string): boolean;
-    delete(id: string): { isPersisted: { promise: Promise<unknown> } };
-  },
-  id: string
-): Promise<void> => {
-  if (!collection.has(id)) return;
-  try {
-    await collection.delete(id).isPersisted.promise;
-  } catch (error) {
-    if (
-      error instanceof DeleteKeyNotFoundError ||
-      (isRpcError(error) && error.code === "NOT_FOUND")
-    )
-      return;
-    throw error;
-  }
-};
-export const discardFirstBot = async (
-  db: Db,
-  result: FirstBotResult
-): Promise<void> => {
-  if (result.preview) {
-    firstBotStore.setState(() => ({ state: "removed" }));
-    return;
-  }
-  if (result.checkInRoutineId)
-    await deletePersisted(db.collections.routines, result.checkInRoutineId);
-  await deletePersisted(db.collections.bots, result.bot.id);
-  firstBotStore.setState(() => ({ state: "removed" }));
 };

@@ -1280,7 +1280,6 @@
     "pages.checkIn": "평일 8:00에 체크인 · Gmail, 캘린더",
     "pages.noCheckIn": "체크인 없음",
     "pages.hello": "인사하기",
-    "pages.scratch": "처음부터 시작",
     "pages.message": "{{name}}에게 메시지",
     "pages.addKey": "API 키 추가",
     "pages.pairing": "{{platform}} 연결 완료",

@@ -1280,7 +1280,6 @@
     "pages.checkIn": "Lapor tiap hari kerja pukul 8:00 · Gmail, Kalender",
     "pages.noCheckIn": "Tidak ada laporan terjadwal",
     "pages.hello": "Sapa bot",
-    "pages.scratch": "Mulai dari awal",
     "pages.message": "Kirim pesan ke {{name}}",
     "pages.addKey": "Tambahkan kunci API",
     "pages.pairing": "Selesaikan koneksi {{platform}}",

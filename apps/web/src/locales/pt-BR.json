@@ -1280,7 +1280,6 @@
     "pages.checkIn": "Faz check-in nos dias úteis às 8:00 · Gmail, Agenda",
     "pages.noCheckIn": "Sem acompanhamentos",
     "pages.hello": "Diga olá",
-    "pages.scratch": "Começar do zero",
     "pages.message": "Mensagem para {{name}}",
     "pages.addKey": "Adicionar chave API",
     "pages.pairing": "Concluir a conexão com {{platform}}",

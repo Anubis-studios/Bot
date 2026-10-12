@@ -1,9 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Db } from "#renderer/data/db";
 import { fixtureBots } from "#renderer/data/fixture-db/rows";
 
-import { ensureFirstBot, firstBotStore, discardFirstBot } from "./first-bot";
+import { ensureFirstBot, firstBotStore } from "./first-bot";
 import { onboardingStore } from "./store";
 const deferred = <T>() => {
   let resolve!: (value: T) => void;
@@ -32,55 +31,6 @@ describe("R6-T9 first-bot persistence", () => {
     expect(create).toHaveBeenCalledOnce();
     gate.resolve(result);
     await vi.waitFor(() => expect(firstBotStore.state.state).toBe("ready"));
-  });
-  it("waits for routine persistence before deleting the bot", async () => {
-    const gate = deferred<void>();
-    const botDelete = vi.fn(() => ({
-      isPersisted: { promise: Promise.resolve() },
-    }));
-    const routineDelete = vi.fn(() => ({
-      isPersisted: { promise: gate.promise },
-    }));
-    const db = {
-      collections: {
-        routines: { has: () => true, delete: routineDelete },
-        bots: { has: () => true, delete: botDelete },
-      },
-    } as unknown as Db;
-    const pending = discardFirstBot(db, result);
-    expect(routineDelete).toHaveBeenCalledOnce();
-    expect(botDelete).not.toHaveBeenCalled();
-    gate.resolve();
-    await pending;
-    expect(botDelete).toHaveBeenCalledOnce();
-  });
-  it("a rejected routine transaction never deletes the bot", async () => {
-    const botDelete = vi.fn();
-    const db = {
-      collections: {
-        routines: {
-          has: () => true,
-          delete: () => ({
-            isPersisted: { promise: Promise.reject(new Error("disk")) },
-          }),
-        },
-        bots: { has: () => true, delete: botDelete },
-      },
-    } as unknown as Db;
-    await expect(discardFirstBot(db, result)).rejects.toThrow("disk");
-    expect(botDelete).not.toHaveBeenCalled();
-  });
-  it("already absent rows count as completed deletion", async () => {
-    const remove = vi.fn();
-    const db = {
-      collections: {
-        routines: { has: () => false, delete: remove },
-        bots: { has: () => false, delete: remove },
-      },
-    } as unknown as Db;
-    await discardFirstBot(db, result);
-    expect(remove).not.toHaveBeenCalled();
-    expect(firstBotStore.state.state).toBe("removed");
   });
   it("existing bots skip without creating", () => {
     const create = vi.fn();

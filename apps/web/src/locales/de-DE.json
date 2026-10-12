@@ -1280,7 +1280,6 @@
     "pages.checkIn": "Meldet sich werktags um 8:00 · Gmail, Kalender",
     "pages.noCheckIn": "Keine Check-ins",
     "pages.hello": "Sag Hallo",
-    "pages.scratch": "Von Grund auf beginnen",
     "pages.message": "Nachricht an {{name}}",
     "pages.addKey": "API-Schlüssel hinzufügen",
     "pages.pairing": "Verbindung mit {{platform}} abschließen",

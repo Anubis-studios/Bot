@@ -166,34 +166,29 @@ it.each([false, true])(
   },
   15000
 );
-it.each(["new-session", "scratch"] as const)(
-  "fresh account preserves the explicit %s destination without creating a default bot",
-  async (choice) => {
-    const seed = defaultSeed();
-    seed.bots = [];
-    seed.routines = [];
-    harness = await renderApp("/onboarding/first-bot", {
-      onboarded: false,
-      signedIn: true,
-      seed,
-    });
-    fireEvent.click(
-      await screen.findByRole("button", {
-        name: choice === "scratch" ? "Start from scratch" : "New session",
-      })
-    );
-    await waitFor(() =>
-      expect(harness!.router.state.location.pathname).toBe(
-        choice === "scratch" ? "/bots/new" : "/sessions/new"
-      )
-    );
-    expect(harness.collections.bots.toArray).toHaveLength(0);
-    expect(harness.collections.routines.toArray).toHaveLength(0);
-    expect(
-      harness.calls.filter(([name]) => name === "account.skipOnboarding")
-    ).toHaveLength(1);
-  }
-);
+it("fresh account preserves the explicit new-session destination without creating a default bot", async () => {
+  const seed = defaultSeed();
+  seed.bots = [];
+  seed.routines = [];
+  harness = await renderApp("/onboarding/first-bot", {
+    onboarded: false,
+    signedIn: true,
+    seed,
+  });
+  fireEvent.click(
+    await screen.findByRole("button", {
+      name: "New session",
+    })
+  );
+  await waitFor(() =>
+    expect(harness!.router.state.location.pathname).toBe("/sessions/new")
+  );
+  expect(harness.collections.bots.toArray).toHaveLength(0);
+  expect(harness.collections.routines.toArray).toHaveLength(0);
+  expect(
+    harness.calls.filter(([name]) => name === "account.skipOnboarding")
+  ).toHaveLength(1);
+});
 
 it("ready final setup automatically opens the Chief chat without another click", async () => {
   const seed = defaultSeed();

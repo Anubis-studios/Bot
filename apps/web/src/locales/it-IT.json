@@ -1280,7 +1280,6 @@
     "pages.checkIn": "Si fa sentire nei giorni feriali alle 8:00 · Gmail, Calendar",
     "pages.noCheckIn": "Nessun aggiornamento",
     "pages.hello": "Di’ ciao",
-    "pages.scratch": "Inizia da zero",
     "pages.message": "Messaggio a {{name}}",
     "pages.addKey": "Aggiungi chiave API",
     "pages.pairing": "Completa la connessione a {{platform}}",

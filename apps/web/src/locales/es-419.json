@@ -1280,7 +1280,6 @@
     "pages.checkIn": "Se reporta entre semana a las 8:00 · Gmail, Calendar",
     "pages.noCheckIn": "Sin seguimientos",
     "pages.hello": "Saluda",
-    "pages.scratch": "Empezar desde cero",
     "pages.message": "Mensaje a {{name}}",
     "pages.addKey": "Agregar clave API",
     "pages.pairing": "Terminar de conectar {{platform}}",

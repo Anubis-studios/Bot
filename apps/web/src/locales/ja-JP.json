@@ -1280,7 +1280,6 @@
     "pages.checkIn": "平日 8:00 にチェックイン · Gmail、カレンダー",
     "pages.noCheckIn": "チェックインなし",
     "pages.hello": "挨拶する",
-    "pages.scratch": "最初から作る",
     "pages.message": "{{name}}にメッセージ",
     "pages.addKey": "API キーを追加",
     "pages.pairing": "{{platform}} の接続を完了",
