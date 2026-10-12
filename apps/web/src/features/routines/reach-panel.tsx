@@ -79,7 +79,7 @@ export const RoutineReachPanel = ({ row }: { row: RoutineRow }) => {
       )}
       {!isHosted(row) && (
         <Item size="sm" className="rounded-(--pane-radius)">
-          {row.access === "full" ? (
+          {row.access !== "unattended" ? (
             <Switch
               aria-label={t("routines.reach.fullAccess")}
               checked
@@ -107,7 +107,7 @@ export const RoutineReachPanel = ({ row }: { row: RoutineRow }) => {
           )}
           <span className="min-w-0 flex-1">
             {t(
-              row.access === "full"
+              row.access !== "unattended"
                 ? "routines.reach.fullAccessOn"
                 : "routines.reach.unattended"
             )}

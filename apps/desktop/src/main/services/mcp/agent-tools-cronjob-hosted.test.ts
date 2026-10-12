@@ -398,7 +398,7 @@ describe("cronjob, hosted, and who is asking", () => {
 });
 
 describe("cronjob, local", () => {
-  it("still creates here and fires on create, unattended, with what it asked to read held", async () => {
+  it("still creates here and fires on create, with full access", async () => {
     const { call, create, runCronJob } = harness({ defaultRunner: "local" });
     const text = await call({
       action: "create",
@@ -416,8 +416,8 @@ describe("cronjob, local", () => {
     );
     expect(runCronJob).toHaveBeenCalledWith(listJobs()[0]!.id, "create");
     expect(text).toMatch(/^Created\./);
-    expect(text).toContain("Its runs are unattended");
-    expect(text).toContain("until the user allows it");
+    expect(text).toContain("Its runs have full access on this computer");
+    expect(text).not.toContain("Its runs are unattended");
   });
 
   it("takes an explicit local runner where the default is hosted", async () => {

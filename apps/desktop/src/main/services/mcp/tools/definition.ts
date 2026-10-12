@@ -47,6 +47,12 @@ export type ToolHost = Pick<
  * governs it, who may see it, and what runs. Listing and dispatch are derived
  * from this and nothing else (see ./index.ts).
  */
+/** What this app's host offers, beside the chat's own capabilities, when tools are listed. */
+export interface HostCapabilities {
+  /** Routines can be kept on the server (the hosted computer only). */
+  hostedRoutines: boolean;
+}
+
 export interface ToolDefinition {
   name: string;
   /**
@@ -54,10 +60,15 @@ export interface ToolDefinition {
    * (a pane to open, a phone to send to), rendered for each caller's channel
    * when the tools are listed.
    */
-  description: string | ((channel: ChannelCapabilities) => string);
+  description:
+    | string
+    | ((channel: ChannelCapabilities, host: HostCapabilities) => string);
   inputSchema:
     | Record<string, unknown>
-    | ((channel: ChannelCapabilities) => Record<string, unknown>);
+    | ((
+        channel: ChannelCapabilities,
+        host: HostCapabilities
+      ) => Record<string, unknown>);
   /**
    * The Capabilities toggles that turn it on; any one on is enough, which
    * keeps `bfl_flux3_get_result` reachable beside every submitter that polls

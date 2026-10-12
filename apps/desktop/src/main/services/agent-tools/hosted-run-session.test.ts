@@ -336,7 +336,7 @@ it("puts what the agent asks a local routine to read in force at once", async ()
   ).rejects.toThrow(/cannot be a routine's sources/);
 });
 
-it("runs a local routine unattended, held to what the user confirmed, unless given full access", async () => {
+it("runs a local routine with full access, held to what the user confirmed only once made read-only", async () => {
   fs.writeFileSync(
     path.join(home, "config.json"),
     JSON.stringify({ apiKeys: { ABACUS_API_KEY: "k" } })
@@ -357,19 +357,19 @@ it("runs a local routine unattended, held to what the user confirmed, unless giv
     sources: ["https://news.example/"],
   });
   expect(await host.runRoutine(routine.id, "manual")).toBe("started");
-  const held = start.mock.calls[0]![0].sessionId;
+  const free = start.mock.calls[0]![0].sessionId;
+  expect(
+    internals.agentSessionManagerService.unattendedPolicy(free)
+  ).toBeNull();
+  // Read-only is the user's call; such a run is held to what it may reach.
+  await host.updateRoutine(routine.id, { access: "unattended" });
+  await internals.agentSessionManagerService.setRunOutcome(free, "completed");
+  expect(await host.runRoutine(routine.id, "manual")).toBe("started");
+  const held = start.mock.calls[1]![0].sessionId;
   expect(internals.agentSessionManagerService.unattendedPolicy(held)).toEqual({
     sources: ["https://news.example/"],
     watchUrl: null,
   });
-  // Full access is the user's call; such a run is not held.
-  await host.updateRoutine(routine.id, { access: "full" });
-  await internals.agentSessionManagerService.setRunOutcome(held, "completed");
-  expect(await host.runRoutine(routine.id, "manual")).toBe("started");
-  const free = start.mock.calls[1]![0].sessionId;
-  expect(
-    internals.agentSessionManagerService.unattendedPolicy(free)
-  ).toBeNull();
 });
 
 it("holds a bot's chat with anyone but its owner: no pages, reads or files", async () => {

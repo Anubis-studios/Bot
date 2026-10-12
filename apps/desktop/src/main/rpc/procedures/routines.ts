@@ -28,10 +28,16 @@ export const routinesRouter = impl.routines.router({
     await hosted.refresh();
     return { hosted: await hosted.capability() };
   }),
-  runners: impl.routines.runners.handler(async ({ context }) => ({
-    hosted: await context.deps.serviceHost.hostedRoutines.capability(),
-    default: context.deps.serviceHost.defaultRoutineRunner(),
-  })),
+  runners: impl.routines.runners.handler(async ({ context }) => {
+    const host = context.deps.serviceHost;
+    // The desktop app keeps no routines on the server: the form offers none.
+    if (host.platform !== "web-host")
+      return { hosted: false, default: "local" };
+    return {
+      hosted: await host.hostedRoutines.capability(),
+      default: host.defaultRoutineRunner(),
+    };
+  }),
   events: impl.routines.events.handler(({ context, signal }) =>
     stream<RoutinesEvent>({
       path: "routines.events",

@@ -1068,6 +1068,7 @@ export class ServiceHost {
 
   private readonly mcpAgentToolsServer = new McpAgentToolsServer({
     skillsService: this.skillsService,
+    hostedRoutines: () => this.hostedRoutinesOffered(),
     enabledToolsets: () => {
       const states = this.getToolsetStates();
       return new Set(Object.keys(states).filter((id) => states[id]));
@@ -5006,9 +5007,15 @@ export class ServiceHost {
   }
 
   defaultRoutineRunner(): RoutineRunner {
-    return this.platform === "web-host" && this.hostedRoutines.capableNow()
-      ? "hosted"
-      : "local";
+    return this.hostedRoutinesOffered() ? "hosted" : "local";
+  }
+
+  /**
+   * Whether this app keeps routines on the server at all: only the hosted
+   * computer does. The desktop app's routines are local, always.
+   */
+  hostedRoutinesOffered(): boolean {
+    return this.platform === "web-host" && this.hostedRoutines.capableNow();
   }
 
   /**
@@ -5027,9 +5034,13 @@ export class ServiceHost {
       throw new HostedRoutineRefusal("plan_limit", { limit: 0 });
     // A hosted bot whose routines run on the server has no other scheduler:
     // a local one there would never fire, and would sidestep the plan.
-    const runner = this.hostedOnly()
-      ? "hosted"
-      : (input.runner ?? this.defaultRoutineRunner());
+    // The desktop app keeps every routine local, whatever was asked.
+    const runner =
+      this.platform !== "web-host"
+        ? "local"
+        : this.hostedOnly()
+          ? "hosted"
+          : (input.runner ?? this.defaultRoutineRunner());
     if (runner === "hosted") {
       // An old server keeps none: said as a refusal, never quietly made local.
       if (!(await this.hostedRoutines.capability()))
@@ -5244,8 +5255,9 @@ export class ServiceHost {
     if (getJob(jobId) == null) return "skipped";
     const home = this.routineHome(job);
 
-    // Unattended unless the user turned full access on for this routine.
-    const unattended = job.access !== "full";
+    // Full access, as a routine on this computer always had, unless the user
+    // made this one read-only.
+    const unattended = job.access === "unattended";
     const prompt = this.withBotVoice(
       job.botId,
       buildRoutineFirePrompt(job, trigger, payload, {

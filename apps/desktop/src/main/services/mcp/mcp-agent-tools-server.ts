@@ -193,6 +193,8 @@ const fileUrl = (absolutePath: string): string =>
 
 export interface McpAgentToolsServerOptions {
   skillsService: SkillsService;
+  /** Routines can be kept on the server (the hosted computer): the cronjob tool offers it. */
+  hostedRoutines?: () => boolean;
   /** Re-read per request so toggles take effect live. */
   enabledToolsets: () => Set<string>;
   workspacePath: () => string | null;
@@ -445,6 +447,7 @@ export class McpAgentToolsServer extends McpHttpServer {
     const forBot = this.isBotCaller(callerSession);
     const forEditor = this.isRoutineEditor(callerSession);
     const channel = this.channelFor(callerSession);
+    const host = { hostedRoutines: this.options.hostedRoutines?.() === true };
     // A run nobody is watching is offered only what it may call.
     const held = this.isHeld(callerSession);
 
@@ -461,10 +464,10 @@ export class McpAgentToolsServer extends McpHttpServer {
         description:
           typeof definition.description === "string"
             ? definition.description
-            : definition.description(channel),
+            : definition.description(channel, host),
         inputSchema:
           typeof definition.inputSchema === "function"
-            ? definition.inputSchema(channel)
+            ? definition.inputSchema(channel, host)
             : definition.inputSchema,
       }));
   }
@@ -887,17 +890,20 @@ export class McpAgentToolsServer extends McpHttpServer {
             ? `\nIt can also be fired by POST to the webhook shown in the Routines panel.`
             : "";
 
-        // Its runs are unattended: say what that means, and that what it was
-        // asked to read waits for the user.
-        const reach =
-          " Its runs are unattended: they search the web and read its own folder, but " +
-          "cannot write files, run commands or message anyone, unless the user gives it " +
-          "full access on its page." +
-          (sources.length + reads.length > 0
-            ? " It reads nothing you asked for (" +
-              [...reads, ...sources].join(", ") +
-              ") until the user allows it on the routine's page: tell them."
-            : "");
+        // A read-only (or hosted) routine's runs are held: say what that means,
+        // and that what it was asked to read waits for the user. A local one
+        // runs with this conversation's reach.
+        const held = job.runner === "hosted" || job.access === "unattended";
+        const reach = !held
+          ? " Its runs have full access on this computer while the app is open."
+          : " Its runs are unattended: they search the web and read its own folder, but " +
+            "cannot write files, run commands or message anyone, unless the user gives it " +
+            "full access on its page." +
+            (sources.length + reads.length > 0
+              ? " It reads nothing you asked for (" +
+                [...reads, ...sources].join(", ") +
+                ") until the user allows it on the routine's page: tell them."
+              : "");
         return this.ok(
           `Created. ${delivery}${reach}${first}${hook}\n\n${describeJob(job)}`
         );

@@ -81,7 +81,7 @@ export interface CronJob {
   runner?: "local" | "hosted";
   /** Moved to the server (see routine-migration.ts): its id there. */
   serverId?: string | null;
-  /** Unattended unless the user turned full access on, confirming it. */
+  /** Full access unless the user made it read-only ("unattended"). */
   access?: "unattended" | "full";
   /** What its unattended runs may reach. */
   reach?: RoutineReach | null;
@@ -337,13 +337,6 @@ export const updateJob = (
 
   const { webhook, ...rest } = changes;
   const updated: CronJob = { ...jobs[index], ...rest };
-  // Full access was given to what the routine did: a new instruction or reach
-  // runs held again until the user gives it again (unless this change does).
-  const rewritten =
-    (rest.prompt != null && rest.prompt !== jobs[index].prompt) ||
-    rest.reach !== undefined;
-  if (rewritten && rest.access == null && updated.access === "full")
-    updated.access = "unattended";
   // A one-time routine that already fired stays done: resumed as it stands
   // it would fire again on the next tick. A new time re-arms it.
   if (

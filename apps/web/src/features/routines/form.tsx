@@ -452,8 +452,8 @@ export const RoutineDialog = ({
                         {t(readKey(read))}
                       </label>
                     ))}
-                    {/* Only an unattended routine's runs are held to this. */}
-                    {(runsHosted || row?.access !== "full") && (
+                    {/* Only a read-only routine's runs are held to this. */}
+                    {(runsHosted || row?.access === "unattended") && (
                       <p className="text-muted-foreground text-xs">
                         {t("routines.reach.lead")}
                       </p>

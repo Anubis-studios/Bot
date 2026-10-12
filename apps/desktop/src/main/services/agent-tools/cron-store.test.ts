@@ -393,17 +393,16 @@ describe("damaged history and migration recovery", () => {
 });
 
 describe("full access and a rewrite", () => {
-  it("goes back to held when the instruction or the reach changes", () => {
+  it("keeps the access the user chose when the instruction or the reach changes", () => {
     const job = createJob({ schedule: "0 9 * * *", prompt: "summarise" });
-    updateJob(job.id, { access: "full" });
-    expect(updateJob(job.id, { name: "Brief" }).access).toBe("full");
-    expect(updateJob(job.id, { prompt: "summarise" }).access).toBe("full");
-    expect(updateJob(job.id, { prompt: "email everyone" }).access).toBe(
-      "unattended"
-    );
-    updateJob(job.id, { access: "full" });
+    expect(job.access).toBeUndefined();
+    expect(
+      updateJob(job.id, { prompt: "email everyone" }).access
+    ).toBeUndefined();
+    updateJob(job.id, { access: "unattended" });
     expect(
       updateJob(job.id, {
+        prompt: "summarise again",
         reach: { sources: ["https://news.example/"], reads: [] },
       }).access
     ).toBe("unattended");
