@@ -3573,6 +3573,8 @@
     "inviteSignIn": "Sign in to Abacus.AI to invite friends.",
     "invitesSent": "Invites sent",
     "manualEmails": "Email addresses",
+    "emailPlaceholder": "Type an email and press Enter",
+    "removeEmail": "Remove {{email}}",
     "loadingGmailContacts": "Loading your friends' email addresses…",
     "noSettings": "No settings match",
     "notFoundMachine": "Not found on this machine",

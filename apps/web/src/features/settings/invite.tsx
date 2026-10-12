@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { X } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import * as v from "valibot";
@@ -72,6 +73,10 @@ export const InviteDialog = ({
     .filter((c) => choices[channel]?.[c.id] !== false)
     .map((c) => c.id);
   const [error, setError] = useState<string | null>(null);
+  // The address being typed; Enter, comma or Tab turns it into a chip (the form's `emails`).
+  const [draft, setDraft] = useState("");
+  const isEmail = (email: string) =>
+    v.safeParse(v.pipe(v.string(), v.email()), email).success;
   const schema = v.object({
     emails: v.string(),
     message: v.pipe(v.string(), v.trim(), v.maxLength(1000)),
@@ -90,18 +95,17 @@ export const InviteDialog = ({
         setError(null);
         const parsed = v.parse(schema, value);
         const emails = [
-          ...new Set([...selected, ...inviteEmails(parsed.emails)]),
+          ...new Set([
+            ...selected,
+            ...inviteEmails(parsed.emails),
+            ...inviteEmails(draft),
+          ]),
         ];
         if ((channel === "gmail" ? emails : selected).length === 0) {
           setError(t("phase5.chooseRecipients"));
           return;
         }
-        if (
-          channel === "gmail" &&
-          !emails.every(
-            (email) => v.safeParse(v.pipe(v.string(), v.email()), email).success
-          )
-        ) {
+        if (channel === "gmail" && !emails.every(isEmail)) {
           setError(t("phase5.invalidEmail"));
           return;
         }
@@ -232,11 +236,75 @@ export const InviteDialog = ({
                       <FieldLabel htmlFor="invite-emails">
                         {t("phase5.manualEmails")}
                       </FieldLabel>
-                      <Textarea
-                        id="invite-emails"
-                        value={f.state.value}
-                        onChange={(e) => f.handleChange(e.target.value)}
-                      />
+                      <div className="border-input bg-input/30 focus-within:border-ring focus-within:ring-ring/50 flex min-h-16 flex-wrap items-start gap-1.5 rounded-lg border px-2.5 py-2 focus-within:ring-[3px]">
+                        {inviteEmails(f.state.value).map((email) => (
+                          <span
+                            key={email}
+                            data-slot="invite-email-chip"
+                            className="bg-background flex h-6 items-center gap-1 rounded-md border ps-2 pe-1 text-xs"
+                          >
+                            {email}
+                            <button
+                              type="button"
+                              aria-label={t("phase5.removeEmail", { email })}
+                              className="text-muted-foreground hover:text-foreground rounded-sm"
+                              onClick={() =>
+                                f.handleChange(
+                                  inviteEmails(f.state.value)
+                                    .filter((other) => other !== email)
+                                    .join("\n")
+                                )
+                              }
+                            >
+                              <X aria-hidden className="size-3" />
+                            </button>
+                          </span>
+                        ))}
+                        <input
+                          id="invite-emails"
+                          value={draft}
+                          placeholder={t("phase5.emailPlaceholder")}
+                          className="h-6 min-w-40 flex-1 bg-transparent text-sm outline-none"
+                          onChange={(e) => setDraft(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (
+                              e.key === "Backspace" &&
+                              draft === "" &&
+                              f.state.value !== ""
+                            ) {
+                              f.handleChange(
+                                inviteEmails(f.state.value)
+                                  .slice(0, -1)
+                                  .join("\n")
+                              );
+                              return;
+                            }
+                            if (
+                              !["Enter", ",", "Tab"].includes(e.key) ||
+                              draft.trim() === ""
+                            )
+                              return;
+                            e.preventDefault();
+                            const typed = inviteEmails(draft);
+                            const valid = typed.filter(isEmail);
+                            f.handleChange(
+                              [
+                                ...new Set([
+                                  ...inviteEmails(f.state.value),
+                                  ...valid,
+                                ]),
+                              ].join("\n")
+                            );
+                            const invalid = typed.filter((x) => !isEmail(x));
+                            setDraft(invalid.join(" "));
+                            setError(
+                              invalid.length > 0
+                                ? t("phase5.invalidEmail")
+                                : null
+                            );
+                          }}
+                        />
+                      </div>
                     </Field>
                   )}
                 </form.Field>
