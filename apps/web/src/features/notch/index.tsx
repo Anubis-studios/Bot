@@ -85,6 +85,21 @@ const choosePresentation = (
       : manual && !mainFocused
         ? manual
         : automatic;
+const signedOut = (
+  mainVisible: boolean,
+  hovered: boolean
+): NotchPresentation => ({
+  route: "/idle",
+  sessionId: null,
+  identity: "signed-out",
+  faces: [{ botId: null, mood: "idle" }],
+  remaining: 0,
+  expanded: hovered,
+  hidden: mainVisible,
+  quietUntil: null,
+  attention: null,
+  queue: [],
+});
 export const NotchShell = ({
   context,
   navigate,
@@ -100,7 +115,11 @@ export const NotchShell = ({
   const animation = notchMotion(reduced);
   const motionId = useId();
   const [layout, setLayout] = useState(context.layout);
-  const [app, setApp] = useState({ mainFocused: false });
+  const [app, setApp] = useState({
+    mainVisible: true,
+    mainFocused: false,
+    signedIn: false,
+  });
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(document.hasFocus());
   const [dictationError, setDictationError] = useState<
@@ -142,12 +161,9 @@ export const NotchShell = ({
   const inputs = useNotchInputs(transport, app, hovered, acks, snoozes);
   const [manual, setManual] = useState<NotchPresentation | null>(null);
   const automatic = presentNotch(inputs, inputs.now ?? 0);
-  const target = choosePresentation(
-    automatic,
-    manual,
-    preview,
-    app.mainFocused
-  );
+  const target = app.signedIn
+    ? choosePresentation(automatic, manual, preview, app.mainFocused)
+    : signedOut(app.mainVisible, hovered);
   const [shown, setShown] = useState(target);
   const [bodySize, setBodySize] = useState<{
     identity: string;
@@ -249,9 +265,12 @@ export const NotchShell = ({
       transport,
       (event) => {
         if (event.type === "layout") setLayout(event.layout);
-        else if (event.type === "app")
-          setApp({ mainFocused: event.mainFocused });
-        else if (event.type === "reaction")
+        else if (event.type === "app") {
+          setApp(event);
+          if (event.signedIn) return;
+          setManual(null);
+          setHovered(false);
+        } else if (event.type === "reaction")
           setReaction({ sessionId: event.sessionId, until: Date.now() + 600 });
         else if (event.type === "shortcut") setHovered(true);
         else if (event.type === "preview") {
@@ -523,6 +542,7 @@ export const NotchShell = ({
         ...context,
         layout,
         presentation: shown,
+        signedIn: app.signedIn,
         open,
         snooze,
         focused,
@@ -697,13 +717,15 @@ export const NotchShell = ({
                               ? t("notch.quiet.until", {
                                   time: shown.quietUntil,
                                 })
-                              : t(
-                                  shown.route === "/idle"
-                                    ? "shell.status.ready"
-                                    : shown.route === "/call"
-                                      ? "notch.listening.title"
-                                      : `notch.wings.${shown.attention?.kind ?? "idle"}`
-                                )}
+                              : !app.signedIn
+                                ? "AbacusAI Bot"
+                                : t(
+                                    shown.route === "/idle"
+                                      ? "shell.status.ready"
+                                      : shown.route === "/call"
+                                        ? "notch.listening.title"
+                                        : `notch.wings.${shown.attention?.kind ?? "idle"}`
+                                  )}
                         </motion.span>
                       </div>
                     }
@@ -748,7 +770,7 @@ export const NotchShell = ({
                               <X aria-hidden />
                             </NotchAction>
                           )}
-                          {shown.expanded && (
+                          {shown.expanded && app.signedIn && (
                             <NotchAction
                               label={t("notch.actions.settings")}
                               variant="ghost"

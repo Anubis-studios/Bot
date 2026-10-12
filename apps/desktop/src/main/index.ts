@@ -20,7 +20,10 @@ import type {
 } from "@abacus-ai/contract/contracts";
 import { funnelDetail, isFunnelStep } from "@abacus-ai/contract/funnel";
 import { THEME_FILE_MAX_BYTES } from "@abacus-ai/contract/look";
-import { PROVIDER_ENV_VARS } from "@abacus-ai/contract/settings";
+import {
+  canSignOutOfAbacus,
+  PROVIDER_ENV_VARS,
+} from "@abacus-ai/contract/settings";
 import {
   app,
   shell,
@@ -1253,9 +1256,9 @@ const appOperations: AppOperations = {
   // The local account; see shared/account.ts for why it is optional.
   account: {
     get: () => readAccountState(),
-    skip: () => skipOnboarding(),
-    signOut: () => signOut(),
-    forget: () => forgetAccount(),
+    skip: () => accountChanged(skipOnboarding()),
+    signOut: () => accountChanged(signOut()),
+    forget: () => accountChanged(forgetAccount()),
   },
 
   // A summary of this run plus every retained day of logs: the run someone
@@ -1423,6 +1426,10 @@ const notchNotifications = new NotchNotificationPolicy({
   presented: (key) => notchController?.hasPresented(key) ?? false,
 });
 let notchBase: RendererBase | null = null;
+const accountChanged = <T>(state: T): T => {
+  notchController?.appChanged();
+  return state;
+};
 
 /**
  * Mount the oRPC router on the MessagePort transport, beside the legacy IPC
@@ -1444,14 +1451,21 @@ function installRpc(host: HostOperations): void {
     unregister: (id) => rpcTransport?.unregisterRendererContents(id),
     revealMain: revealMainWindow,
     mainState: () => ({
-      visible: mainWindowRef?.isVisible() ?? false,
+      visible:
+        (mainWindowRef?.isVisible() ?? false) && !mainWindowRef?.isMinimized(),
       focused: mainWindowRef?.isFocused() ?? false,
+      signedIn:
+        readAccountState().onboarded && canSignOutOfAbacus(readSettings()),
     }),
     publish: (webContentsId, event) =>
       emitBusChannel("notch", { webContentsId, event }),
     command: (command) => emitBusChannel("notch-open", command),
   });
   prefsStore.onChanged(() => notchController?.schedule());
+  mainEventBus.listen(
+    (event) => event.type === "credentials-changed",
+    () => notchController?.appChanged()
+  );
   const cueArbiter = new CueArbiter({
     windows: {
       mainRendererId: () => rendererWebContents()?.id ?? null,

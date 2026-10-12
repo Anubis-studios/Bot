@@ -1,4 +1,11 @@
-import { ExternalLink, MessageCircle, Mic, Pause, Play } from "lucide-react";
+import {
+  ExternalLink,
+  LogIn,
+  MessageCircle,
+  Mic,
+  Pause,
+  Play,
+} from "lucide-react";
 import { motion } from "motion/react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -11,11 +18,26 @@ import { isCheckInRoutine } from "#renderer/lib/bots/check-in";
 import { useNotch } from "#renderer/notch-context";
 
 export const IdleView = () => {
-  const { db, message, transport } = useNotch();
+  const { db, message, transport, signedIn } = useNotch();
   const { t } = useTranslation();
   const animation = useNotchMotion();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
+  if (!signedIn)
+    return (
+      <motion.div {...animation} className="notch-idle">
+        <h2>{t("onboarding.signInCta")}</h2>
+        <div className="notch-idle-actions">
+          <NotchAction
+            label={t("userMenu.signIn")}
+            onClick={() => void transport.client.notch.revealApp({})}
+            data-primary
+          >
+            <LogIn aria-hidden />
+          </NotchAction>
+        </div>
+      </motion.div>
+    );
   const bot = db.collections.bots.toArray.find((bot) => bot.channel == null);
   const routine = bot
     ? db.collections.routines.toArray.find((routine) =>
