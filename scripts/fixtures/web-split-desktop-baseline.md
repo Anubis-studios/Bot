@@ -8,7 +8,23 @@ renderer, a chunk split by a stray import), not against features. A feature
 that needs more is measured, reviewed and recorded here as a new baseline,
 in a commit of its own that says by how much it grew.
 
-## Current: `bc75d297c` (the Routines landing)
+## Current: `27f265ae` (the tool UI redesign, #436)
+
+**395 / 7445505 / 2501803.** Records the renderer at the merge of main into
+the tool UI branch (#436): grouped tool runs, the sessions deliverables card,
+per-pane title bar tabs, markdown tables, the visualizer widget, bash output
+and component tool rows, plus the sub-agent detail and dock fixes. Against
+`bc75d297c`: +5 chunks (+1.28%), +98481 bytes (+1.34%), +36134 gzip bytes
+(+1.47%). Part of that is what merged to main after `bc75d297c` (main stood
+just under the 1% allowance). The 1% allowance is unchanged.
+
+Measured from a local build of the merged tree (`check:react-compiler` build,
+macOS arm64); the chunk count equals what CI reported on this branch (395).
+This baseline-only change touches no renderer code.
+
+## History
+
+### `bc75d297c` (the Routines landing)
 
 **390 / 7347024 / 2465669.** Records the renderer at `bc75d297c`, the Routines
 landing (#431): with no routine open, the area shows the way to make one and
@@ -22,8 +38,6 @@ Measured with `regenerate-web-split-desktop-baseline.sh bc75d297c bc75d297c
 bc25648568bcc79597a09c974e0a8e56e2481596411e5ae84cc9e48fdff2e3a8` (isolated
 archives, frozen-lockfile install, Linux x64); this baseline-only change
 touches no renderer code.
-
-## History
 
 ### `43330457` (renderer as merged while CI was red)
 
