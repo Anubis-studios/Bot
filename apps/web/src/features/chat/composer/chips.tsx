@@ -766,6 +766,30 @@ export const ModelChip = ({
               <ComboboxEmpty>{t("chat.composer.noModels")}</ComboboxEmpty>
             </ComboboxList>
           )}
+          {binding.onUpgrade != null ? (
+            <button
+              type="button"
+              data-slot="chat-model-upgrade"
+              className="hover:bg-foreground/[0.06] focus-visible:ring-ring/40 mt-1 flex shrink-0 items-center gap-2 rounded-lg border-t px-2 py-2 text-start outline-none focus-visible:ring-2"
+              onClick={() => {
+                setOpen(false);
+                binding.onUpgrade?.();
+              }}
+            >
+              <Sparkles
+                aria-hidden
+                className="text-primary size-3.5 shrink-0"
+              />
+              <span className="flex min-w-0 flex-col">
+                <span className="text-xs font-medium">
+                  {t("chat.composer.upgradeModels")}
+                </span>
+                <span className="text-muted-foreground text-xs">
+                  {t("chat.composer.upgradeModelsPrice")}
+                </span>
+              </span>
+            </button>
+          ) : null}
           <Button
             variant="ghost"
             className="mt-1 h-8 shrink-0 justify-start rounded-lg border-t px-2 text-xs"

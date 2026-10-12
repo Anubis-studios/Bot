@@ -37,6 +37,8 @@ export interface ModelGroup {
 export interface ModelChipBinding {
   setup?: import("#renderer/components/model-setup/types").ModelSetupBinding;
   onConfigureProviders?(): void;
+  /** Free accounts only: the picker offers the top models behind an upgrade. */
+  onUpgrade?(): void;
   value: string | null;
   label: string;
   onChange(id: string | null): void;

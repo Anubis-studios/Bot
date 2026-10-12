@@ -15,6 +15,7 @@ import { usePrefs } from "#renderer/data/db/prefs";
 import { accountTier } from "#renderer/lib/credits";
 import { useMotionPreference } from "#renderer/lib/motion";
 import { useAppNavigate } from "#renderer/lib/navigation/use-app-navigate";
+import { openUpgrade } from "#renderer/lib/upgrade";
 import { Button } from "#renderer/ui/button";
 import { Input } from "#renderer/ui/input";
 import { Popover, PopoverTrigger, PopoverContent } from "#renderer/ui/popover";
@@ -75,6 +76,9 @@ export const useBotModelBinding = (
     value,
     onConfigureProviders: () =>
       void navigate({ to: "/settings/models", transition: "settings-in" }),
+    ...(accountTier(account.data) === "free"
+      ? { onUpgrade: () => void openUpgrade(transport.client) }
+      : {}),
     label:
       effectiveModelLabel(value, settings.data?.defaultModel, catalog) ??
       t("bots.form.modelDefault"),

@@ -18,7 +18,10 @@ import {
   draftStore,
   updateDraft,
 } from "#renderer/lib/continuity/composer-drafts";
+import { creditsTier } from "#renderer/lib/credits";
 import { useAppNavigate } from "#renderer/lib/navigation/use-app-navigate";
+import { openUpgrade } from "#renderer/lib/upgrade";
+import { useCreditsAccount } from "#renderer/lib/use-credits-account";
 
 import { useCheckoutQueries, useSessionsTransport } from "./queries";
 import { setSessionModel } from "./session-actions";
@@ -28,6 +31,7 @@ export const useSessionComposerModel = (row?: SessionRow, draftId?: string) => {
   const prefs = usePrefs();
   const transport = useSessionsTransport();
   const navigate = useAppNavigate();
+  const account = useCreditsAccount();
   const options = useCheckoutQueries({
     workspaceId: row?.workspaceId ?? "none",
     sessionId: row?.id,
@@ -115,6 +119,9 @@ export const useSessionComposerModel = (row?: SessionRow, draftId?: string) => {
       setup,
       onConfigureProviders: () =>
         void navigate({ to: "/settings/models", transition: "settings-in" }),
+      ...(creditsTier(account.data) === "free"
+        ? { onUpgrade: () => void openUpgrade(transport.client) }
+        : {}),
       value,
       label:
         effectiveModelLabel(value, settings.data?.defaultModel, models) ??
