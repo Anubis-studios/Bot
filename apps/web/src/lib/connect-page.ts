@@ -107,6 +107,11 @@ export class ConnectAttempt {
     });
   }
 
+  /** Stop waiting here only: the host keeps its watch, so a sign-in finished later still connects. */
+  release(): void {
+    this.abort.abort();
+  }
+
   /** Stop waiting, and have the host drop the connect: its sign-in and its watch. */
   cancel(): void {
     if (this.abort.signal.aborted) return;

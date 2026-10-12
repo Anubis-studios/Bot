@@ -1,12 +1,14 @@
 import { CONNECTORS, type Connector } from "@abacus-ai/connectors/registry";
 import { CheckIcon, LoaderCircleIcon, TriangleAlertIcon } from "lucide-react";
-import { useState, type Ref } from "react";
+import { useRef, useState, type Ref } from "react";
 
 import { ConnectorMark } from "#renderer/components/connector-mark";
 import { usePrefs } from "#renderer/data/db/prefs";
+import { connectErrorText } from "#renderer/lib/connect-page";
 import { IS_ELECTRON } from "#renderer/lib/platform";
 import { Button } from "#renderer/ui/button";
 
+import { ConnectFailed } from "../connect";
 import type { StepContext } from "./context";
 import { StepBody, StepButton, StepTitle } from "./kit";
 
@@ -47,10 +49,51 @@ export const ConnectorsStep = ({
   refresh(): Promise<unknown>;
   heading: Ref<HTMLHeadingElement>;
 }) => {
-  const { t, busy, props, perform, advance } = ctx;
+  const { t, busy, props, advance } = ctx;
   const prefs = usePrefs();
-  const [pending, setPending] = useState<string | null>(null);
-  const [failed, setFailed] = useState<string | null>(null);
+  // Each tile connects on its own: the page never waits on a connector, so a
+  // sign-in left open in the browser blocks neither the other tiles nor Continue.
+  const [pending, setPending] = useState<ReadonlySet<string>>(new Set());
+  const [failed, setFailed] = useState<Readonly<Record<string, string>>>({});
+  const attempts = useRef(new Map<string, number>());
+  const settle = (id: string, token: number, error: string | null) => {
+    if (attempts.current.get(id) !== token) return;
+    setPending((current) => {
+      const next = new Set(current);
+      next.delete(id);
+      return next;
+    });
+    if (error != null) setFailed((current) => ({ ...current, [id]: error }));
+  };
+  const start = (id: string) => {
+    const token = (attempts.current.get(id) ?? 0) + 1;
+    attempts.current.set(id, token);
+    setPending((current) => new Set(current).add(id));
+    setFailed(({ [id]: _cleared, ...rest }) => rest);
+    void Promise.resolve()
+      .then(() => props.connect?.(id))
+      .then(
+        // Connected shows from the statuses, which the host also announces.
+        () => refresh().catch(() => undefined),
+        (error: unknown) => {
+          // Backing out of the sign-in is not a failure: the tile goes back to Connect.
+          if (error instanceof ConnectFailed && error.message === "timeout")
+            return;
+          throw error;
+        }
+      )
+      .then(
+        () => settle(id, token, null),
+        (error: unknown) =>
+          settle(
+            id,
+            token,
+            error instanceof ConnectFailed
+              ? connectErrorText(t, error.message)
+              : t("onboarding.frame.failed")
+          )
+      );
+  };
   const tiles = connectorTiles(statuses);
   const connectedAny = tiles.some(
     (entry) => statuses?.[entry.id]?.state === "connected"
@@ -76,14 +119,14 @@ export const ConnectorsStep = ({
       >
         {tiles.map((entry) => {
           const connected = statuses?.[entry.id]?.state === "connected";
-          const state =
-            pending === entry.id
+          const reason = failed[entry.id];
+          const state = connected
+            ? "connected"
+            : pending.has(entry.id)
               ? "connecting"
-              : failed === entry.id || statuses?.[entry.id]?.state === "error"
+              : reason != null || statuses?.[entry.id]?.state === "error"
                 ? "error"
-                : connected
-                  ? "connected"
-                  : "idle";
+                : "idle";
           return (
             <li key={entry.id} className="min-w-0">
               <Button
@@ -104,20 +147,7 @@ export const ConnectorsStep = ({
                 aria-pressed={connected}
                 aria-busy={state === "connecting"}
                 disabled={busy || connected}
-                onClick={() =>
-                  void perform(async () => {
-                    setPending(entry.id);
-                    setFailed(null);
-                    await Promise.resolve()
-                      .then(() => props.connect?.(entry.id))
-                      .then(() => refresh())
-                      .catch((error) => {
-                        setFailed(entry.id);
-                        throw error;
-                      })
-                      .finally(() => setPending(null));
-                  })
-                }
+                onClick={() => start(entry.id)}
               >
                 <ConnectorMark
                   id={entry.logo ?? entry.id}
@@ -156,6 +186,14 @@ export const ConnectorsStep = ({
                       </>
                     )}
                   </span>
+                  {state === "error" && reason != null && (
+                    <span
+                      className="text-destructive text-xs leading-4 font-normal"
+                      role="alert"
+                    >
+                      {reason}
+                    </span>
+                  )}
                 </span>
               </Button>
             </li>

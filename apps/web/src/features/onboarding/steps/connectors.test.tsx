@@ -147,54 +147,55 @@ describe("ConnectorsStep", () => {
   );
 });
 
-it.each(["connect", "refresh"] as const)(
-  "clears pending state and allows retry after a %s failure",
-  async (failure) => {
-    await initI18n();
-    const error = new Error("Connection failed");
-    const connect = vi.fn(async () => {});
-    const refresh = vi.fn(async () => {});
-    if (failure === "connect") {
-      connect.mockImplementationOnce(() => {
-        throw error;
-      });
-    } else {
-      refresh.mockRejectedValueOnce(error);
-    }
-    const context = ctx({ connect });
-    const errors: unknown[] = [];
-    context.perform = async (action) => {
-      try {
-        await action();
-      } catch (caught) {
-        errors.push(caught);
-      }
-    };
-    render(
-      <ConnectorsStep
-        ctx={context}
-        statuses={{}}
-        refresh={refresh}
-        heading={createRef()}
-      />
-    );
-    const button = screen.getByRole("button", { name: "Connect Gmail" });
-    fireEvent.click(button);
-    await vi.waitFor(() =>
-      expect(button.getAttribute("data-state")).toBe("error")
-    );
-    expect(button.getAttribute("aria-busy")).toBe("false");
-    expect(errors).toEqual([error]);
-    expect(refresh).toHaveBeenCalledTimes(failure === "connect" ? 0 : 1);
-    fireEvent.click(button);
-    await vi.waitFor(() =>
-      expect(button.getAttribute("data-state")).toBe("idle")
-    );
-    expect(connect).toHaveBeenCalledTimes(2);
-    expect(refresh).toHaveBeenCalledTimes(failure === "connect" ? 1 : 2);
-    expect(button.getAttribute("aria-busy")).toBe("false");
-  }
-);
+it("shows a failed connect on its tile and lets it retry", async () => {
+  await initI18n();
+  const connect = vi.fn(async () => {});
+  connect.mockImplementationOnce(() => {
+    throw new Error("Connection failed");
+  });
+  const refresh = vi.fn(async () => {});
+  render(
+    <ConnectorsStep
+      ctx={ctx({ connect })}
+      statuses={{}}
+      refresh={refresh}
+      heading={createRef()}
+    />
+  );
+  const button = screen.getByRole("button", { name: "Connect Gmail" });
+  fireEvent.click(button);
+  await vi.waitFor(() =>
+    expect(button.getAttribute("data-state")).toBe("error")
+  );
+  expect(button.getAttribute("aria-busy")).toBe("false");
+  expect(refresh).not.toHaveBeenCalled();
+  fireEvent.click(button);
+  await vi.waitFor(() =>
+    expect(button.getAttribute("data-state")).toBe("idle")
+  );
+  expect(connect).toHaveBeenCalledTimes(2);
+  expect(refresh).toHaveBeenCalledOnce();
+});
+
+it("leaves a tile idle when only the status refresh fails", async () => {
+  await initI18n();
+  const refresh = vi.fn(async () => {});
+  refresh.mockRejectedValueOnce(new Error("offline"));
+  render(
+    <ConnectorsStep
+      ctx={ctx()}
+      statuses={{}}
+      refresh={refresh}
+      heading={createRef()}
+    />
+  );
+  const button = screen.getByRole("button", { name: "Connect Gmail" });
+  fireEvent.click(button);
+  await vi.waitFor(() => expect(refresh).toHaveBeenCalledOnce());
+  await vi.waitFor(() =>
+    expect(button.getAttribute("data-state")).toBe("idle")
+  );
+});
 
 it("keeps connecting visible until the refreshed status resolves", async () => {
   await initI18n();

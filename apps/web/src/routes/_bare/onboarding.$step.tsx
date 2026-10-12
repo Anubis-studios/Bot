@@ -17,7 +17,7 @@ import {
   type OnboardingExit,
 } from "#renderer/features/onboarding/actions";
 import {
-  cancelOnboardingConnect,
+  releaseOnboardingConnect,
   connectOnboarding,
 } from "#renderer/features/onboarding/connect";
 import { previewFirstBot } from "#renderer/features/onboarding/first-bot";
@@ -80,7 +80,7 @@ const OnboardingRoute = () => {
         void transport.client.auth.openRouter.cancel({}).catch(() => undefined);
         void cancelSignIn(transport).catch(() => undefined);
       }
-      if (step === "connectors") cancelOnboardingConnect();
+      if (step === "connectors") releaseOnboardingConnect();
     };
   }, [db, transport, step]);
   const auth = (intent: "signup" | "signin", profileId?: string) => {

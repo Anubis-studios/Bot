@@ -9,11 +9,12 @@ import { connectTarget } from "#renderer/lib/platform-system";
 /** A connect that did not finish, with the outcome's reason for the step to show. */
 export class ConnectFailed extends Error {}
 
-/** The step's pending connect; leaving the step cancels it. */
+/** The step's pending connect. */
 let waiting: ConnectAttempt | null = null;
 
-export const cancelOnboardingConnect = (): void => {
-  waiting?.cancel();
+/** Leaving the step stops waiting; the host still finishes a sign-in left open in the browser. */
+export const releaseOnboardingConnect = (): void => {
+  waiting?.release();
   waiting = null;
 };
 
