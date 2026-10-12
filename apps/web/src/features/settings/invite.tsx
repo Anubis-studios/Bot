@@ -5,6 +5,7 @@ import * as v from "valibot";
 
 import { useAppForm } from "#renderer/components/form-kit";
 import { Segments } from "#renderer/components/form-kit/controls";
+import { Spinner } from "#renderer/components/spinner";
 import { useAppNavigate } from "#renderer/lib/navigation/use-app-navigate";
 import { IS_ELECTRON } from "#renderer/lib/platform";
 import { showInfo } from "#renderer/lib/toast";
@@ -191,6 +192,17 @@ export const InviteDialog = ({
                   {t("phase5.connectGmail")}
                 </Button>
               )}
+              {channel === "gmail" &&
+                summary.data.gmailConnected &&
+                gmail.isPending && (
+                  <p
+                    role="status"
+                    className="text-muted-foreground flex items-center gap-2 py-1 text-sm"
+                  >
+                    <Spinner />
+                    {t("phase5.loadingGmailContacts")}
+                  </p>
+                )}
               <div className="max-h-48 overflow-auto">
                 {contacts.map((c) => (
                   <label
