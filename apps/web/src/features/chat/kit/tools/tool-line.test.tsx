@@ -106,4 +106,65 @@ describe("R2-T12/T13 rendered tool rows", () => {
     await waitFor(() => expect(screen.queryByText("live line")).toBeNull());
     expect(document.querySelector('[data-status="done"]')).toBeTruthy();
   });
+
+  it("renders todo_write as a checklist with struck-through completed items", async () => {
+    const relay = await memoryRelay();
+    relay.emitAll([
+      ...b.sessionReady(),
+      b.runStarted("r"),
+      b.textStart("a"),
+      ...b.toolCall("todo", "todo_write", "a", {
+        todos: [
+          { content: "first", status: "completed" },
+          { content: "second", status: "in_progress" },
+        ],
+      }),
+      b.toolResult("todo", { text: "ok" }),
+      b.textEnd("a"),
+      b.runFinished("r"),
+    ]);
+    current = await renderRelay(relay, "session");
+    await waitFor(() => {
+      openRuns();
+      expect(document.querySelector('[data-tool="todo_write"]')).toBeTruthy();
+    });
+    const trigger = document.querySelector(
+      '[data-tool="todo_write"] button[aria-expanded]'
+    ) as HTMLElement;
+    fireEvent.click(trigger);
+    const first = await screen.findByText("first");
+    expect(first.className).toContain("line-through");
+    expect(screen.getByText("second").className).not.toContain("line-through");
+  });
+
+  it("styles ANSI bash output and shows the exit code and duration", async () => {
+    const relay = await memoryRelay();
+    relay.emitAll([
+      ...b.sessionReady(),
+      b.runStarted("r"),
+      b.textStart("a"),
+      ...b.toolCall("bash", "bash", "a", { command: "make" }),
+      b.toolResult("bash", {
+        text: "x",
+        terminal: {
+          output: "\u001b[31mboom\u001b[0m",
+          exitCode: 2,
+          durationMs: 1500,
+        } as { output: string },
+      }),
+      b.textEnd("a"),
+      b.runFinished("r"),
+    ]);
+    current = await renderRelay(relay, "session");
+    await waitFor(() => {
+      openRuns();
+      expect(screen.queryByRole("button", { name: /make/ })).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole("button", { name: /make/ }));
+    const boom = await screen.findByText("boom");
+    expect(boom.getAttribute("style")).toContain("color");
+    const footer = document.querySelector("[data-bash-footer]");
+    expect(footer?.textContent).toContain("exit 2");
+    expect(footer?.textContent).toContain("1.5s");
+  });
 });

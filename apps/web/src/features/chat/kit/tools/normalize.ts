@@ -36,6 +36,7 @@ export interface NormalizedTool {
     command?: string;
     output: string;
     exitCode?: number;
+    durationMs?: number;
     timedOut?: boolean;
     background?: boolean;
   };
@@ -169,6 +170,11 @@ const normalizeLive = (
   const terminalOutput =
     str(asRecord(output?.terminal)?.output) ?? live.output ?? undefined;
   const command = str(input.command);
+  const terminalRecord = asRecord(output?.terminal);
+  const exitCode = num(terminalRecord?.exitCode ?? output?.exitCode);
+  const durationMs = num(
+    terminalRecord?.durationMs ?? terminalRecord?.duration ?? output?.duration
+  );
   const text =
     str(output?.text) ??
     (result != null && output == null ? resultText(result) : "");
@@ -191,6 +197,8 @@ const normalizeLive = (
           terminal: {
             ...(command != null ? { command } : {}),
             output: terminalOutput ?? "",
+            ...(exitCode != null ? { exitCode } : {}),
+            ...(durationMs != null ? { durationMs } : {}),
           },
         }
       : {}),
@@ -282,6 +290,9 @@ const normalizeMigrated = (
             : {}),
           ...(num(data.exitCode) != null
             ? { exitCode: num(data.exitCode)! }
+            : {}),
+          ...(num(data.duration) != null
+            ? { durationMs: num(data.duration)! }
             : {}),
           ...(typeof data.timedOut === "boolean"
             ? { timedOut: data.timedOut }
@@ -380,3 +391,56 @@ export const parseUnified = (unified: string): DiffLine[] =>
           ? { kind: "del", text: line.slice(1) }
           : { kind: "same", text: line.startsWith(" ") ? line.slice(1) : line }
     );
+
+/**
+ * File reads may carry `   12\u2192` line-number prefixes. When every
+ * non-empty line has one, strip them and report the first number.
+ */
+export const stripLineNumbers = (
+  content: string
+): { text: string; startLine?: number } => {
+  const lines = content.split("\n");
+  const prefix = /^\s*(\d+)\u2192/;
+  const filled = lines.filter((line) => line !== "");
+  if (filled.length === 0 || !filled.every((line) => prefix.test(line)))
+    return { text: content };
+  return {
+    text: lines.map((line) => line.replace(prefix, "")).join("\n"),
+    startLine: Number(prefix.exec(filled[0]!)![1]),
+  };
+};
+
+export interface TodoItem {
+  content: string;
+  status: "pending" | "in_progress" | "completed";
+}
+
+/** The checklist of a `todo` / `todo_write` call's input, if it has one. */
+export const todoItems = (input: Record<string, unknown>): TodoItem[] =>
+  (Array.isArray(input.todos) ? input.todos : []).flatMap((raw): TodoItem[] => {
+    const item = asRecord(raw);
+    if (item == null) return [];
+    const content = str(item.content) ?? str(item.title) ?? str(item.text);
+    if (content == null) return [];
+    const status = item.status;
+    return [
+      {
+        content: content.trim(),
+        status:
+          status === "completed" || status === "in_progress"
+            ? status
+            : "pending",
+      },
+    ];
+  });
+
+/** `agent-tools_x` / `mcp__server__x` to "X" for tools without a title. */
+export const humanToolName = (name: string): string => {
+  const bare = name
+    .replace(/^mcp__[^_]+(?:_[^_]+)*?__/, "")
+    .replace(/^agent-tools[_-]/, "");
+  const words = bare.split(/[_\-\s]+/).filter((word) => word !== "");
+  return words.length === 0
+    ? name
+    : words.map((word) => word[0]!.toUpperCase() + word.slice(1)).join(" ");
+};

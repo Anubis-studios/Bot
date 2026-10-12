@@ -35,6 +35,7 @@ const KNOWN = [
   "batch_edit",
   "notebook_edit",
   "todo",
+  "todo_write",
 ];
 const KNOWN_TOOL_WIDGETS: Record<string, Widget> = Object.fromEntries(
   KNOWN.map((name) => [name, lineFor(name)])

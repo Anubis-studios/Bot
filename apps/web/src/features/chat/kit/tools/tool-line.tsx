@@ -16,7 +16,10 @@ import {
   FileText,
   Globe,
   ListChecks,
+  LoaderCircle,
   Search,
+  Square,
+  SquareCheck,
   Terminal,
   Wrench,
   type LucideIcon,
@@ -45,16 +48,26 @@ import { formatElapsed, useSeconds } from "../clock";
 import { useChatView, useSubagentScope } from "../context";
 import { useMessageScope } from "../message-scope";
 import { selectPermission } from "../permissions/selection";
+import { parseAnsi, tailLines } from "./ansi";
 import {
   diffLines,
+  humanToolName,
   normalizeTool,
   parseUnified,
+  stripLineNumbers,
+  todoItems,
   toolInput,
   type DiffLine,
   type NormalizedTool,
   type ToolStatus,
 } from "./normalize";
-import { kindOf, toolMeta, type ToolMeta } from "./tool-meta";
+import {
+  kindOf,
+  resolveWorkspacePath,
+  toolMeta,
+  toolOpenPath,
+  type ToolMeta,
+} from "./tool-meta";
 
 const KIND_ICONS: Record<string, LucideIcon> = {
   read: FileText,
@@ -92,6 +105,7 @@ export type Expander =
   | "diff"
   | "read"
   | "browser"
+  | "todo"
   | "generic"
   | "none";
 
@@ -103,7 +117,7 @@ export const expanderFor = (name: string): Expander => {
   )
     return "diff";
   if (name.startsWith("browser")) return "browser";
-  if (name === "todo") return "none";
+  if (name === "todo" || name === "todo_write") return "todo";
   return "generic";
 };
 
@@ -155,11 +169,19 @@ const useNormalizedTool = (
     { runActive: live.runActive, needsYou: live.needsYou != null },
     parsePartialJSON
   );
-  return {
-    tool,
-    input: toolInput(part, parsePartialJSON),
-    needsYou: live.needsYou,
-  };
+  const input = toolInput(part, parsePartialJSON);
+  // A write whose result carries no diff still shows what it wrote, as an
+  // all-add diff.
+  const written = typeof input.content === "string" ? input.content : null;
+  const shown: NormalizedTool =
+    part.name === "write" &&
+    tool.diff == null &&
+    written != null &&
+    tool.status !== "failed" &&
+    tool.status !== "refused"
+      ? { ...tool, diff: { final: written } }
+      : tool;
+  return { tool: shown, input, needsYou: live.needsYou };
 };
 
 export const toolTitle = (
@@ -167,9 +189,10 @@ export const toolTitle = (
   input: Record<string, unknown>
 ): string => {
   try {
-    return buildToolTitle(name, input);
+    const title = buildToolTitle(name, input);
+    return title === name ? humanToolName(name) : title;
   } catch {
-    return name;
+    return humanToolName(name);
   }
 };
 
@@ -205,6 +228,12 @@ const Meta = ({ meta }: { meta: ToolMeta }) => {
       return (
         <span className="text-muted-foreground">
           {formatElapsed(now - meta.since)}
+        </span>
+      );
+    case "todo":
+      return (
+        <span className="text-muted-foreground">
+          {t("chat.tool.todoProgress", { done: meta.done, total: meta.total })}
         </span>
       );
     case "exit":
@@ -267,26 +296,64 @@ const linesOfDiff = (diff: NonNullable<NormalizedTool["diff"]>): DiffLine[] =>
         diff.final == null || diff.final === "" ? [] : diff.final.split("\n")
       );
 
+const AnsiText = ({ text }: { text: string }) => (
+  <>
+    {parseAnsi(text).map((run, index) => (
+      <span key={index} style={run.style}>
+        {run.text}
+      </span>
+    ))}
+  </>
+);
+
+/** The last lines of a still-running command, shown even while collapsed. */
+const LivePreview = ({ output }: { output: string }) => {
+  const tail = tailLines(output, 4).text;
+  return tail === "" ? null : (
+    <pre
+      className="chat-terminal ms-5 mt-1 max-h-16 text-xs"
+      data-live-output
+      aria-live="off"
+    >
+      <AnsiText text={tail} />
+    </pre>
+  );
+};
+
 const BashBody = ({ tool }: { tool: NormalizedTool }) => {
+  const { t } = useTranslation();
   const ref = useRef<HTMLPreElement>(null);
   const [following, setFollowing] = useState(true);
   const output = tool.terminal?.output ?? tool.text;
-  const lines = output.split("\n");
-  const tail = lines.length > 2000 ? lines.slice(-2000).join("\n") : output;
+  const { text: tail, hidden } = tailLines(output);
+  const running = tool.status === "running";
   useEffect(() => {
     const element = ref.current;
-    if (element != null && following && tool.status === "running")
+    if (element != null && following && running)
       element.scrollTop = element.scrollHeight;
-  }, [tail, following, tool.status]);
+  }, [tail, following, running]);
+  const exitCode = tool.terminal?.exitCode;
+  const durationMs = tool.terminal?.durationMs;
   return (
     <div className="flex flex-col gap-1.5">
       {tool.terminal?.command != null ? (
         <div className="chat-mono text-xs">{`$ ${tool.terminal.command}`}</div>
       ) : null}
-      {tail === "" ? null : (
+      {hidden > 0 ? (
+        <div className="text-muted-foreground text-xs">
+          {t("chat.tool.bashEarlierHidden", { count: hidden })}
+        </div>
+      ) : null}
+      {tail === "" ? (
+        running ? null : (
+          <div className="text-muted-foreground chat-mono text-xs">
+            {t("chat.tool.bashNoOutput")}
+          </div>
+        )
+      ) : (
         <pre
           ref={ref}
-          className="chat-terminal"
+          className="chat-terminal max-h-56"
           onScroll={(event) => {
             const element = event.currentTarget;
             setFollowing(
@@ -295,12 +362,77 @@ const BashBody = ({ tool }: { tool: NormalizedTool }) => {
             );
           }}
         >
-          {tail}
+          <AnsiText text={tail} />
         </pre>
       )}
+      {!running && (exitCode != null || durationMs != null) ? (
+        <div
+          className="chat-mono flex items-center gap-2 text-xs"
+          data-bash-footer
+        >
+          {exitCode != null ? (
+            <span
+              className={
+                exitCode === 0
+                  ? "text-[var(--chat-status-done)]"
+                  : "text-destructive"
+              }
+            >
+              {t("chat.tool.meta.exit", { code: exitCode })}
+            </span>
+          ) : null}
+          {durationMs != null ? (
+            <span className="text-muted-foreground">
+              {formatElapsed(durationMs)}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 };
+
+const TodoBody = ({ input }: { input: Record<string, unknown> }) => (
+  <ul className="flex flex-col gap-0.5">
+    {todoItems(input).map((item, index) => (
+      <li
+        key={index}
+        data-status={item.status}
+        className="flex items-center gap-2 py-0.5 text-xs"
+      >
+        {item.status === "completed" ? (
+          <SquareCheck
+            aria-hidden
+            className="size-3 shrink-0 text-[var(--chat-status-done)]"
+          />
+        ) : item.status === "in_progress" ? (
+          <LoaderCircle
+            aria-hidden
+            className="size-3 shrink-0 text-[var(--chat-status-running)]"
+          />
+        ) : (
+          <Square
+            aria-hidden
+            className="text-muted-foreground size-3 shrink-0"
+          />
+        )}
+        <span
+          className={cn(
+            item.status === "completed"
+              ? "text-muted-foreground line-through"
+              : item.status === "in_progress"
+                ? "text-foreground"
+                : "text-secondary-foreground"
+          )}
+        >
+          {item.content}
+        </span>
+      </li>
+    ))}
+  </ul>
+);
+
+const READ_LINES = 80;
 
 const ReadBody = ({
   tool,
@@ -312,27 +444,44 @@ const ReadBody = ({
   const { t } = useTranslation();
   const { onOpenFile, workspaceRoot } = useChatView();
   const highlightCode = useCodeHighlighter();
-  const content = tool.read?.content ?? tool.text;
+  const raw = tool.read?.content ?? tool.text;
+  const stripped = stripLineNumbers(raw);
   const path =
     tool.read?.filePath ??
     (typeof input.path === "string" ? input.path : undefined);
-  const shown = content.split("\n").slice(0, 200).join("\n");
-  const abs =
-    path == null
-      ? null
-      : path.startsWith("/") ||
-          /^[A-Za-z]:[\\/]/.test(path) ||
-          workspaceRoot == null
-        ? path
-        : `${workspaceRoot.replace(/[\\/]+$/, "")}/${path}`;
+  const lines = stripped.text.split("\n");
+  const shown = lines.slice(0, READ_LINES).join("\n");
+  const more = lines.length - READ_LINES;
+  const start =
+    stripped.startLine ??
+    tool.read?.startLine ??
+    (typeof input.offset === "number" ? input.offset : 1);
+  const abs = path == null ? null : resolveWorkspacePath(path, workspaceRoot);
   return (
     <div className="flex flex-col gap-1.5">
-      <pre
-        className="chat-terminal"
-        dangerouslySetInnerHTML={{
-          __html: highlightCode(shown, languageForPath(path)),
-        }}
-      />
+      <div className="flex gap-2">
+        <pre
+          className="text-muted-foreground chat-mono shrink-0 py-2.5 text-end text-xs leading-[1.6] select-none"
+          aria-hidden
+          data-line-numbers
+        >
+          {lines
+            .slice(0, READ_LINES)
+            .map((_, index) => start + index)
+            .join("\n")}
+        </pre>
+        <pre
+          className="chat-terminal min-w-0 flex-1"
+          dangerouslySetInnerHTML={{
+            __html: highlightCode(shown, languageForPath(path)),
+          }}
+        />
+      </div>
+      {more > 0 ? (
+        <div className="text-muted-foreground text-xs">
+          {t("chat.tool.readMore", { count: more })}
+        </div>
+      ) : null}
       {abs != null && onOpenFile != null ? (
         <Button
           variant="ghost"
@@ -408,27 +557,49 @@ const Body = ({
         </div>
       );
     case "generic":
-      return tool.formatted != null ? (
-        <Markdown
-          content={tool.formatted}
-          role="assistant"
-          workspaceRoot={workspaceRoot}
-        />
-      ) : tool.text === "" ? null : (
-        <pre className="chat-terminal">{tool.text}</pre>
+      return (
+        <div className="flex flex-col gap-2">
+          {Object.keys(input).length === 0 ? null : (
+            <div className="flex flex-col gap-1">
+              <div className="text-muted-foreground text-xs">
+                {t("chat.tool.inputLabel")}
+              </div>
+              <pre className="chat-terminal max-h-40">
+                {JSON.stringify(input, null, 2)}
+              </pre>
+            </div>
+          )}
+          {tool.formatted != null ? (
+            <Markdown
+              content={tool.formatted}
+              role="assistant"
+              workspaceRoot={workspaceRoot}
+            />
+          ) : tool.text === "" ? null : (
+            <pre className="chat-terminal">{tool.text}</pre>
+          )}
+        </div>
       );
+    case "todo":
+      return <TodoBody input={input} />;
     case "none":
       return null;
   }
 };
 
-const hasBody = (expander: Expander, tool: NormalizedTool): boolean => {
+const hasBody = (
+  expander: Expander,
+  tool: NormalizedTool,
+  input: Record<string, unknown>
+): boolean => {
   if (expander === "none") return false;
+  if (expander === "todo") return todoItems(input).length > 0;
   if (expander === "bash") return tool.terminal != null || tool.text !== "";
   if (expander === "diff") return tool.diff != null || tool.text !== "";
   return (
     tool.text !== "" ||
     tool.formatted != null ||
+    (expander === "generic" && Object.keys(input).length > 0) ||
     tool.error != null ||
     expander === "browser"
   );
@@ -454,7 +625,8 @@ export const ToolLine = (props: ToolLineProps) => {
 };
 const MountedToolLine = ({ part, result, expander: fixed }: ToolLineProps) => {
   const { t } = useTranslation();
-  const { threadId, skin, session } = useChatView();
+  const { threadId, skin, session, onOpenFile, workspaceRoot } = useChatView();
+  const [open, setOpen] = useState(false);
   const message = useMessageScope().message;
   const runStart = useThreadStore(
     session,
@@ -476,7 +648,8 @@ const MountedToolLine = ({ part, result, expander: fixed }: ToolLineProps) => {
     tool.status === "running" ? firstSeen : null
   );
   const bodyId = useId();
-  const expandable = hasBody(expander, tool);
+  const openPath = toolOpenPath(part.name, input, workspaceRoot);
+  const expandable = hasBody(expander, tool, input);
   const row = (
     <>
       <span
@@ -498,7 +671,12 @@ const MountedToolLine = ({ part, result, expander: fixed }: ToolLineProps) => {
     </>
   );
   return (
-    <Collapsible className="chat-tool-line" data-tool={part.name}>
+    <Collapsible
+      className="chat-tool-line"
+      data-tool={part.name}
+      open={open}
+      onOpenChange={setOpen}
+    >
       <div className="text-muted-foreground flex min-h-7 items-center gap-2 font-mono text-xs">
         {expandable ? (
           <CollapsibleTrigger
@@ -514,6 +692,21 @@ const MountedToolLine = ({ part, result, expander: fixed }: ToolLineProps) => {
         ) : (
           <div className="flex min-w-0 flex-1 items-center gap-2">{row}</div>
         )}
+        {openPath != null && onOpenFile != null ? (
+          <button
+            type="button"
+            data-open-path={openPath}
+            title={openPath}
+            aria-label={t("chat.tool.openPath", { path: openPath })}
+            className="focus-visible:ring-ring hover:text-foreground max-w-[40%] shrink-0 truncate rounded-md underline-offset-2 outline-none hover:underline focus-visible:ring-2"
+            onClick={() => onOpenFile(openPath)}
+          >
+            {openPath
+              .replace(/[\\/]+$/, "")
+              .split(/[\\/]/)
+              .at(-1) ?? openPath}
+          </button>
+        ) : null}
         {needsYou != null && skin === "session" ? (
           <Button
             variant="ghost"
@@ -524,6 +717,9 @@ const MountedToolLine = ({ part, result, expander: fixed }: ToolLineProps) => {
           </Button>
         ) : null}
       </div>
+      {!open && tool.status === "running" && expander === "bash" ? (
+        <LivePreview output={tool.terminal?.output ?? ""} />
+      ) : null}
       {expandable ? (
         <CollapsibleContent id={bodyId} className="ps-5 pt-1 pb-2">
           <Body

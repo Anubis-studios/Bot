@@ -3041,7 +3041,15 @@
       "summaryOtherActive_one": "Using {{count}} tool",
       "summaryOtherActive_other": "Using {{count}} tools",
       "summaryFailed_one": "{{count}} failed",
-      "summaryFailed_other": "{{count}} failed"
+      "summaryFailed_other": "{{count}} failed",
+      "bashEarlierHidden_one": "{{count}} earlier line hidden",
+      "bashEarlierHidden_other": "{{count}} earlier lines hidden",
+      "bashNoOutput": "(no output)",
+      "readMore_one": "+{{count}} more line",
+      "readMore_other": "+{{count}} more lines",
+      "inputLabel": "Input",
+      "todoProgress": "{{done}} of {{total}} done",
+      "openPath": "Open {{path}}"
     },
     "transcript": {
       "jump": "Jump to the end",
