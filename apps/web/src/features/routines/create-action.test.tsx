@@ -25,33 +25,45 @@ const options = (tier: string) => ({
     account: { abacus: os.account.abacus.handler(() => account(tier)) },
   },
 });
-it("opens one upgrade popover instead of the routine form for free users", async () => {
-  const app = await renderApp("/routines", options("free"));
-  try {
-    const nav = await screen.findByRole("navigation", { name: "Routines" });
-    const create = await waitFor(() => {
-      const button = within(nav).getByRole("button", { name: "New routine" });
-      expect(button.getAttribute("aria-haspopup")).toBe("dialog");
-      return button;
-    });
-    fireEvent.click(create);
-    expect(document.querySelector('[data-slot="upgrade-promo"]')).toBeNull();
-    expect(await screen.findByText("Unlock routines")).toBeTruthy();
-    await waitFor(() =>
-      expect(screen.getAllByRole("button", { name: "Upgrade" })).toHaveLength(1)
-    );
-    expect(
-      Boolean(screen.queryByRole("button", { name: "Download desktop" }))
-    ).toBe(IS_BROWSER);
-    expect(screen.queryByRole("textbox", { name: "Instruction" })).toBeNull();
-    expect(app.router.state.location.pathname).toBe("/routines");
-    expect(app.db.routines.rows.size).toBe(2);
-  } finally {
-    app.view.unmount();
-    await app.cleanup();
+it.runIf(IS_BROWSER)(
+  "opens one upgrade popover instead of the routine form for free users",
+  async () => {
+    const app = await renderApp("/routines", options("free"));
+    try {
+      const nav = await screen.findByRole("navigation", { name: "Routines" });
+      const create = await waitFor(() => {
+        const button = within(nav).getByRole("button", { name: "New routine" });
+        expect(button.getAttribute("aria-haspopup")).toBe("dialog");
+        return button;
+      });
+      fireEvent.click(create);
+      expect(document.querySelector('[data-slot="upgrade-promo"]')).toBeNull();
+      expect(await screen.findByText("Unlock routines")).toBeTruthy();
+      await waitFor(() =>
+        expect(screen.getAllByRole("button", { name: "Upgrade" })).toHaveLength(
+          1
+        )
+      );
+      expect(
+        screen.getByRole("button", { name: "Download desktop" })
+      ).toBeTruthy();
+      expect(screen.queryByRole("textbox", { name: "Instruction" })).toBeNull();
+      expect(app.router.state.location.pathname).toBe("/routines");
+      expect(app.db.routines.rows.size).toBe(2);
+    } finally {
+      app.view.unmount();
+      await app.cleanup();
+    }
   }
-});
-it.each(["basic", "go", "pro", "max", "enterprise"])(
+);
+it.each([
+  ...(IS_BROWSER ? [] : ["free"]),
+  "basic",
+  "go",
+  "pro",
+  "max",
+  "enterprise",
+])(
   "keeps routine creation available for %s",
   async (tier) => {
     const app = await renderApp("/routines", options(tier));
@@ -79,15 +91,18 @@ it.each(["basic", "go", "pro", "max", "enterprise"])(
   },
   15000
 );
-it("blocks the direct free create route before showing the form", async () => {
-  const app = await renderApp("/routines/new", options("free"));
-  try {
-    expect(
-      await screen.findByRole("dialog", { name: "Unlock routines" })
-    ).toBeTruthy();
-    expect(screen.queryByRole("textbox", { name: "Instruction" })).toBeNull();
-  } finally {
-    app.view.unmount();
-    await app.cleanup();
+it.runIf(IS_BROWSER)(
+  "blocks the direct free create route before showing the form",
+  async () => {
+    const app = await renderApp("/routines/new", options("free"));
+    try {
+      expect(
+        await screen.findByRole("dialog", { name: "Unlock routines" })
+      ).toBeTruthy();
+      expect(screen.queryByRole("textbox", { name: "Instruction" })).toBeNull();
+    } finally {
+      app.view.unmount();
+      await app.cleanup();
+    }
   }
-});
+);

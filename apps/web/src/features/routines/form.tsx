@@ -20,6 +20,7 @@ import {
 import { useContextualUpsell } from "#renderer/lib/contextual-upsell";
 import { creditsTier } from "#renderer/lib/credits";
 import { useAppNavigate } from "#renderer/lib/navigation/use-app-navigate";
+import { IS_BROWSER } from "#renderer/lib/platform";
 import { platformSystem } from "#renderer/lib/platform-system";
 import { ROUTINE_TEMPLATES } from "#renderer/lib/routines/templates";
 import { showError, showInfo } from "#renderer/lib/toast";
@@ -779,9 +780,9 @@ export const RoutineCreateDialog = () => {
   const account = useAccount();
   const { t } = useTranslation();
   const navigate = useAppNavigate();
-  useContextualUpsell(creditsTier(account.data) === "free");
+  useContextualUpsell(IS_BROWSER && creditsTier(account.data) === "free");
   if (account.isPending) return null;
-  if (creditsTier(account.data) === "free")
+  if (IS_BROWSER && creditsTier(account.data) === "free")
     return (
       <Dialog
         open

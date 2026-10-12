@@ -66,7 +66,9 @@ export const RoutineCreateAction = ({
   const { t } = useTranslation();
   const account = useAccount();
   const [open, setOpen] = useState(false);
-  useContextualUpsell(open && creditsTier(account.data) === "free");
+  useContextualUpsell(
+    open && IS_BROWSER && creditsTier(account.data) === "free"
+  );
   const label = t("routines.sidebar.new");
   const action = iconOnly ? (
     <NavList.Action label={label}>
@@ -75,7 +77,7 @@ export const RoutineCreateAction = ({
   ) : (
     <Button>{label}</Button>
   );
-  if (creditsTier(account.data) !== "free")
+  if (!IS_BROWSER || creditsTier(account.data) !== "free")
     return iconOnly ? (
       <NavList.Action
         label={label}

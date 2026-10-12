@@ -49,10 +49,11 @@ afterEach(() => {
   else process.env.ABACUSAI_BOT_HOME = previousHome;
   fs.rmSync(home, { recursive: true, force: true });
 });
-const host = (hostedOnly = false) =>
+const host = (hostedOnly = false, platform = "web-host") =>
   Object.assign(
     { createRoutine: ServiceHost.prototype.createRoutine },
     {
+      platform,
       hostedOnly: () => hostedOnly,
       defaultRoutineRunner: () => "local",
       hostedRoutines: {
@@ -165,6 +166,12 @@ describe("routine creation plan admission", () => {
       expect(service.hostedRoutines.create).not.toHaveBeenCalled();
     }
   );
+  it("keeps free creation on desktop", async () => {
+    const service = host(false, "electron");
+    const created = await service.createRoutine(input, "desktop-free");
+    expect(created.id).toBe("desktop-free");
+    expect(listJobs()).toHaveLength(1);
+  });
   it("preserves paid hosted creation and agent provenance", async () => {
     account.mockResolvedValue({ subscription_tier: "pro" });
     const service = host(true);
