@@ -154,7 +154,7 @@ describe("the phone's tools", () => {
     } as never);
     const builtins = [
       ...AGENT_TOOL_NAMES,
-      // Phone-only tools (no app definition), billing_plan among them.
+      // Phone-only tools (no app definition).
       ...PHONE_AGENT_TOOLS.map((tool) => tool.name).filter(
         (name) => !AGENT_TOOL_NAMES.includes(name)
       ),

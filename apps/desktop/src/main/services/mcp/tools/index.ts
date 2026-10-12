@@ -1,3 +1,4 @@
+import { BILLING_TOOLS } from "./billing";
 import { BOTS_TOOLS } from "./bots";
 import { CONNECTORS_TOOLS } from "./connectors";
 import { CRONJOB_TOOLS } from "./cronjob";
@@ -29,6 +30,7 @@ export const AGENT_TOOLS: readonly ToolDefinition[] = [
   ...DELIVERABLES_TOOLS,
   ...CONNECTORS_TOOLS,
   ...BOTS_TOOLS,
+  ...BILLING_TOOLS,
   ...MESSAGING_TOOLS,
 ];
 

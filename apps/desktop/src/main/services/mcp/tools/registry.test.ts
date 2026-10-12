@@ -20,8 +20,10 @@ import { AGENT_TOOL_NAMES, AGENT_TOOLS, agentTool } from "./index";
  *
  * `my_activity` answers only a bot's own chat about that bot's other
  * conversations; it grants nothing and there is nothing for a user to switch.
+ * `billing_plan` reads the user's own plan and prices; it grants nothing
+ * either.
  */
-const NOT_IN_REGISTRY = new Set(["my_activity"]);
+const NOT_IN_REGISTRY = new Set(["my_activity", "billing_plan"]);
 
 const registryTools = new Map<string, { toolset: string; agent: boolean }>();
 for (const set of TOOLSETS) {

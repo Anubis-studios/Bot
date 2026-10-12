@@ -42,6 +42,10 @@ export interface BillingPlanTier {
   plan: string;
   planName: string;
   priceText: string;
+  /** The first month's price and the monthly one, and what the first month is off (absent from older servers). */
+  firstMonthPriceCents?: number;
+  priceCents?: number;
+  percentOff?: number;
   features: string[];
 }
 
