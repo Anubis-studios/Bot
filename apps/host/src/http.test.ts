@@ -641,7 +641,7 @@ it("MCP connect: the link goes straight to the provider, and the connector is in
     );
     expect(done.headers.get("x-frame-options")).toBe("DENY");
     const page = await done.text();
-    expect(page).toContain("Notion is connected.");
+    expect(page).toContain("Notion is connected");
     expect(page).toContain("go back to AbacusAI Bot or WhatsApp");
     expect(page).not.toContain("<script");
     expect(page).not.toContain("<form");
@@ -786,7 +786,7 @@ it("MCP connect: the link goes straight to the provider, and the connector is in
     expect(entries.has("huggingface")).toBe(false);
     const open = await get("/mcp/connect/huggingface");
     expect(open.status).toBe(200);
-    expect(await open.text()).toContain("Hugging Face is connected.");
+    expect(await open.text()).toContain("Hugging Face is connected");
     expect(entries.get("huggingface")).toEqual({
       url: "https://huggingface.co/mcp",
     });
@@ -800,7 +800,7 @@ it("MCP connect: the link goes straight to the provider, and the connector is in
     ).toBe("/bot/library/connectors?connected=huggingface");
     // The user's own server that asks for none, signed in by its name.
     expect(await (await get("/mcp/connect/mine")).text()).toContain(
-      "mine is connected."
+      "mine is connected"
     );
 
     // A connector that needs keys is connected from the app, never here.
