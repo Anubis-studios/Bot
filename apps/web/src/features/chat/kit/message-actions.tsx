@@ -901,7 +901,7 @@ const SessionActions = ({
         <div
           onMouseDown={(event) => event.preventDefault()}
           data-slot="session-message-actions"
-          className="pointer-events-none absolute start-0 top-full z-10 flex h-7 items-center gap-0.5 rounded-md bg-[var(--chat-surface)] opacity-0 group-focus-within/message:pointer-events-auto group-focus-within/message:opacity-100 group-hover/message:pointer-events-auto group-hover/message:opacity-100"
+          className="pointer-events-none absolute start-0 top-full z-10 flex h-7 items-center gap-0.5 rounded-md bg-[var(--chat-surface)] opacity-0 group-focus-within/message:pointer-events-auto group-focus-within/message:opacity-100 group-hover/message:pointer-events-auto group-hover/message:opacity-100 group-has-[[data-slot=tool-group]:hover]/message:pointer-events-none group-has-[[data-slot=tool-group]:hover]/message:opacity-0"
         >
           <Button
             variant="ghost"

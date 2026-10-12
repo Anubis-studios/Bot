@@ -46,6 +46,7 @@ import {
 import { UpgradeTriggers } from "../kit/upgrade-triggers";
 import { useHost, useThreadStore } from "../store/selectors";
 import type { RunOutcomeRecord } from "../store/thread-store";
+import { coalesceToolRuns, isToolOnly } from "./coalesce";
 import { toolRows, ToolWindowProvider } from "./row-context";
 import {
   dayKey,
@@ -359,18 +360,7 @@ const transcriptItems = (
   }));
 };
 
-const toolOnly = (message: UIMessage | undefined): boolean =>
-  message?.role === "assistant" &&
-  message.parts.some((part) => part.type === "tool-call") &&
-  message.parts.every(
-    (part) =>
-      part.type === "tool-call" ||
-      part.type === "tool-result" ||
-      (part.type === "text" &&
-        part.content.trim() === "" &&
-        !(part as { metadata?: { abacus?: { kind?: string } } }).metadata
-          ?.abacus?.kind)
-  );
+const toolOnly = isToolOnly;
 
 const toolGapBefore = (previous: UIMessage | undefined, message: UIMessage) => {
   if (!toolOnly(message) || !toolOnly(previous)) return undefined;
@@ -456,12 +446,21 @@ export const Transcript = ({ messages, Message }: TranscriptProps) => {
   const [settled] = useState(
     () => new Set(messages.map((message) => message.id))
   );
-  const visible = visibleMessages(
+  const shownMessages = visibleMessages(
     messages,
     skin,
     slots.isMessageHidden,
     active
   );
+  // Sessions: consecutive tool steps, spread over several assistant
+  // messages, read as one group in one row.
+  const { visible, hostOf } =
+    skin === "bot"
+      ? { visible: shownMessages, hostOf: new Map<string, string>() }
+      : (({ messages: merged, hostOf: hosts }) => ({
+          visible: merged,
+          hostOf: hosts,
+        }))(coalesceToolRuns(shownMessages));
   const items = transcriptItems(visible, outcomes);
   const itemsById = new Map(items.map((item) => [item.id, item]));
   const placeholderHeight = (from: number, to: number) =>
@@ -526,17 +525,21 @@ export const Transcript = ({ messages, Message }: TranscriptProps) => {
     document.addEventListener("chat:jump-to-message", onJump);
     return () => document.removeEventListener("chat:jump-to-message", onJump);
   }, [session]);
+  const jumpRow = jump == null ? null : (hostOf.get(jump) ?? jump);
   const jumpIndex =
-    jump == null ? -1 : visible.findIndex((message) => message.id === jump);
+    jumpRow == null
+      ? -1
+      : visible.findIndex((message) => message.id === jumpRow);
   if (jumpIndex >= 0 && (jumpIndex < window.start || jumpIndex >= window.end)) {
     setWindow(newestWindow(items.slice(0, jumpIndex + 1)));
   }
   useLayoutEffect(() => {
     if (!jump || handledJump.current === jump) return;
-    const index = visible.findIndex((message) => message.id === jump);
+    const row = hostOf.get(jump) ?? jump;
+    const index = visible.findIndex((message) => message.id === row);
     if (index < 0) return;
     const target = viewportRef.current?.querySelector<HTMLElement>(
-      `[data-message-target="${CSS.escape(jump)}"]`
+      `[data-message-target="${CSS.escape(row)}"]`
     );
     if (!target) return;
     handledJump.current = jump;
@@ -553,7 +556,7 @@ export const Transcript = ({ messages, Message }: TranscriptProps) => {
       setJump(null);
     }, 1200);
     highlight.current = { target, timer };
-  }, [jump, visible, window.start, window.end]);
+  }, [jump, visible, hostOf, window.start, window.end]);
   const opened = useRef(false);
   useLayoutEffect(() => {
     const viewport = viewportRef.current;

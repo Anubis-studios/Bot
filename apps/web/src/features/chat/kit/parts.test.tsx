@@ -254,3 +254,64 @@ it("keeps one collapsed run for every kind of tool call while streaming", async 
     expect(document.querySelectorAll("[data-tool]")).toHaveLength(3)
   );
 });
+
+it("folds tool steps spread over consecutive assistant messages into one group", async () => {
+  const relay = new FakeRelay();
+  relay.emitAll([
+    ...b.sessionReady(),
+    b.runStarted("steps"),
+    ...b.text("p1", "assistant", "Looking into it."),
+    b.textStart("s1"),
+    ...b.toolCall("c1", "bash", "s1", { command: "npm test" }),
+    b.toolResult("c1", { text: "ok" }),
+    b.textEnd("s1"),
+    b.textStart("s2"),
+    ...b.toolCall("c2", "bash", "s2", { command: "npm run lint" }),
+    b.toolResult("c2", { text: "ok" }),
+    b.textEnd("s2"),
+    b.textStart("s3"),
+    ...b.toolCall("c3", "read", "s3", { path: "/tmp/example.txt" }),
+    b.toolResult("c3", { text: "example" }),
+    b.textEnd("s3"),
+    b.runFinished("steps"),
+  ]);
+  current = await renderRelay(relay, "session");
+  const summary = await screen.findByText("Ran 2 commands and read 1 file");
+  expect(screen.getByText("Looking into it.")).toBeTruthy();
+  expect(document.querySelectorAll('[data-slot="tool-group"]')).toHaveLength(1);
+  expect(document.querySelectorAll('[data-role="assistant"]')).toHaveLength(1);
+  fireEvent.click(summary);
+  await waitFor(() =>
+    expect(document.querySelectorAll("[data-tool]")).toHaveLength(3)
+  );
+  // The bar belongs to prose; copying takes the prose alone.
+  expect(
+    document.querySelectorAll('[data-slot="session-message-actions"]')
+  ).toHaveLength(1);
+});
+
+it("shows no actions bar for rows that are only tool calls", async () => {
+  const relay = new FakeRelay();
+  relay.emitAll([
+    ...b.sessionReady(),
+    b.runStarted("only"),
+    ...b.text("u1", "user", "go"),
+    b.textStart("s1"),
+    ...b.toolCall("c1", "bash", "s1", { command: "npm test" }),
+    b.toolResult("c1", { text: "ok" }),
+    b.textEnd("s1"),
+    b.textStart("s2"),
+    ...b.toolCall("c2", "bash", "s2", { command: "npm run lint" }),
+    b.toolResult("c2", { text: "ok" }),
+    b.textEnd("s2"),
+    b.runFinished("only"),
+  ]);
+  current = await renderRelay(relay, "session");
+  await screen.findByText("Ran 2 commands");
+  expect(document.querySelectorAll('[data-slot="tool-group"]')).toHaveLength(1);
+  expect(
+    document
+      .querySelector('[data-role="assistant"]')
+      ?.closest('[data-slot="message-actions-host"]')
+  ).toBeNull();
+});

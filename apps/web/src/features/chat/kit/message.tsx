@@ -328,7 +328,14 @@ const useStreaming = (message: UIMessage): boolean => {
   const { session } = useChatView();
   const active = useThreadStore(session, (state) => state.runs.active != null);
   const lastId = useHost(session, (state) => state.messages.at(-1)?.id);
-  return active && message.role === "assistant" && message.id === lastId;
+  const abacus = message.metadata?.abacus as
+    | { coalescedIds?: string[] }
+    | undefined;
+  return (
+    active &&
+    message.role === "assistant" &&
+    (message.id === lastId || abacus?.coalescedIds?.includes(lastId!) === true)
+  );
 };
 
 interface ToolSegment {
