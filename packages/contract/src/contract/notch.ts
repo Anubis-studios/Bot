@@ -15,7 +15,12 @@ export interface NotchLayout {
 }
 export type NotchEvent =
   | { type: "layout"; layout: NotchLayout }
-  | { type: "app"; mainVisible: boolean; mainFocused: boolean }
+  | {
+      type: "app";
+      mainVisible: boolean;
+      mainFocused: boolean;
+      signedIn: boolean;
+    }
   | { type: "reaction"; sessionId: string; reaction: "wink" }
   | { type: "shortcut" }
   | { type: "preview" }
@@ -72,6 +77,7 @@ export const notch = {
     .input(v.object({ pattern: v.literal("alignment"), key: id }))
     .output(type<void>()),
   openInApp: mutation.input(OpenTargetSchema).output(type<{ id: string }>()),
+  revealApp: mutation.input(NoInput).output(type<void>()),
   presented: mutation
     .input(v.object({ dedupeKey: id, documentVisible: v.boolean() }))
     .output(type<void>()),

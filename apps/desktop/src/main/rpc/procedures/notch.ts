@@ -64,6 +64,9 @@ export const notchRouter = impl.notch.router({
   openInApp: impl.notch.openInApp.handler(({ context, input }) =>
     controller(context).open(requireNotch(context), input)
   ),
+  revealApp: impl.notch.revealApp.handler(({ context }) =>
+    controller(context).reveal(requireNotch(context))
+  ),
   presented: impl.notch.presented.handler(({ context, input }) =>
     controller(context).presented(
       requireNotch(context),

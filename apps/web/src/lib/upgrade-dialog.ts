@@ -1,0 +1,121 @@
+import type { UIMessage } from "@tanstack/ai-client";
+import { Store, useStore } from "@tanstack/react-store";
+
+import { hiddenUserMessage, userMessageText } from "#renderer/lib/user-message";
+
+/**
+ * The upgrade dialog over the whole window: `credits` when a free account's
+ * turn stopped because its Abacus credits are used up, `connectors` when it
+ * still chats on its own model key but a connector call needs Abacus credits.
+ * Triggers ask; the shell's host confirms on a fresh account read and opens.
+ */
+export type UpgradeDialogKind = "credits" | "connectors";
+
+export interface UpgradeDialogRequest {
+  kind: UpgradeDialogKind;
+  /** One dialog per refusal: a run id or a tool call id. */
+  key: string;
+  /** The chat it came from: a dismissed connectors dialog stays dismissed there. */
+  threadId: string;
+  /** The user's message that waits for the upgrade, shown in the dialog. */
+  pendingText?: string;
+  /** Sends that message again once the plan is active. */
+  resume?: () => Promise<unknown>;
+}
+
+interface UpgradeDialogState {
+  request: UpgradeDialogRequest | null;
+}
+
+export const upgradeDialogStore = new Store<UpgradeDialogState>({
+  request: null,
+});
+
+const asked = new Set<string>();
+/** Chats where the person chose to keep chatting without connectors. */
+const connectorsDeclined = new Set<string>();
+/** An ask of the other kind that came while a dialog was open. */
+let queued: UpgradeDialogRequest | null = null;
+
+const wanted = (request: UpgradeDialogRequest): boolean =>
+  !(request.kind === "connectors" && connectorsDeclined.has(request.threadId));
+
+/**
+ * Ask for the dialog. A key already asked for is ignored, and so are
+ * connector asks from a chat where the person kept chatting without them. An
+ * ask of the same kind as the open dialog is dropped (a turn refusing several
+ * connectors shows one dialog); one of the other kind waits its turn.
+ */
+export const requestUpgradeDialog = (request: UpgradeDialogRequest): void => {
+  if (asked.has(request.key) || !wanted(request)) return;
+  asked.add(request.key);
+  const open = upgradeDialogStore.state.request;
+  if (open == null) upgradeDialogStore.setState(() => ({ request }));
+  else if (open.kind !== request.kind) queued = request;
+};
+
+/**
+ * Close the dialog; `dismissed` when the person said no to it (Not now, Keep
+ * chatting, Esc). The waiting ask, if any, opens next.
+ */
+export const closeUpgradeDialog = (dismissed = false): void => {
+  const open = upgradeDialogStore.state.request;
+  if (dismissed && open?.kind === "connectors")
+    connectorsDeclined.add(open.threadId);
+  const next = queued != null && wanted(queued) ? queued : null;
+  queued = null;
+  upgradeDialogStore.setState(() => ({ request: next }));
+};
+
+export const useUpgradeDialogRequest = () =>
+  useStore(upgradeDialogStore, (state) => state.request);
+
+/** The Abacus connectors gateway's tools are named `abacus-connectors_<Tool>`. */
+const CONNECTOR_TOOL_PREFIX = "abacus-connectors";
+/** The gateway's refusal when the account has no Abacus credits left. */
+const CONNECTOR_CREDIT_REFUSAL = /needs abacus ai credits/i;
+
+const text = (value: unknown): string =>
+  typeof value === "string" ? value : JSON.stringify(value ?? "");
+
+/** The newest visible user message: what waits for the upgrade. */
+export const lastUserText = (
+  messages: readonly UIMessage[]
+): string | undefined => {
+  const last = messages.findLast(
+    (message) => message.role === "user" && !hiddenUserMessage(message)
+  );
+  const value = last == null ? "" : userMessageText(last).trim();
+  return value.length > 0 ? value : undefined;
+};
+
+/**
+ * Connector calls the gateway refused for want of Abacus credits, in messages
+ * that arrived live (`fresh`), so a reopened chat never asks again.
+ */
+export const connectorCreditRefusals = (
+  messages: readonly UIMessage[],
+  fresh: Readonly<Record<string, true>>
+): string[] => {
+  const refused: string[] = [];
+  for (const message of messages) {
+    if (message.role !== "assistant" || fresh[message.id] !== true) continue;
+    const connectorCalls = new Set(
+      message.parts
+        .filter(
+          (part) =>
+            part.type === "tool-call" &&
+            part.name.startsWith(CONNECTOR_TOOL_PREFIX)
+        )
+        .map((part) => (part as { id: string }).id)
+    );
+    for (const part of message.parts)
+      if (
+        part.type === "tool-result" &&
+        connectorCalls.has(part.toolCallId) &&
+        CONNECTOR_CREDIT_REFUSAL.test(text(part.content))
+      )
+        refused.push(part.toolCallId);
+  }
+  return refused;
+};

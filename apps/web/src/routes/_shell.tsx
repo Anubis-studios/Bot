@@ -31,6 +31,7 @@ import {
   ShellFailure,
 } from "#renderer/features/shell/shell-layout";
 import { startTour, useTourState } from "#renderer/features/tour/store";
+import { UpgradeDialogHost } from "#renderer/features/upgrade-dialog";
 const TourHost = lazy(() =>
   import("#renderer/features/tour").then((m) => ({ default: m.TourHost }))
 );
@@ -89,6 +90,7 @@ const ShellRoute = () => {
       <PairingQueueBanner suppressed={tour != null} />
       {!provisional && tour == null && <WhatsAppIntro />}
       <SessionsGlobals preview={dispatchPreview} />
+      <UpgradeDialogHost />
     </>
   );
 };
