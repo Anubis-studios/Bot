@@ -37,7 +37,7 @@ import { useFloatingIntent } from "./floating-intent";
 import { SHELL_GEOMETRY } from "./geometry";
 import type { ShellArea, SidebarMode } from "./layout";
 import { PromoOutlet } from "./promo-host";
-import { shellStore } from "./shell-store";
+import { shellStore, type FloatingIntent } from "./shell-store";
 import { BotsStrip, NEEDS_YOU, SIDEBARS } from "./sidebars";
 
 const SidebarContent = ({
@@ -70,6 +70,20 @@ const columnWidth = (mode: SidebarMode): number =>
 /** Sheet and drawer curve, the one vaul and LibreChat settle on. */
 const FOCUSABLE =
   "a[href], button:not([disabled]), [tabindex]:not([tabindex='-1'])";
+
+/** Holds the floating sidebar while the pointer is inside it by either measure; leaves once it is in neither. */
+const pointerMoved = (
+  hovered: { dom: boolean; react: boolean },
+  intent: Pick<FloatingIntent, "hold" | "leave">,
+  part: "dom" | "react",
+  inside: boolean
+): void => {
+  const was = hovered.dom || hovered.react;
+  hovered[part] = inside;
+  const is = hovered.dom || hovered.react;
+  if (is && !was) intent.hold();
+  else if (!is && was) intent.leave();
+};
 
 export const SidebarSlot = ({
   mode,
@@ -128,6 +142,30 @@ export const SidebarSlot = ({
 
   const floatingOpen = mode === "floating" && floating.open;
   const peek = floatingOpen && floating.reason === "peek";
+
+  // The pointer is over the floating sidebar if it is inside it in the DOM
+  // (content portaled in, like the upgrade card) or in the React tree (layers
+  // portaled out, like a row's menu). It holds open while either is true.
+  const hovered = useRef({ dom: false, react: false });
+  useEffect(() => {
+    const node = floatingRef.current;
+    if (!floatingOpen || node == null) return;
+    hovered.current = { dom: false, react: false };
+    const enter = (event: PointerEvent): void => {
+      if (event.pointerType === "mouse")
+        pointerMoved(hovered.current, intent, "dom", true);
+    };
+    const leave = (event: PointerEvent): void => {
+      if (event.pointerType === "mouse")
+        pointerMoved(hovered.current, intent, "dom", false);
+    };
+    node.addEventListener("pointerenter", enter);
+    node.addEventListener("pointerleave", leave);
+    return () => {
+      node.removeEventListener("pointerenter", enter);
+      node.removeEventListener("pointerleave", leave);
+    };
+  }, [floatingOpen, intent]);
 
   // Opened for the keyboard: focus moves in, and back out when it closes.
   useEffect(() => {
@@ -243,11 +281,13 @@ export const SidebarSlot = ({
                   },
                 })}
             onPointerEnter={(event) => {
-              if (event.pointerType === "mouse") intent.hold();
+              if (event.pointerType === "mouse")
+                pointerMoved(hovered.current, intent, "react", true);
             }}
             onPointerLeave={(event) => {
               // A finger lifting is not leaving; focus leaving still closes it.
-              if (event.pointerType === "mouse") intent.leave();
+              if (event.pointerType === "mouse")
+                pointerMoved(hovered.current, intent, "react", false);
             }}
             onFocus={intent.hold}
             onBlur={(event) => {
