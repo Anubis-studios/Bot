@@ -16,6 +16,7 @@ import {
   useState,
   type ComponentType,
   type ReactNode,
+  type RefObject,
 } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -404,6 +405,39 @@ const outcomesByAnchor = (
   return { byAnchor, orphans };
 };
 
+type HeldRow = { el: Element; top: number };
+
+function holdRow(
+  viewportRef: RefObject<HTMLDivElement | null>,
+  held: RefObject<HeldRow | null>,
+  change: () => void
+) {
+  const viewport = viewportRef.current;
+  if (viewport != null) {
+    const box = viewport.getBoundingClientRect();
+    for (const el of viewport.querySelectorAll(ROWS)) {
+      const rect = el.getBoundingClientRect();
+      if (rect.top >= box.bottom) break;
+      if (rect.height > 0 && rect.top >= box.top && rect.bottom <= box.bottom) {
+        held.current = { el, top: rect.top };
+        viewport.style.overflowAnchor = "none";
+        break;
+      }
+    }
+  }
+  change();
+}
+
+function useHold(
+  viewportRef: RefObject<HTMLDivElement | null>,
+  held: RefObject<HeldRow | null>
+) {
+  return useCallback(
+    (change: () => void) => holdRow(viewportRef, held, change),
+    [viewportRef, held]
+  );
+}
+
 export const Transcript = ({ messages, Message }: TranscriptProps) => {
   const { t } = useTranslation();
   const { session, slots, skin } = useChatView();
@@ -571,27 +605,8 @@ export const Transcript = ({ messages, Message }: TranscriptProps) => {
   // Paging the window keeps the first fully visible row where it was. Native
   // anchoring is off for that commit: it misses rows evicted across the top
   // edge, and would correct a second time on top of this.
-  const held = useRef<{ el: Element; top: number } | null>(null);
-  const hold = useCallback((change: () => void) => {
-    const viewport = viewportRef.current;
-    if (viewport != null) {
-      const box = viewport.getBoundingClientRect();
-      for (const el of viewport.querySelectorAll(ROWS)) {
-        const rect = el.getBoundingClientRect();
-        if (rect.top >= box.bottom) break;
-        if (
-          rect.height > 0 &&
-          rect.top >= box.top &&
-          rect.bottom <= box.bottom
-        ) {
-          held.current = { el, top: rect.top };
-          viewport.style.overflowAnchor = "none";
-          break;
-        }
-      }
-    }
-    change();
-  }, []);
+  const held = useRef<HeldRow | null>(null);
+  const hold = useHold(viewportRef, held);
   useLayoutEffect(() => {
     const viewport = viewportRef.current;
     const row = held.current;
