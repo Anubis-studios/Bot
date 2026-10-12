@@ -1218,7 +1218,7 @@
       "intro": "Reach your agent from any device by messaging the shared Abacus AI bot. No token to paste: one scan or tap, and you're linked.",
       "requiredIntro": "This is the second half of the setup: linking the Abacus AI bot is what lets you message your agent from your phone. Follow the steps below.",
       "link": "Link Abacus AI bot",
-      "step1": "Add Abacus AI to your Discord (Add to My Apps).",
+      "step1": "Add Abacus AI to your Discord.",
       "addToDiscord": "Add to Discord",
       "step2Copy": "Copy this command.",
       "step3Dm": "Open your chat with the bot (message icon on its profile), paste it, and send.",
