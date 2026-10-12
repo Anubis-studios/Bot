@@ -770,7 +770,7 @@ export const ModelChip = ({
             <button
               type="button"
               data-slot="chat-model-upgrade"
-              className="hover:bg-foreground/[0.06] focus-visible:ring-ring/40 mt-1 flex shrink-0 items-center gap-2 rounded-lg border-t px-2 py-2 text-start outline-none focus-visible:ring-2"
+              className="hover:bg-foreground/[0.06] focus-visible:ring-ring/40 mt-1 flex shrink-0 items-center gap-2 rounded-lg border-t px-2 py-1.5 text-start outline-none focus-visible:ring-2"
               onClick={() => {
                 setOpen(false);
                 binding.onUpgrade?.();
@@ -781,10 +781,10 @@ export const ModelChip = ({
                 className="text-primary size-3.5 shrink-0"
               />
               <span className="flex min-w-0 flex-col">
-                <span className="text-xs font-medium">
+                <span className="truncate text-xs font-medium">
                   {t("chat.composer.upgradeModels")}
                 </span>
-                <span className="text-muted-foreground text-xs">
+                <span className="text-muted-foreground truncate text-xs">
                   {t("chat.composer.upgradeModelsPrice")}
                 </span>
               </span>
