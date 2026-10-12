@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { usePanelRef } from "react-resizable-panels";
 
 import { EmptyState } from "#renderer/components/empty-state";
+import { RoutinesIllustration } from "#renderer/components/empty-state/illustrations";
 import { ConfirmAction } from "#renderer/components/form-kit/confirm";
 import { PageToolbar } from "#renderer/components/form-kit/page";
 import { createPaneWidthWriter, usePrefs } from "#renderer/data/db/prefs";
@@ -46,6 +47,7 @@ export const RoutinesListBody = () => {
     >
       <EmptyState
         icon="routines"
+        illustration={<RoutinesIllustration />}
         title={t(
           routines.length ? "phase5.pickRoutine" : "routines.page.emptyTitle"
         )}

@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { EmptyState } from "#renderer/components/empty-state";
+import { ArtifactsIllustration } from "#renderer/components/empty-state/illustrations";
 import { FilePreview } from "#renderer/components/file-preview";
 import { Segments } from "#renderer/components/form-kit/controls";
 import { PageToolbar } from "#renderer/components/form-kit/page";
@@ -297,6 +298,7 @@ export const ArtifactsPage = ({
         {filtered.length === 0 ? (
           <EmptyState
             icon="artifacts"
+            illustration={rows.length ? undefined : <ArtifactsIllustration />}
             title={t(
               rows.length
                 ? "phase5.nothingMatches"

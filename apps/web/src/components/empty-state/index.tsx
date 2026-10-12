@@ -18,6 +18,7 @@ import {
 
 export interface EmptyStateProps {
   icon?: AppIconName;
+  illustration?: ReactNode;
   title: string;
   description?: string;
   action?: ReactNode;
@@ -26,6 +27,7 @@ export interface EmptyStateProps {
 
 export const EmptyState = ({
   icon,
+  illustration,
   title,
   description,
   action,
@@ -36,8 +38,19 @@ export const EmptyState = ({
     data-testid="empty-state"
   >
     <EmptyHeader className="max-w-full min-w-0">
+      {illustration != null && (
+        <EmptyMedia className="phone:hidden [@media(max-height:560px)]:hidden">
+          {illustration}
+        </EmptyMedia>
+      )}
       {icon != null && (
-        <EmptyMedia variant="icon">
+        <EmptyMedia
+          variant="icon"
+          className={cn(
+            illustration != null &&
+              "phone:flex hidden [@media(max-height:560px)]:flex"
+          )}
+        >
           <AppIcon name={icon} size={18} />
         </EmptyMedia>
       )}
