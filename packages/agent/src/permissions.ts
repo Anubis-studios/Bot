@@ -512,7 +512,7 @@ function gateWebFetch(tool: ToolRequest, options: GateOptions): Gate {
  * through, one outside asks in every mode but Yolo, as the
  * `write_outside_directory` / `edit_outside_directory` request types.
  */
-const WRITE_TOOLS = new Set([
+export const WRITE_TOOLS: ReadonlySet<string> = new Set([
   "write",
   "edit",
   "batch_edit",

@@ -8,12 +8,16 @@
  * Repetition: the third identical tool call in a run is blocked (the second,
  * for a connector call, which is billed). Connector calls: every fifth one,
  * the model is reminded what they cost and asked whether it already has
- * enough. There is no cap, only a nudge. Temperature
+ * enough. There is no cap, only a nudge. Show your work: a run that has written
+ * files but presented nothing is told, unseen by the user, to present what it
+ * has after 10 minutes of working time, and again after 20; time
+ * spent waiting on an approval is not working time. Temperature
  * (ABACUSAI_BOT_TEMPERATURE, default 0.3, "off" to disable) when unset.
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 import { connectorToolMeta } from "../mcp/index.js";
+import { WRITE_TOOLS } from "../permissions.js";
 
 /** How far short of the cap each warning lands. */
 const WRAP_UP_MARGIN = 100;
@@ -22,6 +26,10 @@ const REPEAT_LIMIT = 3;
 /** A connector call costs credits; the first identical one already answered. */
 const CONNECTOR_REPEAT_LIMIT = 2;
 const CONNECTOR_REMINDER_EVERY = 5;
+/** Working time before a run that built something but showed nothing is told to show it. */
+const PRESENT_NUDGE_MS = 10 * 60_000;
+const PRESENT_AGAIN_MS = 20 * 60_000;
+const PRESENT_TOOL = "present_deliverable";
 
 /** Why the budget stopped the current run, or null. Cleared as the next run starts. */
 let stoppedBecause: string | null = null;
@@ -71,6 +79,17 @@ const connectorPrompt = (calls: number, credits: number): string =>
   `information you already hold. If you can, finish; if not, make the fewest further calls that ` +
   `get you there.`;
 
+const presentNudgePrompt = (minutes: number): string =>
+  `Show your work: you have been working for over ${minutes} minutes and the user has not seen anything ` +
+  `yet. Present what exists now with ${PRESENT_TOOL}, which opens it in the preview. If nothing ` +
+  `is presentable yet (only scripts, assets or notes), build the simplest working version first, ` +
+  `with CSS or placeholder images instead of generated art, and present that. You can keep ` +
+  `improving it afterwards.`;
+
+/** The tool that hands work over, under its own name or a server's prefix. */
+const isPresentTool = (name: string): boolean =>
+  name === PRESENT_TOOL || name.endsWith(`_${PRESENT_TOOL}`);
+
 /** What the user reads when the run is stopped. */
 const stoppedMessage = (cap: number): string =>
   `This run made ${cap} model calls without finishing, so it was probably going in circles, and ` +
@@ -89,16 +108,75 @@ export default function (pi: ExtensionAPI) {
   let turns = 0;
   let connectorCalls = 0;
   const callCounts = new Map<string, number>();
+  // Working time: the model generating or a tool running. A call held for
+  // approval sits between the two, so the wait is not counted.
+  let workedMs = 0;
+  let activeSince: number | null = null;
+  let generating = false;
+  const runningTools = new Set<string>();
+  let wroteFile = false;
+  let presented = false;
+  let presentNudges = 0;
+  const track = (change: () => void): void => {
+    const now = Date.now();
+    if (activeSince != null) workedMs += now - activeSince;
+    change();
+    activeSince = generating || runningTools.size > 0 ? now : null;
+  };
 
   pi.on("agent_start", async () => {
     turns = 0;
     connectorCalls = 0;
     stoppedBecause = null;
     callCounts.clear();
+    workedMs = 0;
+    activeSince = null;
+    generating = false;
+    runningTools.clear();
+    wroteFile = false;
+    presented = false;
+    presentNudges = 0;
+  });
+
+  pi.on("message_end", (event) => {
+    if ((event.message as { role?: string }).role !== "assistant") return;
+    track(() => {
+      generating = false;
+    });
+  });
+
+  pi.on("tool_execution_start", (event) => {
+    track(() => runningTools.add(event.toolCallId));
+  });
+
+  pi.on("tool_execution_end", (event) => {
+    track(() => runningTools.delete(event.toolCallId));
+    if (event.isError) return;
+    if (WRITE_TOOLS.has(event.toolName)) wroteFile = true;
+    if (isPresentTool(event.toolName)) presented = true;
   });
 
   pi.on("turn_start", async (_event, ctx) => {
     turns++;
+    track(() => {
+      generating = true;
+    });
+    // Hidden from the user: the preview appearing is what they see.
+    const showWork = (content: string): void => {
+      pi.sendMessage(
+        { customType: "abacusai-bot-show-work", content, display: false },
+        { deliverAs: "steer" }
+      );
+    };
+    if (wroteFile && !presented) {
+      if (workedMs >= PRESENT_AGAIN_MS && presentNudges < 2) {
+        presentNudges = 2;
+        showWork(presentNudgePrompt(PRESENT_AGAIN_MS / 60_000));
+      } else if (workedMs >= PRESENT_NUDGE_MS && presentNudges < 1) {
+        presentNudges = 1;
+        showWork(presentNudgePrompt(PRESENT_NUDGE_MS / 60_000));
+      }
+    }
     const cap = turnCap();
     // Each warning fires on its own turn; a cap small enough to fold them
     // onto one turn gets the harder of the two.

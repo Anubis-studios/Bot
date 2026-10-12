@@ -8,7 +8,7 @@ import { fakePi } from "@abacus-ai/test-support/fake-pi";
  * started relaunching the app to "force a state change" rather than simply
  * looking again after a tap.
  */
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import budgets, { budgetStopReason } from "./budgets.js";
 
@@ -234,5 +234,146 @@ describe("a run that runs long", () => {
     await pi.fire("agent_start", {});
 
     expect(budgetStopReason()).toBeNull();
+  });
+});
+
+/**
+ * Show your work. A run on a cheap model spent 26 minutes drawing product
+ * images for a store it never built, so there was nothing to preview. A run
+ * that has written files but presented nothing is now told, unseen by the
+ * user, to present after 10 minutes of working time, and again after 20.
+ * Waiting on an approval is not working time.
+ */
+describe("show your work", () => {
+  const MINUTE = 60_000;
+  const showWork = (pi: ReturnType<typeof fakePi>) =>
+    pi.messages.filter((m) => m.customType === "abacusai-bot-show-work");
+
+  /** One model step of `ms`, ending in a reply. */
+  const step = async (pi: ReturnType<typeof fakePi>, ms: number) => {
+    await pi.fire("turn_start", {}, { hasUI: false, abort: () => {} });
+    vi.advanceTimersByTime(ms);
+    await pi.fire("message_end", { message: { role: "assistant" } });
+  };
+  /** One tool run of `ms`. */
+  let id = 0;
+  const tool = async (
+    pi: ReturnType<typeof fakePi>,
+    toolName: string,
+    ms: number,
+    isError = false
+  ) => {
+    const toolCallId = `t${++id}`;
+    await pi.fire("tool_execution_start", { toolName, toolCallId });
+    vi.advanceTimersByTime(ms);
+    await pi.fire("tool_execution_end", { toolName, toolCallId, isError });
+  };
+  /** Steps of a minute each, running bash, until `minutes` of work. */
+  const work = async (pi: ReturnType<typeof fakePi>, minutes: number) => {
+    for (let i = 0; i < minutes; i++) {
+      await step(pi, 30_000);
+      await tool(pi, "bash", 30_000);
+    }
+  };
+  const started = async () => {
+    const pi = withBudgets();
+    await pi.fire("agent_start", {});
+    return pi;
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it("tells a build that showed nothing to present at 10 minutes and again at 20, hidden from the user", async () => {
+    const pi = await started();
+    await step(pi, 1000);
+    await tool(pi, "write", 1000);
+    await work(pi, 9);
+    await step(pi, 1000);
+    expect(showWork(pi)).toHaveLength(0);
+
+    await work(pi, 1);
+    await step(pi, 1000);
+    expect(showWork(pi)).toHaveLength(1);
+    expect(String(showWork(pi)[0]!.content)).toContain("over 10 minutes");
+    expect(String(showWork(pi)[0]!.content)).toContain("present_deliverable");
+    expect(String(showWork(pi)[0]!.content)).toMatch(/placeholder images/);
+    expect(pi.messages.at(-1)?.options?.deliverAs).toBe("steer");
+    expect((pi.messages.at(-1) as { display?: boolean }).display).toBe(false);
+
+    await work(pi, 5);
+    expect(showWork(pi)).toHaveLength(1);
+    await work(pi, 5);
+    await step(pi, 1000);
+    expect(showWork(pi)).toHaveLength(2);
+    expect(String(showWork(pi)[1]!.content)).toBe(
+      String(showWork(pi)[0]!.content).replace("10 minutes", "20 minutes")
+    );
+
+    await work(pi, 30);
+    expect(showWork(pi)).toHaveLength(2);
+  });
+
+  it("does not count time waiting on an approval", async () => {
+    const pi = await started();
+    await step(pi, 1000);
+    await tool(pi, "write", 1000);
+    // The model asks for a tool; the call waits 15 minutes for the user.
+    await step(pi, 1000);
+    vi.advanceTimersByTime(15 * MINUTE);
+    await tool(pi, "bash", 1000);
+    await step(pi, 1000);
+    expect(showWork(pi)).toHaveLength(0);
+  });
+
+  it("stays quiet once the work was presented, under any server prefix", async () => {
+    for (const name of [
+      "present_deliverable",
+      "abacusai-bot_present_deliverable",
+    ]) {
+      const pi = await started();
+      await tool(pi, "write", 1000);
+      await tool(pi, name, 1000);
+      await work(pi, 25);
+      await step(pi, 1000);
+      expect(showWork(pi)).toHaveLength(0);
+    }
+  });
+
+  it("does not count a failed presentation or a failed write", async () => {
+    const pi = await started();
+    await tool(pi, "write", 1000, true);
+    await work(pi, 12);
+    await step(pi, 1000);
+    expect(showWork(pi)).toHaveLength(0);
+
+    await tool(pi, "edit", 1000);
+    await tool(pi, "present_deliverable", 1000, true);
+    await step(pi, 1000);
+    expect(showWork(pi)).toHaveLength(1);
+  });
+
+  it("never nudges a run that wrote nothing: research, email, answers", async () => {
+    const pi = await started();
+    await work(pi, 25);
+    await step(pi, 1000);
+    expect(showWork(pi)).toHaveLength(0);
+  });
+
+  it("starts over with each run", async () => {
+    const pi = await started();
+    await tool(pi, "write", 1000);
+    await work(pi, 8);
+    await pi.fire("agent_start", {});
+    await tool(pi, "write", 1000);
+    await work(pi, 8);
+    await step(pi, 1000);
+    expect(showWork(pi)).toHaveLength(0);
+    await work(pi, 2);
+    await step(pi, 1000);
+    expect(showWork(pi)).toHaveLength(1);
   });
 });
