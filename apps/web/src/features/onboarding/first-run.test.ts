@@ -13,7 +13,9 @@ const setup = () => {
   }));
   const funnelStep = vi.fn(async () => {});
   const openExternal = vi.fn(async () => {});
-  const statuses = vi.fn(async () => ({}));
+  const statuses = vi.fn(async () => ({
+    "abacus-gmailuser": { state: "available" },
+  }));
   // The host's change stream: one status-changed per `changed()`.
   let changed = (): void => {};
   const events = vi.fn(async () =>
@@ -49,8 +51,8 @@ it("opens Gmail's connect link once, as the host minted it, and reports once con
   const { transport, connect, funnelStep, openExternal, statuses, changed } =
     setup();
   await Promise.all([
-    startFirstRunGmail(transport, "ada@example.com"),
-    startFirstRunGmail(transport, "ada@example.com"),
+    startFirstRunGmail(transport, true),
+    startFirstRunGmail(transport, true),
   ]);
   expect(connect).toHaveBeenCalledExactlyOnceWith({
     connectorId: "abacus-gmailuser",
@@ -71,14 +73,16 @@ it("opens Gmail's connect link once, as the host minted it, and reports once con
   expect(funnelStep).toHaveBeenCalledWith({ step: "gmail_allowed" });
 });
 
-it("does not open Gmail for a missing address or a connected account", async () => {
+it("does not open Google for an account that does not sign in with Google, or one already connected", async () => {
   const { transport, connect } = setup();
-  await startFirstRunGmail(transport, "");
+  await startFirstRunGmail(transport, false);
   transport.client.connectors.statuses = async () => ({
-    "abacus-gmailuser": { state: "connected" },
+    "abacus-gmailuser": { state: "available" },
+    "abacus-googledriveuser": { state: "connected" },
   });
-  await startFirstRunGmail(transport, "ada@example.com");
+  await startFirstRunGmail(transport, true);
   expect(connect).not.toHaveBeenCalled();
+  expect(localStorage.getItem("abacusai-bot:onboarding.gmailHop")).toBeNull();
 });
 
 it("does not restart a cancelled website-account sign-in after remount or sign-out", async () => {
@@ -94,7 +98,7 @@ it("does not launch first-run Gmail consent when the host does not offer it", as
   statuses.mockResolvedValue({
     "abacus-gmailuser": { state: "unavailable", reason: "not-offered" },
   } as never);
-  await startFirstRunGmail(transport, "ada@example.com");
+  await startFirstRunGmail(transport, true);
   expect(connect).not.toHaveBeenCalled();
   expect(openExternal).not.toHaveBeenCalled();
   expect(localStorage.getItem("abacusai-bot:onboarding.gmailHop")).toBeNull();

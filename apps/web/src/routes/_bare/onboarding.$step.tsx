@@ -97,9 +97,10 @@ const OnboardingRoute = () => {
           });
           if (onboardingStore.state.signIn?.id !== attemptId) return;
           // Optional connector consent must not hold up a completed sign-in.
-          void startFirstRunGmail(transport, account?.email ?? "").catch(
-            () => {}
-          );
+          void startFirstRunGmail(
+            transport,
+            account?.google_sign_in === true
+          ).catch(() => {});
           await queryClient.invalidateQueries();
           if (onboardingStore.state.signIn?.id !== attemptId) return;
           await go("connected");
@@ -190,15 +191,15 @@ const OnboardingRoute = () => {
     if (facts.provisional) return;
     if (step === "welcome" && !facts.signedIn)
       void startWebsiteSignIn(transport, automaticallySignIn).catch(() => {});
-    if (facts.signedIn && facts.email)
-      void startFirstRunGmail(transport, facts.email).catch(() => {});
+    if (facts.signedIn && facts.googleSignIn)
+      void startFirstRunGmail(transport, true).catch(() => {});
     if (facts.signedIn && facts.webSignup && step === "connected")
       void completeWebsiteSignup();
   }, [
     step,
     facts.provisional,
     facts.signedIn,
-    facts.email,
+    facts.googleSignIn,
     facts.webSignup,
     transport,
   ]);
@@ -268,7 +269,7 @@ const factsOf = async (
     signedIn: canSignOutOfAbacus(settings),
     payingTier: isPayingAbacusTier(account?.subscription_tier),
     webSignup: account?.web_signup === true,
-    email: account?.email ?? "",
+    googleSignIn: account?.google_sign_in === true,
     ownsBot: context.db.collections.bots.toArray.some(
       (bot) => bot.channel == null
     ),
