@@ -51,9 +51,10 @@ describe("ChatView over scenarios", () => {
     const status = (name: string) =>
       rows
         .find((row) => row.getAttribute("data-tool") === name)!
-        .querySelector("[data-status]")!.textContent;
+        .querySelector("[data-status]")!
+        .getAttribute("data-status");
     expect(status("read")).toBe("done");
-    expect(status("bash")).toBe("runs");
+    expect(status("bash")).toBe("running");
     expect(
       within(rows[0] as HTMLElement).getByText("lines 168 to 268")
     ).toBeTruthy();

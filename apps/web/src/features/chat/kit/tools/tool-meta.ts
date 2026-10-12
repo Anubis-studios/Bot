@@ -5,6 +5,8 @@
  */
 import { toToolKind, type ToolKind } from "@abacus-ai/agent/tool-display";
 
+import { resolveWorkspacePath } from "#renderer/components/file-preview/paths";
+
 import { countChanges, todoItems, type NormalizedTool } from "./normalize";
 
 export type ToolMeta =
@@ -90,18 +92,6 @@ const PATH_TOOLS = new Set([
   "apply_patch",
   "ls",
 ]);
-
-const isAbsolute = (path: string): boolean =>
-  path.startsWith("/") || /^[A-Za-z]:[\\/]/.test(path);
-
-/** A relative path resolves against the workspace root, as the old code did. */
-export const resolveWorkspacePath = (
-  path: string,
-  workspaceRoot: string | null
-): string =>
-  isAbsolute(path) || workspaceRoot == null
-    ? path
-    : `${workspaceRoot.replace(/[\\/]+$/, "")}/${path.replace(/^\.\//, "")}`;
 
 /** The absolute path a file tool row opens, if it has exactly one. */
 export const toolOpenPath = (

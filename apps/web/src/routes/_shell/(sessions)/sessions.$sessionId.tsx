@@ -97,10 +97,16 @@ const SessionAgents = ({
   runtime,
   threadId,
   selected,
+  workspaceRoot,
+  onOpenFile,
+  onOpenDiff,
 }: {
   runtime: ChatRuntime;
   threadId: string;
   selected: string | undefined;
+  workspaceRoot: string | null;
+  onOpenFile: (path: string) => void;
+  onOpenDiff: (path: string, toolKey?: string) => void;
 }) => {
   const agents = useSubagents(runtime, threadId);
   const { t } = useTranslation();
@@ -135,6 +141,9 @@ const SessionAgents = ({
               runtime={runtime}
               threadId={threadId}
               subagentRunId={selected}
+              workspaceRoot={workspaceRoot}
+              onOpenFile={onOpenFile}
+              onOpenDiff={onOpenDiff}
             />
           </Suspense>
           <Button
@@ -323,6 +332,18 @@ const SessionRoute = () => {
       replace: true,
       transition: "none",
     });
+  const openDiff = (path: string, toolKey?: string) =>
+    void navigate({
+      to: "/sessions/$sessionId/diff",
+      params: { sessionId },
+      search: (p: Record<string, unknown>) => ({
+        ...p,
+        path,
+        toolKey,
+        source: toolKey ? "tool" : "git",
+      }),
+      transition: "none",
+    });
   const openFile = (path: string) => {
     if (isUrl(path)) {
       openUrl(path);
@@ -408,7 +429,14 @@ const SessionRoute = () => {
         )}
         renderSession={(id) => <SessionBeside id={id} />}
         renderAgent={(id) => (
-          <SessionAgents runtime={runtime} threadId={sessionId} selected={id} />
+          <SessionAgents
+            runtime={runtime}
+            threadId={sessionId}
+            selected={id}
+            workspaceRoot={root}
+            onOpenFile={openFile}
+            onOpenDiff={openDiff}
+          />
         )}
         chat={
           <ChatView
@@ -418,19 +446,7 @@ const SessionRoute = () => {
             workspaceRoot={root}
             onOpenFile={openFile}
             onOpenSubagent={(id) => select("agents", { agent: id })}
-            onOpenDiff={(path, toolKey) =>
-              void navigate({
-                to: "/sessions/$sessionId/diff",
-                params: { sessionId },
-                search: (p: Record<string, unknown>) => ({
-                  ...p,
-                  path,
-                  toolKey,
-                  source: toolKey ? "tool" : "git",
-                }),
-                transition: "none",
-              })
-            }
+            onOpenDiff={openDiff}
             slots={{
               composerNotice: (
                 <>

@@ -27,6 +27,10 @@ import {
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
+import {
+  containmentRootFor,
+  resolveWorkspacePath,
+} from "#renderer/components/file-preview/paths";
 import { messageTime } from "#renderer/lib/bot-turns/gap-stamp";
 import { cn } from "#renderer/lib/cn";
 import { Button } from "#renderer/ui/button";
@@ -66,13 +70,7 @@ import {
   type NormalizedTool,
   type ToolStatus,
 } from "./normalize";
-import {
-  kindOf,
-  resolveWorkspacePath,
-  toolMeta,
-  toolOpenPath,
-  type ToolMeta,
-} from "./tool-meta";
+import { kindOf, toolMeta, toolOpenPath, type ToolMeta } from "./tool-meta";
 
 const KIND_ICONS: Record<string, LucideIcon> = {
   read: FileText,
@@ -87,13 +85,14 @@ const KIND_ICONS: Record<string, LucideIcon> = {
   other: Wrench,
 };
 
-const STATUS_CLASS: Record<ToolStatus, string> = {
-  running: "text-[var(--chat-status-running)]",
+/** Done is the plain row; every other state is said by tint, not by a word. */
+const ROW_TONE: Record<ToolStatus, string> = {
+  running: "",
   "needs-you": "text-[var(--chat-status-attention)]",
-  done: "text-[var(--chat-status-done)]",
+  done: "",
   failed: "text-destructive",
-  refused: "text-[var(--chat-status-muted)]",
-  stopped: "text-[var(--chat-status-muted)]",
+  refused: "",
+  stopped: "",
 };
 
 const STATUS_KEY: Record<ToolStatus, string> = {
@@ -351,7 +350,8 @@ const BashBody = ({ tool }: { tool: NormalizedTool }) => {
   const { t } = useTranslation();
   const ref = useRef<HTMLPreElement>(null);
   const [following, setFollowing] = useState(true);
-  const output = tool.terminal?.output ?? tool.text;
+  const terminalOutput = tool.terminal?.output ?? "";
+  const output = terminalOutput !== "" ? terminalOutput : tool.text;
   const { text: tail, hidden } = tailLines(output);
   const running = tool.status === "running";
   useEffect(() => {
@@ -372,7 +372,7 @@ const BashBody = ({ tool }: { tool: NormalizedTool }) => {
         </div>
       ) : null}
       {tail === "" ? (
-        running ? null : (
+        running || tool.error != null ? null : (
           <div className="text-muted-foreground chat-mono text-xs">
             {t("chat.tool.bashNoOutput")}
           </div>
@@ -392,6 +392,15 @@ const BashBody = ({ tool }: { tool: NormalizedTool }) => {
           <AnsiText text={tail} />
         </pre>
       )}
+      {tool.error != null && tool.error !== "" && tool.error !== output ? (
+        <div
+          role="alert"
+          data-bash-error
+          className="text-destructive chat-mono text-xs break-words whitespace-pre-wrap"
+        >
+          {tool.error}
+        </div>
+      ) : null}
       {!running && (exitCode != null || durationMs != null) ? (
         <div
           className="chat-mono flex items-center gap-2 text-xs"
@@ -497,11 +506,7 @@ const ImageReadCard = ({ image }: { image: ImageRead }) => {
     let live = true;
     const path = image.filePath;
     runtime.host
-      .readImage(
-        path,
-        workspaceRoot ??
-          path.slice(0, Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\")))
-      )
+      .readImage(path, containmentRootFor(path, workspaceRoot))
       .then((url) => {
         if (!live) return;
         if (url === "") setFailed(true);
@@ -617,12 +622,48 @@ const ReadBody = ({
   );
 };
 
+const BROWSER_ARGS: Array<[string, string]> = [
+  ["action", "Action"],
+  ["url", "URL"],
+  ["ref", "Ref"],
+  ["selector", "Selector"],
+  ["text", "Text"],
+  ["value", "Value"],
+  ["key", "Key"],
+  ["direction", "Direction"],
+  ["url_pattern", "URL Pattern"],
+  ["depth", "Depth"],
+  ["code", "Code"],
+];
+
+/** The browser call's own arguments as label/value pairs (click target, typed text, scope, code...). */
+export const browserInputLines = (
+  name: string,
+  input: Record<string, unknown>
+): Array<[string, string]> => {
+  const lines: Array<[string, string]> = [];
+  for (const [key, label] of BROWSER_ARGS) {
+    const raw = input[key];
+    if (raw == null || raw === "" || typeof raw === "object") continue;
+    // A ref names the target; the selector is only a fallback for it.
+    if (key === "selector" && input.ref) continue;
+    const value = String(raw);
+    lines.push([
+      key === "selector" && name.includes("snapshot") ? "Scope" : label,
+      key === "code" && value.length > 200 ? `${value.slice(0, 200)}…` : value,
+    ]);
+  }
+  return lines;
+};
+
 const Body = ({
   expander,
   tool,
   input,
   diffKey,
+  name,
 }: {
+  name: string;
   diffKey: string;
   expander: Expander;
   tool: NormalizedTool;
@@ -667,11 +708,21 @@ const Body = ({
     case "browser":
       return (
         <div className="flex flex-col gap-1 text-xs">
-          <div className="chat-mono text-muted-foreground">
-            {[input.action, input.url]
-              .filter((v) => typeof v === "string")
-              .join(" ")}
-          </div>
+          {browserInputLines(name, input).length === 0 ? null : (
+            <div
+              data-browser-args
+              className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs"
+            >
+              {browserInputLines(name, input).map(([label, value]) => (
+                <span key={label}>
+                  <span className="text-muted-foreground">{label}: </span>
+                  <span className="chat-mono text-secondary-foreground">
+                    {value}
+                  </span>
+                </span>
+              ))}
+            </div>
+          )}
           {tool.text === "" ? null : (
             <pre className="chat-terminal">{tool.text}</pre>
           )}
@@ -772,13 +823,20 @@ const MountedToolLine = ({ part, result, expander: fixed }: ToolLineProps) => {
   const expander = fixed ?? expanderFor(part.name);
   const Icon = KIND_ICONS[kindOf(part.name)] ?? Wrench;
   const title = toolTitle(part.name, input);
-  const component = componentLine(
-    part.name,
-    input,
-    tool.status === "running",
-    t,
-    tool.text
-  );
+  // A failed, stopped or refused call must not claim "Built"/"Opened": it
+  // falls back to the generic row, whose body carries the error.
+  const component =
+    tool.status === "failed" ||
+    tool.status === "stopped" ||
+    tool.status === "refused"
+      ? null
+      : componentLine(
+          part.name,
+          input,
+          tool.status === "running",
+          t,
+          tool.text
+        );
   const meta = toolMeta(
     part.name,
     input,
@@ -791,21 +849,23 @@ const MountedToolLine = ({ part, result, expander: fixed }: ToolLineProps) => {
     component == null &&
     tool.status !== "refused" &&
     hasBody(expander, tool, input);
+  const tone = ROW_TONE[tool.status];
   const row = (
     <>
-      <span
-        className={cn("shrink-0", STATUS_CLASS[tool.status])}
-        data-status={tool.status}
-      >
-        {t(STATUS_KEY[tool.status])}
-      </span>
-      <Icon aria-hidden className="text-muted-foreground size-3.5 shrink-0" />
+      {tool.status === "done" ? null : (
+        <span className="sr-only">{t(STATUS_KEY[tool.status])}</span>
+      )}
+      <Icon
+        aria-hidden
+        className={cn("size-3.5 shrink-0", tone || "text-muted-foreground")}
+      />
       {component != null ? (
         <ComponentTitle line={component} running={tool.status === "running"} />
       ) : (
         <span
           className={cn(
-            "text-foreground min-w-0 truncate",
+            "min-w-0 truncate",
+            tone || "text-foreground",
             tool.status === "running" && "shimmer"
           )}
         >
@@ -822,7 +882,15 @@ const MountedToolLine = ({ part, result, expander: fixed }: ToolLineProps) => {
       open={open}
       onOpenChange={setOpen}
     >
-      <div className="text-muted-foreground flex min-h-7 items-center gap-2 font-mono text-xs">
+      <div
+        data-status={tool.status}
+        className={cn(
+          "text-muted-foreground flex min-h-7 items-center gap-2 font-mono text-xs",
+          tool.status === "refused" || tool.status === "stopped"
+            ? "opacity-60"
+            : undefined
+        )}
+      >
         {expandable ? (
           <CollapsibleTrigger
             aria-controls={bodyId}
@@ -876,6 +944,7 @@ const MountedToolLine = ({ part, result, expander: fixed }: ToolLineProps) => {
             expander={expander}
             tool={tool}
             input={input}
+            name={part.name}
             diffKey={toolKey(scope, part.id)}
           />
         </CollapsibleContent>

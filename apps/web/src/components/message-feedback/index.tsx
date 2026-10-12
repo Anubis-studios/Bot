@@ -22,6 +22,12 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "#renderer/ui/tooltip";
 
 type Rating = "up" | "down";
 
+/** Shared look of the turn/message action buttons (Copy, thumbs): 28px, muted. */
+export const ACTION_BUTTON_CLASS =
+  "text-muted-foreground hover:text-foreground hover:bg-muted aria-pressed:bg-primary/10 aria-pressed:text-primary aria-pressed:hover:bg-primary/15 aria-pressed:[&_svg]:fill-current";
+export const ACTION_ICON_CLASS = "size-4";
+export const ACTION_ICON_STROKE = 1.75;
+
 export interface MessageFeedbackProps {
   /** The reply's feedback segment; absent, the controls keep their own state. */
   id?: string;
@@ -115,7 +121,7 @@ export const MessageFeedback = ({ id, send }: MessageFeedbackProps) => {
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="aria-pressed:bg-foreground/10 rounded-full"
+                      className={ACTION_BUTTON_CLASS}
                       aria-label={t(label)}
                       aria-pressed={rating === value}
                       data-status={status}
@@ -125,7 +131,11 @@ export const MessageFeedback = ({ id, send }: MessageFeedbackProps) => {
                 />
               }
             >
-              <Icon aria-hidden className="size-4" />
+              <Icon
+                aria-hidden
+                className={ACTION_ICON_CLASS}
+                strokeWidth={ACTION_ICON_STROKE}
+              />
             </TooltipTrigger>
             <TooltipContent>{t(label)}</TooltipContent>
           </Tooltip>

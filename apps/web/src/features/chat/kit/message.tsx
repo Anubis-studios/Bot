@@ -41,6 +41,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 
+import { containmentRootFor } from "#renderer/components/file-preview/paths";
 import { botVisibleMessage } from "#renderer/lib/bot-turns/turns";
 import { cn } from "#renderer/lib/cn";
 import {
@@ -85,6 +86,7 @@ import {
 import { useKitParts, useMessageScope, MessageScope } from "./message-scope";
 import { ReplyQuote, jumpToMessage } from "./reply";
 import { joinLabels, toolRunCounts, toolRunKind } from "./tool-run";
+import { useRunOpen } from "./tool-run-state";
 import { toolInput } from "./tools/normalize";
 import { RunLiveOutput } from "./tools/tool-line";
 
@@ -148,11 +150,7 @@ const AttachmentChip = ({ path }: { path: string }) => {
     if (!image || !inView) return;
     let live = true;
     runtime.host
-      .readImage(
-        path,
-        workspaceRoot ??
-          path.slice(0, Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\")))
-      )
+      .readImage(path, containmentRootFor(path, workspaceRoot))
       .then((url) => live && url !== "" && setThumb(url))
       .catch(() => {});
     return () => {
@@ -612,9 +610,13 @@ const ToolRun = ({
   children: ReactNode;
 }) => {
   const { t, i18n } = useTranslation();
-  const { session } = useChatView();
+  const { session, threadId } = useChatView();
   const scope = useSubagentScope();
-  const [open, setOpen] = useState(false);
+  // Keyed by the run's first call, so the disclosure survives a remount.
+  const [open, setOpen] = useRunOpen(
+    threadId,
+    `${scope ?? ""}\0${calls[0]?.id ?? ""}`
+  );
   // A call the person must approve is waiting, not running.
   const needsYou = useThreadStore(session, (state) =>
     calls.reduce(
@@ -856,11 +858,7 @@ export const SessionMessage = ({ message }: MessageProps<unknown>) => {
         <Credits message={message} />
         {decoration?.after}
         {turn != null && !streaming ? (
-          <TurnActions
-            messageId={turn.id}
-            text={turn.text}
-            feedback={decoration?.actions}
-          />
+          <TurnActions text={turn.text} feedback={decoration?.actions} />
         ) : null}
       </div>
     </MessageScope>

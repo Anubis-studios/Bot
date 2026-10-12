@@ -20,6 +20,15 @@ describe("actionOf", () => {
       expect(actionOf(name)).toBe("Command");
   });
 
+  it("classes migrated aliases and prefixed names", () => {
+    expect(actionOf("batch_file_read")).toBe("Read");
+    expect(actionOf("web_search_text_only")).toBe("WebSearch");
+    expect(actionOf("scrape_url_content")).toBe("WebSearch");
+    expect(actionOf("agent-tools_scrape_url_content")).toBe("WebSearch");
+    expect(actionOf("batch_edit")).toBe("Edit");
+    expect(actionOf("glob")).toBe("CodeSearch");
+  });
+
   it("names browser, MCP, plan, ask, sub-agent, deliverable and component tools", () => {
     expect(actionOf("browser_task")).toBe("Browser");
     expect(actionOf("mcp__linear__create_issue")).toBe("Mcp");

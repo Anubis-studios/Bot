@@ -13,6 +13,11 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 
+import {
+  ACTION_BUTTON_CLASS,
+  ACTION_ICON_CLASS,
+  ACTION_ICON_STROKE,
+} from "#renderer/components/message-feedback";
 import { cn } from "#renderer/lib/cn";
 import { updateDraft } from "#renderer/lib/continuity/composer-drafts";
 import { useMotionPreference } from "#renderer/lib/motion";
@@ -870,7 +875,6 @@ const replyTo = (
 
 const MotionBubbleReactions = motion.create(BubbleReactions);
 
-const ICON_BUTTON_CLASS = "text-muted-foreground hover:text-foreground";
 const COPIED_MS = 1500;
 
 /**
@@ -890,8 +894,8 @@ const CopyButton = ({ text, onFail }: { text: string; onFail: () => void }) => {
   return (
     <Button
       variant="ghost"
-      size="icon-xs"
-      className={ICON_BUTTON_CLASS}
+      size="icon"
+      className={ACTION_BUTTON_CLASS}
       // Keep the transcript selection while copying it.
       onMouseDown={(event) => event.preventDefault()}
       aria-label={t("chat.actions.copy")}
@@ -903,39 +907,25 @@ const CopyButton = ({ text, onFail }: { text: string; onFail: () => void }) => {
         }, onFail)
       }
     >
-      {copied ? <Check aria-hidden /> : <Copy aria-hidden />}
-    </Button>
-  );
-};
-
-const ReplyButton = ({
-  messageId,
-  role,
-  text,
-}: {
-  messageId: string;
-  role: Role;
-  text: string;
-}) => {
-  const { t } = useTranslation();
-  const { threadId, composer } = useChatView();
-  return (
-    <Button
-      variant="ghost"
-      size="icon-xs"
-      className={ICON_BUTTON_CLASS}
-      onMouseDown={(event) => event.preventDefault()}
-      aria-label={t("chat.actions.reply")}
-      disabled={composer.readOnly != null}
-      onClick={() => replyTo(threadId, messageId, role, text)}
-    >
-      <Reply aria-hidden />
+      {copied ? (
+        <Check
+          aria-hidden
+          className={ACTION_ICON_CLASS}
+          strokeWidth={ACTION_ICON_STROKE}
+        />
+      ) : (
+        <Copy
+          aria-hidden
+          className={ACTION_ICON_CLASS}
+          strokeWidth={ACTION_ICON_STROKE}
+        />
+      )}
     </Button>
   );
 };
 
 /**
- * The sessions skin's user message: its Copy and Reply sit in a row of their
+ * The sessions skin's user message: its Copy sits in a row of their
  * own directly under the bubble, aligned to its edge. The row is in flow (its
  * height is reserved, nothing floats and no gap separates it from the
  * bubble), appears on hover or focus anywhere in the message, and is always
@@ -963,7 +953,6 @@ const SessionActions = ({
           data-slot="session-message-actions"
           className="flex h-7 items-center justify-end gap-0.5 opacity-0 transition-opacity duration-150 group-focus-within/message:opacity-100 group-hover/message:opacity-100 motion-reduce:transition-none [@media(hover:none)]:opacity-100"
         >
-          <ReplyButton messageId={message.id} role="user" text={text} />
           <CopyButton text={text} onFail={() => setFailed(true)} />
         </div>
       ) : null}
@@ -984,16 +973,14 @@ const FailedCopy = () => {
 /**
  * The one action row of an assistant turn (everything between two user
  * messages), at the end of the turn's last row once the turn has finished:
- * Copy (the turn's prose), Reply and, when the route offers it, the thumbs.
+ * Copy (the turn's prose) and, when the route offers it, the thumbs.
  * It is always rendered (a faint row, so the transcript never shifts) and
  * lifts to full strength on hover or focus; touch screens always show it.
  */
 export const TurnActions = ({
-  messageId,
   text,
   feedback,
 }: {
-  messageId: string;
   text: string;
   feedback?: ReactNode;
 }) => {
@@ -1008,7 +995,6 @@ export const TurnActions = ({
         className="flex h-8 items-center gap-0.5 opacity-50 transition-opacity duration-150 focus-within:opacity-100 hover:opacity-100 motion-reduce:transition-none [@media(hover:none)]:opacity-100"
       >
         <CopyButton text={text} onFail={() => setFailed(true)} />
-        <ReplyButton messageId={messageId} role="assistant" text={text} />
         {rateable ? feedback : null}
       </div>
       {failed ? (

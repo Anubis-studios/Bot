@@ -10,6 +10,7 @@ import { ChevronRight, ExternalLink, Square } from "lucide-react";
 import { type ComponentType, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { botVisibleMessage } from "#renderer/lib/bot-turns/turns";
 import { cn } from "#renderer/lib/cn";
 import { Button } from "#renderer/ui/button";
 import {
@@ -20,10 +21,12 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "#renderer/ui/tooltip";
 
 import { Markdown } from "../../markdown/markdown";
+import { isBlankText } from "../../scroller/coalesce";
 import { useToolWindow } from "../../scroller/row-context";
 import { useThreadStore } from "../../store/selectors";
 import { formatElapsed, useSeconds } from "../clock";
 import { SubagentScope, useChatView } from "../context";
+import { MessageScope, useKitParts } from "../message-scope";
 import { toolInput } from "../tools/normalize";
 import { toolTitle } from "../tools/tool-line";
 import { narrationLines, subagentEnding, subagentReport } from "./summary";
@@ -64,6 +67,47 @@ export const SubagentCard = (props: SubagentProps<unknown>) => {
     return null;
   return <MountedSubagentCard {...props} />;
 };
+/**
+ * A bot's sub-agent thread: each child message passes the bot's spoken-part
+ * rule (no reasoning, no stray media) and renders in its own message scope,
+ * so actions and ids are the child's, not the parent reply's.
+ */
+export const BotChildMessages = ({
+  messages,
+  running,
+}: {
+  messages: readonly UIMessage[];
+  running: boolean;
+}) => {
+  const Kit = useKitParts();
+  return messages.map((child, index) => {
+    const visible = botVisibleMessage(child, messages, running);
+    if (visible.parts.length === 0) return null;
+    return (
+      <MessageScope
+        key={child.id}
+        value={{
+          id: child.id,
+          role: child.role,
+          streaming: running && index === messages.length - 1,
+          message: visible,
+        }}
+      >
+        <Kit.Message message={visible}>
+          {(parts) =>
+            parts
+              .filter(
+                (item) =>
+                  item.part.type !== "tool-result" && !isBlankText(item.part)
+              )
+              .map((item, i) => <Kit.Part key={i} part={item} />)
+          }
+        </Kit.Message>
+      </MessageScope>
+    );
+  });
+};
+
 const MountedSubagentCard = ({ subagent, Parts }: SubagentProps<unknown>) => {
   const { t } = useTranslation();
   const { runtime, threadId, session, onOpenSubagent, skin, workspaceRoot } =
@@ -196,7 +240,11 @@ const MountedSubagentCard = ({ subagent, Parts }: SubagentProps<unknown>) => {
       ) : null}
       <CollapsibleContent className="flex flex-col gap-1 px-4 pb-3">
         <SubagentScope value={subagent.id}>
-          <PartsView />
+          {skin === "bot" ? (
+            <BotChildMessages messages={subagent.messages} running={running} />
+          ) : (
+            <PartsView />
+          )}
         </SubagentScope>
       </CollapsibleContent>
     </Collapsible>

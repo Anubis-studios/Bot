@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 
+import { resolveWorkspacePath } from "#renderer/components/file-preview/paths";
+
 import { parseImageRead } from "./image-read";
 import { humanToolName, stripLineNumbers, todoItems } from "./normalize";
-import { expanderFor } from "./tool-line";
-import { resolveWorkspacePath, toolOpenPath } from "./tool-meta";
+import { browserInputLines, expanderFor } from "./tool-line";
+import { toolOpenPath } from "./tool-meta";
 
 describe("tool helpers", () => {
   it("strips arrow line-number prefixes only when every line has one", () => {
@@ -33,6 +35,9 @@ describe("tool helpers", () => {
   it("resolves relative paths against the workspace", () => {
     expect(resolveWorkspacePath("src/a.ts", "/ws/")).toBe("/ws/src/a.ts");
     expect(resolveWorkspacePath("/abs/a.ts", "/ws")).toBe("/abs/a.ts");
+    expect(resolveWorkspacePath("\\\\srv\\share\\a.ts", "/ws")).toBe(
+      "\\\\srv\\share\\a.ts"
+    );
     expect(toolOpenPath("edit", { file_path: "./a.ts" }, "/ws")).toBe(
       "/ws/a.ts"
     );
@@ -69,5 +74,31 @@ describe("tool helpers", () => {
       null
     );
     expect(parseImageRead("plain text")).toBe(null);
+  });
+
+  it("lists a browser call's own arguments", () => {
+    expect(
+      browserInputLines("browser_interact", {
+        action: "type",
+        ref: "e5",
+        selector: "#x",
+        text: "hello",
+        key: "Enter",
+      })
+    ).toEqual([
+      ["Action", "type"],
+      ["Ref", "e5"],
+      ["Text", "hello"],
+      ["Key", "Enter"],
+    ]);
+    expect(
+      browserInputLines("browser_snapshot", { selector: "main", depth: 3 })
+    ).toEqual([
+      ["Scope", "main"],
+      ["Depth", "3"],
+    ]);
+    expect(
+      browserInputLines("browser_execute", { code: "x".repeat(300) })[0]![1]
+    ).toHaveLength(201);
   });
 });

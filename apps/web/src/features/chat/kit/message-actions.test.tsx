@@ -780,7 +780,7 @@ it("sessions carry one action row per assistant turn, at its end, with the turn'
   // Rating keys on the turn's last assistant message.
   fireEvent.click(within(first).getByRole("button", { name: "Good response" }));
   expect(send).toHaveBeenCalledWith("b", "up");
-  // Each user message has its Copy and Reply directly under its bubble.
+  // Each user message has its Copy directly under its bubble.
   const userRow = document
     .querySelector('[data-message-target="u1"]')!
     .querySelector('[data-slot="session-message-actions"]')!;
@@ -788,8 +788,9 @@ it("sessions carry one action row per assistant turn, at its end, with the turn'
     within(userRow as HTMLElement).getByRole("button", { name: "Copy message" })
   ).toBeTruthy();
   expect(
-    within(userRow as HTMLElement).getByRole("button", { name: "Reply" })
-  ).toBeTruthy();
+    within(userRow as HTMLElement).queryByRole("button", { name: "Reply" })
+  ).toBeNull();
+  expect(within(first).queryByRole("button", { name: "Reply" })).toBeNull();
   expect(userRow.className).toContain("[@media(hover:none)]:opacity-100");
   expect(userRow.className).toContain("group-focus-within/message:opacity-100");
   const text = document.querySelector<HTMLElement>("[data-message-text]")!;

@@ -31,6 +31,19 @@ const COMMAND_TOOLS = new Set([
 const CODE_SEARCH_TOOLS = new Set(["code_map"]);
 const PLAN_TOOLS = new Set(["todo", "todo_write", "exit_plan_mode"]);
 
+/**
+ * Names the agent's kind table may not know: current tools and the aliases
+ * migrated history carries. Checked before the table.
+ */
+const ALIASES: Record<string, Action> = {
+  batch_file_read: "Read",
+  batch_edit: "Edit",
+  web_search_text_only: "WebSearch",
+  scrape_url_content: "WebSearch",
+  grep: "CodeSearch",
+  glob: "CodeSearch",
+};
+
 const kindOf = (name: string): ToolKind => {
   try {
     return toToolKind(name);
@@ -44,8 +57,14 @@ const kindOf = (name: string): ToolKind => {
  * table for file/command/search tools (the tool rows use it for their icon);
  * the rest are named by what the call is for.
  */
+/** Drops the `agent-tools_` prefix some wire names carry. */
+const bareName = (name: string): string =>
+  name.startsWith("agent-tools_") ? name.slice("agent-tools_".length) : name;
+
 export const actionOf = (name: string): Action => {
   if (COMMAND_TOOLS.has(name)) return "Command";
+  const alias = ALIASES[bareName(name)];
+  if (alias != null) return alias;
   if (name === "present_deliverable" || name.endsWith("_present_deliverable"))
     return "Present";
   if (componentToolBase(name) != null) return "Create";

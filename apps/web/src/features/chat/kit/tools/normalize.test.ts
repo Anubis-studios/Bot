@@ -206,3 +206,14 @@ describe("R2-T13 migrated", () => {
     expect(new Set(statuses).size).toBeGreaterThan(1);
   });
 });
+
+describe("bash results without a terminal envelope", () => {
+  it("keep the result text as the terminal output", () => {
+    const { call, result } = partsAfter([
+      ...b.toolCall("t1", "bash", "a", { command: "echo hi" }),
+      b.toolResult("t1", { text: "hi there" }),
+    ]);
+    const tool = normalizeTool(call, result, {}, { runActive: false });
+    expect(tool.terminal?.output).toBe("hi there");
+  });
+});

@@ -8,6 +8,8 @@
 import { cleanup, configure } from "@testing-library/react";
 import { afterEach, vi } from "vitest";
 
+import { resetRunState } from "#renderer/features/chat/kit/tool-run-state";
+
 import { resetMedia } from "./media";
 
 // A shared CI runner (Windows most of all) can take past the default second
@@ -18,6 +20,7 @@ afterEach(() => {
   cleanup();
   vi.clearAllMocks();
   resetMedia();
+  resetRunState();
   document.documentElement.className = "";
   for (const name of document.documentElement.getAttributeNames())
     if (name !== "lang" && name !== "dir")

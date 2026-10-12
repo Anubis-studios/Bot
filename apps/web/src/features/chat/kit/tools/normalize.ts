@@ -167,8 +167,6 @@ const normalizeLive = (
     ...(asRecord(output?.display) as ToolDisplayData | undefined),
   } as ToolDisplayData;
   const status = statusOf(call, result, output, context);
-  const terminalOutput =
-    str(asRecord(output?.terminal)?.output) ?? live.output ?? undefined;
   const command = str(input.command);
   const terminalRecord = asRecord(output?.terminal);
   const exitCode = num(terminalRecord?.exitCode ?? output?.exitCode);
@@ -178,6 +176,11 @@ const normalizeLive = (
   const text =
     str(output?.text) ??
     (result != null && output == null ? resultText(result) : "");
+  // A result with no terminal envelope still carries its text: keep it.
+  const terminalOutput =
+    str(asRecord(output?.terminal)?.output) ??
+    live.output ??
+    (text !== "" ? text : undefined);
   const diff = liveDiff(Object.keys(display).length > 0 ? display : undefined);
   const lineCount = num(display.lineCount);
   return {

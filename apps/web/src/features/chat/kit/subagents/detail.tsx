@@ -7,16 +7,23 @@ import {
   createInlineRegistry,
   SubagentScope,
 } from "../context";
-import { MessageScope } from "../message-scope";
+import { KitPartsProvider, MessageScope } from "../message-scope";
 import { SessionUI } from "../ui";
 export const SubagentDetail = ({
   runtime,
   threadId,
   subagentRunId,
+  workspaceRoot = null,
+  onOpenFile,
+  onOpenDiff,
 }: {
   runtime: ChatRuntime;
   threadId: string;
   subagentRunId: string;
+  /** The session's checkout, so relative paths and attachments resolve. */
+  workspaceRoot?: string | null;
+  onOpenFile?: (absPath: string) => void;
+  onOpenDiff?: (path: string, toolKey?: string) => void;
 }) => {
   const session = runtime.session(threadId);
   const chat = useThreadHost(session);
@@ -38,30 +45,34 @@ export const SubagentDetail = ({
           model: null,
         },
         slots: {},
-        workspaceRoot: null,
+        workspaceRoot,
+        onOpenFile,
+        onOpenDiff,
         focused: false,
         notchEnabled: false,
         inline,
       }}
     >
-      <SessionUI.Provider chat={chat}>
-        <SubagentScope value={subagentRunId}>
-          <div className="flex flex-col gap-4 p-4">
-            {subagent.messages.map((message) => (
-              <MessageScope
-                key={message.id}
-                value={{
-                  id: message.id,
-                  role: message.role,
-                  streaming: subagent.status === "running",
-                }}
-              >
-                <SessionUI.Message message={message} />
-              </MessageScope>
-            ))}
-          </div>
-        </SubagentScope>
-      </SessionUI.Provider>
+      <KitPartsProvider value={SessionUI}>
+        <SessionUI.Provider chat={chat}>
+          <SubagentScope value={subagentRunId}>
+            <div className="flex flex-col gap-4 p-4">
+              {subagent.messages.map((message) => (
+                <MessageScope
+                  key={message.id}
+                  value={{
+                    id: message.id,
+                    role: message.role,
+                    streaming: subagent.status === "running",
+                  }}
+                >
+                  <SessionUI.Message message={message} />
+                </MessageScope>
+              ))}
+            </div>
+          </SubagentScope>
+        </SessionUI.Provider>
+      </KitPartsProvider>
     </ChatViewProvider>
   );
 };
