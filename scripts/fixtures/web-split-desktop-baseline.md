@@ -8,7 +8,24 @@ renderer, a chunk split by a stray import), not against features. A feature
 that needs more is measured, reviewed and recorded here as a new baseline,
 in a commit of its own that says by how much it grew.
 
-## Current: `43330457` (renderer as merged while CI was red)
+## Current: `bc75d297c` (the Routines landing)
+
+**390 / 7347024 / 2465669.** Records the renderer at `bc75d297c`, the Routines
+landing (#431): with no routine open, the area shows the way to make one and
+the six routine templates. Against `43330457`: +2 chunks (+0.5%), +75321 bytes
+(+1.04%), +24174 gzip bytes (+0.99%). Most of that is what merged to main
+after `43330457` (main stood just under the 1% allowance); the landing, its
+template cards and four strings in every locale took the byte total over it.
+The 1% allowance is unchanged.
+
+Measured with `regenerate-web-split-desktop-baseline.sh bc75d297c bc75d297c
+bc25648568bcc79597a09c974e0a8e56e2481596411e5ae84cc9e48fdff2e3a8` (isolated
+archives, frozen-lockfile install, Linux x64); this baseline-only change
+touches no renderer code.
+
+## History
+
+### `43330457` (renderer as merged while CI was red)
 
 **388 / 7271703 / 2441495.** Records the renderer as merged through
 `43330457` (#369). Main's CI has failed since early October on other steps,
@@ -21,8 +38,6 @@ and was not measured per merge. The 1% allowance is unchanged.
 Measured from a clean worktree build of `43330457` with the #370 lockfile
 (frozen-lockfile install, Linux x64); this baseline-only change touches no
 renderer code.
-
-## History
 
 ### `700190fc` (renderer as merged while the guard was not running)
 
