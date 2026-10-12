@@ -433,6 +433,12 @@ export class FileTreeService {
         // `--directory` collapses a fully-untracked directory into `dir/`.
         const isDirectoryEntry = line.endsWith("/");
         const normalized = line.replace(/\\/g, "/").replace(/\/$/, "");
+        // `./`: the root itself is untracked in a repository above it, so
+        // nothing under it is ignored.
+        if (normalized === ".") {
+          info.untrackedRoots.add("");
+          continue;
+        }
         if (normalized.length === 0) {
           continue;
         }
@@ -465,7 +471,11 @@ export class FileTreeService {
     }
     // Inside a fully-untracked subtree is itself non-ignored.
     for (const root of tracked.untrackedRoots) {
-      if (relativePath === root || relativePath.startsWith(`${root}/`)) {
+      if (
+        root === "" ||
+        relativePath === root ||
+        relativePath.startsWith(`${root}/`)
+      ) {
         return true;
       }
     }

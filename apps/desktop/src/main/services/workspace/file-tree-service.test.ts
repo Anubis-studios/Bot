@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 /**
  * The workspace containment on the file operations the tree exposes.
  *
@@ -24,6 +25,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { setMigrationWriteBlocks } from "../../migrations/write-block";
 import { FileTreeService } from "./file-tree-service";
+import { GitService } from "./git-service";
 
 vi.mock("electron", () => ({
   shell: {
@@ -301,5 +303,97 @@ describe("files held by an unresolved migration commit", () => {
       success: false,
       error: held,
     });
+  });
+});
+
+/**
+ * The Default workspace lives in the app's own folder, which can sit inside a
+ * repository above it: a home folder kept in git. Git then reported the whole
+ * workspace as one untracked `./`, the visibility filter matched none of its
+ * folders, and the Files pane was blank; the status read scanned the whole
+ * home repository. Real git throughout.
+ */
+describe("a workspace inside a larger repository", () => {
+  const run = (cwd: string, ...args: string[]) =>
+    execFileSync("git", ["-C", cwd, ...args], {
+      env: { ...process.env, GIT_CONFIG_NOSYSTEM: "1" },
+    }).toString();
+  let home: string;
+  let base: string;
+  let defaultWorkspace: string;
+  const originalCeilings = process.env.GIT_CEILING_DIRECTORIES;
+
+  beforeEach(() => {
+    home = mkdtempSync(join(tmpdir(), "ft-home-"));
+    run(home, "init", "-q");
+    writeFileSync(join(home, "notes.txt"), "the user's own file\n");
+    base = join(home, ".abacusai-bot");
+    defaultWorkspace = join(base, "session-home");
+    mkdirSync(join(defaultWorkspace, "ember-oak", "assets"), {
+      recursive: true,
+    });
+    writeFileSync(join(defaultWorkspace, "ember-oak", "index.html"), "<h1/>");
+    writeFileSync(join(defaultWorkspace, "ember-oak", "assets", "a.png"), "x");
+  });
+
+  afterEach(() => {
+    if (originalCeilings == null) delete process.env.GIT_CEILING_DIRECTORIES;
+    else process.env.GIT_CEILING_DIRECTORIES = originalCeilings;
+    rmSync(home, { recursive: true, force: true });
+  });
+
+  const names = async (root: string) =>
+    (await new FileTreeService().buildRootTree(root, [])).map((n) => n.name);
+
+  it("lists the folders of a workspace the repository does not track", async () => {
+    expect(await names(defaultWorkspace)).toEqual(["ember-oak"]);
+  });
+
+  it("still hides what the workspace's own repository ignores", async () => {
+    run(defaultWorkspace, "init", "-q");
+    mkdirSync(join(defaultWorkspace, "build"));
+    writeFileSync(join(defaultWorkspace, "build", "out.js"), "x");
+    writeFileSync(join(defaultWorkspace, ".gitignore"), "build/\n");
+
+    expect(await names(defaultWorkspace)).toEqual(["ember-oak", ".gitignore"]);
+  });
+
+  it("reads git changes for the workspace only, never the rest of the repository", async () => {
+    const git = new GitService();
+    const relative = await git.readGitChanges(defaultWorkspace, {
+      checkoutRelative: true,
+    });
+    const whole = await new GitService().readGitChanges(defaultWorkspace);
+
+    expect(relative.changes.map((c) => c.path)).toEqual([
+      "ember-oak/assets/a.png",
+      "ember-oak/index.html",
+    ]);
+    expect(whole.changes.map((c) => c.path)).not.toContain("notes.txt");
+  });
+
+  it("with the app's folder as a ceiling, the Default workspace is a plain folder that lists everything", async () => {
+    // Even a home repository that ignores everything cannot hide it.
+    writeFileSync(join(home, ".gitignore"), "*\n");
+    process.env.GIT_CEILING_DIRECTORIES = base;
+
+    expect(
+      (await new GitService().readGitChanges(defaultWorkspace)).available
+    ).toBe(false);
+    expect(await names(defaultWorkspace)).toEqual(["ember-oak"]);
+  });
+
+  it("under the ceiling, a workspace with its own repository keeps it", async () => {
+    process.env.GIT_CEILING_DIRECTORIES = base;
+    run(defaultWorkspace, "init", "-q");
+
+    const changes = await new GitService().readGitChanges(defaultWorkspace, {
+      checkoutRelative: true,
+    });
+    expect(changes.available).toBe(true);
+    expect(changes.changes.map((c) => [c.status, c.path])).toEqual([
+      ["??", "ember-oak/assets/a.png"],
+      ["??", "ember-oak/index.html"],
+    ]);
   });
 });

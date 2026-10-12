@@ -97,6 +97,15 @@ const activeHome = (): string => {
 /** Called before any module that reads `abacusBotHome()` loads. */
 export const initProfileHome = (): void => {
   process.env.ABACUSAI_BOT_BASE = BASE;
+  // The app's own folders (the Default workspace, routine and bot homes) are
+  // never part of a repository above them, such as a home folder kept in git.
+  const ceilings = (process.env.GIT_CEILING_DIRECTORIES ?? "")
+    .split(path.delimiter)
+    .filter((entry) => entry.length > 0);
+  if (!ceilings.includes(BASE))
+    process.env.GIT_CEILING_DIRECTORIES = [...ceilings, BASE].join(
+      path.delimiter
+    );
   // Unconditional: a relaunch inherits the previous process's mutated value.
   process.env.ABACUSAI_BOT_HOME = activeHome();
 };

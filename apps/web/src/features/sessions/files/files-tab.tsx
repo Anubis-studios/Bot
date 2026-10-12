@@ -202,9 +202,19 @@ export const FilesTab = ({
           </Button>
         )}
         {tree.isError ? (
-          <Button onClick={() => void tree.refetch()}>
-            {t("sessions.common.retry")}
-          </Button>
+          <div role="alert">
+            <p>{t("web.files.failed")}</p>
+            <Button onClick={() => void tree.refetch()}>
+              {t("sessions.common.retry")}
+            </Button>
+          </div>
+        ) : !debounced && tree.isPending ? (
+          <div role="status">
+            <Skeleton className="h-8 w-full" />
+            <span className="sr-only">{t("web.files.loading")}</span>
+          </div>
+        ) : !debounced && paths.length === 0 ? (
+          <p role="status">{t("web.files.empty")}</p>
         ) : debounced && search.isPending ? (
           <Skeleton className="h-8 w-full" />
         ) : debounced && search.isError ? (

@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 let sandbox: string;
 const originalBase = process.env.ABACUSAI_BOT_BASE;
 const originalHome = process.env.ABACUSAI_BOT_HOME;
+const originalCeilings = process.env.GIT_CEILING_DIRECTORIES;
 
 beforeEach(() => {
   sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "account-profiles-"));
@@ -20,6 +21,8 @@ afterEach(() => {
   else process.env.ABACUSAI_BOT_BASE = originalBase;
   if (originalHome == null) delete process.env.ABACUSAI_BOT_HOME;
   else process.env.ABACUSAI_BOT_HOME = originalHome;
+  if (originalCeilings == null) delete process.env.GIT_CEILING_DIRECTORIES;
+  else process.env.GIT_CEILING_DIRECTORIES = originalCeilings;
   fs.rmSync(sandbox, { recursive: true, force: true });
 });
 
@@ -184,5 +187,21 @@ describe("account profile ownership", () => {
     initProfileHome();
 
     expect(process.env.ABACUSAI_BOT_HOME).toBe(sandbox);
+  });
+});
+
+describe("the app's folders and a repository above them", () => {
+  it("adds the base as a git ceiling once, keeping any already set", async () => {
+    const other = path.join(sandbox, "elsewhere");
+    process.env.GIT_CEILING_DIRECTORIES = other;
+    const { initProfileHome } = await import("./profile-home");
+
+    initProfileHome();
+    // A relaunch inherits the mutated environment and runs it again.
+    initProfileHome();
+
+    expect(process.env.GIT_CEILING_DIRECTORIES).toBe(
+      [other, sandbox].join(path.delimiter)
+    );
   });
 });

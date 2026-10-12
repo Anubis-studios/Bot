@@ -660,14 +660,22 @@ export class GitService {
     }
 
     try {
-      const statusOutput = await execFileAsync("git", [
-        "-C",
-        workspacePath,
-        "status",
-        "--porcelain",
-        "-uall",
-        "-z",
-      ]);
+      // Scoped to the workspace: one inside a larger repository (a home
+      // folder kept in git) must not scan the whole of it.
+      const statusOutput = await execFileAsync(
+        "git",
+        [
+          "-C",
+          workspacePath,
+          "status",
+          "--porcelain",
+          "-uall",
+          "-z",
+          "--",
+          ".",
+        ],
+        LITERAL_PATHSPECS
+      );
       let changes: GitChangeItem[] = parseStatusZ(statusOutput.stdout);
       if (options.checkoutRelative === true) {
         const location = await this.repositoryLocation(workspacePath);
