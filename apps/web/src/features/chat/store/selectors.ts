@@ -114,6 +114,3 @@ const NO_PLAN: readonly never[] = [];
  * call, it never picks up a sub-agent's todos.
  */
 export const planOf = (state: ThreadStoreState) => state.agent?.plan ?? NO_PLAN;
-
-export const usePlan = (session: ThreadSession) =>
-  useThreadStore(session, planOf);

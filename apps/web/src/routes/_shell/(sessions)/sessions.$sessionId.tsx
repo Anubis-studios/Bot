@@ -344,6 +344,16 @@ const SessionRoute = () => {
       }),
       transition: "none",
     });
+  const openUrl = (url?: string) => {
+    const existing = url
+      ? panelTabsStore.state[key]?.tabs.find(
+          (tab) => tab.ref.startsWith("browser:") && tab.url === url
+        )
+      : undefined;
+    const ref = existing?.ref ?? `browser:${crypto.randomUUID()}`;
+    openTab(key, { ref, title: url ?? t("sessions.dock.browser"), url });
+    select(ref);
+  };
   const openFile = (path: string) => {
     if (isUrl(path)) {
       openUrl(path);
@@ -371,16 +381,6 @@ const SessionRoute = () => {
     });
     select(ref);
   };
-  function openUrl(url?: string) {
-    const existing = url
-      ? panelTabsStore.state[key]?.tabs.find(
-          (tab) => tab.ref.startsWith("browser:") && tab.url === url
-        )
-      : undefined;
-    const ref = existing?.ref ?? `browser:${crypto.randomUUID()}`;
-    openTab(key, { ref, title: url ?? t("sessions.dock.browser"), url });
-    select(ref);
-  }
   return (
     <>
       <PreviewRegistration

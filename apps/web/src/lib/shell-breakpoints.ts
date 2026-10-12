@@ -41,14 +41,6 @@ const subscribeWidth = (changed: () => void) => {
     window.removeEventListener("resize", changed);
   };
 };
-/** Exact available width, including changes within a band. */
-export const useShellWidth = () =>
-  useSyncExternalStore(
-    subscribeWidth,
-    () => window.innerWidth,
-    () => 1280
-  );
-
 /** One object per distinct layout, so equal layouts are `===`. */
 const layouts = new Map<string, ShellLayoutState>();
 
