@@ -37,6 +37,7 @@ export interface ConnectorRequestCardProps {
   onConnected?(): void;
   /** While the connect page is open: stop waiting. */
   onStop?(): void;
+  className?: string;
 }
 
 export const ConnectorRequestCard = ({
@@ -47,6 +48,7 @@ export const ConnectorRequestCard = ({
   onDecline,
   onConnected,
   onStop,
+  className,
 }: ConnectorRequestCardProps) => {
   const { t } = useTranslation();
   const id = useId();
@@ -69,7 +71,10 @@ export const ConnectorRequestCard = ({
 
   return (
     <div
-      className="bg-card/60 mx-auto mb-2 flex w-full max-w-(--composer-max-w) items-start gap-3 rounded-xl border px-3.5 py-3"
+      className={cn(
+        "bg-card/60 mx-auto mb-2 flex w-full max-w-(--composer-max-w) items-start gap-3 rounded-xl border px-3.5 py-3",
+        className
+      )}
       data-slot="connector-request"
       data-connector={request.connectorId}
       role="group"

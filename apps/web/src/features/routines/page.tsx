@@ -139,8 +139,11 @@ const ReportLayout = ({
 };
 export const RoutinePage = ({
   renderRunReport,
+  renderRequests,
 }: {
   renderRunReport?: (runId: string) => ReactNode;
+  /** The connector asks of these runs (the open run's are in its report). */
+  renderRequests?: (sessionIds: ReadonlySet<string>) => ReactNode;
 }) => {
   const { t, i18n } = useTranslation();
   const { db, transport } = useAppContext();
@@ -275,6 +278,13 @@ export const RoutinePage = ({
               />
             </div>
           </PageToolbar>
+          {renderRequests?.(
+            new Set(
+              sessions
+                .filter((s) => s.routineId === row.id && s.id !== run)
+                .map((s) => s.id)
+            )
+          )}
           {isHosted(row) && hostedOff && (
             <p role="status" className="text-muted-foreground text-xs">
               {t("routines.hosted.unavailable")}

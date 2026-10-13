@@ -2,20 +2,21 @@ import type {
   ConnectorRequest,
   ConnectorOutcome,
 } from "@abacus-ai/contract/contracts";
-import { sessionConversationKey } from "@abacus-ai/contract/conversation-scope";
-import { useEffect, useState } from "react";
+import { conversationRefFromKey } from "@abacus-ai/contract/conversation-scope";
+import { useState, useSyncExternalStore } from "react";
 
 import { ConnectorRequestCard } from "#renderer/components/connector-request-card";
-import { followNotices } from "#renderer/data/queries/notices";
+import { noticeSnapshot } from "#renderer/data/queries/notices";
 import { useAppContext, errorText } from "#renderer/lib/use-app-context";
+/** The pending connector asks of these run sessions, one card each. */
 export const RunRequests = ({
-  sessionId,
-  workspaceId,
+  sessionIds,
+  className,
   connect,
   cancel,
 }: {
-  sessionId: string;
-  workspaceId: string;
+  sessionIds: ReadonlySet<string>;
+  className?: string;
   connect(
     id: string,
     values?: Record<string, string>
@@ -23,33 +24,16 @@ export const RunRequests = ({
   cancel(): Promise<void>;
 }) => {
   const { transport } = useAppContext();
-  const [requests, setRequests] = useState<ConnectorRequest[]>([]);
+  const asks = noticeSnapshot("connectors", transport);
+  const snapshot = useSyncExternalStore(asks.subscribe, asks.get);
+  const requests = (snapshot?.requests ?? []).flatMap((request) => {
+    const ref = conversationRefFromKey(request.conversationKey);
+    return ref?.kind === "session" && sessionIds.has(ref.sessionId)
+      ? [{ request, workspaceId: ref.workspaceId, sessionId: ref.sessionId }]
+      : [];
+  });
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const conversationKey = sessionConversationKey(workspaceId, sessionId);
-  useEffect(() => {
-    const abort = new AbortController();
-    void followNotices(
-      transport,
-      ({ signal }) =>
-        transport.client.connectors.events({ conversationKey }, { signal }),
-      (event) => {
-        if (event.type === "snapshot") setRequests(event.requests);
-        if (event.type === "request")
-          setRequests((rows) =>
-            rows.some((r) => r.requestId === event.request.requestId)
-              ? rows
-              : [...rows, event.request]
-          );
-        if (event.type === "cleared")
-          setRequests((rows) =>
-            rows.filter((r) => r.requestId !== event.requestId)
-          );
-      },
-      abort.signal
-    );
-    return () => abort.abort();
-  }, [transport, conversationKey]);
   const respond = async (
     request: ConnectorRequest,
     outcome: "connected" | "declined" | "failed",
@@ -57,12 +41,12 @@ export const RunRequests = ({
   ) =>
     transport.client.connectors.respond({
       requestId: request.requestId,
-      conversationKey,
+      conversationKey: request.conversationKey,
       outcome,
       ...(error ? { error } : {}),
     });
   const accept = async (
-    request: ConnectorRequest,
+    { request, workspaceId, sessionId }: (typeof requests)[number],
     values?: Record<string, string>
   ) => {
     setBusy(request.requestId);
@@ -98,20 +82,21 @@ export const RunRequests = ({
   };
   return (
     <>
-      {requests.map((request) => (
+      {requests.map((ask) => (
         <ConnectorRequestCard
-          key={request.requestId}
-          request={request}
-          busy={busy === request.requestId}
+          key={ask.request.requestId}
+          request={ask.request}
+          className={className}
+          busy={busy === ask.request.requestId}
           error={error}
-          onConnect={(values) => void accept(request, values)}
+          onConnect={(values) => void accept(ask, values)}
           onConnected={() =>
-            void respond(request, "connected").catch((e) =>
+            void respond(ask.request, "connected").catch((e) =>
               setError(errorText(e))
             )
           }
           onDecline={() =>
-            void respond(request, "declined").catch((e) =>
+            void respond(ask.request, "declined").catch((e) =>
               setError(errorText(e))
             )
           }

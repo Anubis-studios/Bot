@@ -13,10 +13,28 @@ const RoutineRoute = () => {
   const { t } = useTranslation();
   const { transport, db, chat } = Route.useRouteContext();
   const flow = useConnectFlow();
+  const requests = (sessionIds: ReadonlySet<string>, className?: string) => (
+    <RunRequests
+      sessionIds={sessionIds}
+      className={className}
+      connect={(id, values) =>
+        values
+          ? transport.client.connectors.submitFields({
+              connectorId: id,
+              values,
+            })
+          : flow.start(id)
+      }
+      cancel={flow.cancel}
+    />
+  );
   return (
     <>
       <TopBarSlot>{t("shell.rail.routines")}</TopBarSlot>
       <RoutinePage
+        renderRequests={(sessionIds) =>
+          requests(sessionIds, "mx-0 mb-0 max-w-none")
+        }
         renderRunReport={(runId) => (
           <ChatView
             threadId={runId}
@@ -34,23 +52,7 @@ const RoutineRoute = () => {
               decorateMessage: (message, ctx) => ({
                 hidden: message.role === "user" && ctx.index === 0,
               }),
-              banner: (
-                <RunRequests
-                  sessionId={runId}
-                  workspaceId={
-                    db.collections.sessions.get(runId)?.workspaceId ?? ""
-                  }
-                  connect={(id, values) =>
-                    values
-                      ? transport.client.connectors.submitFields({
-                          connectorId: id,
-                          values,
-                        })
-                      : flow.start(id)
-                  }
-                  cancel={flow.cancel}
-                />
-              ),
+              banner: requests(new Set([runId])),
             }}
             workspaceRoot={
               db.collections.workspaces.get(
