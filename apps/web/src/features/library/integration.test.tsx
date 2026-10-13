@@ -116,3 +116,12 @@ it("selecting Global skills overrides the remembered workspace in listInstalled"
   );
   expect((choice as HTMLSelectElement).value).toBe("");
 });
+
+it("shows only categories with connectors in them, and a link to an empty one lands on Featured", async () => {
+  app = await renderApp("/library/connectors?category=support");
+  const featured = await screen.findByRole("button", { name: "Featured" });
+  expect(screen.getByRole("button", { name: "Data" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Development" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Support" })).toBeNull();
+  expect(featured.getAttribute("aria-pressed")).toBe("true");
+});

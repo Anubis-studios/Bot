@@ -64,15 +64,21 @@ export const ConnectorsPage = () => {
     ...transport.orpc.connectors.statuses.queryOptions({ input: {} }),
     staleTime: 60000,
   });
-  const entries = CONNECTORS.filter(
+  const offered = CONNECTORS.filter(
     (e) =>
-      e.kind !== "messaging" &&
-      statuses.data?.[e.id]?.reason !== "not-offered" &&
-      (search.q
-        ? foldSearch(e.name + " " + e.description).includes(
-            foldSearch(search.q)
-          )
-        : visibleTabsFor(e).includes(search.category ?? "featured"))
+      e.kind !== "messaging" && statuses.data?.[e.id]?.reason !== "not-offered"
+  );
+  // Only categories with something in them; Featured always leads.
+  const tabs = CONNECTOR_CATEGORY_TABS.filter(
+    (tab) =>
+      tab === "featured" || offered.some((e) => visibleTabsFor(e).includes(tab))
+  );
+  // A link to a category with nothing in it lands on Featured.
+  const category = tabs.find((tab) => tab === search.category) ?? "featured";
+  const entries = offered.filter((e) =>
+    search.q
+      ? foldSearch(e.name + " " + e.description).includes(foldSearch(search.q))
+      : visibleTabsFor(e).includes(category)
   );
   const connected = (id: string) =>
     ["connected", "pending"].includes(statuses.data?.[id]?.state ?? "");
@@ -98,8 +104,8 @@ export const ConnectorsPage = () => {
       {!search.q && (
         <Segments
           label={t("phase5.category")}
-          value={search.category ?? "featured"}
-          values={CONNECTOR_CATEGORY_TABS.map((value) => ({
+          value={category}
+          values={tabs.map((value) => ({
             value,
             label: t(`phase5.categories.${value}`),
           }))}
