@@ -1,4 +1,5 @@
 import type { AbacusAccountInfo } from "@abacus-ai/contract/contracts";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Bot,
   Calendar,
@@ -9,7 +10,7 @@ import {
   Mail,
   MessageSquare,
 } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -22,7 +23,12 @@ import {
   ownKeyResumeModel,
   providerDisplayName,
 } from "#renderer/lib/own-key-unavailable";
-import { openUpgrade } from "#renderer/lib/upgrade";
+import {
+  checkPlanNow,
+  onPlanActive,
+  openUpgrade,
+  watchForPlan,
+} from "#renderer/lib/upgrade";
 import {
   closeUpgradeDialog,
   useUpgradeDialogRequest,
@@ -32,11 +38,6 @@ import { useAccount } from "#renderer/lib/use-account";
 import { useAppContext } from "#renderer/lib/use-app-context";
 import { Button } from "#renderer/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "#renderer/ui/dialog";
-
-/** How often the dialog re-reads the account while checkout is open. */
-const UPGRADE_POLL_MS = 5_000;
-/** The one-time checkout link lives 30 minutes; stop polling after it. */
-const UPGRADE_POLL_LIMIT_MS = 30 * 60 * 1000;
 
 /** A free account whose Abacus credits are used up: the only one asked. */
 export const spentFreeAccount = (
@@ -55,11 +56,6 @@ const askedAccount = (
   request.kind === "own-key"
     ? creditsTier(account) === "free"
     : spentFreeAccount(account);
-
-const paying = (account: AbacusAccountInfo | null | undefined): boolean => {
-  const tier = creditsTier(account);
-  return tier === "basic" || tier === "paid";
-};
 
 type PlanFeature = "credits" | "models" | "routines" | "apps" | "media";
 
@@ -120,51 +116,35 @@ const DialogBody = ({
 }) => {
   const { t } = useTranslation();
   const { transport } = useAppContext();
-  const { data: account, refetch: refetchAccount } = useAccount();
+  const { data: account } = useAccount();
   const [waiting, setWaiting] = useState(false);
-  const checkNow = useRef<() => void>(() => {});
   const connectors = request.kind === "connectors";
   const ownKey = request.kind === "own-key";
 
-  // Checkout runs in the browser: read the account until the plan is active,
-  // then send the waiting message and close.
+  // Checkout runs in the browser: once the plan is active (lib/upgrade.ts
+  // watches for it), send the waiting message and close.
   useEffect(() => {
     if (!waiting) return;
     let stopped = false;
-    const started = Date.now();
-    const check = async () => {
-      const fresh = await transport.client.account
-        .abacus({ refresh: true })
-        .catch(() => null);
+    void watchForPlan(transport.client).then(async (paid) => {
       if (stopped) return;
-      if (paying(fresh)) {
-        stopped = true;
-        void refetchAccount();
-        onDone(false);
-        if (request.kind !== "own-key") {
-          void request.resume?.().catch(() => {});
-          return;
-        }
-        // The plan's catalog, not the free one read before checkout.
-        const models = await transport.client.models
-          .list({ refresh: true })
-          .catch(() => []);
-        void request.resume?.(ownKeyResumeModel(models)).catch(() => {});
+      if (paid == null) {
+        setWaiting(false);
         return;
       }
-      if (Date.now() - started > UPGRADE_POLL_LIMIT_MS) setWaiting(false);
-    };
-    const timer = setInterval(() => void check(), UPGRADE_POLL_MS);
-    const onFocus = () => void check();
-    checkNow.current = onFocus;
-    window.addEventListener("focus", onFocus);
+      onDone(false);
+      if (request.kind !== "own-key") {
+        void request.resume?.().catch(() => {});
+        return;
+      }
+      // The plan's catalog, which the watch has just read afresh.
+      const models = await transport.client.models.list({}).catch(() => []);
+      void request.resume?.(ownKeyResumeModel(models)).catch(() => {});
+    });
     return () => {
       stopped = true;
-      checkNow.current = () => {};
-      clearInterval(timer);
-      window.removeEventListener("focus", onFocus);
     };
-  }, [waiting, transport, request, onDone, refetchAccount]);
+  }, [waiting, transport, request, onDone]);
 
   if (waiting)
     return (
@@ -184,7 +164,7 @@ const DialogBody = ({
           )}
         </p>
         <div className="flex w-full flex-col gap-1.5 pt-1">
-          <Button className="h-10" onClick={() => checkNow.current()}>
+          <Button className="h-10" onClick={checkPlanNow}>
             {t("upgradeDialog.checkAgain")}
           </Button>
           <Button
@@ -343,7 +323,23 @@ const DialogBody = ({
 export const UpgradeDialogHost = () => {
   const request = useUpgradeDialogRequest();
   const { transport } = useAppContext();
+  const qc = useQueryClient();
   const [confirmed, setConfirmed] = useState<string | null>(null);
+
+  // A plan bought from any surface: the account and the catalog every card and
+  // picker reads change at once, not on their next poll.
+  useEffect(
+    () =>
+      onPlanActive(() => {
+        void qc.invalidateQueries({
+          queryKey: transport.orpc.account.abacus.key(),
+        });
+        void qc.invalidateQueries({
+          queryKey: transport.orpc.models.list.key(),
+        });
+      }),
+    [qc, transport]
+  );
 
   useEffect(() => {
     if (request == null) return;

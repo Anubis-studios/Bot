@@ -1,7 +1,8 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { initI18n } from "#renderer/lib/i18n";
+import { onPlanActive } from "#renderer/lib/upgrade";
 
 import { UpgradePromo } from "./credits-card";
 import { PromoOutlet } from "./promo-host";
@@ -26,6 +27,8 @@ const state = vi.hoisted(() => ({
   query: vi.fn(),
   open: vi.fn(),
   update: vi.fn(),
+  readAccount: vi.fn(),
+  listModels: vi.fn(),
 }));
 vi.mock("@tanstack/react-query", () => ({
   useQuery: (options: { queryKey?: unknown }) => {
@@ -52,9 +55,22 @@ vi.mock("#renderer/lib/use-app-context", () => ({
           },
         },
       },
-      client: { system: { openExternal: state.open } },
+      client: {
+        system: { openExternal: state.open },
+        account: {
+          abacus: state.readAccount,
+          upgradeUrl: async () => "https://checkout.example/once",
+        },
+        models: { list: state.listModels },
+      },
     },
   }),
+}));
+vi.mock("#renderer/lib/platform-system", async (original) => ({
+  ...(await original<typeof import("#renderer/lib/platform-system")>()),
+  openPendingLink: async (_client: unknown, resolve: () => Promise<string>) => {
+    state.open({ url: await resolve() });
+  },
 }));
 vi.mock("#renderer/lib/motion", async (original) => ({
   ...(await original<typeof import("#renderer/lib/motion")>()),
@@ -165,4 +181,67 @@ it("keeps one account cache when an exhaustion notice is cleared", () => {
   view.rerender(promo());
   for (const [options] of state.query.mock.calls)
     expect(options.queryKey).toEqual(["account"]);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+it("after Upgrade, reads the account until the plan is active, then tells the app at once and stops", async () => {
+  vi.useFakeTimers();
+  state.open.mockClear();
+  const paid = { ...state.account, subscription_tier: "basic" };
+  state.readAccount.mockReset();
+  state.readAccount
+    .mockResolvedValueOnce(state.account)
+    .mockResolvedValueOnce(paid);
+  state.listModels.mockReset().mockResolvedValue([]);
+  const heard = vi.fn();
+  const stop = onPlanActive(heard);
+  try {
+    render(promo());
+    fireEvent.click(screen.getByRole("button", { name: "Upgrade" }));
+    // A second click while checkout is open watches nothing twice.
+    fireEvent.click(screen.getByRole("button", { name: "Upgrade" }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(state.open).toHaveBeenCalledWith({
+      url: "https://checkout.example/once",
+    });
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(state.readAccount).toHaveBeenCalledTimes(1);
+    expect(heard).not.toHaveBeenCalled();
+
+    // Back from the browser: read at once, not on the next tick.
+    window.dispatchEvent(new Event("focus"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(state.readAccount).toHaveBeenCalledTimes(2);
+    expect(state.readAccount).toHaveBeenLastCalledWith({ refresh: true });
+    expect(state.listModels).toHaveBeenCalledWith({ refresh: true });
+    expect(heard).toHaveBeenCalledWith(paid);
+
+    // Paid: the watch is over.
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(state.readAccount).toHaveBeenCalledTimes(2);
+  } finally {
+    stop();
+  }
+});
+
+it("stops watching when the checkout link has run out, the plan unchanged", async () => {
+  vi.useFakeTimers();
+  state.readAccount.mockReset().mockResolvedValue(state.account);
+  const heard = vi.fn();
+  const stop = onPlanActive(heard);
+  try {
+    render(promo());
+    fireEvent.click(screen.getByRole("button", { name: "Upgrade" }));
+    await vi.advanceTimersByTimeAsync(31 * 60_000);
+    const reads = state.readAccount.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(state.readAccount).toHaveBeenCalledTimes(reads);
+    expect(heard).not.toHaveBeenCalled();
+  } finally {
+    stop();
+  }
 });
