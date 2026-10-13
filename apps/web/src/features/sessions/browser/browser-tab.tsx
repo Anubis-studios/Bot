@@ -33,7 +33,7 @@ import {
 import { Input } from "#renderer/ui/input";
 
 import { useSessionsTransport } from "../data/queries";
-import type { TabDraw } from "../dock/tab-draws";
+import type { TabDraw } from "../dock/panel-tabs-store";
 import { acquireLocalFile } from "./local-materialization";
 /** What a browser tab opens on when nothing asked for a page. */
 export const NEW_TAB_URL = "https://www.google.com/";

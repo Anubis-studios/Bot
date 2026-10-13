@@ -29,9 +29,8 @@ import {
   useCheckoutWatch,
   effectiveCheckoutIdentity,
 } from "./data/queries";
-import { openTab, updateTab } from "./dock/panel-tabs-store";
+import { openTab, reportTabDraw, updateTab } from "./dock/panel-tabs-store";
 import { SessionDock, type SessionDockProps } from "./dock/session-dock";
-import { reportTabDraw } from "./dock/tab-draws";
 const BrowserTab = lazy(() =>
   import("#platform/browser-tab").then((m) => ({ default: m.BrowserTab }))
 );

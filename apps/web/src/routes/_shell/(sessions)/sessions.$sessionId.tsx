@@ -65,10 +65,10 @@ import {
 } from "#renderer/features/sessions/data/queries";
 import { openSessionOnce } from "#renderer/features/sessions/data/unread-store";
 import {
+  awaitTabDraw,
   openTab,
   panelTabsStore,
 } from "#renderer/features/sessions/dock/panel-tabs-store";
-import { awaitTabDraw } from "#renderer/features/sessions/dock/tab-draws";
 import {
   isAbsolutePreviewPath,
   previewTargetPath,

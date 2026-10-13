@@ -1,11 +1,10 @@
 import { ExternalLink, Globe, MonitorDown } from "lucide-react";
-import { useEffect, useEffectEvent } from "react";
+import { useEffect, useEffectEvent, type ComponentProps } from "react";
 import { useTranslation } from "react-i18next";
 
 import { FilePreview } from "#renderer/components/file-preview";
 import type { BrowserTab as Native } from "#renderer/features/sessions/browser/browser-tab";
 import { useSessionsTransport } from "#renderer/features/sessions/data/queries";
-import type { TabDraw } from "#renderer/features/sessions/dock/tab-draws";
 import {
   ABACUS_AGENT_URL,
   DESKTOP_DOWNLOAD_URL,
@@ -18,6 +17,10 @@ import { sidebarAccount } from "#renderer/lib/sidebar-account";
 import { openUpgrade } from "#renderer/lib/upgrade";
 import { useAccount } from "#renderer/lib/use-account";
 import { Button } from "#renderer/ui/button";
+
+type TabDraw = Parameters<
+  NonNullable<ComponentProps<typeof Native>["onDraw"]>
+>[0];
 
 export const BrowserTab: typeof Native = ({
   file,
