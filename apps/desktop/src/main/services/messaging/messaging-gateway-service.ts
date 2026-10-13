@@ -143,6 +143,13 @@ const CONNECT_DEADLINE_MS: Partial<Record<MessagingPlatformId, number>> = {
  */
 const STOP_DEADLINE_MS = 5_000;
 
+/**
+ * How long a login may still land after its connect dialog closed unlinked.
+ * The phone is ahead of the app (people close on the phone's "linked"), so the
+ * dialog only releases its login; past this, an unfinished one is turned off.
+ */
+export const RELEASED_LOGIN_MS = 180_000;
+
 type GatewayOptions = {
   platform?: () => HostPlatform;
   /** Workspace remote messages run in; null when none is configured. */
@@ -371,6 +378,12 @@ export class MessagingGatewayService {
    */
   private readonly generations = new Map<MessagingPlatformId, number>();
 
+  /** Armed while a released login may still land; see RELEASED_LOGIN_MS. */
+  private readonly releasedLogins = new Map<
+    MessagingPlatformId,
+    ReturnType<typeof setTimeout>
+  >();
+
   /** Armed while a platform is connecting; see CONNECT_DEADLINE_MS. */
   private readonly connectDeadlines = new Map<
     MessagingPlatformId,
@@ -441,6 +454,8 @@ export class MessagingGatewayService {
   }
 
   async dispose(): Promise<void> {
+    for (const timer of this.releasedLogins.values()) clearTimeout(timer);
+    this.releasedLogins.clear();
     if (this.logSaveTimer != null) {
       clearTimeout(this.logSaveTimer);
       this.logSaveTimer = null;
@@ -651,6 +666,9 @@ export class MessagingGatewayService {
     // Leaving `connecting` at all (connected, failed, switched off) settles
     // the question the deadline was asking.
     if (state !== "connecting") this.clearConnectDeadline(platformId);
+    // A released login that landed is kept.
+    if (state === "connected" || state === "syncing")
+      this.clearReleasedLogin(platformId);
     // A connector that made it back up has earned a fresh restart ladder.
     if (state === "connected") this.restartBackoff.delete(platformId);
     // Every transition to the main log, so an export says what the card showed.
@@ -1464,8 +1482,56 @@ export class MessagingGatewayService {
     return this.getSnapshot();
   }
 
+  /**
+   * Its connect dialog closed without a link: stop showing the login, but
+   * leave it running, since a scan already made may still land. Unfinished
+   * after RELEASED_LOGIN_MS, the platform is turned off (with its shared-bot
+   * lane, as Unlink does).
+   */
+  releaseLogin(platformId: MessagingPlatformId): void {
+    const state = this.states.get(platformId)?.state;
+    if (state === "connected" || state === "syncing") return;
+    const connector = this.connectors.get(platformId);
+    if (
+      connector instanceof TelegramWebConnector ||
+      connector instanceof DiscordWebConnector ||
+      connector instanceof WhatsAppWebConnector
+    )
+      connector.hideLoginWindow();
+    this.clearReleasedLogin(platformId);
+    const timer = setTimeout(() => {
+      this.releasedLogins.delete(platformId);
+      void this.abandonLogin(platformId).catch((err: unknown) => {
+        console.error(`[messaging] ${platformId}: turning off failed:`, err);
+      });
+    }, RELEASED_LOGIN_MS);
+    timer.unref?.();
+    this.releasedLogins.set(platformId, timer);
+  }
+
+  private clearReleasedLogin(platformId: MessagingPlatformId): void {
+    const timer = this.releasedLogins.get(platformId);
+    if (timer == null) return;
+    clearTimeout(timer);
+    this.releasedLogins.delete(platformId);
+  }
+
+  private async abandonLogin(platformId: MessagingPlatformId): Promise<void> {
+    const state = this.states.get(platformId)?.state;
+    if (state === "connected" || state === "syncing") return;
+    console.log(
+      `[messaging] ${platformId}: login not finished ${RELEASED_LOGIN_MS / 1000}s after its dialog closed; turning it off`
+    );
+    const shared = SHARED_BOT_PLATFORM_OF[platformId];
+    if (shared != null)
+      await this.updatePlatform({ platformId: shared, enabled: false });
+    await this.updatePlatform({ platformId, enabled: false });
+  }
+
   /** Bring a web-login platform's sign-in window back to the front. */
   showMessagingLogin(platformId: MessagingPlatformId): void {
+    // Shown again: the user is back on it, so nothing is abandoned.
+    this.clearReleasedLogin(platformId);
     const connector = this.connectors.get(platformId);
     if (
       connector instanceof TelegramWebConnector ||
@@ -2275,8 +2341,11 @@ export class MessagingGatewayService {
 
     if (request.values != null)
       savePlatformValues(request.platformId, request.values);
-    if (request.enabled != null)
+    if (request.enabled != null) {
+      // Switched either way by hand: a released login's deadline is moot.
+      this.clearReleasedLogin(request.platformId);
       setPlatformEnabled(request.platformId, request.enabled);
+    }
 
     // Credentials changed under a live connector: restart it. `pending_restart`
     // covers the window where stored and in-use values disagree.

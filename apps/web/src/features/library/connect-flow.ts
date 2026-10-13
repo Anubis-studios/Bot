@@ -18,7 +18,7 @@ import { useAppNavigate } from "#renderer/lib/navigation/use-app-navigate";
 import { connectTarget } from "#renderer/lib/platform-system";
 import { useAppContext, errorText } from "#renderer/lib/use-app-context";
 
-/** How long a chat app's pairing may stay open before it is given up. */
+/** How long the app waits on a chat app's pairing before it stops waiting (main decides whether the login is turned off). */
 export const PAIRING_WAIT_MS = 180_000;
 export interface FlowDeps {
   transport: Transport;
@@ -72,6 +72,16 @@ export const disablePlatform = async (
     snapshot
   );
 };
+/**
+ * A pairing that ends unlinked (closed, cancelled, replaced, timed out) only
+ * stops waiting here: main keeps the login running, since the phone is ahead
+ * of the app and a scan may still land, and turns it off if none does. Only
+ * Unlink turns a platform off from here.
+ */
+const releasePlatform = (
+  deps: Pick<FlowDeps, "transport">,
+  platformId: MessagingPlatformId
+) => deps.transport.client.messaging.releaseLogin({ platformId });
 export const createConnectFlow = (deps: FlowDeps) => {
   const store = new Store<FlowState>({ connectorId: null, phase: "idle" });
   type PairingRecord = {
@@ -125,7 +135,7 @@ export const createConnectFlow = (deps: FlowDeps) => {
     const a = active;
     if (!a) return;
     finish(a.id, { ok: false, cancelled: true, error: "cancelled" });
-    if (a.platform) await disablePlatform(deps, a.platform);
+    if (a.platform) await releasePlatform(deps, a.platform);
   };
   const settleRecord = (a: PairingRecord): Promise<void> => {
     if (a.settlement) return a.settlement;
@@ -145,10 +155,10 @@ export const createConnectFlow = (deps: FlowDeps) => {
             : { ok: false, cancelled: true, error: "not-linked" }
         );
         if (ok) await refresh();
-        else await disablePlatform(deps, a.platform!);
+        else await releasePlatform(deps, a.platform!);
       } catch (e) {
         finishRecord(a, { ok: false, error: errorText(e) });
-        await disablePlatform(deps, a.platform!);
+        await releasePlatform(deps, a.platform!);
       }
     })();
     return a.settlement;

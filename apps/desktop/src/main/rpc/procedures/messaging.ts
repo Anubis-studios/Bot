@@ -18,6 +18,9 @@ export const messagingRouter = impl.messaging.router({
   showLogin: impl.messaging.showLogin.handler(({ input, context }) => {
     context.deps.serviceHost.showMessagingLogin(input.platformId);
   }),
+  releaseLogin: impl.messaging.releaseLogin.handler(({ input, context }) => {
+    context.deps.serviceHost.releaseMessagingLogin(input.platformId);
+  }),
   pairShared: impl.messaging.pairShared.handler(({ input, context }) =>
     context.deps.serviceHost.pairSharedChannel(input.platformId)
   ),

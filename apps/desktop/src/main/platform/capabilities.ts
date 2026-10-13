@@ -174,6 +174,7 @@ export const WEB_HOST_ALLOWED = [
   "voice.requestMicrophone",
   "messaging.snapshot",
   "messaging.updatePlatform",
+  "messaging.releaseLogin",
   "messaging.decidePairing",
   "messaging.updateSettings",
   "messaging.pairShared",

@@ -51,6 +51,11 @@ export const messaging = {
     .output(type<MessagingSnapshot>()),
   /** Reopen the platform's own web login window. */
   showLogin: mutation.input(PlatformInput).output(type<void>()),
+  /**
+   * Its connect dialog closed unlinked: hide the login and keep it running,
+   * since a scan may still land; main turns it off if none does in time.
+   */
+  releaseLogin: mutation.input(PlatformInput).output(type<void>()),
   /** Mint a pairing code for a shared-bot platform. */
   pairShared: mutation.input(PlatformInput).output(type<MessagingSnapshot>()),
   unlinkShared: mutation.input(PlatformInput).output(type<MessagingSnapshot>()),

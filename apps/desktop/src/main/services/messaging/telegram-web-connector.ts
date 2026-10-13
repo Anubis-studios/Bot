@@ -367,6 +367,12 @@ export class TelegramWebConnector implements MessagingConnector {
     presentAsDialog(win);
   }
 
+  /** Out of sight, still running: a scan already made can still land. */
+  hideLoginWindow(): void {
+    const win = this.window;
+    if (win != null && !win.isDestroyed() && win.isVisible()) win.hide();
+  }
+
   /** True once the user has signed in; surfaced to the connect dialog. */
   get isLoggedIn(): boolean {
     return this.loggedIn;

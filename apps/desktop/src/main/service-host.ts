@@ -3102,6 +3102,10 @@ export class ServiceHost {
     this.messagingGatewayService.showMessagingLogin(platformId);
   }
 
+  releaseMessagingLogin(platformId: MessagingPlatformId): void {
+    this.messagingGatewayService.releaseLogin(platformId);
+  }
+
   listSessionArtifacts(): SessionArtifact[] {
     return this.sessionArtifactsService.list();
   }

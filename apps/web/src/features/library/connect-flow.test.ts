@@ -30,6 +30,9 @@ const setup = () => {
       return { ...snapshot, gatewayEnabled: true };
     }
   );
+  const releaseLogin = vi.fn(async (input: { platformId: string }) => {
+    calls.push(`${input.platformId}:released`);
+  });
   const snapshotCall = vi.fn(async () => {
     calls.push("snapshot");
     return snapshot;
@@ -37,7 +40,12 @@ const setup = () => {
   const key = ["messaging", "snapshot"];
   const transport = {
     client: {
-      messaging: { snapshot: snapshotCall, updateSettings, updatePlatform },
+      messaging: {
+        snapshot: snapshotCall,
+        updateSettings,
+        updatePlatform,
+        releaseLogin,
+      },
       connectors: { statuses: vi.fn(async () => ({})) },
       mcp: { refresh: vi.fn() },
     },
@@ -90,7 +98,7 @@ describe("connection lifecycle", () => {
     });
     expect(d.navigate).not.toHaveBeenCalled();
   });
-  it("R5-T17 sheet cancellation settles exactly once and disables an unlinked platform", async () => {
+  it("R5-T17 sheet cancellation settles exactly once and releases an unlinked login to main", async () => {
     const d = setup();
     const flow = createConnectFlow(d);
     const entry = CONNECTORS.find(
@@ -107,11 +115,13 @@ describe("connection lifecycle", () => {
       cancelled: true,
       error: "not-linked",
     });
-    expect(d.calls.filter((c) => c === "whatsapp:false")).toHaveLength(1);
+    // Released, not switched off: a scan already made may still land.
+    expect(d.calls.filter((c) => c === "whatsapp:released")).toHaveLength(1);
+    expect(d.calls).not.toContain("whatsapp:false");
   });
 });
 
-it("R5-T16 pairing watchdog settles the pending caller and disables its platform", async () => {
+it("R5-T16 pairing watchdog settles the pending caller and releases its login", async () => {
   vi.useFakeTimers();
   try {
     const d = setup();
@@ -124,7 +134,8 @@ it("R5-T16 pairing watchdog settles the pending caller and disables its platform
     expect(d.navigate).toHaveBeenCalledWith("whatsapp");
     await vi.advanceTimersByTimeAsync(180000);
     expect(await pending).toMatchObject({ ok: false, cancelled: true });
-    expect(d.calls).toContain("whatsapp:false");
+    expect(d.calls).toContain("whatsapp:released");
+    expect(d.calls).not.toContain("whatsapp:false");
     expect(flow.store.state.error).toBe("timeout");
   } finally {
     vi.useRealTimers();
@@ -156,8 +167,10 @@ it("a two-platform route transition settles deferred setup without cancelling it
     await vi.advanceTimersByTimeAsync(1000);
     expect(settled).toHaveBeenCalledTimes(1);
     expect(await pending).toMatchObject({ ok: false, cancelled: true });
-    expect(d.calls.filter((call) => call === "whatsapp:false")).toHaveLength(1);
-    expect(d.calls).not.toContain("telegram:false");
+    expect(d.calls.filter((call) => call === "whatsapp:released")).toHaveLength(
+      1
+    );
+    expect(d.calls).not.toContain("telegram:released");
     expect(flow.store.state).toMatchObject({
       connectorId: "telegram",
       phase: "pairing",

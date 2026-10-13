@@ -67,6 +67,9 @@ const setup = (
           return snapshot;
         }),
         showLogin: os.messaging.showLogin.handler(() => {}),
+        releaseLogin: os.messaging.releaseLogin.handler(({ input }) => {
+          calls.push(`${input.platformId}:released`);
+        }),
         pairShared: os.messaging.pairShared.handler(() => snapshot),
         unlinkShared: os.messaging.unlinkShared.handler(({ input }) => {
           calls.push(`unlink:${input.platformId}`);
@@ -100,11 +103,13 @@ it.each(["Escape", "Cancel", "navigation"])(
         await act(async () => {
           await app.router.navigate({ to: "/settings/general" });
         });
+      // Released to main, never switched off: a scan may still land.
       await waitFor(() =>
         expect(
-          d.calls.filter((call) => call === "whatsapp:false")
+          d.calls.filter((call) => call === "whatsapp:released")
         ).toHaveLength(1)
       );
+      expect(d.calls).not.toContain("whatsapp:false");
     } finally {
       app.view.unmount();
       await app.cleanup();
@@ -211,12 +216,12 @@ it("changing the Messaging route settles delayed WhatsApp setup and preserves th
         await vi.advanceTimersByTimeAsync(0);
       });
       expect(
-        d.calls.filter((call) => call === "whatsapp:false"),
+        d.calls.filter((call) => call === "whatsapp:released"),
         JSON.stringify(d.calls)
       ).toHaveLength(1);
     });
     expect(d.calls).toContain("telegram:true");
-    expect(d.calls).not.toContain("telegram:false");
+    expect(d.calls).not.toContain("telegram:released");
     await act(async () => {
       await vi.advanceTimersByTimeAsync(179000);
     });
@@ -225,7 +230,7 @@ it("changing the Messaging route settles delayed WhatsApp setup and preserves th
         await vi.advanceTimersByTimeAsync(0);
       });
       expect(
-        d.calls.filter((call) => call === "telegram:false"),
+        d.calls.filter((call) => call === "telegram:released"),
         JSON.stringify(d.calls)
       ).toHaveLength(1);
     });

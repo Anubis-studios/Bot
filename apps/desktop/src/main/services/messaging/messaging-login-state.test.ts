@@ -27,7 +27,8 @@ vi.mock("./messaging-config-service", async (importOriginal) => ({
   isPlatformConfigured: (id: MessagingPlatformId) => id === "discord",
 }));
 
-const { MessagingGatewayService } = await import("./messaging-gateway-service");
+const { MessagingGatewayService, RELEASED_LOGIN_MS } =
+  await import("./messaging-gateway-service");
 
 /** What each stub connector's login probe will report, when asked. */
 const probeVerdicts = new Map<MessagingPlatformId, string>();
@@ -188,5 +189,56 @@ describe("asking the platforms before saying what is connected", () => {
     expect(live).toEqual([]);
     expect(platformState(gateway)).toBe("needs_login");
     probeVerdicts.clear();
+  });
+});
+
+describe("a login whose connect dialog closed unlinked", () => {
+  // The phone is ahead of the app: people close the dialog on the phone's
+  // "linked", a moment before the connector says so.
+  const released = async () => {
+    const { gateway, captured } = service();
+    await gateway.syncConnectors();
+    captured[0]!.onState("needs_login", "Scan the QR to connect.");
+    const off = vi
+      .spyOn(gateway, "updatePlatform")
+      .mockResolvedValue(gateway.getSnapshot());
+    gateway.releaseLogin("discord");
+    return { gateway, captured, off };
+  };
+
+  it("is kept when the scan lands after the dialog closed", async () => {
+    const { gateway, captured, off } = await released();
+    captured[0]!.onState("connected");
+    await vi.advanceTimersByTimeAsync(RELEASED_LOGIN_MS);
+    expect(off).not.toHaveBeenCalled();
+    expect(platformState(gateway)).toBe("connected");
+  });
+
+  it("is turned off, with its shared-bot lane, when none lands in time", async () => {
+    const { off } = await released();
+    await vi.advanceTimersByTimeAsync(RELEASED_LOGIN_MS - 1);
+    expect(off).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(off.mock.calls.map(([request]) => request)).toEqual([
+      { platformId: "abacus_discord", enabled: false },
+      { platformId: "discord", enabled: false },
+    ]);
+  });
+
+  it("is not abandoned once its login is shown again", async () => {
+    const { gateway, off } = await released();
+    gateway.showMessagingLogin("discord");
+    await vi.advanceTimersByTimeAsync(RELEASED_LOGIN_MS);
+    expect(off).not.toHaveBeenCalled();
+  });
+
+  it("leaves a connected platform alone", async () => {
+    const { gateway, captured } = service();
+    await gateway.syncConnectors();
+    captured[0]!.onState("connected");
+    const off = vi.spyOn(gateway, "updatePlatform");
+    gateway.releaseLogin("discord");
+    await vi.advanceTimersByTimeAsync(RELEASED_LOGIN_MS);
+    expect(off).not.toHaveBeenCalled();
   });
 });
