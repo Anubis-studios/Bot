@@ -6,20 +6,25 @@ import { readRendererStateFile } from "./renderer-state";
 
 const receiptFile = (home: string) =>
   path.join(home, "electron", "composer-drafts.imported.json");
+// Missing, unreadable or malformed: nothing is acknowledged, so nothing is lost.
 const receipts = (home: string): string[] => {
   try {
     const keys: unknown = JSON.parse(
       fs.readFileSync(receiptFile(home), "utf8")
     );
-    if (!Array.isArray(keys) || !keys.every((key) => typeof key === "string"))
-      throw new Error("Invalid draft import receipts");
-    return keys;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
-    throw error;
+    return Array.isArray(keys)
+      ? keys.filter((key): key is string => typeof key === "string")
+      : [];
+  } catch {
+    return [];
   }
 };
 
+/**
+ * v1.0.85 keys are `composer.draft:session:<id>` and
+ * `composer.draft:workspace:<id>` (a workspace's new-session box). A session's
+ * draft is keyed by the bare session id, as the composer reads it.
+ */
 export const pendingLegacyDrafts = (home: string): Record<string, string> => {
   const imported = new Set(receipts(home));
   return Object.fromEntries(
@@ -29,11 +34,13 @@ export const pendingLegacyDrafts = (home: string): Record<string, string> => {
       ),
     ]
       .filter(
-        ([key]) =>
-          key.startsWith("composer.draft:") &&
-          key.length > "composer.draft:".length
+        ([key, text]) =>
+          /^composer\.draft:(session|workspace):./.test(key) && text !== ""
       )
-      .map(([key, text]) => [key.slice("composer.draft:".length), text])
+      .map(([key, text]) => [
+        key.slice("composer.draft:".length).replace(/^session:/, ""),
+        text,
+      ])
       .filter(([key]) => !imported.has(key!))
   );
 };

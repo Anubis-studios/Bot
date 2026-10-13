@@ -1,37 +1,85 @@
 import { expect, it, vi } from "vitest";
 
 import {
-  draftStore,
   clearDraft,
   updateDraft,
 } from "#renderer/lib/continuity/composer-drafts";
 
-it("imports a synthetic v1.0.85 durable draft once without overwriting a new draft", async () => {
-  const { importLegacyDrafts } =
-    await import("#renderer/lib/continuity/composer-drafts");
+// `system.info.legacyComposerDrafts` for a v1.0.85 renderer-state holding
+// `composer.draft:session:<uuid>` and `composer.draft:workspace:<id>`.
+const SESSION = "3f2b6c1e-8a4d-4f7e-9c21-5d0e7b9a1c42";
+const LEGACY = {
+  [SESSION]: "unsent session words",
+  "workspace:ws-1": "unsent new-session words",
+};
+const load = async () => {
+  vi.resetModules();
+  const chat = await import("#renderer/lib/continuity/composer-drafts");
+  const sessions =
+    await import("#renderer/features/sessions/start/session-drafts");
+  return { ...chat, ...sessions };
+};
+const workspaceDrafts = (m: Awaited<ReturnType<typeof load>>) =>
+  Object.values(m.sessionDraftsStore.state.drafts).filter(
+    (d) => d.workspaceId === "ws-1"
+  );
+
+it("lands v1.0.85 drafts where the composers read them, and acknowledges only what is landed", async () => {
+  sessionStorage.clear();
+  localStorage.clear();
+  let m = await load();
   const acknowledge = vi.fn().mockResolvedValue(undefined);
-  const legacy = {
-    "old-thread": "unsent legacy words",
-    "edited-thread": "old words",
-  };
-  draftStore.setState(() => ({
-    "edited-thread": { text: "new words", attachments: [] },
-  }));
-  await importLegacyDrafts(legacy, acknowledge);
-  expect(draftStore.state["old-thread"]).toEqual({
-    text: "unsent legacy words",
-    attachments: [],
-  });
-  expect(draftStore.state["edited-thread"]?.text).toBe("new words");
-  expect(
-    JSON.parse(sessionStorage.getItem("abacusai-bot:abacus.chat.drafts")!)[
-      "old-thread"
-    ].text
-  ).toBe("unsent legacy words");
-  expect(acknowledge).toHaveBeenCalledWith(["old-thread", "edited-thread"]);
-  clearDraft("old-thread");
-  await importLegacyDrafts(legacy, acknowledge);
-  expect(draftStore.state["old-thread"]?.text).toBe("");
+  await m.importLegacyDrafts(LEGACY, acknowledge);
+  expect(m.draftStore.state[SESSION]?.text).toBe("unsent session words");
+  const [created] = workspaceDrafts(m);
+  expect(created?.composer.text).toBe("unsent new-session words");
+  // Only the new-session draft is in durable storage; the session's is not.
+  expect(acknowledge.mock.calls).toEqual([[["workspace:ws-1"]]]);
+
+  // A reload keeps both; rerunning the import duplicates and overwrites nothing.
+  m.draftStore.flush();
+  m = await load();
+  m.updateDraft(SESSION, (d) => ({ ...d, text: "edited since" }));
+  await m.importLegacyDrafts(LEGACY, acknowledge);
+  expect(m.draftStore.state[SESSION]?.text).toBe("edited since");
+  expect(workspaceDrafts(m)).toEqual([created]);
+
+  // Quit (sessionStorage gone): the unacknowledged session draft lands again.
+  m.draftStore.flush();
+  sessionStorage.clear();
+  m = await load();
+  await m.importLegacyDrafts({ [SESSION]: LEGACY[SESSION] }, acknowledge);
+  expect(m.draftStore.state[SESSION]?.text).toBe("unsent session words");
+  expect(workspaceDrafts(m)).toEqual([created]);
+
+  // Sent or cleared, the session's draft is done with.
+  expect(acknowledge).toHaveBeenCalledTimes(2);
+  m.clearDraft(SESSION);
+  expect(acknowledge).toHaveBeenLastCalledWith([SESSION]);
+});
+
+it("keeps drafts pending when storage refuses the write, and survives a failed receipt", async () => {
+  sessionStorage.clear();
+  localStorage.clear();
+  const m = await load();
+  const setItem = vi
+    .spyOn(Storage.prototype, "setItem")
+    .mockImplementation(() => {
+      throw new DOMException("full", "QuotaExceededError");
+    });
+  try {
+    const acknowledge = vi.fn().mockResolvedValue(undefined);
+    await m.importLegacyDrafts(LEGACY, acknowledge);
+    expect(acknowledge).not.toHaveBeenCalled();
+  } finally {
+    setItem.mockRestore();
+  }
+  await expect(
+    m.importLegacyDrafts(
+      { "workspace:ws-2": "words" },
+      vi.fn().mockRejectedValue(new Error("closed"))
+    )
+  ).resolves.toBeUndefined();
 });
 
 it("writes drafts to sessionStorage once per burst of keystrokes, and on pagehide", () => {
