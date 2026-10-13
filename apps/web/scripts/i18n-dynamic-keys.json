@@ -671,6 +671,7 @@
     "prefix": "phase5.categories.",
     "values": [
       "featured",
+      "messaging",
       "abacus",
       "productivity",
       "data",
