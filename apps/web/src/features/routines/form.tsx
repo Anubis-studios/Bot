@@ -53,7 +53,6 @@ import { Switch } from "#renderer/ui/switch";
 import { RoutineUpgradeActions, RoutineUpgradeAvatar } from "./create-action";
 import { useRoutinesData } from "./data";
 import { browserTimeZone, isHosted } from "./hosted";
-import { readKey } from "./reach-panel";
 import { routineRefusal, type RoutineRefusalText } from "./refusal";
 import { RoutineRefusalNotice } from "./refusal-notice";
 import {
@@ -417,50 +416,6 @@ export const RoutineDialog = ({
                   />
                 )}
               </form.AppField>
-              <form.AppField name="sources">
-                {(f) => (
-                  <f.TextField
-                    label={t("routines.reach.sourcesLabel")}
-                    placeholder={t("routines.reach.sourcesPlaceholder")}
-                    max={4000}
-                    multiline
-                  />
-                )}
-              </form.AppField>
-              <form.Subscribe selector={(s) => s.values.reads}>
-                {(reads) => (
-                  <Field>
-                    <FieldLabel>{t("routines.reach.readsLabel")}</FieldLabel>
-                    {(
-                      ["gmail.search", "gmail.read", "calendar.read"] as const
-                    ).map((read) => (
-                      <label
-                        key={read}
-                        className="flex items-center gap-2 text-[13px]"
-                      >
-                        <Switch
-                          checked={reads.includes(read)}
-                          onCheckedChange={(on) =>
-                            form.setFieldValue(
-                              "reads",
-                              on
-                                ? [...reads, read]
-                                : reads.filter((entry) => entry !== read)
-                            )
-                          }
-                        />
-                        {t(readKey(read))}
-                      </label>
-                    ))}
-                    {/* Only a read-only routine's runs are held to this. */}
-                    {(runsHosted || row?.access === "unattended") && (
-                      <p className="text-muted-foreground text-xs">
-                        {t("routines.reach.lead")}
-                      </p>
-                    )}
-                  </Field>
-                )}
-              </form.Subscribe>
               <form.Subscribe selector={(s) => s.values}>
                 {(value) => {
                   const d = value.schedule;
