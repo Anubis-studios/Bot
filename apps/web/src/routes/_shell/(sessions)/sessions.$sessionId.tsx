@@ -18,6 +18,7 @@ import * as v from "valibot";
 
 import { ComposerUpdateNotice } from "#platform/updates";
 import { useCollections } from "#renderer/data/db";
+import { usePrefs } from "#renderer/data/db/prefs";
 import { loadFixtureRuntime } from "#renderer/features/chat/fixture-runtime";
 import { ChatView } from "#renderer/features/chat/kit/lazy-view";
 import { AgentsList } from "#renderer/features/chat/kit/subagents/agents-list";
@@ -319,6 +320,7 @@ const SessionRoute = () => {
     observedWorkspace ??
     (row ? collections.workspaces.get(row.workspaceId) : undefined);
   const model = useSessionComposerModel(row);
+  const prefs = usePrefs();
   const session = runtime.session(sessionId);
   // Only the inner store handle: the host state also carries the streaming
   // messages, and subscribing to it here would re-render the route (and the
@@ -564,7 +566,7 @@ const SessionRoute = () => {
             composer={{
               mode: "full",
               sharedElement: true,
-              placeholder: t("chat.composer.busySession"),
+              placeholder: t("chat.composer.mini"),
               attachmentsBase: root,
               attachmentContext: async () => ({
                 workspaceId: row.workspaceId,
@@ -575,6 +577,7 @@ const SessionRoute = () => {
               onResumeOnFreePool: model.onResumeOnFreePool,
               onResumeOnModel: model.onResumeOnModel,
               availableModes: model.availableModes,
+              defaultMode: row.mode ?? prefs.defaultMode,
               blocked: model.blocked,
               turnBusy: row.turn?.isBusy === true,
               mentions: {
