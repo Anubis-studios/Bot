@@ -1,9 +1,15 @@
+import { createHash } from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
+
+import { writeFileAtomicSync } from "@abacus-ai/agent/atomic-file";
 import {
   ABACUS_ACCOUNT_FOCI,
   type AbacusAccountInfo,
 } from "@abacus-ai/contract/contracts";
 import type { ModelAvailability, ModelTier } from "@abacus-ai/contract/models";
 
+import { abacusBotHome } from "../../paths";
 import { credentialFor, hasCredential } from "../config/settings";
 import { abacusRoutellmV1, abacusUserAgent } from "./abacus-host";
 
@@ -42,6 +48,42 @@ interface AbacusModel {
 const FREE_MODEL_NOTE = "Free: doesn't use credits";
 
 let cache: ModelAvailability[] | null = null;
+
+/**
+ * The account's last fetched list on disk, so a start without a network shows
+ * the models it had rather than none. Keyed by a hash of the key.
+ */
+const lastGoodFile = (key: string): string =>
+  path.join(
+    abacusBotHome(),
+    "abacus-models",
+    `${createHash("sha256").update(key).digest("hex").slice(0, 16)}.json`
+  );
+
+const readLastGood = (key: string): ModelAvailability[] | null => {
+  try {
+    const parsed: unknown = JSON.parse(
+      fs.readFileSync(lastGoodFile(key), "utf8")
+    );
+    return Array.isArray(parsed) && parsed.length > 0
+      ? (parsed as ModelAvailability[])
+      : null;
+  } catch {
+    // Never fetched on this machine: nothing to fall back on.
+    return null;
+  }
+};
+
+const writeLastGood = (key: string, models: ModelAvailability[]): void => {
+  try {
+    writeFileAtomicSync(lastGoodFile(key), JSON.stringify(models), {
+      restrict: true,
+      skipIfUnchanged: true,
+    });
+  } catch {
+    // A lost copy costs only the offline fallback.
+  }
+};
 
 /**
  * Has the platform refused the key we hold? A timeout or 500 means "ask again
@@ -198,9 +240,12 @@ export const fetchAbacusModels = async (): Promise<ModelAvailability[]> => {
     });
 
     if (!response.ok) {
-      if (REJECTED_STATUSES.has(response.status)) credentialRejected = true;
+      if (REJECTED_STATUSES.has(response.status)) {
+        credentialRejected = true;
+        return withCurrentConfigured(cache);
+      }
 
-      return withCurrentConfigured(cache);
+      return withCurrentConfigured(cache ?? readLastGood(key));
     }
 
     const body = (await response.json()) as { data?: AbacusModel[] };
@@ -241,11 +286,12 @@ export const fetchAbacusModels = async (): Promise<ModelAvailability[]> => {
     // Catalog order is kept: the server sends a deliberate tier-shaped lineup.
 
     cache = models;
+    if (models.length > 0) writeLastGood(key, models);
 
     return models;
   } catch {
     // Offline, timed out, or a shape we don't recognise.
-    return withCurrentConfigured(cache);
+    return withCurrentConfigured(cache ?? readLastGood(key));
   }
 };
 

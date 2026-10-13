@@ -2645,6 +2645,7 @@
       "tools_one": "Running {{count}} tool",
       "tools_other": "Running {{count}} tools",
       "typing": "Typing",
+      "waitingForConnection": "接続を待っています…",
       "working": "Working"
     },
     "code": {
@@ -3188,13 +3189,16 @@
       "once": "Once",
       "webhook": "Webhook",
       "manual": "On demand",
-      "scheduled": "Scheduled"
+      "scheduled": "Scheduled",
+      "waiting": "接続待ち"
     },
     "outcomes": {
       "running": "Running",
       "completed": "Completed",
       "failed": "Failed",
       "skipped": "Skipped",
+      "skipped-offline": "スキップ: オフライン",
+      "offline": "Abacus に接続できませんでした",
       "unknown": "Unknown",
       "paused": "Paused"
     },

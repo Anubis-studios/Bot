@@ -801,6 +801,8 @@
       "completed",
       "failed",
       "skipped",
+      "skipped-offline",
+      "offline",
       "unknown",
       "paused"
     ],
@@ -849,7 +851,8 @@
       "once",
       "webhook",
       "manual",
-      "scheduled"
+      "scheduled",
+      "waiting"
     ],
     "sources": ["features/routines/sidebar.tsx"]
   },

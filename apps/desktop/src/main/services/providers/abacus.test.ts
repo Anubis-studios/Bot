@@ -1,4 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const fetchMock = vi.hoisted(() => vi.fn());
 
@@ -15,8 +19,14 @@ vi.mock("./abacus-host", () => ({
 
 vi.stubGlobal("fetch", fetchMock);
 
-const { abacusCredentialRejected, clearAbacusCache, fetchAbacusAccount } =
-  await import("./abacus");
+const {
+  abacusCredentialRejected,
+  clearAbacusCache,
+  fetchAbacusAccount,
+  fetchAbacusModels,
+} = await import("./abacus");
+const { ConnectivityService } =
+  await import("../connectivity/connectivity-service");
 
 beforeEach(() => {
   fetchMock.mockReset();
@@ -196,5 +206,131 @@ describe("whether the key has been refused outright", () => {
     fetchMock.mockResolvedValueOnce(new Response(null, { status: 403 }));
 
     await expect(fetchAbacusAccount(true)).resolves.toBeNull();
+  });
+});
+
+describe("fetchAbacusModels without a network", () => {
+  it("offers the account's last fetched list after a restart", async () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "desktop-abacus-"));
+    vi.stubEnv("ABACUSAI_BOT_HOME", home);
+    try {
+      fetchMock.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: [
+              { id: "model-a", model_type: "text_generation", agentic: true },
+            ],
+          }),
+          { status: 200 }
+        )
+      );
+      const live = await fetchAbacusModels();
+      expect(live.map((model) => model.id)).toEqual(["abacus/model-a"]);
+
+      // A new process: nothing cached in memory, and the network is gone.
+      clearAbacusCache();
+      fetchMock.mockRejectedValueOnce(new TypeError("fetch failed"));
+      expect(await fetchAbacusModels()).toEqual(live);
+    } finally {
+      vi.unstubAllEnvs();
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+});
+
+/** The connectivity owner: the OS's answer, sleep and wake, and a probe of the Abacus API. */
+describe("connectivity", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const service = (options: { reachable?: boolean } = {}) => {
+    const probe = vi.fn(async () => options.reachable ?? true);
+    const changes: Array<{ state: string; resumed: boolean }> = [];
+    const connectivity = new ConnectivityService({ probe });
+    connectivity.onChange((change) => changes.push(change));
+    return { connectivity, probe, changes };
+  };
+
+  describe("the connectivity owner", () => {
+    it("goes offline the moment the OS says so, without a probe", async () => {
+      let osOnline = true;
+      const { connectivity, probe, changes } = service();
+      connectivity.start(() => osOnline);
+      expect(connectivity.state).toBe("online");
+
+      osOnline = false;
+      await vi.advanceTimersByTimeAsync(5_000);
+
+      expect(connectivity.state).toBe("offline");
+      expect(changes).toEqual([{ state: "offline", resumed: false }]);
+      expect(probe).not.toHaveBeenCalled();
+      connectivity.stop();
+    });
+
+    it("probes when the OS has a network again, and says online once Abacus answers", async () => {
+      let osOnline = false;
+      const { connectivity, probe, changes } = service();
+      connectivity.start(() => osOnline);
+      expect(connectivity.state).toBe("offline");
+
+      osOnline = true;
+      await vi.advanceTimersByTimeAsync(5_000);
+
+      expect(probe).toHaveBeenCalled();
+      expect(connectivity.state).toBe("online");
+      expect(changes.at(-1)).toEqual({ state: "online", resumed: false });
+      connectivity.stop();
+    });
+
+    it("is degraded when the OS has a network but Abacus does not answer, and backs off", async () => {
+      const { connectivity, probe } = service({ reachable: false });
+
+      connectivity.reportFailure();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(connectivity.state).toBe("degraded");
+      expect(probe).toHaveBeenCalledTimes(1);
+
+      // 5s, 10s, 20s: never a hot loop.
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(probe).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(9_000);
+      expect(probe).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(probe).toHaveBeenCalledTimes(3);
+      connectivity.stop();
+    });
+
+    it("does not probe while online with nothing reported", async () => {
+      const { connectivity, probe } = service();
+      connectivity.start(() => true);
+
+      await vi.advanceTimersByTimeAsync(10 * 60_000);
+
+      expect(probe).not.toHaveBeenCalled();
+      connectivity.stop();
+    });
+
+    it("says so on wake, even when the state did not move", async () => {
+      const { connectivity, changes } = service();
+
+      connectivity.suspended();
+      connectivity.resumed();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(changes).toEqual([{ state: "online", resumed: true }]);
+    });
+
+    it("answers a caller about to need the network from a fresh probe", async () => {
+      const { connectivity, probe } = service({ reachable: false });
+
+      expect(await connectivity.ensureFresh()).toBe("degraded");
+      expect(probe).toHaveBeenCalledTimes(1);
+      connectivity.stop();
+    });
   });
 });

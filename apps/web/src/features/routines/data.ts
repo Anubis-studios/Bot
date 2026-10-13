@@ -74,6 +74,8 @@ export const routineState = (
     .filter((a) => a.routineId === r.id)
     .toSorted((a, b) => b.startedAt.localeCompare(a.startedAt));
   if (own.some((a) => a.outcome === "running")) return "running";
+  // Held for the network: it runs once the connection is back.
+  if (r.waitingForConnection === true && r.enabled) return "waiting";
   if (own[0]?.outcome === "failed" && r.enabled) return "failed";
   if (!r.enabled) return "paused";
   if (r.runAt != null && r.schedule == null) return "once";
@@ -119,6 +121,7 @@ export const runsView = (
             started: "running",
             "start-failed": "failed",
             skipped: "skipped",
+            "skipped-offline": "skipped-offline",
             "no-workspace": "failed",
             unknown: "unknown",
             paused: "paused",

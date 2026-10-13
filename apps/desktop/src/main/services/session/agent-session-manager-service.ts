@@ -273,7 +273,10 @@ export class AgentSessionManagerService {
   setRunOutcome(sessionId: string, outcome: RoutineRunOutcome): boolean {
     const session = this.sessions.get(sessionId);
     if (session == null || session.routineId == null) return false;
-    if (session.runOutcome === "failed" && outcome === "completed")
+    if (
+      (session.runOutcome === "failed" || session.runOutcome === "offline") &&
+      outcome === "completed"
+    )
       return false;
     if (session.runOutcome === outcome) return false;
     session.runOutcome = outcome;

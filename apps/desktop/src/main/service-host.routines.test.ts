@@ -187,6 +187,58 @@ describe("routine creation plan admission", () => {
     expect(listJobs()).toEqual([]);
   });
 });
+
+describe("a routine run the network let down", () => {
+  const settle = (service: object, event: Record<string, unknown>): void =>
+    (
+      ServiceHost.prototype as unknown as {
+        settleRoutineRun: (sessionId: string, payload: unknown) => void;
+      }
+    ).settleRoutineRun.call(service, "run-1", { type: "event", event });
+
+  it("is filed offline, and never pauses the routine", async () => {
+    const { createJob } = await import("./services/agent-tools/cron-store");
+    const { NetworkWaitClock } =
+      await import("./services/agent-tools/routine-guards");
+    const { readLastRoutineRun } =
+      await import("./services/agent-tools/routine-runs-store");
+    const job = createJob({ schedule: "0 9 * * *", prompt: "x" });
+    const dir = path.join(home, "routine-home");
+    const outcomes: string[] = [];
+    const service = {
+      agentSessionManagerService: {
+        isRoutineSession: () => true,
+        setRunOutcome: (_id: string, outcome: string) => {
+          if (outcomes.at(-1) === "offline" && outcome === "completed")
+            return false;
+          outcomes.push(outcome);
+          return true;
+        },
+        get: () => ({ routineId: job.id, createdAt: "2026-10-13T09:00:00Z" }),
+      },
+      routineNetworkWaits: new NetworkWaitClock(),
+      routineRunText: new Map([["run-1", []]]),
+      routineHome: () => dir,
+      pauseRoutine: vi.fn(),
+      pauseIfFailingRepeatedly: vi.fn(),
+    };
+
+    settle(service, {
+      type: "error",
+      error: {
+        message: "Couldn't reach Abacus — check your connection.",
+        code: "network_unreachable",
+      },
+    });
+    settle(service, { type: "status_changed", status: "idle" });
+
+    expect(outcomes).toEqual(["offline"]);
+    expect(readLastRoutineRun(dir)?.outcome).toBe("offline");
+    expect(service.pauseRoutine).not.toHaveBeenCalled();
+    expect(service.pauseIfFailingRepeatedly).not.toHaveBeenCalled();
+  });
+});
+
 describe("a routine fired while signed out", () => {
   it("records the run as skipped", async () => {
     const job = createJob({ prompt: "p", schedule: "0 9 * * *" });

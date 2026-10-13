@@ -8,7 +8,8 @@ export type RoutineTrigger = "schedule" | "webhook" | "manual" | "create";
 
 /**
  * One entry of a routine's history (spec 05 §31.5 f). **Attempt kinds** are
- * one per fire: `started` and `start-failed` (a session exists), `skipped`
+ * one per fire: `started` and `start-failed` (a session exists), `skipped`,
+ * `skipped-offline` (held for the network, and its next fire came first)
  * and `no-workspace` (none), and `unknown` (a legacy entry main could not
  * classify). **Follow-up kinds** are not fires: `timed-out` (the reaper
  * stopped a started run; it names that attempt) and `paused` (an
@@ -18,6 +19,7 @@ export type RoutineRunKind =
   | "started"
   | "start-failed"
   | "skipped"
+  | "skipped-offline"
   | "no-workspace"
   | "unknown"
   | "timed-out"
@@ -149,6 +151,8 @@ export interface RoutineListItem extends Routine {
   botName: string | null;
   /** Set on a hosted routine's row. */
   hosted?: HostedRoutineInfo;
+  /** A fire came due with the network down: it runs once the network is back. */
+  waitingForConnection?: boolean;
 }
 
 export interface RoutineCreateInput {

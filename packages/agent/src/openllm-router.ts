@@ -12,7 +12,7 @@
 import type { ModelRegistry } from "@earendil-works/pi-coding-agent";
 
 import { type CooldownStore, fileCooldownStore } from "./openllm-cooldowns.js";
-import { classifyFailure } from "./openllm-failures.js";
+import { classifyFailure, type NetworkEvidence } from "./openllm-failures.js";
 import {
   fileQuotaStore,
   QuotaLedger,
@@ -26,6 +26,9 @@ export interface RunningModel {
   provider: string;
   id: string;
 }
+
+/** What a failure moves the pool to: the next model, a wait for the network, or nothing. */
+export type RouterStep = { nextId: string } | { network: true } | null;
 
 export const OPENLLM_CONTINUATION_TYPE = "abacusai-bot:openllm-rotation";
 
@@ -108,17 +111,27 @@ export class OpenLlmRouter {
    * The turn ended on a provider error from `current`. The model sits out;
    * when the account, not the model, said no (credits gone, a key's quota
    * spent), the whole class sits out with it, this chat and the next. The
-   * answer is the next model to try, or null when none is left this turn.
+   * answer is the next model to try, null when none is left this turn, or
+   * `network` when the network failed: then nothing is recorded, since a
+   * cooldown on disk would penalize the model for the connection.
    */
   failed(
     registry: ModelRegistry,
     failure: string,
-    current: RunningModel | undefined
-  ): { nextId: string } | null {
+    current: RunningModel | undefined,
+    network?: NetworkEvidence
+  ): RouterStep {
     const currentId =
       current != null ? `${current.provider}/${current.id}` : undefined;
 
-    const verdict = classifyFailure(failure, current?.provider, this.now());
+    const verdict = classifyFailure(
+      failure,
+      current?.provider,
+      this.now(),
+      network
+    );
+
+    if (verdict.network === true) return { network: true };
 
     if (currentId != null) {
       this.rotation.markFailed(currentId, verdict.cooldownMs);
@@ -134,6 +147,25 @@ export class OpenLlmRouter {
     );
 
     return next == null ? null : { nextId: next.id };
+  }
+
+  /**
+   * Every model is cooling down after saying it is busy: the one ready
+   * soonest and how long until then, with it made eligible again this turn.
+   * Null when the pool is shut or empty, where waiting cannot help.
+   */
+  soonestReady(
+    registry: ModelRegistry
+  ): { nextId: string; readyInMs: number } | null {
+    const candidates = openLlmCandidates(listModels(registry));
+    if (this.rotation.poolShut(candidates)) return null;
+    const soonest = this.rotation.soonest(candidates);
+    if (soonest == null) return null;
+    this.failedThisTurn.delete(soonest.id);
+    return {
+      nextId: soonest.id,
+      readyInMs: Math.max(0, soonest.readyAt - this.now()),
+    };
   }
 
   /**

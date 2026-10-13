@@ -2,11 +2,29 @@
  * How long a failed pool model, or its provider, sits out: read from the
  * provider's own words where it names a wait.
  */
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import {
+  hostAttached,
+  markHostGone,
+  setHostConnectivity,
+  setReachabilityProbe,
+} from "./connectivity.js";
+import {
+  BusyWait,
+  failedCallStreamed,
+  NETWORK_WAIT_TURN_MS,
+  NETWORK_WAIT_ROUTINE_MS,
+  NetworkWait,
+  networkEvidence,
+  networkWaitBudgetMs,
+  runOrigin,
+} from "./network-wait.js";
 import {
   classifyFailure,
   endedOnLeakedToolCall,
+  isBusyFailure,
+  networkVerdict,
   retryHintMs,
 } from "./openllm-failures.js";
 
@@ -161,5 +179,291 @@ describe("a tool call written as text", () => {
       endedOnLeakedToolCall([assistant([{ type: "text", text: "All done." }])])
     ).toBeNull();
     expect(endedOnLeakedToolCall([])).toBeNull();
+  });
+});
+
+describe("a failure of the network", () => {
+  it.each([
+    "Connection error.",
+    "fetch failed",
+    "getaddrinfo ENOTFOUND routellm.abacus.ai",
+    "connect ECONNREFUSED 127.0.0.1:443",
+    "read ECONNRESET",
+    "socket hang up",
+    "Request timed out.",
+  ])("%s is the network's while the machine is offline", (failure) => {
+    expect(networkVerdict(failure, { connectivity: "offline" })).toBe(
+      "network"
+    );
+    expect(
+      classifyFailure(failure, "abacus", NOON, { connectivity: "degraded" })
+    ).toEqual({ network: true });
+  });
+
+  it("asks for a probe when the host thinks the network is fine", () => {
+    expect(
+      networkVerdict("Request timed out.", { connectivity: "online" })
+    ).toBe("unknown");
+    expect(
+      networkVerdict("Request timed out.", {
+        connectivity: "online",
+        abacusReachable: false,
+      })
+    ).toBe("network");
+  });
+
+  it("stays the provider's when the Abacus API answers", () => {
+    expect(
+      classifyFailure("Request timed out.", "abacus", NOON, {
+        connectivity: "online",
+        abacusReachable: true,
+      })
+    ).toEqual({});
+  });
+
+  it("is never an HTTP answer, a gateway timeout included", () => {
+    for (const failure of [
+      "504 Gateway Timeout",
+      "429 rate limited upstream",
+      "502 upstream connect error",
+    ])
+      expect(networkVerdict(failure, { connectivity: "offline" })).toBe(
+        "provider"
+      );
+  });
+});
+
+describe("a busy provider", () => {
+  it.each([
+    ["429 rate limited upstream", true],
+    ["503 Service Unavailable", true],
+    ["529 Overloaded", true],
+    ["The model is overloaded, try later", true],
+    ["429 Rate limit reached for requests per day (RPD)", false],
+    ["404 model not found", false],
+    ["401 Invalid API Key", false],
+  ])("%s busy: %s", (failure, busy) => {
+    expect(isBusyFailure(failure)).toBe(busy);
+  });
+});
+
+/** The wait both loops share when the network goes, and when every pool model is busy. */
+describe("network and busy waits", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    setHostConnectivity("unknown");
+    setReachabilityProbe(null);
+    hostAttached();
+    delete process.env.ABACUSAI_BOT_ROUTINE_RUN;
+  });
+
+  describe("the wait for the network", () => {
+    it("ends the moment the host goes away, and never starts after", async () => {
+      const wait = new NetworkWait(() => Date.now());
+      const next = wait.next(NETWORK_WAIT_TURN_MS, () => {});
+      markHostGone();
+      expect(await next).toBe("cancelled");
+
+      const waits: number[] = [];
+      expect(
+        await wait.next(NETWORK_WAIT_TURN_MS, (_attempt, delay) =>
+          waits.push(delay)
+        )
+      ).toBe("cancelled");
+      expect(waits).toEqual([]);
+
+      const busy = new BusyWait();
+      expect(await busy.wait(5_000)).toBe(false);
+      expect(busy.rounds).toBe(0);
+    });
+
+    it("a busy-pool wait ends when the host goes away", async () => {
+      const busy = new BusyWait();
+      const waited = busy.wait(30_000);
+      markHostGone();
+      expect(await waited).toBe(false);
+    });
+
+    it("backs off 2s, 4s, 8s, 16s, then every 30s", async () => {
+      const wait = new NetworkWait(() => Date.now());
+      const delays: number[] = [];
+
+      for (let round = 0; round < 7; round++) {
+        const next = wait.next(NETWORK_WAIT_TURN_MS, (_attempt, delay) =>
+          delays.push(delay)
+        );
+        await vi.advanceTimersByTimeAsync(delays.at(-1)!);
+        expect(await next).toBe("retry");
+      }
+
+      expect(delays).toEqual([
+        2_000, 4_000, 8_000, 16_000, 30_000, 30_000, 30_000,
+      ]);
+    });
+
+    it("retries at once when the host says the network is back", async () => {
+      const wait = new NetworkWait(() => Date.now());
+      setHostConnectivity("offline");
+      for (let round = 0; round < 4; round++) {
+        const next = wait.next(NETWORK_WAIT_TURN_MS, () => {});
+        await vi.advanceTimersByTimeAsync(16_000);
+        await next;
+      }
+
+      const next = wait.next(NETWORK_WAIT_TURN_MS, () => {});
+      await vi.advanceTimersByTimeAsync(100);
+      setHostConnectivity("online");
+
+      expect(await next).toBe("retry");
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it("retries at once when the machine wakes", async () => {
+      const wait = new NetworkWait(() => Date.now());
+      setHostConnectivity("offline");
+      const next = wait.next(NETWORK_WAIT_TURN_MS, () => {});
+
+      setHostConnectivity("offline", true);
+
+      expect(await next).toBe("retry");
+    });
+
+    it("gives up once the budget is spent, and never waits past it", async () => {
+      const wait = new NetworkWait(() => Date.now());
+      const delays: number[] = [];
+      let outcome: string = "retry";
+
+      while (outcome === "retry") {
+        const next = wait.next(20_000, (_attempt, delay) => delays.push(delay));
+        await vi.advanceTimersByTimeAsync(delays.at(-1) ?? 0);
+        outcome = await next;
+      }
+
+      expect(outcome).toBe("gave-up");
+      // 2 + 4 + 8, then the 6s left of the budget, not a full 16.
+      expect(delays).toEqual([2_000, 4_000, 8_000, 6_000]);
+    });
+
+    it("ends at once on Stop", async () => {
+      const wait = new NetworkWait(() => Date.now());
+      const next = wait.next(NETWORK_WAIT_TURN_MS, () => {});
+
+      wait.cancel();
+
+      expect(await next).toBe("cancelled");
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it("starts afresh after a reset", async () => {
+      const wait = new NetworkWait(() => Date.now());
+      const delays: number[] = [];
+      const first = wait.next(NETWORK_WAIT_TURN_MS, (_a, d) => delays.push(d));
+      await vi.advanceTimersByTimeAsync(2_000);
+      await first;
+
+      wait.reset();
+      const second = wait.next(NETWORK_WAIT_TURN_MS, (_a, d) => delays.push(d));
+      await vi.advanceTimersByTimeAsync(2_000);
+      await second;
+
+      expect(delays).toEqual([2_000, 2_000]);
+    });
+  });
+
+  describe("the budget", () => {
+    it("is ten minutes for a turn a person sent and an hour for a routine's run", () => {
+      expect(runOrigin()).toBe("turn");
+      expect(networkWaitBudgetMs()).toBe(10 * 60_000);
+      expect(NETWORK_WAIT_TURN_MS).toBe(10 * 60_000);
+
+      process.env.ABACUSAI_BOT_ROUTINE_RUN = "1";
+      expect(runOrigin()).toBe("routine");
+      expect(networkWaitBudgetMs()).toBe(60 * 60_000);
+      expect(NETWORK_WAIT_ROUTINE_MS).toBe(60 * 60_000);
+    });
+  });
+
+  describe("the evidence for a failure", () => {
+    it("takes the host's word without probing when it knows", async () => {
+      const probe = vi.fn(async () => true);
+      setReachabilityProbe(probe);
+      setHostConnectivity("offline");
+
+      expect(await networkEvidence("Request timed out.")).toEqual({
+        connectivity: "offline",
+      });
+      expect(probe).not.toHaveBeenCalled();
+    });
+
+    it("probes the Abacus API when the host thinks all is well", async () => {
+      setReachabilityProbe(async () => false);
+      setHostConnectivity("online");
+
+      expect(await networkEvidence("Request timed out.")).toEqual({
+        connectivity: "online",
+        abacusReachable: false,
+      });
+    });
+
+    it("never probes for a failure that is not network-shaped", async () => {
+      const probe = vi.fn(async () => false);
+      setReachabilityProbe(probe);
+
+      await networkEvidence("429 rate limited upstream");
+
+      expect(probe).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("whether the failed call had started answering", () => {
+    it("reads the failed message's own content", () => {
+      expect(
+        failedCallStreamed([
+          { role: "user", content: "hi" },
+          { role: "assistant", stopReason: "error", content: [] },
+        ])
+      ).toBe(false);
+      expect(
+        failedCallStreamed([
+          {
+            role: "assistant",
+            stopReason: "error",
+            content: [{ type: "text", text: "Here is" }],
+          },
+        ])
+      ).toBe(true);
+    });
+  });
+
+  describe("the wait for a busy pool", () => {
+    it("waits for the soonest model, at most a minute a round, three rounds", async () => {
+      const wait = new BusyWait();
+      const delays: number[] = [];
+
+      for (const readyIn of [15_000, 300_000, 300_000, 300_000]) {
+        if (!wait.available) break;
+        delays.push(wait.delayFor(readyIn));
+        const next = wait.wait(readyIn);
+        await vi.advanceTimersByTimeAsync(60_000);
+        expect(await next).toBe(true);
+      }
+
+      expect(delays).toEqual([15_000, 60_000, 60_000]);
+      expect(wait.available).toBe(false);
+      expect(await wait.wait(1_000)).toBe(false);
+    });
+
+    it("ends at once on Stop", async () => {
+      const wait = new BusyWait();
+      const next = wait.wait(60_000);
+
+      wait.cancel();
+
+      expect(await next).toBe(false);
+    });
   });
 });

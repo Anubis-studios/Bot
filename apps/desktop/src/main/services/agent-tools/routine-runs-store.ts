@@ -16,7 +16,7 @@ export interface RoutineRunRecord {
   sessionId: string;
   startedAt: string;
   endedAt: string;
-  outcome: "completed" | "failed";
+  outcome: "completed" | "failed" | "offline";
   /** Everything the run said, assistant text only. */
   reply: string;
 }
@@ -98,7 +98,10 @@ export const readLastRoutineRun = (home: string): RoutineRunRecord | null => {
       sessionId: String(record.sessionId ?? ""),
       startedAt: record.startedAt,
       endedAt: String(record.endedAt ?? record.startedAt),
-      outcome: record.outcome === "failed" ? "failed" : "completed",
+      outcome:
+        record.outcome === "failed" || record.outcome === "offline"
+          ? record.outcome
+          : "completed",
       reply: record.reply,
     };
   } catch {

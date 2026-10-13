@@ -38,6 +38,7 @@ import {
   userProfilePrompt,
   type AbacusBotConfig,
 } from "./config.js";
+import { hostConnectivity, hostIsGone } from "./connectivity.js";
 import { setCurrentMode, setUnattendedPolicy } from "./current-mode.js";
 import {
   customInstructionsPrompt,
@@ -81,7 +82,26 @@ import {
   memorySnapshot as readMemorySnapshot,
   rememberSnapshot,
 } from "./memory-store.js";
-import { endedOnLeakedToolCall } from "./openllm-failures.js";
+import {
+  BUSY_RETRY_PROMPT,
+  BusyWait,
+  BUSY_WAIT_ROUNDS,
+  NETWORK_UNREACHABLE_CODE,
+  NETWORK_UNREACHABLE_MESSAGE,
+  NetworkWait,
+  failedCallStreamed,
+  networkContinuation,
+  networkEvidence,
+  networkSuspect,
+  networkWaitBudgetMs,
+  runMadeProgress,
+  type NetworkSuspect,
+} from "./network-wait.js";
+import {
+  endedOnLeakedToolCall,
+  isBusyFailure,
+  networkVerdict,
+} from "./openllm-failures.js";
 import {
   OPENLLM_CONTINUATION_PROMPT,
   OPENLLM_CONTINUATION_TYPE,
@@ -744,6 +764,14 @@ export class AbacusBotSession {
   private openLlmActive = false;
   /** The free pool: which model runs, and what happens when it fails. See openllm-router.ts. */
   private readonly router = new OpenLlmRouter();
+  /** Set at `agent_end` when the call failed in a way that may be the network's. */
+  private pendingNetworkFailure: NetworkSuspect | null = null;
+  /** Set at `agent_end` when every pool model is busy and a wait is left this turn. */
+  private pendingBusyWait: { failure: string } | null = null;
+  private readonly networkWait = new NetworkWait();
+  private readonly busyWait = new BusyWait();
+  /** The turn already ended on "couldn't reach Abacus"; pi's error is not a second one. */
+  private networkFailureReported = false;
   /** Whether the Abacus provider was registered with the sponsored-run marker. */
   private sponsoredAtRegistration = sponsoredRunActive();
   /**
@@ -1251,6 +1279,11 @@ export class AbacusBotSession {
     this.contextCompactions = 0;
     this.pendingContextCompaction = null;
     this.router.beginTurn();
+    this.pendingNetworkFailure = null;
+    this.pendingBusyWait = null;
+    this.networkWait.reset();
+    this.busyWait.reset();
+    this.networkFailureReported = false;
     // The sponsored window closing (or opening) changes the headers the
     // Abacus provider was registered with; a run must not carry the marker
     // past its deadline, nor miss it.
@@ -1316,7 +1349,11 @@ export class AbacusBotSession {
    * same way and is skipped, or every Stop would paint a terminal error.
    */
   private reportTurnFailure(): void {
-    if (this.interrupted || this.stallFailureReported) {
+    if (
+      this.interrupted ||
+      this.stallFailureReported ||
+      this.networkFailureReported
+    ) {
       return;
     }
 
@@ -1470,11 +1507,15 @@ export class AbacusBotSession {
       this.pendingOpenLlmRotation != null ||
       this.pendingLanguageRepair != null ||
       this.pendingToolArrival != null ||
-      this.pendingStall != null
+      this.pendingStall != null ||
+      this.pendingNetworkFailure != null ||
+      this.pendingBusyWait != null
     ) {
       // Stop cancels the continuation, but the withheld idle event still has
       // to go out or the session stays busy forever.
       if (this.interrupted) {
+        this.pendingNetworkFailure = null;
+        this.pendingBusyWait = null;
         this.continuingPastMalformedToolCall = false;
         this.pendingContextCompaction = null;
         this.pendingOpenLlmRotation = null;
@@ -1490,6 +1531,22 @@ export class AbacusBotSession {
         const stalled = this.pendingStall.modelId;
         this.pendingStall = null;
         await this.recoverFromStall(stalled);
+
+        continue;
+      }
+
+      if (this.pendingNetworkFailure != null) {
+        const suspect = this.pendingNetworkFailure;
+        this.pendingNetworkFailure = null;
+        await this.recoverFromNetworkFailure(suspect);
+
+        continue;
+      }
+
+      if (this.pendingBusyWait != null) {
+        const busy = this.pendingBusyWait;
+        this.pendingBusyWait = null;
+        await this.waitForBusyPool(busy.failure);
 
         continue;
       }
@@ -1581,12 +1638,24 @@ export class AbacusBotSession {
     const seconds = modelStallMs() / 1000;
     const registry = this.registry;
 
+    // Silence while the network is down is the network's, not the model's.
+    const connectivity = hostConnectivity();
+    if (connectivity === "offline" || connectivity === "degraded") {
+      this.pendingNetworkFailure = {
+        failure: `no reply in ${Math.round(seconds)}s`,
+        streamed: failedCallStreamed(this.session?.messages ?? []),
+        confirmed: true,
+      };
+
+      return;
+    }
+
     if (this.openLlmActive && registry != null) {
       // No "." in this: the routing log line keeps the first sentence only.
       const failure = `no reply in ${Math.round(seconds)}s`;
       const next = this.router.failed(registry, failure, this.session?.model);
 
-      if (next != null) {
+      if (next != null && "nextId" in next) {
         this.pendingOpenLlmRotation = { failure, nextId: next.nextId };
 
         return;
@@ -1664,7 +1733,9 @@ export class AbacusBotSession {
       // Nothing older than the recency window to summarize. Another pool
       // model may have room for the transcript as it stands, so try that
       // before anything reaches the user.
-      this.pendingOpenLlmRotation = this.shouldRotateOpenLlm(pending.messages);
+      this.pendingOpenLlmRotation = this.shouldRotateOpenLlm(
+        pending.messages
+      ).rotation;
 
       if (this.pendingOpenLlmRotation != null) return;
 
@@ -1792,7 +1863,11 @@ export class AbacusBotSession {
     await session.sendCustomMessage(
       {
         customType: OPENLLM_CONTINUATION_TYPE,
-        content: OPENLLM_CONTINUATION_PROMPT,
+        // After a busy wait the same model may be asked again.
+        content:
+          failedId === rotation.nextId
+            ? BUSY_RETRY_PROMPT
+            : OPENLLM_CONTINUATION_PROMPT,
         display: false,
       },
       { triggerTurn: true }
@@ -1805,29 +1880,166 @@ export class AbacusBotSession {
    * emitted; the candidate is picked here so that promise is never made for a
    * fallback that does not exist.
    */
-  private shouldRotateOpenLlm(
-    messages: readonly unknown[]
-  ): { failure: string; nextId: string } | null {
-    if (!this.openLlmActive || this.interrupted) return null;
+  private shouldRotateOpenLlm(messages: readonly unknown[]): {
+    rotation: { failure: string; nextId: string } | null;
+    busy: { failure: string } | null;
+  } {
+    const none = { rotation: null, busy: null };
+    if (!this.openLlmActive || this.interrupted) return none;
 
     const failure =
       endedOnProviderError(messages) ?? endedOnLeakedToolCall(messages);
 
-    if (failure == null) return null;
+    if (failure == null) return none;
 
+    return this.routeAfterFailure(failure);
+  }
+
+  /**
+   * The pool's answer to a provider failure: the next model, or, when every
+   * model is busy and the turn has a wait left, a wait for the soonest one.
+   */
+  private routeAfterFailure(
+    failure: string,
+    network?: Parameters<OpenLlmRouter["failed"]>[3]
+  ): {
+    rotation: { failure: string; nextId: string } | null;
+    busy: { failure: string } | null;
+  } {
     const registry = this.registry;
     const current = this.session?.model;
     const currentId = current ? `${current.provider}/${current.id}` : undefined;
     const next =
-      registry != null ? this.router.failed(registry, failure, current) : null;
+      registry != null
+        ? this.router.failed(registry, failure, current, network)
+        : null;
 
-    if (next == null) {
-      process.stderr.write(
-        `[abacusai-bot-agent] pool not rotating after "${failure.slice(0, 80)}": no other candidate (current ${currentId ?? "?"})\n`
-      );
+    if (next != null && "nextId" in next)
+      return { rotation: { failure, nextId: next.nextId }, busy: null };
+
+    const busy =
+      isBusyFailure(failure) && this.busyWait.available && !this.isPoolShut();
+    process.stderr.write(
+      `[abacusai-bot-agent] pool not rotating after "${failure.slice(0, 80)}": no other candidate (current ${currentId ?? "?"})${busy ? "; waiting for the soonest" : ""}\n`
+    );
+
+    return { rotation: null, busy: busy ? { failure } : null };
+  }
+
+  /**
+   * The call failed in a way that may be the network's. If it is, the turn
+   * waits for the connection and picks up where it stopped; if the Abacus
+   * API answers, it is a provider failure and goes the usual way.
+   */
+  private async recoverFromNetworkFailure(
+    suspect: NetworkSuspect
+  ): Promise<void> {
+    const evidence = suspect.confirmed
+      ? null
+      : await networkEvidence(suspect.failure);
+    const network =
+      evidence == null ||
+      networkVerdict(suspect.failure, evidence) === "network";
+
+    if (this.interrupted) {
+      this.finishTurn();
+      return;
     }
 
-    return next != null ? { failure, nextId: next.nextId } : null;
+    if (!network) {
+      const route = this.openLlmActive
+        ? this.routeAfterFailure(suspect.failure, evidence ?? undefined)
+        : { rotation: null, busy: null };
+      this.pendingOpenLlmRotation = route.rotation;
+      this.pendingBusyWait = route.busy;
+      if (route.rotation == null && route.busy == null) this.finishTurn();
+      return;
+    }
+
+    const budgetMs = networkWaitBudgetMs();
+    const outcome = await this.networkWait.next(
+      budgetMs,
+      (attempt, delayMs) => {
+        process.stderr.write(
+          `[abacusai-bot-agent] network unavailable ("${suspect.failure.slice(0, 80)}"); waiting ${delayMs}ms (attempt ${attempt}, budget ${budgetMs}ms)\n`
+        );
+        this.emitAgentEvent({
+          type: "retry",
+          attempt,
+          maxAttempts: 0,
+          delayMs,
+          isNetworkError: true,
+          waitingForConnection: true,
+        });
+      }
+    );
+
+    // The host went away mid-wait: the turn ends as stopped, not failed.
+    if (hostIsGone()) this.interrupted = true;
+    if (outcome === "cancelled" || this.interrupted) {
+      this.finishTurn();
+      return;
+    }
+
+    if (outcome === "gave-up") {
+      this.networkFailureReported = true;
+      if (this.openLlmRouting)
+        this.closeRoutingLine("Routing stopped: no network.", "warning");
+      this.emitAgentEvent(
+        {
+          type: "error",
+          error: {
+            message: NETWORK_UNREACHABLE_MESSAGE,
+            code: NETWORK_UNREACHABLE_CODE,
+            detail: suspect.failure,
+          },
+        },
+        { origin: "turn" }
+      );
+      this.finishTurn();
+      return;
+    }
+
+    const session = this.session;
+    if (session == null) {
+      this.finishTurn();
+      return;
+    }
+    await networkContinuation(session, suspect.streamed);
+  }
+
+  /**
+   * Every pool model is cooling down after saying it is busy: wait for the
+   * soonest (bounded), then ask it again, before telling the user.
+   */
+  private async waitForBusyPool(failure: string): Promise<void> {
+    const registry = this.registry;
+    const soonest =
+      registry != null ? this.router.soonestReady(registry) : null;
+
+    if (soonest == null || this.interrupted) {
+      this.finishTurn();
+      return;
+    }
+
+    this.emitAgentEvent({
+      type: "retry",
+      attempt: this.busyWait.rounds + 1,
+      maxAttempts: BUSY_WAIT_ROUNDS,
+      delayMs: this.busyWait.delayFor(soonest.readyInMs),
+      isNetworkError: false,
+    });
+
+    const waited = await this.busyWait.wait(soonest.readyInMs);
+    // The host went away mid-wait: the turn ends as stopped, not failed.
+    if (hostIsGone()) this.interrupted = true;
+
+    if (!waited || this.interrupted) {
+      this.finishTurn();
+      return;
+    }
+
+    this.pendingOpenLlmRotation = { failure, nextId: soonest.nextId };
   }
 
   /**
@@ -2012,6 +2224,9 @@ export class AbacusBotSession {
   async stop(): Promise<void> {
     // The turn about to end was stopped, not failed; see reportTurnFailure.
     this.interrupted = true;
+    // A turn waiting for the network or a busy pool ends now, not after the wait.
+    this.networkWait.cancel();
+    this.busyWait.cancel();
 
     // An unanswered approval would keep the tool hook parked forever.
     this.rejectAllPending("Interrupted.");
@@ -2345,6 +2560,8 @@ export class AbacusBotSession {
   /** Start a fresh conversation, discarding the transcript but keeping the process. */
   async resetConversation(): Promise<void> {
     this.interrupted = true;
+    this.networkWait.cancel();
+    this.busyWait.cancel();
     this.rejectAllPending("Conversation reset.");
     // As in `stop`: a queued message must not land in the fresh conversation.
     this.pendingSteers.clear();
@@ -2596,6 +2813,29 @@ export class AbacusBotSession {
           return;
         }
 
+        // A call that answered ends any outage this turn was riding out.
+        if (runMadeProgress(event.messages)) this.networkWait.reset();
+        // The network's failure is checked (and waited out) before anything
+        // reads it as the model's: no cooldown, no rotation, no compaction.
+        this.pendingNetworkFailure =
+          this.interrupted || event.willRetry
+            ? null
+            : networkSuspect(
+                endedOnProviderError(event.messages),
+                event.messages
+              );
+        if (this.pendingNetworkFailure != null) {
+          this.lastTurnUsage = turnUsage(event.messages as never);
+          this.continuingPastMalformedToolCall = false;
+          this.pendingContextCompaction = null;
+          this.pendingOpenLlmRotation = null;
+          this.pendingBusyWait = null;
+          this.pendingLanguageRepair = null;
+          this.pendingToolArrival = null;
+
+          return;
+        }
+
         // Decided here: a continuation must suppress the idle event emitted below.
         this.continuingPastMalformedToolCall =
           this.shouldContinuePastMalformedToolCall(event.messages);
@@ -2606,16 +2846,19 @@ export class AbacusBotSession {
         this.pendingContextCompaction = this.continuingPastMalformedToolCall
           ? null
           : this.shouldCompactAndRetry(event.messages);
-        this.pendingOpenLlmRotation =
+        const route =
           this.continuingPastMalformedToolCall ||
           this.pendingContextCompaction != null
-            ? null
+            ? { rotation: null, busy: null }
             : this.shouldRotateOpenLlm(event.messages);
+        this.pendingOpenLlmRotation = route.rotation;
+        this.pendingBusyWait = event.willRetry ? null : route.busy;
         // Only a turn that ended cleanly is judged on its language.
         this.pendingLanguageRepair =
           this.continuingPastMalformedToolCall ||
           this.pendingContextCompaction != null ||
           this.pendingOpenLlmRotation != null ||
+          this.pendingBusyWait != null ||
           this.languageRepairsThisTurn > 0
             ? null
             : replyLanguageMismatch(event.messages);
@@ -2626,6 +2869,7 @@ export class AbacusBotSession {
           this.continuingPastMalformedToolCall ||
           this.pendingContextCompaction != null ||
           this.pendingOpenLlmRotation != null ||
+          this.pendingBusyWait != null ||
           this.pendingLanguageRepair != null ||
           this.toolArrivalsThisTurn > 0
             ? []
@@ -2636,6 +2880,7 @@ export class AbacusBotSession {
           !this.continuingPastMalformedToolCall &&
           this.pendingContextCompaction == null &&
           this.pendingOpenLlmRotation == null &&
+          this.pendingBusyWait == null &&
           this.pendingLanguageRepair == null &&
           this.pendingToolArrival == null
         ) {

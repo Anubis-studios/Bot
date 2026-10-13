@@ -303,7 +303,8 @@ export interface BotSenderChat {
   autoReply: "approved" | "paused" | null;
 }
 
-export type RoutineRunOutcome = "running" | "completed" | "failed";
+/** `offline`: the run waited out its budget for a network that never came back. */
+export type RoutineRunOutcome = "running" | "completed" | "failed" | "offline";
 
 /** One fire of a routine: the session it ran in and how it went. */
 export interface RoutineRunItem {
