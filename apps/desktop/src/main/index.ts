@@ -33,6 +33,7 @@ import {
   session,
   nativeImage,
   nativeTheme,
+  net,
   dialog,
   Notification,
   powerMonitor,
@@ -1821,6 +1822,16 @@ app
 
     powerMonitor.on("lock-screen", () => {});
     powerMonitor.on("unlock-screen", () => {});
+
+    // The connectivity owner reads the OS's network state and hears sleep
+    // and wake; agents and routines take their cue from it.
+    workspaceServiceHost.connectivity.start(() => net.isOnline());
+    powerMonitor.on("suspend", () =>
+      workspaceServiceHost.connectivity.suspended()
+    );
+    powerMonitor.on("resume", () =>
+      workspaceServiceHost.connectivity.resumed()
+    );
 
     // CI's proof that the app starts, printed once every module has evaluated
     // and the window exists. A live pid is not proof: an import-time exception

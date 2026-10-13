@@ -28,6 +28,8 @@ const GROUPS = [
   // The connector registry's status table and connect flow. One answer to
   // "is it connected?" and one way to connect, for every kind.
   "connectors",
+  // Whether this machine can reach Abacus: one owner agents and routines read.
+  "connectivity",
   "conversation",
   "debug-sync",
   "diagnostics",

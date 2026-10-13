@@ -311,6 +311,7 @@ const applyRunCustom = (
             maxAttempts: Number(value.maxAttempts ?? 0),
             delayMs: Number(value.delayMs ?? 0),
             isNetworkError: value.isNetworkError === true,
+            waitingForConnection: value.waitingForConnection === true,
           },
         },
       };

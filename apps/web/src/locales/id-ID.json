@@ -2650,6 +2650,7 @@
       "tools_one": "Running {{count}} tool",
       "tools_other": "Running {{count}} tools",
       "typing": "Typing",
+      "waitingForConnection": "Menunggu koneksi…",
       "working": "Working"
     },
     "code": {
@@ -3193,13 +3194,16 @@
       "once": "Once",
       "webhook": "Webhook",
       "manual": "On demand",
-      "scheduled": "Scheduled"
+      "scheduled": "Scheduled",
+      "waiting": "Menunggu koneksi"
     },
     "outcomes": {
       "running": "Running",
       "completed": "Completed",
       "failed": "Failed",
       "skipped": "Skipped",
+      "skipped-offline": "Dilewati: offline",
+      "offline": "Tidak dapat menjangkau Abacus",
       "unknown": "Unknown",
       "paused": "Paused"
     },

@@ -222,6 +222,19 @@ describe("R2-T8 applyEvent", () => {
       })
     );
     expect(state.activity.retry?.attempt).toBe(2);
+    expect(state.activity.retry?.waitingForConnection).toBe(false);
+    state = applyEvent(
+      state,
+      7,
+      b.custom("agent.retry", {
+        attempt: 1,
+        maxAttempts: 0,
+        delayMs: 2_000,
+        isNetworkError: true,
+        waitingForConnection: true,
+      })
+    );
+    expect(state.activity.retry?.waitingForConnection).toBe(true);
     state = applyEvent(state, 8, b.textStart("m"));
     expect(state.activity.retry).toBeNull();
     state = applyEvent(

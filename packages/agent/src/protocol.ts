@@ -290,6 +290,8 @@ export type AgentEvent =
       maxAttempts: number;
       delayMs: number;
       isNetworkError: boolean;
+      /** The turn is paused until the network is back, not retrying a model. */
+      waitingForConnection?: boolean;
     }
   | { type: "network_status"; online: boolean }
   | {
@@ -509,6 +511,8 @@ export type DesktopCommand =
   | { type: "mcp_list_servers" }
   /** Re-read stored API keys and provider catalogs without restarting. */
   | { type: "refresh_providers" }
+  /** The desktop's connectivity owner changed its mind, or the machine woke. */
+  | { type: "connectivity"; state: string; resumed?: boolean }
   /**
    * Reconnect every MCP server. With `requestId`, the agent answers
    * `mcp_refreshed` (or `mcp_refresh_failed`) carrying it once done.

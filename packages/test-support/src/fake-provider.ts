@@ -40,6 +40,8 @@ export type Reply =
     }
   /** A provider error, as a status and the body a provider would send with it. */
   | { fail: { status: number; message: string } }
+  /** The connection dies before any answer: what a lost network looks like. */
+  | { drop: true }
   /**
    * A stream that opens, says this much, and then never sends another byte
    * or closes: the shape of a connection the server has finished with but
@@ -165,6 +167,12 @@ export class FakeProvider {
     this.calls.push(call);
 
     const reply = await this.responder(call, index);
+
+    if ("drop" in reply) {
+      request.socket.destroy();
+
+      return;
+    }
 
     if ("fail" in reply) {
       response.writeHead(reply.fail.status, {

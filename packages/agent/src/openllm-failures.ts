@@ -2,8 +2,10 @@
  * What a pool model's failure means for how long it, or its whole provider,
  * sits out. pi hands over the provider's error as text, status first, so the
  * text is what is read: the status class, and any wait the provider names
- * ("try again in 7m12s", "retryDelay": "30s"), which beats any guess.
+ * ("try again in 7m12s", "retryDelay": "30s"), which beats any guess. A
+ * failure of the network is no model's fault and sits nobody out.
  */
+import type { Connectivity } from "./connectivity.js";
 import {
   accountWideFailure,
   OPENLLM_ACCOUNT_COOLDOWN_MS,
@@ -19,6 +21,8 @@ const MIN_HINT_MS = 5 * SECOND_MS;
 const MAX_HINT_MS = DAY_MS;
 
 export interface FailureVerdict {
+  /** The network failed, not the model: nothing sits out and nothing rotates. */
+  network?: true;
   /** How long the model sits out; absent leaves the usual escalating wait. */
   cooldownMs?: number;
   /** The provider or tier refused, not the model: every sibling sits out. */
@@ -85,12 +89,67 @@ const TOO_LARGE =
 const DAILY =
   /per day|daily|\brpd\b|\btpd\b|requests? per day|tokens? per day/i;
 
+/** The request never reached a server, or its connection died. */
+const CONNECTION_FAILURE =
+  /fetch failed|connection error|network error|network is unreachable|getaddrinfo|ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET|ECONNABORTED|ETIMEDOUT|ENETUNREACH|ENETDOWN|EHOSTUNREACH|EPIPE|socket hang up|other side closed|UND_ERR_|\bTLS\b|\bSSL\b|ERR_TLS|certificate|EPROTO/i;
+const TIMED_OUT = /timed? ?out|timeout/i;
+
+/**
+ * Whether `failure` looks like the network's: a connection that failed or a
+ * request that timed out, with no HTTP status (an answering gateway, a 504
+ * included, proves the network works).
+ */
+export const networkShaped = (failure: string): boolean =>
+  !/^\s*[1-5]\d\d\b/.test(failure) &&
+  (CONNECTION_FAILURE.test(failure) || TIMED_OUT.test(failure));
+
+/** What is known about the network when a call failed. */
+export interface NetworkEvidence {
+  connectivity: Connectivity;
+  /** Whether the Abacus API answered a probe just now; absent when not asked. */
+  abacusReachable?: boolean;
+}
+
+/**
+ * Whether a failure is the network's: network-shaped, and the connectivity
+ * owner says the machine is offline or degraded, or the Abacus API does not
+ * answer either. "unknown" asks for a probe. A server that answers makes even
+ * a timeout the provider's.
+ */
+export function networkVerdict(
+  failure: string,
+  evidence: NetworkEvidence
+): "network" | "provider" | "unknown" {
+  if (!networkShaped(failure)) return "provider";
+  if (
+    evidence.connectivity === "offline" ||
+    evidence.connectivity === "degraded"
+  )
+    return "network";
+  if (evidence.abacusReachable == null) return "unknown";
+  return evidence.abacusReachable ? "provider" : "network";
+}
+
+/** Busy, not broken: worth waiting for when every model says it. */
+export function isBusyFailure(failure: string): boolean {
+  const code = status(failure);
+  if (code === 429) return !DAILY.test(failure);
+  if (code != null && code >= 500) return true;
+  return /overloaded|rate.?limit|too many requests|at capacity|server is busy/i.test(
+    failure
+  );
+}
+
 /** What `failure` from a model under `provider` means; see FailureVerdict. */
 export function classifyFailure(
   failure: string,
   provider: string | undefined,
-  now: number = Date.now()
+  now: number = Date.now(),
+  network?: NetworkEvidence
 ): FailureVerdict {
+  if (network != null && networkVerdict(failure, network) === "network")
+    return { network: true };
+
   const code = status(failure);
   const hint = retryHintMs(failure);
 

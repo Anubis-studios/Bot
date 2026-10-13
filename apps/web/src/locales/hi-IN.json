@@ -2650,6 +2650,7 @@
       "tools_one": "Running {{count}} tool",
       "tools_other": "Running {{count}} tools",
       "typing": "Typing",
+      "waitingForConnection": "कनेक्शन की प्रतीक्षा हो रही है…",
       "working": "Working"
     },
     "code": {
@@ -3193,13 +3194,16 @@
       "once": "Once",
       "webhook": "वेबहुक",
       "manual": "On demand",
-      "scheduled": "Scheduled"
+      "scheduled": "Scheduled",
+      "waiting": "कनेक्शन की प्रतीक्षा"
     },
     "outcomes": {
       "running": "Running",
       "completed": "Completed",
       "failed": "Failed",
       "skipped": "Skipped",
+      "skipped-offline": "छोड़ा गया: ऑफ़लाइन",
+      "offline": "Abacus से कनेक्ट नहीं हो सका",
       "unknown": "Unknown",
       "paused": "Paused"
     },

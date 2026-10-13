@@ -5,6 +5,7 @@
  * any OpenAI-compatible endpoint declared in config as a custom provider. A
  * provider is usable the moment a credential exists for it.
  */
+import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
@@ -15,7 +16,12 @@ import {
 } from "@earendil-works/pi-coding-agent";
 
 import { abacusV1BaseUrl, sponsoredRunHeaders } from "./abacus-endpoint.js";
-import type { AbacusBotConfig, CustomProviderConfig } from "./config.js";
+import { writeFileAtomicSync } from "./atomic-file.js";
+import {
+  abacusBotDir,
+  type AbacusBotConfig,
+  type CustomProviderConfig,
+} from "./config.js";
 import { missingCatalogSupplements } from "./model-catalog.js";
 
 /** Providers AbacusAI Bot surfaces by name, in the order the UI shows them. */
@@ -476,6 +482,48 @@ const fetchAbacusCatalog = async (apiKey: string): Promise<AbacusPiModel[]> => {
 };
 
 /**
+ * The last catalog an account fetched, so an offline start runs on the
+ * account's real models rather than the one-model fallback. Keyed by a hash of
+ * the key: two accounts on one machine never see each other's list.
+ */
+const lastGoodCatalogFile = (apiKey: string): string =>
+  path.join(
+    abacusBotDir(),
+    "abacus-catalog",
+    `${createHash("sha256").update(apiKey).digest("hex").slice(0, 16)}.json`
+  );
+
+const readLastGoodCatalog = (apiKey: string): AbacusPiModel[] => {
+  try {
+    const parsed: unknown = JSON.parse(
+      fs.readFileSync(lastGoodCatalogFile(apiKey), "utf8")
+    );
+    return Array.isArray(parsed)
+      ? (parsed as AbacusPiModel[]).filter(
+          (model) => typeof model?.id === "string" && model.id.length > 0
+        )
+      : [];
+  } catch {
+    // Never fetched on this machine, or unreadable: the static list stands.
+    return [];
+  }
+};
+
+const writeLastGoodCatalog = (
+  apiKey: string,
+  models: AbacusPiModel[]
+): void => {
+  try {
+    writeFileAtomicSync(lastGoodCatalogFile(apiKey), JSON.stringify(models), {
+      restrict: true,
+      skipIfUnchanged: true,
+    });
+  } catch {
+    // A lost copy only means the static list on the next offline start.
+  }
+};
+
+/**
  * Abacus.AI, gated on a key like Gemini but with its model list FETCHED: the
  * desktop picker offers every model `/v1/models` returns, and pi can only run
  * a model registered here, so the two have to come from the same source.
@@ -488,6 +536,8 @@ export async function registerAbacusProvider(
   if (apiKey.length === 0) return;
 
   const live = await fetchAbacusCatalog(apiKey);
+  if (live.length > 0) writeLastGoodCatalog(apiKey, live);
+  const lastGood = live.length > 0 ? [] : readLastGoodCatalog(apiKey);
   const sponsored = sponsoredRunHeaders();
 
   registry.registerProvider("abacus", {
@@ -495,7 +545,12 @@ export async function registerAbacusProvider(
     baseUrl: abacusBaseUrl(),
     apiKey,
     api: "openai-completions" as const,
-    models: live.length > 0 ? live : STATIC_ABACUS_MODELS,
+    models:
+      live.length > 0
+        ? live
+        : lastGood.length > 0
+          ? lastGood
+          : STATIC_ABACUS_MODELS,
     ...(Object.keys(sponsored).length > 0 ? { headers: sponsored } : {}),
   });
 }

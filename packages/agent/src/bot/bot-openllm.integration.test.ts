@@ -24,15 +24,28 @@ import {
   describe,
   expect,
   it,
+  vi,
 } from "vitest";
 
+import {
+  hostAttached,
+  markHostGone,
+  setHostConnectivity,
+  setReachabilityProbe,
+} from "../connectivity.js";
 import { currentMode } from "../current-mode.js";
+import {
+  NETWORK_UNREACHABLE_CODE,
+  NETWORK_UNREACHABLE_MESSAGE,
+} from "../network-wait.js";
 import { type DesktopEvent } from "../protocol.js";
 import { AgentMode } from "../protocol.js";
 import { BotSession } from "./bot-session.js";
 
 // A stall is noticed in well under a second here, not two minutes.
 process.env.ABACUSAI_BOT_MODEL_STALL_MS = "700";
+// A busy pool's wait for its soonest model, which is up to a minute for real.
+process.env.ABACUSAI_BOT_BUSY_WAIT_MS = "20";
 
 let provider: FakeProvider;
 let home: string;
@@ -363,14 +376,19 @@ describe("a bot whose model fails mid-turn", () => {
   });
 
   it("ends the turn saying why once every model has failed", async () => {
-    provider.scriptSequence([
-      { fail: { status: 429, message: "rate limited upstream" } },
-      { fail: { status: 429, message: "rate limited upstream" } },
-    ]);
+    provider.script(() => ({
+      fail: { status: 429, message: "rate limited upstream" },
+    }));
     const { session, events } = botSession();
     await session.start();
     await session.send("hi");
 
+    // Every model busy: a few bounded waits for the soonest one first.
+    expect(
+      agentEvents(events)
+        .filter((event) => event.type === "retry")
+        .map((event) => (event.type === "retry" ? event.attempt : 0))
+    ).toEqual([1, 2, 3]);
     const failures = agentEvents(events).filter(
       (event) => event.type === "error" && event.error?.code === "turn_failed"
     );
@@ -379,6 +397,170 @@ describe("a bot whose model fails mid-turn", () => {
       agentEvents(events).filter((event) => event.type === "turn_complete")
     ).toHaveLength(1);
     provider.script(() => ({ say: "ok" }));
+  });
+});
+
+describe("a bot whose network goes", () => {
+  const agentEvents = (events: DesktopEvent[]) =>
+    events
+      .filter(
+        (event): event is Extract<DesktopEvent, { type: "event" }> =>
+          event.type === "event"
+      )
+      .map((event) => event.event);
+  const cooldowns = (): string => {
+    try {
+      return fs.readFileSync(path.join(home, "openllm-cooldowns.json"), "utf8");
+    } catch {
+      return "";
+    }
+  };
+
+  beforeEach(() => {
+    provider.calls.length = 0;
+    fs.rmSync(path.join(home, "openllm-cooldowns.json"), { force: true });
+  });
+  afterEach(() => {
+    setHostConnectivity("unknown");
+    setReachabilityProbe(null);
+    hostAttached();
+    delete process.env.ABACUSAI_BOT_NETWORK_WAIT_MS;
+    provider.script(() => ({ say: "ok" }));
+  });
+
+  it("stops waiting when the host goes away, and asks no model again", async () => {
+    provider.script(() => ({ drop: true }));
+    setHostConnectivity("offline");
+    const { session, events } = botSession();
+    await session.start();
+    const sent = session.send("hi");
+
+    const deadline = Date.now() + 10_000;
+    while (
+      !agentEvents(events).some(
+        (event) => event.type === "retry" && event.waitingForConnection === true
+      )
+    ) {
+      if (Date.now() > deadline) throw new Error("never waited");
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    const calls = provider.calls.length;
+
+    markHostGone();
+    await sent;
+
+    expect(provider.calls.length).toBe(calls);
+    expect(
+      agentEvents(events).filter((event) => event.type === "error")
+    ).toEqual([]);
+    expect(cooldowns()).toBe("");
+  });
+
+  it("waits for the connection on the same model, then answers", async () => {
+    let offline = true;
+    provider.script(() => (offline ? { drop: true } : { say: "back again" }));
+    setHostConnectivity("offline");
+    const { session, events } = botSession();
+    await session.start();
+    const sent = session.send("hi");
+
+    const deadline = Date.now() + 10_000;
+    while (
+      !agentEvents(events).some(
+        (event) => event.type === "retry" && event.waitingForConnection === true
+      )
+    ) {
+      if (Date.now() > deadline) throw new Error("never waited");
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    offline = false;
+    setHostConnectivity("online");
+    await sent;
+
+    expect(
+      agentEvents(events)
+        .map((event) => (event.type === "text_delta" ? event.content : ""))
+        .join("")
+    ).toContain("back again");
+    expect(
+      agentEvents(events).filter((event) => event.type === "error")
+    ).toEqual([]);
+    expect(new Set(provider.calls.map((call) => call.model))).toEqual(
+      new Set(["big:free"])
+    );
+    expect(cooldowns()).not.toContain("big:free");
+  });
+
+  it.each([
+    ["a bot's chat", undefined, 10 * 60_000],
+    ["a bot's routine run", "1", 60 * 60_000],
+  ])("gives %s its budget", async (_origin, routine, budgetMs) => {
+    if (routine != null) process.env.ABACUSAI_BOT_ROUTINE_RUN = routine;
+    const lines: string[] = [];
+    const spy = vi.spyOn(process.stderr, "write").mockImplementation(((
+      chunk: unknown
+    ) => {
+      lines.push(String(chunk));
+      return true;
+    }) as never);
+    try {
+      provider.script(() => ({ drop: true }));
+      setHostConnectivity("offline");
+      const { session, events } = botSession();
+      await session.start();
+      void session.send("hi");
+      const deadline = Date.now() + 10_000;
+      while (!agentEvents(events).some((event) => event.type === "retry")) {
+        if (Date.now() > deadline) throw new Error("never waited");
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      await session.stop();
+
+      expect(lines.join("")).toContain(`budget ${budgetMs}ms`);
+    } finally {
+      spy.mockRestore();
+      delete process.env.ABACUSAI_BOT_ROUTINE_RUN;
+    }
+  });
+
+  it("ends saying the connection is gone once the wait runs out", async () => {
+    provider.script(() => ({ drop: true }));
+    setHostConnectivity("degraded");
+    process.env.ABACUSAI_BOT_NETWORK_WAIT_MS = "300";
+    const { session, events } = botSession();
+    await session.start();
+    await session.send("hi");
+
+    const failures = agentEvents(events).filter(
+      (event) => event.type === "error"
+    );
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toMatchObject({
+      error: {
+        message: NETWORK_UNREACHABLE_MESSAGE,
+        code: NETWORK_UNREACHABLE_CODE,
+      },
+    });
+    expect(cooldowns()).toBe("");
+  });
+
+  it("rotates as before when the Abacus API still answers", async () => {
+    provider.script((call) =>
+      call.model === "big:free" ? { drop: true } : { say: "from small" }
+    );
+    setHostConnectivity("online");
+    setReachabilityProbe(async () => true);
+    const { session, events } = botSession();
+    await session.start();
+    await session.send("hi");
+
+    expect(provider.calls.map((call) => call.model)).toContain("small:free");
+    expect(
+      agentEvents(events).some(
+        (event) => event.type === "retry" && event.waitingForConnection === true
+      )
+    ).toBe(false);
+    expect(cooldowns()).toContain("big:free");
   });
 });
 
@@ -430,22 +612,14 @@ describe("a bot whose model goes silent", () => {
 describe("what a bot says when the whole pool has failed", () => {
   it("is the pool's sentence, not the provider's envelope", async () => {
     provider.calls.length = 0;
-    provider.scriptSequence([
-      {
-        fail: {
-          status: 429,
-          message:
-            '{"error":{"code":429,"message":"You exceeded your current quota"}}',
-        },
+    // Every attempt, busy waits included.
+    provider.script(() => ({
+      fail: {
+        status: 429,
+        message:
+          '{"error":{"code":429,"message":"You exceeded your current quota"}}',
       },
-      {
-        fail: {
-          status: 429,
-          message:
-            '{"error":{"code":429,"message":"You exceeded your current quota"}}',
-        },
-      },
-    ]);
+    }));
     const { session, events } = botSession();
     await session.start();
     await session.send("hi");
@@ -494,10 +668,9 @@ describe("a turn's reply", () => {
 
   it("says the turn failed, after the error, once", async () => {
     provider.calls.length = 0;
-    provider.scriptSequence([
-      { fail: { status: 429, message: "rate limited upstream" } },
-      { fail: { status: 429, message: "rate limited upstream" } },
-    ]);
+    provider.script(() => ({
+      fail: { status: 429, message: "rate limited upstream" },
+    }));
     const { session, events } = botSession();
     await session.start();
 
