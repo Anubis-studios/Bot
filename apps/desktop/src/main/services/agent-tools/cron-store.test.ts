@@ -304,11 +304,11 @@ describe("damaged history and migration recovery", () => {
     expect(saved).toHaveLength(2);
   });
 
-  it("lists the readable routines past an entry without an id, and keeps that entry verbatim across a save", () => {
+  it("lists the readable routines past an entry it cannot read, and keeps that entry verbatim across a save", () => {
     const a = createJob({ prompt: "a" });
     const file = path.join(home, "cronjobs.json");
     const raw = JSON.parse(fs.readFileSync(file, "utf8"));
-    const bad = [{ prompt: "no id", runs: [] }, null, { id: 7 }];
+    const bad = [null, { id: 7 }];
     fs.writeFileSync(file, JSON.stringify([raw[0], ...bad]));
 
     expect(listJobs().map((job) => job.id)).toEqual([a.id]);
@@ -325,6 +325,89 @@ describe("damaged history and migration recovery", () => {
         .map((job: { id: string; name: string }) => [job.id, job.name])
     ).toEqual([[a.id, "changed"]]);
     expect(saved.filter((job: never) => !readable(job))).toEqual(bad);
+  });
+
+  describe("a routine saved without an id", () => {
+    const legacy = {
+      name: "Inbox",
+      schedule: "0 9 * * *",
+      prompt: "Summarize my inbox",
+      enabled: true,
+      createdAt: 1_700_000_000_000,
+      lastRunAt: 1_700_000_100_000,
+      lastResult: "started session s1",
+      runs: [
+        {
+          at: 1_700_000_100_000,
+          trigger: "schedule",
+          result: "started session s1",
+        },
+      ],
+    };
+    const file = () => path.join(home, "cronjobs.json");
+    const seed = () => {
+      const a = createJob({ prompt: "a" });
+      const raw = JSON.parse(fs.readFileSync(file(), "utf8"));
+      fs.writeFileSync(file(), JSON.stringify([raw[0], legacy, null]));
+      return a;
+    };
+
+    it("gets a derived id, saved once, and its history beside it", () => {
+      const a = seed();
+      const listed = listJobs();
+      const recovered = listed.find((job) => job.name === "Inbox")!;
+      expect(listed.map((job) => job.id)).toEqual([a.id, recovered.id]);
+      expect(recovered.id).toMatch(/^job-recovered-[0-9a-f]{12}$/);
+      expect(recovered.runs).toEqual([
+        expect.objectContaining({ kind: "started", sessionId: "s1" }),
+      ]);
+      const saved = JSON.parse(fs.readFileSync(file(), "utf8"));
+      expect(saved).toEqual([
+        expect.objectContaining({ id: a.id }),
+        { ...legacy, id: recovered.id },
+        null,
+      ]);
+      const text = fs.readFileSync(file(), "utf8");
+      expect(listJobs().map((job) => job.id)).toEqual([a.id, recovered.id]);
+      expect(fs.readFileSync(file(), "utf8")).toBe(text);
+    });
+
+    it("can be edited and removed", () => {
+      seed();
+      const id = listJobs()[1]!.id;
+      updateJob(id, { name: "Renamed" });
+      expect(getJob(id)?.name).toBe("Renamed");
+      removeJob(id);
+      const saved = JSON.parse(fs.readFileSync(file(), "utf8"));
+      expect(saved).toHaveLength(2);
+      expect(saved[1]).toBeNull();
+    });
+
+    it("gets the same id on the launch after a crash before it was saved", () => {
+      seed();
+      const before = fs.readFileSync(file(), "utf8");
+      const spy = vi.spyOn(fs, "renameSync").mockImplementationOnce(() => {
+        throw new Error("crash");
+      });
+      const first = listJobs()[1]!.id;
+      spy.mockRestore();
+      expect(fs.readFileSync(file(), "utf8")).toBe(before);
+      expect(listJobs()[1]!.id).toBe(first);
+      expect(JSON.parse(fs.readFileSync(file(), "utf8"))[1].id).toBe(first);
+    });
+
+    it("is not saved while the file is held, and is saved once it is not", () => {
+      seed();
+      const before = fs.readFileSync(file(), "utf8");
+      setMigrationWriteBlocks({
+        unresolved: [{ attempt: "step-5", destinations: [file()] }],
+      } as never);
+      const id = listJobs()[1]!.id;
+      expect(fs.readFileSync(file(), "utf8")).toBe(before);
+      setMigrationWriteBlocks(null);
+      expect(listJobs()[1]!.id).toBe(id);
+      expect(JSON.parse(fs.readFileSync(file(), "utf8"))[1].id).toBe(id);
+    });
   });
 
   it("refuses to overwrite a corrupt nonempty job file", () => {

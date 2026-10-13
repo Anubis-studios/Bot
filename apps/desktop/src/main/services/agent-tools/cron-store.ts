@@ -126,6 +126,31 @@ const isJobEntry = (
   isRecord(value) && typeof value.id === "string";
 
 /**
+ * A routine saved without an id gets one derived from what it says, so
+ * every launch, and a launch after a crash before it was saved, agrees.
+ */
+const withRecoveredIds = (entries: unknown[]): unknown[] => {
+  const taken = new Set(entries.filter(isJobEntry).map((entry) => entry.id));
+  return entries.map((entry) => {
+    if (
+      !isRecord(entry) ||
+      entry.id != null ||
+      typeof entry.prompt !== "string"
+    )
+      return entry;
+    const hash = crypto
+      .createHash("sha256")
+      .update(JSON.stringify([entry.name, entry.createdAt, entry.prompt]))
+      .digest("hex")
+      .slice(0, 12);
+    let id = `job-recovered-${hash}`;
+    for (let n = 2; taken.has(id); n++) id = `job-recovered-${hash}-${n}`;
+    taken.add(id);
+    return { ...entry, id };
+  });
+};
+
+/**
  * The jobs on disk (or held), or null when the file is there but cannot be
  * read as a job list. A missing or blank file is no jobs; an entry that is
  * not a job is left out (`write` keeps it).
@@ -142,8 +167,17 @@ const load = (): CronJob[] | null => {
     return null;
   }
   if (!Array.isArray(parsed)) return null;
+  const recovered = withRecoveredIds(parsed);
+  if (recovered.some((entry, index) => entry !== parsed[index])) {
+    try {
+      if (!held.isBlocked(FILE()))
+        held.write(FILE(), `${JSON.stringify(recovered, null, 2)}\n`);
+    } catch (error) {
+      console.warn("[cron-store] could not save recovered routine ids", error);
+    }
+  }
   // Older files lack the newer fields; they were all plain cron jobs.
-  return (parsed.filter(isJobEntry) as unknown as CronJob[]).map((job) => ({
+  return (recovered.filter(isJobEntry) as unknown as CronJob[]).map((job) => ({
     ...job,
     name:
       job.name ?? deriveName(typeof job.prompt === "string" ? job.prompt : ""),
@@ -204,10 +238,11 @@ const write = (jobs: CronJob[]): void => {
   // The public list omits entries it cannot interpret. Keep those bytes as
   // JSON values when saving another edit instead of silently deleting them.
   const source = held.read(FILE());
-  const raw: unknown[] =
+  const raw: unknown[] = withRecoveredIds(
     source.status === "ok" && source.text.trim() !== ""
       ? JSON.parse(source.text)
-      : [];
+      : []
+  );
   const stored = jobs.map((job) => {
     const old = raw
       .filter(isJobEntry)
