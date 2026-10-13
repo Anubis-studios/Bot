@@ -194,7 +194,7 @@ const FOCUSED_ENTRYPOINTS: Record<string, readonly string[]> = {
     "top-bar-slots",
     "use-panel",
   ],
-  tour: ["gallery", "store"],
+  tour: ["gallery", "new-look", "store"],
 };
 
 const featureBoundaryHits = (

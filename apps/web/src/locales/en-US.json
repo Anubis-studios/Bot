@@ -1837,6 +1837,11 @@
     "next": "Next",
     "progress": "Step {{current}} of {{total}}",
     "replay": "Take the tour",
+    "newLook": {
+      "message": "AbacusAI Bot has a new look. Your bots, sessions and routines came with you.",
+      "start": "Take a quick tour",
+      "dismiss": "Got it"
+    },
     "stops": {
       "sessions": {
         "title": "Sessions",

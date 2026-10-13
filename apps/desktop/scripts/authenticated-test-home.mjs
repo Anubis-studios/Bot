@@ -16,6 +16,9 @@ export const authenticatedTestHome = (home) => {
     ABACUS_API_KEY: "acceptance-invalid-key",
   };
   writeFileSync(configPath, JSON.stringify(config));
+  // A 1.0.86 profile: without prefs.json an onboarded account is an upgrade.
+  const prefsPath = join(home, "prefs.json");
+  if (!existsSync(prefsPath)) writeFileSync(prefsPath, "{}");
   const preload = join(home, "fake-abacus.cjs");
   writeFileSync(
     preload,

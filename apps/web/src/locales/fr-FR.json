@@ -1837,6 +1837,11 @@
     "next": "Suivant",
     "progress": "Étape {{current}} sur {{total}}",
     "replay": "Refaire la visite",
+    "newLook": {
+      "message": "AbacusAI Bot fait peau neuve. Vos bots, sessions et routines vous ont suivi.",
+      "start": "Faire une visite rapide",
+      "dismiss": "Compris"
+    },
     "stops": {
       "sessions": {
         "title": "Sessions",

@@ -35,6 +35,7 @@ import {
   stashWhatsAppClaim,
   whatsappChatQuery,
 } from "#renderer/features/onboarding/whatsapp";
+import { importLegacyDrafts } from "#renderer/features/sessions/start/session-drafts";
 import { ConnectScreen } from "#renderer/features/shell/connect";
 import { followReconnects } from "#renderer/features/shell/connect/recovery";
 import {
@@ -59,7 +60,6 @@ import {
   switchAccountWithoutApp,
 } from "#renderer/lib/browser/sign-out";
 import { installUiContinuity } from "#renderer/lib/continuity";
-import { importLegacyDrafts } from "#renderer/lib/continuity/composer-drafts";
 import { changeLanguage, fixedT, resolveLanguage } from "#renderer/lib/i18n";
 import { installLogRing } from "#renderer/lib/log-ring";
 import { installTransitionTypes } from "#renderer/lib/navigation/transition-types";
@@ -85,6 +85,7 @@ const PHONE_QUERY = "(max-width: 799px)";
 /** Until the host answers `system.info`: the browser's own view. */
 const PLACEHOLDER_SYSTEM: SystemInfo = {
   appVersion: "",
+  legacyInstall: false,
   platform: "linux",
   arch: "",
   versions: {},

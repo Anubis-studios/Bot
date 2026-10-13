@@ -124,24 +124,3 @@ export const restoreDraft = (
 export const adoptDraftModel = (key: string, model: string | null): void => {
   updateDraft(key, (draft) => ({ ...draft, model }));
 };
-
-/** Import durable pre-cutover text before composers mount; current drafts win. */
-export const importLegacyDrafts = async (
-  legacy: Record<string, string>,
-  acknowledge: (keys: string[]) => Promise<void>
-): Promise<void> => {
-  const keys = Object.keys(legacy);
-  if (!keys.length) return;
-  draftStore.setState((state) => ({
-    ...Object.fromEntries(
-      Object.entries(legacy).map(([key, text]) => [
-        key,
-        { text, attachments: [] },
-      ])
-    ),
-    ...state,
-  }));
-  // Do not consume durable evidence when session storage is unavailable/full.
-  globalThis.sessionStorage.setItem(KEY, JSON.stringify(draftStore.state));
-  await acknowledge(keys);
-};

@@ -50,9 +50,16 @@ export const systemRouter = impl.system.router({
   info: impl.system.info.handler(({ context }) => {
     const { app, host, serviceHost } = context.deps;
     const homeDir = app.homeDir();
+    let legacyComposerDrafts: Record<string, string> = {};
+    try {
+      legacyComposerDrafts = pendingLegacyDrafts(app.botHome());
+    } catch (error) {
+      console.warn(`[drafts] legacy drafts unreadable: ${String(error)}`);
+    }
     return {
       appVersion: app.appVersion(),
-      legacyComposerDrafts: pendingLegacyDrafts(app.botHome()),
+      legacyComposerDrafts,
+      legacyInstall: app.legacyInstall(),
       platform: process.platform,
       arch: process.arch,
       versions: { ...process.versions },

@@ -1837,6 +1837,11 @@
     "next": "다음",
     "progress": "{{total}}단계 중 {{current}}단계",
     "replay": "둘러보기",
+    "newLook": {
+      "message": "AbacusAI Bot이 새로운 모습으로 바뀌었습니다. 봇, 세션, 루틴은 그대로 옮겨졌습니다.",
+      "start": "간단히 둘러보기",
+      "dismiss": "확인"
+    },
     "stops": {
       "sessions": {
         "title": "세션",

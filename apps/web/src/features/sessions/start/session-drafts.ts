@@ -54,8 +54,9 @@ export const pruneSessionDrafts = (
   };
 };
 
+const KEY = "abacusai-bot:abacus.sessions.drafts";
 export const sessionDraftsStore = persistedStore<SessionDrafts>(
-  "abacusai-bot:abacus.sessions.drafts",
+  KEY,
   () => ({ activeId: null, drafts: {} }),
   {
     durable: true,
@@ -184,6 +185,85 @@ export const removeSessionDraft = (id: string): (() => boolean) => {
     );
     return true;
   };
+};
+
+/**
+ * Lands v1.0.85 drafts before composers mount; text the user has typed since
+ * wins. A key is acknowledged only once its source is no longer needed: a
+ * workspace's draft once it is a new-session draft in `localStorage`, a
+ * session's (whose store does not outlive the app) once the user has sent or
+ * cleared it. Until then each launch lands it again.
+ */
+export const importLegacyDrafts = async (
+  legacy: Record<string, string>,
+  acknowledge: (keys: string[]) => Promise<void>
+): Promise<void> => {
+  const ack = (keys: string[]) =>
+    keys.length === 0
+      ? undefined
+      : acknowledge(keys).catch((error: unknown) => {
+          console.warn("[drafts] legacy import not acknowledged", error);
+        });
+  const entries = Object.entries(legacy);
+  const sessions = new Map(
+    entries.filter(([key]) => !key.startsWith("workspace:"))
+  );
+  if (sessions.size) {
+    draftStore.setState((state) => ({
+      ...state,
+      ...Object.fromEntries(
+        [...sessions]
+          .filter(([id]) => !state[id]?.text)
+          .map(([id, text]) => [id, { ...(state[id] ?? EMPTY_DRAFT), text }])
+      ),
+    }));
+    const sent = draftStore.subscribe((state) => {
+      const done = [...sessions.keys()].filter((id) => state[id]?.text === "");
+      for (const id of done) sessions.delete(id);
+      if (!sessions.size) sent.unsubscribe();
+      void ack(done);
+    });
+  }
+  const landed: string[] = [];
+  for (const [key, text] of entries) {
+    if (!key.startsWith("workspace:")) continue;
+    const workspaceId = key.slice("workspace:".length);
+    const id =
+      Object.values(sessionDraftsStore.state.drafts).find(
+        (d) => d.workspaceId === workspaceId && d.composer.text === text
+      )?.id ?? crypto.randomUUID();
+    const now = Date.now();
+    sessionDraftsStore.setState((state) =>
+      state.drafts[id]
+        ? state
+        : {
+            ...state,
+            drafts: {
+              ...state.drafts,
+              [id]: {
+                id,
+                workspaceId,
+                worktree: { kind: "current" },
+                worktreeOperationId: null,
+                stage: "draft",
+                envelope: null,
+                createdAt: now,
+                updatedAt: now,
+                composer: { text, attachments: [] },
+              },
+            },
+          }
+    );
+    try {
+      const stored = JSON.parse(
+        globalThis.localStorage.getItem(KEY) ?? "null"
+      ) as SessionDrafts | null;
+      if (stored?.drafts?.[id]?.composer?.text === text) landed.push(key);
+    } catch {
+      // Not durable yet: the next launch tries again.
+    }
+  }
+  await ack(landed);
 };
 
 draftStore.setState((state) => ({
