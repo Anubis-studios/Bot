@@ -455,6 +455,7 @@ it("MCP connect: the link goes straight to the provider, and the connector is in
       disconnect: async () => ({ ok: true }),
       watch: () => {},
     },
+    pastedGithubToken: { held: async () => false, remove: () => {} },
     mcp: {
       entry: (name) => entries.get(name),
       add,

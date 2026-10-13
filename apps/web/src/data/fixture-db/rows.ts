@@ -90,7 +90,7 @@ export const fixtureWorkspaces = (): WorkspaceRow[] => [
     kind: "auto",
     isActive: false,
   },
-  // Hidden from the sidebar: routine and bot folders.
+  // Hidden from pickers: routine and bot folders.
   {
     id: "routine-folder",
     label: "Morning digest",

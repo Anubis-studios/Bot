@@ -8,8 +8,8 @@ import { Folder, Plus } from "lucide-react";
 /**
  * The Sessions sidebar (spec 01 §7.3, canvas `SessionsSidebar`): sessions
  * that are not a bot's chat, a routine run or a routine editor, grouped by
- * their workspace (routine and bot folders excluded), pinned ones first, each
- * group newest first, groups collapsible (prefs.workspaceExpanded).
+ * their workspace, pinned ones first, each group newest first, groups
+ * collapsible (prefs.workspaceExpanded).
  */
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -19,7 +19,7 @@ import { CommandPaletteAction } from "#renderer/components/command-palette-actio
 import { NavList } from "#renderer/components/nav-list";
 import { useDb } from "#renderer/data/db";
 import { useCollections } from "#renderer/data/db";
-import { isListedSession, isListedWorkspace } from "#renderer/data/db/filters";
+import { isListedSession } from "#renderer/data/db/filters";
 import { usePrefs, useUpdatePrefs } from "#renderer/data/db/prefs";
 import { useCollectionStatus } from "#renderer/data/db/status";
 import { usePendingConnectorAsks } from "#renderer/lib/connector-requests";
@@ -85,8 +85,7 @@ export const groupSessions = (
   workspaces: readonly WorkspaceRow[],
   pinnedIds: readonly string[]
 ): SessionGroups => {
-  const listedWorkspaces = workspaces.filter(isListedWorkspace);
-  const ids = new Set(listedWorkspaces.map((workspace) => workspace.id));
+  const ids = new Set(workspaces.map((workspace) => workspace.id));
   const listed = sessions.filter(
     (session) => isListedSession(session) && ids.has(session.workspaceId)
   );
@@ -96,7 +95,7 @@ export const groupSessions = (
   const rest = listed.filter((session) => !pinnedIds.includes(session.id));
   return {
     pinned,
-    groups: listedWorkspaces
+    groups: workspaces
       .map((workspace) => ({
         workspace,
         sessions: rest

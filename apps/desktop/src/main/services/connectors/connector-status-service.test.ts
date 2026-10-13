@@ -37,6 +37,7 @@ const inputs = (overrides: Partial<StatusInputs> = {}): StatusInputs => ({
     connected: new Set(["gmailuser"]),
     accounts: { gmailuser: "Gmail - ada@example.com" },
   },
+  storedProviders: new Set(),
   messaging: null,
   mcpServers: [],
   mcpTokens: new Map(),
@@ -79,6 +80,43 @@ describe("platform connectors", () => {
         })
       )["abacus-gmailuser"]
     ).toEqual({ state: "unavailable", reason: "not-signed-in" });
+  });
+});
+
+describe("GitHub", () => {
+  const github = (overrides: Partial<StatusInputs>) =>
+    buildConnectorStatuses(inputs(overrides))["abacus-githubbot"];
+  const listing = (connected: string[]): StatusInputs["platform"] => ({
+    available: new Set(["githubbot"]),
+    connected: new Set(connected),
+    accounts: { githubbot: "GitHub - ada" },
+  });
+
+  it("is available with neither a sign-in nor a pasted token", () => {
+    expect(github({ platform: listing([]) })).toEqual({ state: "available" });
+  });
+
+  it("is connected by a pasted token while it is not signed in", () => {
+    const storedProviders = new Set(["github"]);
+
+    expect(github({ platform: listing([]), storedProviders })).toEqual({
+      state: "connected",
+    });
+    expect(github({ platform: null, storedProviders })).toEqual({
+      state: "connected",
+    });
+  });
+
+  it("is the platform's connection when signed in, pasted token or not", () => {
+    const connected = { state: "connected", account: "GitHub - ada" };
+
+    expect(github({ platform: listing(["githubbot"]) })).toEqual(connected);
+    expect(
+      github({
+        platform: listing(["githubbot"]),
+        storedProviders: new Set(["github"]),
+      })
+    ).toEqual(connected);
   });
 });
 
@@ -186,6 +224,7 @@ describe("the service", () => {
       platform: async () => {
         throw new Error("network");
       },
+      storedProviders: () => new Set(),
       messaging: () => null,
       mcpServers: () => [
         {

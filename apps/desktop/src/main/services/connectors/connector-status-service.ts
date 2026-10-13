@@ -34,6 +34,7 @@ export interface StatusInputs {
     reason?: string;
   } | null;
   /** Credential providers with a key stored, or exported in the shell. */
+  storedProviders: ReadonlySet<string>;
   messaging: MessagingSnapshot | null;
   mcpServers: readonly McpServerInfo[];
   /** Each installed server's sign-in, by server id; absent when unlisted. */
@@ -49,6 +50,14 @@ const statusOf = (
   switch (connector.kind) {
     case "platform": {
       const platform = inputs.platform;
+      // A GitHub token pasted before GitHub was a sign-in still reaches the
+      // agent as GH_TOKEN until GitHub is connected here.
+      if (
+        connector.service === "githubbot" &&
+        inputs.storedProviders.has("github") &&
+        platform?.connected.has(connector.service) !== true
+      )
+        return { state: "connected" };
       if (platform == null || platform.reason != null)
         return {
           state: "unavailable",
@@ -115,6 +124,7 @@ export interface StatusSources {
   platform: (options?: {
     fresh?: boolean;
   }) => Promise<StatusInputs["platform"]>;
+  storedProviders: () => ReadonlySet<string>;
   messaging: () => MessagingSnapshot | null;
   mcpServers: () => readonly McpServerInfo[];
   mcpTokens: () => ReadonlyMap<string, McpTokenState>;
@@ -140,6 +150,7 @@ export class ConnectorStatusService {
     }
     return buildConnectorStatuses({
       platform,
+      storedProviders: this.sources.storedProviders(),
       messaging: this.sources.messaging(),
       mcpServers: this.sources.mcpServers(),
       mcpTokens: this.sources.mcpTokens(),

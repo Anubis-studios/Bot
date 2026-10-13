@@ -339,6 +339,8 @@ import {
   setToolsetEnabled,
   readSettings,
   credentialFor,
+  saveApiKey,
+  storedKeyProviders,
 } from "./services/config/settings";
 import { ConnectivityService } from "./services/connectivity/connectivity-service";
 import {
@@ -1505,6 +1507,7 @@ export class ServiceHost {
 
   readonly connectorStatuses = new ConnectorStatusService({
     platform: (options) => this.connectorSync.platform(options),
+    storedProviders: () => new Set(storedKeyProviders()),
     messaging: () => this.messagingGatewayService.getSnapshot(),
     mcpServers: () => this.mcpConfigService.listUserServers("code"),
     mcpTokens: () => this.mcpTokenStates(),
@@ -1546,6 +1549,15 @@ export class ServiceHost {
           sessionId: null,
           ...(requestId != null ? { requestId } : {}),
         }),
+    },
+    pastedGithubToken: {
+      held: async () =>
+        storedKeyProviders().includes("github") &&
+        !(await this.connectorSync.platform()).connected.has("githubbot"),
+      remove: () => {
+        saveApiKey("github", "");
+        this.refreshAgentProviders();
+      },
     },
     mcp: {
       entry: (name) =>

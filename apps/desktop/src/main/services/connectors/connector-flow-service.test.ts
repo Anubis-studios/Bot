@@ -26,6 +26,8 @@ const platformConnect = vi.fn(
 );
 const platformDisconnect = vi.fn(async () => ({ ok: true }) as const);
 const watch = vi.fn();
+let pastedTokenHeld = false;
+const removePastedToken = vi.fn();
 const installed = new Map<string, McpServerEntry>();
 const addServer = vi.fn((name: string, entry: McpServerEntry) => {
   installed.set(name, entry);
@@ -45,6 +47,10 @@ const flow = (): ConnectorFlowService =>
       disconnect: platformDisconnect,
       watch,
     },
+    pastedGithubToken: {
+      held: async () => pastedTokenHeld,
+      remove: removePastedToken,
+    },
     mcp: {
       entry: (name) => installed.get(name),
       add: addServer,
@@ -59,6 +65,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   installed.clear();
   connectUrl = () => null;
+  pastedTokenHeld = false;
 });
 
 describe("a platform connector", () => {
@@ -101,6 +108,22 @@ describe("a platform connector", () => {
     await flow().disconnect("abacus-slack");
 
     expect(platformDisconnect).toHaveBeenCalledWith("slack");
+  });
+
+  it("removes a pasted GitHub token rather than the platform's connection", async () => {
+    pastedTokenHeld = true;
+
+    expect(await flow().disconnect("abacus-githubbot")).toEqual({ ok: true });
+
+    expect(removePastedToken).toHaveBeenCalledOnce();
+    expect(platformDisconnect).not.toHaveBeenCalled();
+  });
+
+  it("disconnects GitHub on the platform when no pasted token is held", async () => {
+    await flow().disconnect("abacus-githubbot");
+
+    expect(platformDisconnect).toHaveBeenCalledWith("githubbot");
+    expect(removePastedToken).not.toHaveBeenCalled();
   });
 });
 

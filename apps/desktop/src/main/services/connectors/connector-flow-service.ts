@@ -35,6 +35,11 @@ export interface FlowSources {
     /** Follows a connector whose link was handed out until it connects. */
     watch: (connectorId: string, requestId?: string) => void;
   };
+  /**
+   * A GitHub token pasted on the card GitHub had before its sign-in, while
+   * GitHub is not connected on the platform: whether one is held, and removing it.
+   */
+  pastedGithubToken: { held: () => Promise<boolean>; remove: () => void };
   mcp: {
     /** The entry installed under `name`, if any. */
     entry: (name: string) => McpServerEntry | undefined;
@@ -280,6 +285,13 @@ export class ConnectorFlowService {
     if (connector == null) return unknown(connectorId);
     switch (connector.kind) {
       case "platform":
+        if (
+          connector.service === "githubbot" &&
+          (await this.sources.pastedGithubToken.held())
+        ) {
+          this.sources.pastedGithubToken.remove();
+          return { ok: true };
+        }
         return this.sources.platform.disconnect(connector.service);
       case "mcp": {
         const result = this.sources.mcp.remove(connector.id);

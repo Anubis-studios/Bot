@@ -5,6 +5,6 @@ import type { SessionRow, WorkspaceRow } from "@abacus-ai/contract/contract";
 export const isListedSession = (session: SessionRow): boolean =>
   !session.botOwned && session.editorFor == null && session.routineId == null;
 
-/** Routine and bot folders stay out of pickers and the sidebar. */
+/** Routine and bot folders stay out of pickers. */
 export const isListedWorkspace = (workspace: WorkspaceRow): boolean =>
   workspace.kind !== "routine" && workspace.kind !== "bot";

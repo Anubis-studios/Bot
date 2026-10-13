@@ -47,6 +47,36 @@ describe("groupSessions", () => {
     for (const hidden of ["bot-chat", "routine-run", "routine-editor"])
       expect(all).not.toContain(hidden);
   });
+
+  it("lists the user's own sessions in the bot folder, not its bot chats or routine runs", () => {
+    const base = fixtureSessions(NOW).find((s) => s.id === "review-prs")!;
+    const { groups } = groupSessions(
+      [
+        { ...base, id: "own", workspaceId: "bot-home" },
+        { ...base, id: "bot-chat", workspaceId: "bot-home", botOwned: true },
+        {
+          ...base,
+          id: "routine-run",
+          workspaceId: "bot-home",
+          routineId: "morning-digest",
+        },
+      ],
+      [
+        {
+          id: "bot-home",
+          label: "Bot home",
+          description: "",
+          status: "idle",
+          kind: "bot",
+          isActive: false,
+        },
+      ],
+      []
+    );
+    expect(
+      groups.map((g) => [g.workspace.id, g.sessions.map((s) => s.id)])
+    ).toEqual([["bot-home", ["own"]]]);
+  });
 });
 
 describe("SessionsSidebar", () => {
