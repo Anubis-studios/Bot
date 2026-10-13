@@ -19,8 +19,11 @@ const server = (over: Partial<McpServerStatus>): McpServerStatus => ({
 });
 
 describe("the connected-services line", () => {
-  it("names a server the model can call, with its tool count", () => {
-    expect(mcpPrompt([server({})])).toMatch(/`abacus-connectors` \(3 tools/);
+  it("names a server the model can call, without a count that would churn the prompt", () => {
+    expect(mcpPrompt([server({})])).toContain(
+      "`abacus-connectors` (tools named `abacus-connectors_*`)"
+    );
+    expect(mcpPrompt([server({ toolCount: 7 })])).toBe(mcpPrompt([server({})]));
   });
 
   it("says nothing about a connected server that has no tools yet", () => {
@@ -39,7 +42,7 @@ describe("the connected-services line", () => {
 });
 
 describe("the roster fingerprint", () => {
-  it("changes when a server gains a tool, and not with order", () => {
+  it("changes when a server gets its first tool, not with a count or order", () => {
     const before = mcpRosterFingerprint([
       server({ toolCount: 2 }),
       server({ id: "notion", name: "notion", toolCount: 42 }),
@@ -52,8 +55,13 @@ describe("the roster fingerprint", () => {
       server({ toolCount: 3 }),
       server({ id: "notion", name: "notion", toolCount: 42 }),
     ]);
+    const empty = mcpRosterFingerprint([
+      server({ toolCount: 0 }),
+      server({ id: "notion", name: "notion", toolCount: 42 }),
+    ]);
     expect(reordered).toBe(before);
-    expect(grown).not.toBe(before);
+    expect(grown).toBe(before);
+    expect(empty).not.toBe(before);
   });
 
   it("ignores the app's own servers", () => {

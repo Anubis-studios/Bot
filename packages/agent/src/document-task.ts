@@ -15,6 +15,7 @@ import {
 import { Type } from "typebox";
 
 import { confinedBashTool } from "./backends.js";
+import { subAgentBasePrompt } from "./base-prompt.js";
 import { excludedTools } from "./excluded-tools.js";
 import guardrails from "./extensions/guardrails.js";
 import type { HostServiceClient } from "./host-services.js";
@@ -412,6 +413,8 @@ export async function runDocumentTask(
       agentDir: context.agentDir,
       settingsManager: context.settingsManager,
       additionalSkillPaths: context.skillPaths,
+      // Ours in place of pi's default prompt; see base-prompt.ts.
+      systemPromptOverride: () => subAgentBasePrompt(true),
       appendSystemPrompt: [SYSTEM_PROMPT],
       // Guardrails only: the permission gate would prompt a user who is not
       // watching, so bash-gate, path-guard and output-trim are the whole

@@ -15,6 +15,7 @@ import {
   type SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 
+import { subAgentBasePrompt } from "./base-prompt.js";
 import type { ChannelCapabilities } from "./channel.js";
 import {
   BROWSER_PAUSE_TOOL_NAME,
@@ -676,6 +677,8 @@ export async function runBrowserTask(
         cwd: context.cwd,
         agentDir: context.agentDir,
         settingsManager: context.settingsManager,
+        // Ours in place of pi's default prompt; no file tools here.
+        systemPromptOverride: () => subAgentBasePrompt(false),
         appendSystemPrompt: [browserSubAgentPrompt(context)],
         // No extensions: the permission gate would prompt a user not watching.
         extensionFactories: [],

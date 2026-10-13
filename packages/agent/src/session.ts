@@ -19,6 +19,7 @@ import { Allowances } from "./allowances.js";
 import { allowedPathsFromEnv } from "./allowed-paths.js";
 import { backendOperations } from "./backends.js";
 import { notifyConversationQueueCleared } from "./background-processes.js";
+import { basePrompt } from "./base-prompt.js";
 /**
  * The bridge: one pi `AgentSession`, presented as the desktop's event stream.
  * The only place that knows both vocabularies. Approval is a promise awaited
@@ -57,7 +58,6 @@ import editTool from "./extensions/edit-tool.js";
 import emailFormat from "./extensions/email-format.js";
 import guardrails from "./extensions/guardrails.js";
 import knowledge from "./extensions/knowledge.js";
-import noPiDocs from "./extensions/no-pi-docs.js";
 import orientation from "./extensions/orientation.js";
 import outputRepair from "./extensions/output-repair.js";
 import spill from "./extensions/spill.js";
@@ -102,7 +102,7 @@ import {
   parseMode,
   parseModeStrict,
 } from "./permissions.js";
-import { identityPrompt, personaPrompt, readPersona } from "./persona.js";
+import { personaPrompt, readPersona } from "./persona.js";
 import { windowsShellPrompt } from "./posix-shell.js";
 import {
   AgentMode,
@@ -301,14 +301,19 @@ export function planModePrompt(
 
 /**
  * The roster as the prompt describes it, for telling whether the prompt is
- * stale: a server added, gone, or grown a tool since it was built.
+ * stale: a server added, gone, or its first tool arrived. Counts are left
+ * out, as in the prompt: a server growing a tool must not cost a reload and
+ * the prompt cache.
  */
 export function mcpRosterFingerprint(
   statuses: readonly McpServerStatus[]
 ): string {
   return statuses
     .filter((status) => status.isBuiltin !== true)
-    .map((status) => `${status.name}:${status.status}:${status.toolCount}`)
+    .map(
+      (status) =>
+        `${status.name}:${status.status}:${status.toolCount > 0 ? "tools" : "none"}`
+    )
     .sort()
     .join("|");
 }
@@ -339,10 +344,7 @@ export function mcpPrompt(statuses: readonly McpServerStatus[]): string | null {
 
   if (connected.length > 0) {
     const described = connected
-      .map(
-        (status) =>
-          `\`${status.name}\` (${status.toolCount} tool${status.toolCount === 1 ? "" : "s"}, named \`${status.name}_*\`)`
-      )
+      .map((status) => `\`${status.name}\` (tools named \`${status.name}_*\`)`)
       .join(", ");
 
     lines.push(
@@ -632,17 +634,20 @@ export class AbacusBotSession {
   private readonly sandboxApprovals = new SandboxApprovals();
   private permissionCounter = 0;
   /**
-   * Extension handle for audit lines. Undefined until the permission gate is
-   * built, so every use is optional: an audit line must not break startup.
+   * The live session's extension handle, for audit lines and MCP tools.
+   * Undefined until a session is built, so every use is optional. Taken only
+   * when a session is built: a loader reload (prompt rebuilds, skills) re-runs
+   * the factories into a runtime the live session never reads.
    */
   private pi: ExtensionAPI | undefined;
+  /** The handle from the newest extension load. */
+  private loadedPi: ExtensionAPI | undefined;
   private mcp: ConnectedMcp = {
     clients: [],
     statuses: [],
     routes: new Map(),
     tools: [],
   };
-  /** MCP tool names pi already has, so `refreshMcp` registers only what is new. */
   /** Which MCP tools the model sees; see McpToolSync. */
   private readonly mcpTools = new McpToolSync({
     pi: () => this.pi,
@@ -816,6 +821,8 @@ export class AbacusBotSession {
       ? null
       : memoryPrompt(qualifiedName(toolNames, "memory") != null);
     const settingsManager = SettingsManager.create(this.options.cwd, dir);
+    // Only the gate, so `edit` is pi's built-in and batch_* are absent.
+    const noExtensions = process.env.ABACUSAI_BOT_NO_EXTENSIONS === "1";
     // Sub-agents get their own manager, left at the configured retry budget.
     const subAgentSettingsManager = SettingsManager.create(
       this.options.cwd,
@@ -835,8 +842,9 @@ export class AbacusBotSession {
       // Nor the folder's AGENTS.md and skills, which are the user's own text.
       additionalSkillPaths: unattended ? [] : skillDirs(this.options.cwd),
       ...(unattended ? { noSkills: true, noContextFiles: true } : {}),
-      // What the model cannot work out for itself about this app, appended to
-      // pi's own prompt rather than replacing it.
+      // Every prompt pi builds starts from ours; see base-prompt.ts.
+      systemPromptOverride: () => basePrompt(noExtensions ? "builtin" : "ours"),
+      // What the model cannot work out for itself about this app.
       appendSystemPrompt: [
         userProfile,
         memory,
@@ -859,7 +867,7 @@ export class AbacusBotSession {
       // start: this hook runs on each reload, and `base` is the array above,
       // so the user's own instructions stay last.
       appendSystemPromptOverride: (base: string[]): string[] => {
-        // Who the agent is comes first, then a bot's own persona, then what it knows.
+        // After who the agent is (the base prompt): a bot's own persona, then what it knows.
         const persona = personaPrompt();
         const instructions = unattended ? null : customInstructionsPrompt();
         const remember = unattended ? null : rememberPrompt();
@@ -871,7 +879,6 @@ export class AbacusBotSession {
         this.promptMcpRoster = mcpRosterFingerprint(this.mcp.statuses);
 
         return [
-          identityPrompt(),
           ...(persona == null ? [] : [persona]),
           ...base,
           ...(mcp == null ? [] : [mcp]),
@@ -884,7 +891,7 @@ export class AbacusBotSession {
       // The permission gate runs before the guardrails: a call the user will
       // reject must not be rewritten first. ABACUSAI_BOT_NO_EXTENSIONS=1 loads
       // only the gate, the first step when a turn misbehaves.
-      extensionFactories: (process.env.ABACUSAI_BOT_NO_EXTENSIONS === "1"
+      extensionFactories: (noExtensions
         ? [
             {
               name: "abacusai-bot-permissions",
@@ -898,10 +905,6 @@ export class AbacusBotSession {
             },
             // After the gate: handlers run in registration order, and it only
             // touches the timeout argument, so the approval card stays accurate.
-            {
-              name: "abacusai-bot-no-pi-docs",
-              factory: noPiDocs as unknown as (pi: ExtensionAPI) => void,
-            },
             {
               name: "abacusai-bot-tool-timeouts",
               factory: toolTimeouts as unknown as (pi: ExtensionAPI) => void,
@@ -1120,6 +1123,9 @@ export class AbacusBotSession {
     });
 
     this.session = created.session;
+    this.pi = this.loadedPi;
+    // The opening mode, so the log is a complete account rather than deltas.
+    this.applyMode(this.mode, "startup");
     anchorCompactions(this.session.sessionManager);
     this.unsubscribe = this.session.subscribe((event) => this.onPiEvent(event));
 
@@ -2366,6 +2372,11 @@ export class AbacusBotSession {
       });
 
       this.session = created.session;
+      this.pi = this.loadedPi;
+      // A fresh session has only the tools it was built with.
+      this.mcpTools.rebind(
+        new Set(this.session.getAllTools().map((tool) => tool.name))
+      );
       anchorCompactions(this.session.sessionManager);
       this.unsubscribe = this.session.subscribe((event) =>
         this.onPiEvent(event)
@@ -2715,10 +2726,8 @@ export class AbacusBotSession {
    */
   private readonly permissionExtension = (pi: ExtensionAPI): void => {
     // The gate is loaded in every configuration, so it is the only safe place
-    // to take the audit handle.
-    this.pi = pi;
-    // The opening mode, so the log is a complete account rather than deltas.
-    this.applyMode(this.mode, "startup");
+    // to take the handle; it becomes live only when a session is built on it.
+    this.loadedPi = pi;
 
     pi.on("tool_call", async (event, ctx) => {
       const tool = this.toToolRequest(

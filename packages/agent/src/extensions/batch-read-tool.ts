@@ -109,6 +109,12 @@ function readOne(
   };
 }
 
+// Exported for the prompt's guidelines block (base-prompt.ts): it saves turns.
+export const BATCH_READ_GUIDELINES = [
+  "When you want more than one file, use batch_file_read once instead of read several times",
+  "Use read for one file, for a region of a file (offset/limit), or for an image",
+];
+
 export default function (pi: ExtensionAPI) {
   pi.registerTool({
     name: "batch_file_read",
@@ -120,10 +126,7 @@ export default function (pi: ExtensionAPI) {
       "fit is named rather than returned. For a specific region of a single file, or for an image, use read.",
     parameters: batchReadSchema,
     promptSnippet: "Read several files in one call",
-    promptGuidelines: [
-      "When you want more than one file, use batch_file_read once instead of read several times",
-      "Use read for one file, for a region of a file (offset/limit), or for an image",
-    ],
+    promptGuidelines: BATCH_READ_GUIDELINES,
 
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       if (params.paths.length === 0) {

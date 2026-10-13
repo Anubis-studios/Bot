@@ -73,6 +73,17 @@ export class McpToolSync {
     this.apply();
   }
 
+  /**
+   * A new pi session (a reset) has only the tools it was built with: what
+   * was registered since and is missing there is registered again.
+   */
+  rebind(present: ReadonlySet<string>): void {
+    for (const name of this.registered)
+      if (!present.has(name)) this.registered.delete(name);
+    this.stale = false;
+    this.apply();
+  }
+
   private apply(): void {
     const pi = this.deps.pi();
     if (pi == null) return;

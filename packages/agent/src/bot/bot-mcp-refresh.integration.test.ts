@@ -18,6 +18,9 @@ import {
 } from "@abacus-ai/test-support/fake-provider";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
+import type { ForeverEngine } from "../forever/engine.js";
+import { IDENTITY_PROMPT } from "../persona.js";
+import { PhoneSession } from "../phone/phone-session.js";
 import type { DesktopEvent } from "../protocol.js";
 import { BotSession } from "./bot-session.js";
 
@@ -26,14 +29,12 @@ let home: string;
 let botDir: string;
 let configPath: string;
 let server: FakeMcpServer | null = null;
-let bot: BotSession | null = null;
+let bot: ForeverEngine | null = null;
 
 const offeredTools = (): string[] => provider.calls.at(-1)?.tools ?? [];
 
-const systemPrompt = (): string => {
-  const message = provider.calls
-    .at(-1)
-    ?.messages.find((entry) => entry.role === "system");
+const systemPrompt = (call = provider.calls.at(-1)): string => {
+  const message = call?.messages.find((entry) => entry.role === "system");
   const content = message?.content;
   return typeof content === "string"
     ? content
@@ -75,6 +76,7 @@ beforeAll(async () => {
   process.env.ABACUSAI_BOT_HOME = home;
   process.env.ABACUSAI_BOT_BOT_DIR = botDir;
   process.env.ABACUSAI_BOT_MCP_CONFIG = configPath;
+  process.env.ABACUSAI_BOT_PHONE_DIR = path.join(home, "phone");
   process.env.PI_OFFLINE = "1";
 }, 60_000);
 
@@ -84,6 +86,7 @@ afterAll(async () => {
   delete process.env.ABACUSAI_BOT_HOME;
   delete process.env.ABACUSAI_BOT_BOT_DIR;
   delete process.env.ABACUSAI_BOT_MCP_CONFIG;
+  delete process.env.ABACUSAI_BOT_PHONE_DIR;
 });
 
 afterEach(async () => {
@@ -116,7 +119,9 @@ describe("a bot chat whose connector gateway gains a tool", () => {
     await bot.send("send hi to alex on slack dm");
 
     expect(offeredTools()).toContain("abacus-connectors_Slack_Tool");
-    expect(systemPrompt()).toMatch(/`abacus-connectors` \(1 tool/);
+    expect(systemPrompt()).toMatch(
+      /`abacus-connectors` \(tools named `abacus-connectors_\*`\)/
+    );
 
     // Slack disconnected: the gateway drops its tool, and so does the chat.
     server.setTools([]);
@@ -183,5 +188,94 @@ describe("a bot chat whose connector gateway gains a tool", () => {
     expect(provider.calls[2]?.userText.join("\n")).toMatch(
       /became available: abacus-connectors_Slack_Tool/
     );
+  }, 60_000);
+});
+
+describe.each([
+  {
+    engine: "a bot chat",
+    create: (cwd: string): ForeverEngine =>
+      new BotSession({ cwd, mode: "yolo", emit: () => {} }),
+    marker: "persistent personal bot with one long-running conversation",
+  },
+  {
+    engine: "the phone loop",
+    create: (cwd: string): ForeverEngine =>
+      new PhoneSession({ cwd, mode: "yolo", emit: () => {} }),
+    marker: "personal assistant on WhatsApp",
+  },
+])("$engine, after a roster-change reload", ({ create, marker }) => {
+  it("takes a tool added mid-turn into the continuation and the next turn, always under its own prompt", async () => {
+    // The production sequence: a connector between turns rebuilds the prompt
+    // (a loader reload), then another lands mid-turn. A reload used to move
+    // the tool handle to a runtime the session never reads.
+    let refreshed: Promise<void> = Promise.resolve();
+    server = await FakeMcpServer.start([]);
+    fs.writeFileSync(
+      configPath,
+      mcpConfig({ "abacus-connectors": { url: server.url } }),
+      "utf8"
+    );
+    bot = create(
+      fs.mkdtempSync(path.join(os.tmpdir(), "abacusai-bot-botmcp-"))
+    );
+    await bot.start();
+    await bot.send("one");
+    const turnOne = provider.calls.length;
+
+    server.setTools([
+      {
+        name: "Gmail_Tool",
+        reply: () => {
+          server!.setTools([
+            { name: "Gmail_Tool", reply: () => "connected" },
+            { name: "Slack_Tool", reply: () => "sent" },
+          ]);
+          refreshed = new Promise((resolve) => {
+            setTimeout(() => void bot!.refreshMcp().then(resolve), 0);
+          });
+          return "Slack is connected.";
+        },
+      },
+    ]);
+    await bot.refreshMcp();
+    provider.script(async (_call, index) => {
+      if (index === turnOne)
+        return { call: { name: "abacus-connectors_Gmail_Tool", args: {} } };
+      if (index === turnOne + 1) {
+        await refreshed;
+        return { say: "No Slack tool here." };
+      }
+      return { say: "sent" };
+    });
+    await bot.send("two");
+
+    const turnTwo = provider.calls.slice(turnOne);
+    expect(turnTwo).toHaveLength(3);
+    expect(turnTwo[1]?.tools).not.toContain("abacus-connectors_Slack_Tool");
+    expect(turnTwo[2]?.userText.join("\n")).toMatch(
+      /became available: abacus-connectors_Slack_Tool/
+    );
+    expect(turnTwo[2]?.tools).toContain("abacus-connectors_Slack_Tool");
+
+    await bot.send("three");
+    const turnThree = provider.calls.at(-1)!;
+    expect(turnThree.tools).toContain("abacus-connectors_Slack_Tool");
+    // Neither a tool-count-only change nor a mid-turn arrival touches the
+    // prompt, and so its cache.
+    for (const call of [...turnTwo, turnThree])
+      expect(systemPrompt(call)).toBe(systemPrompt(turnTwo[0]));
+
+    for (const call of provider.calls) {
+      const system = systemPrompt(call);
+      expect(system).toContain(IDENTITY_PROMPT.split("\n")[0]);
+      expect(system).toContain(marker);
+      // The guidelines pi shows only in its own default prompt.
+      expect(system).toContain(
+        "Use read to examine files instead of cat or sed"
+      );
+      expect(system).toMatch(/edits\[\]\.oldText must match the file exactly/);
+      expect(system).not.toMatch(/inside pi|Pi documentation/);
+    }
   }, 60_000);
 });

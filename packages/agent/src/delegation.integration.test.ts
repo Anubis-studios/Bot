@@ -23,7 +23,12 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
+import { runBrowserTask } from "./browser-task.js";
+import { runDeckTask } from "./deck-task.js";
 import { resolveTaskRoot, runDelegatedTask } from "./delegation.js";
+import { runDesignTask } from "./design-task.js";
+import { runDocumentTask } from "./document-task.js";
+import { HostServiceClient } from "./host-services.js";
 import type { AgentEvent } from "./protocol.js";
 import { createModelRuntime } from "./providers.js";
 
@@ -489,5 +494,73 @@ describe("what the user switched off", () => {
     } finally {
       delete process.env.ABACUSAI_BOT_EXCLUDED_TOOLS;
     }
+  });
+});
+
+describe("every sub-agent's system prompt", () => {
+  const hostServices = new HostServiceClient(() => {});
+  const none = (): undefined => undefined;
+
+  it.each([
+    {
+      name: "delegate_task",
+      fileTools: true,
+      run: async (cwd: string) =>
+        runDelegatedTask(await context(cwd), "task", none),
+    },
+    {
+      name: "document",
+      fileTools: true,
+      run: async (cwd: string) =>
+        runDocumentTask(
+          { ...(await context(cwd)), hostServices },
+          "a document",
+          path.join(cwd, "out.pdf"),
+          none
+        ),
+    },
+    {
+      name: "deck",
+      fileTools: true,
+      run: async (cwd: string) =>
+        runDeckTask(
+          { ...(await context(cwd)), hostServices },
+          "a deck",
+          path.join(cwd, "out.pdf"),
+          3,
+          none
+        ),
+    },
+    {
+      name: "design",
+      fileTools: true,
+      run: async (cwd: string) =>
+        runDesignTask(
+          { ...(await context(cwd)), hostServices },
+          "a design",
+          path.join(cwd, "out"),
+          {},
+          none
+        ),
+    },
+    {
+      name: "browser_task",
+      fileTools: false,
+      run: async (cwd: string) =>
+        runBrowserTask(
+          { ...(await context(cwd)), browserTools: () => [] },
+          "a page",
+          none
+        ),
+    },
+  ])("is ours for $name, never pi's default", async ({ run, fileTools }) => {
+    await run(workspace());
+
+    const system = JSON.stringify(
+      provider.firstCall?.messages.filter((m) => m.role === "system")
+    );
+    expect(system).toContain("You are a sub-agent of AbacusAI Bot");
+    expect(system).not.toMatch(/inside pi|Pi documentation/);
+    expect(system.includes("Use read to examine files")).toBe(fileTools);
   });
 });

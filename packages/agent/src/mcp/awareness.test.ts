@@ -30,16 +30,10 @@ describe("what the session says it is connected to", () => {
       status({ name: "github", toolCount: 12 }),
     ]);
 
-    expect(prompt).toContain("`playwright` (24 tools, named `playwright_*`)");
-    expect(prompt).toContain("`github` (12 tools, named `github_*`)");
+    expect(prompt).toContain("`playwright` (tools named `playwright_*`)");
+    expect(prompt).toContain("`github` (tools named `github_*`)");
     expect(prompt).toContain(
       "do not say you lack an integration that is named here"
-    );
-  });
-
-  it("counts one tool as one tool", () => {
-    expect(mcpPrompt([status({ name: "docs", toolCount: 1 })])).toContain(
-      "(1 tool, named"
     );
   });
 

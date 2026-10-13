@@ -269,10 +269,22 @@ async function applyFileEdits(
   };
 }
 
-const SHARED_GUIDELINES = [
+// Exported for the prompt's guidelines block (base-prompt.ts): pi only shows a
+// tool's guidelines in its own default prompt, which we replace.
+export const EDIT_SHARED_GUIDELINES = [
   "Each oldText is matched against the original file, so quote it as the file actually reads. Read the file first.",
   "Keep oldText as small as possible while still being unique in the file. Do not pad with large unchanged regions.",
   "To change every occurrence of the same text, set replaceAll: true instead of repeating the edit or padding it with context.",
+];
+
+export const EDIT_GUIDELINES = [
+  "Use edit for a single precise change: pass path, oldText and newText",
+  "When changing several separate places in one file, use batch_edit in a single call rather than calling edit repeatedly",
+];
+
+export const BATCH_EDIT_GUIDELINES = [
+  "Use batch_edit when one file needs changes in several separate places, instead of several edit calls",
+  "Do not emit overlapping or nested edits. Merge nearby changes into one entry.",
 ];
 
 export default function (pi: ExtensionAPI) {
@@ -288,11 +300,7 @@ export default function (pi: ExtensionAPI) {
       "To change several separate places in the same file, use batch_edit instead of calling this repeatedly.",
     parameters: editSchema,
     promptSnippet: "Replace exact text in a file",
-    promptGuidelines: [
-      "Use edit for a single precise change: pass path, oldText and newText",
-      "When changing several separate places in one file, use batch_edit in a single call rather than calling edit repeatedly",
-      ...SHARED_GUIDELINES,
-    ],
+    promptGuidelines: [...EDIT_GUIDELINES, ...EDIT_SHARED_GUIDELINES],
 
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       return applyFileEdits(params.path, [params], ctx);
@@ -319,11 +327,7 @@ export default function (pi: ExtensionAPI) {
       "Prefer this over calling edit repeatedly on the same file. For a single change, use edit.",
     parameters: batchEditSchema,
     promptSnippet: "Replace text in several places in one file, in one call",
-    promptGuidelines: [
-      "Use batch_edit when one file needs changes in several separate places, instead of several edit calls",
-      "Do not emit overlapping or nested edits. Merge nearby changes into one entry.",
-      ...SHARED_GUIDELINES,
-    ],
+    promptGuidelines: [...BATCH_EDIT_GUIDELINES, ...EDIT_SHARED_GUIDELINES],
 
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       return applyFileEdits(params.path, params.edits, ctx);

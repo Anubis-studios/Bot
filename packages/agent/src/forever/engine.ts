@@ -20,6 +20,7 @@ import {
 import { sponsoredRunActive } from "../abacus-endpoint.js";
 import { Allowances } from "../allowances.js";
 import { notifyConversationQueueCleared } from "../background-processes.js";
+import { basePrompt } from "../base-prompt.js";
 import { BotOutputSanitizer, tidyBotText } from "../bot/bot-output.js";
 import {
   browserTaskEnabled,
@@ -48,7 +49,6 @@ import { TOOL_NAME_ALIASES } from "../excluded-tools.js";
 import background from "../extensions/background.js";
 import budgets, { budgetStopReason } from "../extensions/budgets.js";
 import compactionPruner from "../extensions/compaction-pruner.js";
-import noPiDocs from "../extensions/no-pi-docs.js";
 import spill from "../extensions/spill.js";
 import toolCallRepair from "../extensions/tool-call-repair.js";
 import toolTimeouts from "../extensions/tool-timeouts.js";
@@ -78,7 +78,7 @@ import {
   parseMode,
   parseModeStrict,
 } from "../permissions.js";
-import { identityPrompt, personaPrompt, readPersona } from "../persona.js";
+import { personaPrompt, readPersona } from "../persona.js";
 import { windowsShellPrompt } from "../posix-shell.js";
 import {
   AgentMode,
@@ -218,7 +218,14 @@ export class ForeverEngine {
   private readonly maxOutputTokens: number =
     this.config.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS;
   private mode: AgentMode;
+  /**
+   * The live session's extension handle. Taken only when a session is built:
+   * a loader reload re-runs the factories into a runtime the live session
+   * never reads, and tools registered there reach no model.
+   */
   private pi: ExtensionAPI | undefined;
+  /** The handle from the newest extension load. */
+  private loadedPi: ExtensionAPI | undefined;
   private mcp: ConnectedMcp = {
     clients: [],
     statuses: [],
@@ -354,6 +361,9 @@ export class ForeverEngine {
       cwd: this.options.cwd,
       agentDir: dir,
       settingsManager,
+      // Every prompt pi builds starts from ours; see base-prompt.ts. No
+      // edit-tool extension here, so `edit` is pi's built-in.
+      systemPromptOverride: () => basePrompt("builtin"),
       appendSystemPrompt: [
         ...this.profile.systemPrompt(),
         // Same guard as the desktop chat, on a worse surface.
@@ -369,7 +379,6 @@ export class ForeverEngine {
         this.promptMcpRoster = mcpRosterFingerprint(this.mcp.statuses);
 
         return [
-          identityPrompt(),
           ...(persona == null ? [] : [persona]),
           ...base,
           ...(mcp == null ? [] : [mcp]),
@@ -381,10 +390,6 @@ export class ForeverEngine {
         {
           name: "abacusai-bot-bot-permissions",
           factory: this.permissionExtension,
-        },
-        {
-          name: "abacusai-bot-no-pi-docs",
-          factory: noPiDocs as unknown as (pi: ExtensionAPI) => void,
         },
         {
           name: "abacusai-bot-tool-timeouts",
@@ -514,6 +519,7 @@ export class ForeverEngine {
     });
 
     this.session = created.session;
+    this.pi = this.loadedPi;
     // A degenerate summary from a cheap model must not erase the history.
     anchorCompactions(this.session.sessionManager, {
       anchorRequest: this.profile.anchorCompaction !== false,
@@ -1527,6 +1533,11 @@ export class ForeverEngine {
       });
 
       this.session = created.session;
+      this.pi = this.loadedPi;
+      // A fresh session has only the tools it was built with.
+      this.mcpTools.rebind(
+        new Set(this.session.getAllTools().map((tool) => tool.name))
+      );
       // A degenerate summary from a cheap model must not erase the history.
       anchorCompactions(this.session.sessionManager, {
         anchorRequest: this.profile.anchorCompaction !== false,
@@ -1922,7 +1933,8 @@ export class ForeverEngine {
   // ------------------------------------------------------------- approval flow
 
   private readonly permissionExtension = (pi: ExtensionAPI): void => {
-    this.pi = pi;
+    // Live only once a session is built on this load; see `pi`.
+    this.loadedPi = pi;
 
     pi.on("tool_call", async (event, ctx) => {
       const tool = this.toToolRequest(

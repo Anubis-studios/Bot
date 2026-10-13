@@ -21,6 +21,9 @@ import {
 } from "@abacus-ai/test-support/fake-provider";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
+import { BATCH_READ_GUIDELINES } from "../extensions/batch-read-tool.js";
+import { BATCH_EDIT_GUIDELINES } from "../extensions/edit-tool.js";
+import { IDENTITY_PROMPT } from "../persona.js";
 import type { DesktopEvent } from "../protocol.js";
 import { AbacusBotSession } from "../session.js";
 
@@ -84,6 +87,20 @@ async function mcpServer(
 /** The tool names the model was offered on the most recent request. */
 function offeredTools(): string[] {
   return provider.calls.at(-1)?.tools ?? [];
+}
+
+/** One request's system prompt, as sent. */
+function systemPromptOf(call: {
+  messages: Array<{ role: string; content: unknown }>;
+}): string {
+  return call.messages
+    .filter((message) => message.role === "system")
+    .map((message) =>
+      typeof message.content === "string"
+        ? message.content
+        : JSON.stringify(message.content)
+    )
+    .join("\n");
 }
 
 beforeAll(async () => {
@@ -203,7 +220,7 @@ describe("connecting", () => {
       .join("\n");
 
     expect(system).toContain("playwright");
-    expect(system).toContain("2 tools");
+    expect(system).toContain("tools named `playwright_*`");
   });
 
   it("leaves a built-in server's names alone", async () => {
@@ -393,6 +410,92 @@ describe("refreshing", () => {
     expect(provider.calls[2]?.userText.join("\n")).toMatch(
       /became available: docs_Slack_Tool/
     );
+  });
+
+  it("reaches the model after a roster-change reload: mid-turn in the continuation, the next turn, and after a reset, always under our prompt", async () => {
+    // The production sequence: a connector added between turns rebuilds the
+    // prompt (a loader reload), then another tool lands mid-turn. A reload
+    // used to move the tool handle to a runtime the session never reads, so
+    // the mid-turn tool was registered nowhere and never retried.
+    let harness: Harness | null = null;
+    let refreshed: Promise<void> = Promise.resolve();
+    const chat = await mcpServer([{ name: "post", reply: () => "posted" }]);
+    const docs = await mcpServer([
+      {
+        name: "connect",
+        reply: () => {
+          chat.setTools([
+            { name: "post", reply: () => "posted" },
+            { name: "react", reply: () => "reacted" },
+          ]);
+          refreshed = new Promise((resolve) => {
+            setTimeout(
+              () => void harness!.session.refreshMcp().then(resolve),
+              0
+            );
+          });
+          return "Connected.";
+        },
+      },
+    ]);
+
+    fs.writeFileSync(
+      configPath,
+      mcpConfig({ docs: { url: docs.url } }),
+      "utf8"
+    );
+    harness = session();
+    await harness.session.start();
+    await harness.session.send("one");
+    const turnOne = provider.calls.length;
+
+    fs.writeFileSync(
+      configPath,
+      mcpConfig({ docs: { url: docs.url }, chat: { url: chat.url } }),
+      "utf8"
+    );
+    await harness.session.refreshMcp();
+    provider.script(async (_call, index) => {
+      if (index === turnOne)
+        return { call: { name: "docs_connect", args: {} } };
+      if (index === turnOne + 1) {
+        await refreshed;
+        return { say: "No react tool here." };
+      }
+      return { say: "done" };
+    });
+    await harness.session.send("two");
+
+    const turnTwo = provider.calls.slice(turnOne);
+    expect(turnTwo).toHaveLength(3);
+    expect(turnTwo[0]?.tools).toContain("chat_post");
+    expect(turnTwo[1]?.tools).not.toContain("chat_react");
+    expect(turnTwo[2]?.userText.join("\n")).toMatch(
+      /became available: chat_react/
+    );
+    expect(turnTwo[2]?.tools).toContain("chat_react");
+
+    await harness.session.send("three");
+    const turnThree = provider.calls.at(-1)!;
+    expect(turnThree.tools).toContain("chat_react");
+
+    // Neither a tool-count-only change nor a mid-turn arrival touches the
+    // prompt, and so its cache.
+    for (const call of [...turnTwo, turnThree])
+      expect(systemPromptOf(call)).toBe(systemPromptOf(turnTwo[0]!));
+
+    await harness.session.resetConversation();
+    await harness.session.send("four");
+    expect(offeredTools()).toContain("chat_react");
+
+    for (const call of provider.calls) {
+      const system = systemPromptOf(call);
+      expect(system).toContain(IDENTITY_PROMPT.split("\n")[0]);
+      // Our tools' guidelines, which pi shows only in its own default prompt.
+      expect(system).toContain(BATCH_READ_GUIDELINES[0]);
+      expect(system).toContain(BATCH_EDIT_GUIDELINES[0]);
+      expect(system).not.toMatch(/inside pi|Pi documentation/);
+    }
   });
 
   it("keeps routing the tools it already had", async () => {
