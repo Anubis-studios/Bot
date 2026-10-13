@@ -77,6 +77,7 @@ describe("present_deliverable's stored target", () => {
           conversationKey: sessionKey,
           id: "p1",
         } satisfies FilesEvent;
+        await new Promise(() => undefined);
       },
       pendingPreview: (conversationKey) =>
         conversationKey === sessionKey ? stored : null,
