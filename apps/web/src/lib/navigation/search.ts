@@ -114,6 +114,7 @@ export const ArtifactsSearch = v.object({
 
 export const CONNECTOR_CATEGORY_TABS = [
   "featured",
+  "messaging",
   "abacus",
   "productivity",
   "data",

@@ -125,3 +125,14 @@ it("shows only categories with connectors in them, and a link to an empty one la
   expect(screen.queryByRole("button", { name: "Support" })).toBeNull();
   expect(featured.getAttribute("aria-pressed")).toBe("true");
 });
+
+it("lists the chat apps under Featured and their own Messaging category", async () => {
+  app = await renderApp("/library/connectors");
+  for (const name of ["WhatsApp", "Telegram", "Discord"])
+    expect(await screen.findByText(name)).toBeTruthy();
+  expect(screen.getByText("Gmail")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Messaging" }));
+  await waitFor(() => expect(screen.queryByText("Gmail")).toBeNull());
+  for (const name of ["WhatsApp", "Telegram", "Discord"])
+    expect(screen.getByText(name)).toBeTruthy();
+});

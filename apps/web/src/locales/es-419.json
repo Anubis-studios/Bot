@@ -3597,7 +3597,8 @@
       "infrastructure": "Infrastructure",
       "payments": "Payments",
       "support": "Support",
-      "web": "Web"
+      "web": "Web",
+      "messaging": "Mensajería"
     },
     "formats": {
       "pdf": "PDF",

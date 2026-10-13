@@ -34,6 +34,7 @@ import {
 import { Spinner } from "#renderer/components/spinner";
 import { connectErrorText } from "#renderer/lib/connect-page";
 import { useAppNavigate } from "#renderer/lib/navigation/use-app-navigate";
+import { IS_ELECTRON } from "#renderer/lib/platform";
 import { platformSystem } from "#renderer/lib/platform-system";
 import { useAppContext, foldSearch } from "#renderer/lib/use-app-context";
 import { Button } from "#renderer/ui/button";
@@ -45,7 +46,7 @@ import { useConnectFlow } from "./connect-flow";
 import { CONNECTOR_CATEGORY_TABS } from "./search";
 export const visibleTabsFor = (entry: Connector): string[] =>
   entry.kind === "messaging"
-    ? []
+    ? ["messaging", "featured"]
     : entry.category === "abacus-connectors"
       ? entry.onboarding
         ? ["abacus", "featured"]
@@ -64,9 +65,11 @@ export const ConnectorsPage = () => {
     ...transport.orpc.connectors.statuses.queryOptions({ input: {} }),
     staleTime: 60000,
   });
+  // Chat apps pair from the desktop; a browser has no pairing.
   const offered = CONNECTORS.filter(
     (e) =>
-      e.kind !== "messaging" && statuses.data?.[e.id]?.reason !== "not-offered"
+      (IS_ELECTRON || e.kind !== "messaging") &&
+      statuses.data?.[e.id]?.reason !== "not-offered"
   );
   // Only categories with something in them; Featured always leads.
   const tabs = CONNECTOR_CATEGORY_TABS.filter(
@@ -170,7 +173,13 @@ export const ConnectorsPage = () => {
                       disabled={inFlight}
                       aria-busy={inFlight}
                       onClick={() => {
-                        if (group && !signIn)
+                        if (group && !signIn && e.kind === "messaging")
+                          void navigate({
+                            to: "/library/messaging",
+                            search: { platform: e.platform },
+                            transition: "none",
+                          });
+                        else if (group && !signIn)
                           void navigate({
                             to: "/library/connectors",
                             search: (p) => ({ ...p, connector: e.id }),
