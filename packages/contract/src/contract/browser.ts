@@ -46,12 +46,28 @@ export const MaterializeBrowserRuntimeFileRequestSchema = v.object({
   resourceId: v.pipe(v.string(), v.nonEmpty()),
   filePath: v.pipe(v.string(), v.nonEmpty()),
   hostRoot: v.pipe(v.string(), v.nonEmpty()),
+  /**
+   * A viewer holding the runtime open: main closes it once the last holder
+   * `release`s it (or its conversation goes). Absent, nothing holds it.
+   */
+  holder: v.optional(v.pipe(v.string(), v.nonEmpty())),
 });
 
 export type MaterializeBrowserRuntimeFileRequest = v.InferOutput<
   typeof MaterializeBrowserRuntimeFileRequestSchema
 >;
 
+export const ReleaseBrowserRuntimeRequestSchema = v.object({
+  conversationKey: ConversationKeySchema,
+  resourceId: v.pipe(v.string(), v.nonEmpty()),
+  holder: v.pipe(v.string(), v.nonEmpty()),
+});
+
+/**
+ * Presents the resource the lease names, whatever its generation: a runtime
+ * replaced or closed underneath is rebuilt from what it was made from, and
+ * the answer's lease is the one now shown.
+ */
 export const PresentBrowserRuntimeRequestSchema = v.object({
   lease: BrowserRuntimeLeaseSchema,
   presentationId: v.pipe(v.string(), v.nonEmpty()),
@@ -153,6 +169,9 @@ export const browser = {
       .output(type<BrowserRuntimeCapture>()),
     hide: mutation.input(HideBrowserRuntimeRequestSchema).output(type<void>()),
     close: mutation.input(BrowserRuntimeLeaseSchema).output(type<void>()),
+    release: mutation
+      .input(ReleaseBrowserRuntimeRequestSchema)
+      .output(type<void>()),
     promoteScope: mutation
       .input(PromoteBrowserRuntimeScopeRequestSchema)
       .output(type<BrowserRuntimeLease[]>()),

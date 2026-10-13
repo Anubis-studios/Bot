@@ -1,64 +1,36 @@
-import type { BrowserRuntimeState } from "@abacus-ai/contract/contracts";
-
 import type { Transport } from "#renderer/data/transport";
 
 type Runtime = Transport["client"]["browser"]["runtime"];
-interface Materialization {
-  owners: number;
-  promise: Promise<BrowserRuntimeState>;
-  state?: BrowserRuntimeState;
-}
-const transports = new WeakMap<Transport, Map<string, Materialization>>();
 
-/** A dock move can release a viewer before its replacement acquires the same lease. */
+/**
+ * One viewer's hold on a local file's runtime. Main counts the holders and
+ * closes the view after the last lets go, so two tabs, a dock move or a
+ * remount never close a view another surface still shows.
+ */
 export const acquireLocalFile = (
   transport: Transport,
-  input: Parameters<Runtime["materializeFile"]>[0]
+  input: Omit<Parameters<Runtime["materializeFile"]>[0], "holder">
 ) => {
   const runtime = transport.client.browser.runtime;
-  let entries = transports.get(transport);
-  if (!entries) {
-    entries = new Map();
-    transports.set(transport, entries);
-  }
-  const key = JSON.stringify([
-    input.conversationKey,
-    input.resourceId,
-    input.filePath,
-    input.hostRoot,
-  ]);
-  const existing = entries.get(key);
-  const entry = existing ?? {
-    owners: 0,
-    promise: runtime.materializeFile(input),
-  };
-  const closeUnused = () => {
-    if (entry.owners || !entry.state || entries.get(key) !== entry) return;
-    entries.delete(key);
-    void runtime.close(entry.state.lease).catch(() => {});
-  };
-  if (!existing) {
-    entries.set(key, entry);
-    void entry.promise.then(
-      (state) => {
-        entry.state = state;
-        closeUnused();
-      },
-      () => {
-        if (entries.get(key) === entry) entries.delete(key);
-      }
-    );
-  }
-  entry.owners++;
+  const holder = crypto.randomUUID();
+  const promise = runtime.materializeFile({ ...input, holder });
   let released = false;
   return {
-    promise: entry.promise,
+    promise,
     release: () => {
       if (released) return;
       released = true;
-      entry.owners--;
-      // Let the replacement effect acquire an already materialized lease too.
-      queueMicrotask(closeUnused);
+      // After the acquire lands, or main would hold a holder nobody releases.
+      void promise
+        .catch(() => undefined)
+        .then(() =>
+          runtime.release({
+            conversationKey: input.conversationKey,
+            resourceId: input.resourceId,
+            holder,
+          })
+        )
+        .catch(() => undefined);
     },
   };
 };

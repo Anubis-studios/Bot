@@ -27,7 +27,9 @@ it("keyless URL previews on the start route use the draft browser scope and reje
         url: "https://other.test",
       })
     ).toBe(false);
-    expect(dispatchPreview({ url: "https://draft.test" })).toBe(true);
+    await expect(dispatchPreview({ url: "https://draft.test" })).resolves.toBe(
+      true
+    );
   });
   await waitFor(() =>
     expect(

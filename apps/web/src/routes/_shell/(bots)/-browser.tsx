@@ -49,7 +49,9 @@ export const BotBrowserRegistration = ({
     const unsubscribe = registerPreviewConsumer({
       owns: (candidate) => candidate == null || candidate === key,
       open: (event) => {
-        if (event.url) open(sessionId, event.url);
+        if (!event.url) return false;
+        open(sessionId, event.url);
+        return true;
       },
     });
     return () => {

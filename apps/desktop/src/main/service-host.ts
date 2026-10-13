@@ -442,6 +442,7 @@ import { AgentCommunicationService } from "./services/session/cli-communication-
 import { AgentManagerService } from "./services/session/cli-manager-service";
 import { deliverMessage } from "./services/session/message-delivery";
 import { ModelSwitchWaiters } from "./services/session/model-switch";
+import { PreviewTargets } from "./services/session/preview-targets";
 import { SessionArtifactsService } from "./services/session/session-artifacts-service";
 import {
   INACTIVITY_TIMEOUT_MINUTES,
@@ -1066,8 +1067,12 @@ export class ServiceHost {
     return this.hostedFeed.listen(listener);
   }
 
+  /** `present_deliverable`'s stored "show this", per conversation. */
+  readonly previewTargets = new PreviewTargets();
+
   private readonly mcpAgentToolsServer = new McpAgentToolsServer({
     skillsService: this.skillsService,
+    previewTargets: this.previewTargets,
     hostedRoutines: () => this.hostedRoutinesOffered(),
     enabledToolsets: () => {
       const states = this.getToolsetStates();

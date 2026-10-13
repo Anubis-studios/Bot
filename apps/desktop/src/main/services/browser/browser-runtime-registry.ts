@@ -116,7 +116,7 @@ export class StaleBrowserRuntimeError extends Error {
 
 export class BrowserRuntimeNotFoundError extends Error {
   constructor(readonly lease: BrowserRuntimeLease) {
-    super(`Browser runtime ${lease.resourceId} does not exist`);
+    super(`Browser runtime ${lease.resourceId} is closed or does not exist`);
     this.name = "BrowserRuntimeNotFoundError";
   }
 }
@@ -326,6 +326,7 @@ export class BrowserRuntimeRegistry<
   }
 
   private removeRuntime(runtime: RuntimeRecord<View>): void {
+    this.forgetGeneration(runtime);
     const scope = this.scopes.get(runtime.lease.conversationKey);
     if (scope == null) return;
     scope.runtimes.delete(runtime.lease.resourceId);
@@ -352,9 +353,17 @@ export class BrowserRuntimeRegistry<
     }
   }
 
+  /** A closed runtime is gone, not stale: its leases now read as not found. */
+  private forgetGeneration(runtime: RuntimeRecord<View>): void {
+    this.latestGenerations.delete(
+      this.runtimeKey(runtime.lease.conversationKey, runtime.lease.resourceId)
+    );
+  }
+
   private disposeRuntimes(runtimes: readonly RuntimeRecord<View>[]): void {
     const failures: unknown[] = [];
     for (const runtime of runtimes) {
+      this.forgetGeneration(runtime);
       try {
         this.disposeRuntime(runtime);
       } catch (error) {

@@ -6,7 +6,7 @@ import type { ConversationKey } from "../conversation-scope";
 import type { PptxDeck } from "../pptx";
 import { mutation, query, subscription } from "./base";
 import { CheckoutRefSchema, type CheckoutKey } from "./checkout";
-import { NoInput } from "./ids";
+import { ConversationKeySchema, NoInput } from "./ids";
 
 export const UPLOAD_LIMITS = {
   fileBytes: 256 * 1024 * 1024,
@@ -22,8 +22,22 @@ export type FilesEvent =
    * live `git.watch`. Absent only when no workspace is active.
    */
   | { type: "tree-root-changed"; checkoutKey?: CheckoutKey }
-  /** Show a path in the pane of the conversation that presented it. */
-  | { type: "preview-open"; path: string; conversationKey?: ConversationKey };
+  /**
+   * Show a path in the pane of the conversation that presented it. `id`
+   * names main's stored target: the pane answers `previewHandled` with it.
+   */
+  | {
+      type: "preview-open";
+      path: string;
+      conversationKey?: ConversationKey;
+      id?: string;
+    };
+
+/** A conversation's stored `present_deliverable` target, not yet shown. */
+export interface PendingPreview {
+  id: string;
+  path: string;
+}
 
 export interface DirectoryListing {
   root: string;
@@ -130,5 +144,22 @@ export const files = {
   readPptx: query
     .input(HostFileInput)
     .output(type<{ deck: PptxDeck; sizeBytes: number }>()),
+  /**
+   * The conversation's latest `present_deliverable` target that no pane has
+   * shown yet: a pane reads it when it mounts (after a reload too).
+   */
+  pendingPreview: query
+    .input(v.object({ conversationKey: ConversationKeySchema }))
+    .output(type<PendingPreview | null>()),
+  /** The pane took the stored target (`shown`, or declined it): main forgets it. */
+  previewHandled: mutation
+    .input(
+      v.object({
+        conversationKey: ConversationKeySchema,
+        id: v.pipe(v.string(), v.nonEmpty()),
+        shown: v.boolean(),
+      })
+    )
+    .output(type<void>()),
   events: subscription.input(NoInput).output(eventIterator(type<FilesEvent>())),
 };

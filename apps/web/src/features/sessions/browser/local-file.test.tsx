@@ -1,19 +1,38 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Store } from "@tanstack/react-store";
-import { act, render, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 const mock = vi.hoisted(() => ({ transport: {} as any }));
 vi.mock("../data/queries", () => ({
   useSessionsTransport: () => mock.transport,
 }));
-import type {
-  BrowserRuntimeLease,
-  BrowserRuntimeState,
-} from "@abacus-ai/contract/contracts";
+import type { BrowserRuntimeState } from "@abacus-ai/contract/contracts";
 
 import { BrowserTab } from "./browser-tab";
-it("independent local-file owners materialize separately and close their own leases", async () => {
-  const close = vi.fn(async (_lease: BrowserRuntimeLease) => {});
+const profiles = {
+  browser: {
+    profiles: {
+      list: {
+        queryOptions: () => ({
+          queryKey: ["profiles"],
+          queryFn: async () => [],
+        }),
+      },
+    },
+  },
+};
+const idlePresenter = () => ({
+  captures: new Store<Record<string, string>>({}),
+  owner: new Store<string | null>(null),
+  register: () => () => {},
+  activate: async () => {},
+  refresh: async () => {},
+});
+type Held = { resourceId: string; holder: string };
+
+it("each local-file viewer holds the runtime in main and releases only its own hold", async () => {
+  const close = vi.fn(async () => {});
+  const release = vi.fn(async (_input: Held) => {});
   const materializeFile = vi.fn(async (input) => ({
     lease: {
       conversationKey: input.conversationKey,
@@ -22,145 +41,164 @@ it("independent local-file owners materialize separately and close their own lea
     },
     url: input.filePath,
   }));
-  const events = async function* () {
-    yield* [];
-  };
   mock.transport = {
-    client: { browser: { runtime: { materializeFile, close }, events } },
-    orpc: {
+    client: {
       browser: {
-        profiles: {
-          list: {
-            queryOptions: () => ({
-              queryKey: ["profiles"],
-              queryFn: async () => [],
-            }),
-          },
-        },
+        runtime: { materializeFile, close, release },
+        events: async function* () {},
       },
     },
-  };
-  const presenter = {
-    captures: new Store<Record<string, string>>({}),
-    owner: new Store<string | null>(null),
-    register: () => () => {},
-    activate: async () => {},
-    refresh: async () => {},
+    orpc: profiles,
   };
   const props = {
     row: { workspaceId: "w", id: "s" },
     root: "/root",
     file: "/root/a.pdf",
     visible: true,
-    presenter,
+    presenter: idlePresenter(),
     blocked: () => false,
   };
   const qc = new QueryClient();
   const view = render(
     <QueryClientProvider client={qc}>
-      <BrowserTab {...props} id="files-owner" />
-      <BrowserTab {...props} id="preview-owner" file="/root/b.html" />
+      <BrowserTab {...props} id="shared" />
+      <BrowserTab {...props} id="shared" />
     </QueryClientProvider>
   );
   await waitFor(() => expect(materializeFile).toHaveBeenCalledTimes(2));
+  const holders = materializeFile.mock.calls.map(([input]) => input.holder);
+  expect(new Set(holders).size).toBe(2);
+  view.rerender(
+    <QueryClientProvider client={qc}>
+      <BrowserTab {...props} id="shared" />
+    </QueryClientProvider>
+  );
+  await waitFor(() => expect(release).toHaveBeenCalledOnce());
+  // The other tab keeps its hold; the renderer never closes a shared view.
+  expect(close).not.toHaveBeenCalled();
   view.unmount();
-  await waitFor(() => expect(close).toHaveBeenCalledTimes(2));
-  expect(close.mock.calls.map(([lease]) => lease.resourceId).sort()).toEqual([
-    "files-owner",
-    "preview-owner",
-  ]);
+  await waitFor(() => expect(release).toHaveBeenCalledTimes(2));
+  expect(release.mock.calls.map(([input]) => input.holder).sort()).toEqual(
+    [...holders].sort()
+  );
+  expect(close).not.toHaveBeenCalled();
   qc.clear();
 });
 
-it.each([false, true])(
-  "keeps a shared local lease across a dock-leaf remount, settled=%s",
-  async (settled) => {
-    let complete!: (state: BrowserRuntimeState) => void;
-    const pending = new Promise<BrowserRuntimeState>((resolve) => {
-      complete = resolve;
-    });
-    const materializeFile = vi.fn(() => pending);
-    const close = vi.fn(async () => {});
-    mock.transport = {
-      client: {
-        browser: {
-          runtime: { materializeFile, close },
-          events: async function* () {},
-        },
+it("releases a hold only once its acquire has landed", async () => {
+  let complete!: (state: BrowserRuntimeState) => void;
+  const materializeFile = vi.fn(
+    () =>
+      new Promise<BrowserRuntimeState>((resolve) => {
+        complete = resolve;
+      })
+  );
+  const release = vi.fn(async () => {});
+  mock.transport = {
+    client: {
+      browser: {
+        runtime: { materializeFile, release, close: vi.fn() },
+        events: async function* () {},
       },
-      orpc: {
-        browser: {
-          profiles: {
-            list: {
-              queryOptions: () => ({
-                queryKey: ["profiles"],
-                queryFn: async () => [],
-              }),
-            },
-          },
-        },
+    },
+    orpc: profiles,
+  };
+  const qc = new QueryClient();
+  const view = render(
+    <QueryClientProvider client={qc}>
+      <BrowserTab
+        row={{ workspaceId: "w", id: "s" }}
+        id="slow"
+        root="/root"
+        file="/root/a.pdf"
+        visible
+        presenter={idlePresenter()}
+        blocked={() => false}
+      />
+    </QueryClientProvider>
+  );
+  await waitFor(() => expect(materializeFile).toHaveBeenCalledOnce());
+  view.unmount();
+  await act(async () => {});
+  expect(release).not.toHaveBeenCalled();
+  await act(async () => {
+    complete({
+      lease: { conversationKey: "k", resourceId: "slow", generation: 1 },
+      url: "file:///root/a.pdf",
+    } as BrowserRuntimeState);
+  });
+  await waitFor(() => expect(release).toHaveBeenCalledOnce());
+  qc.clear();
+});
+
+it("a present that fails shows the tab's error with Retry, which acquires again", async () => {
+  const materializeFile = vi.fn(async (input) => ({
+    lease: {
+      conversationKey: input.conversationKey,
+      resourceId: input.resourceId,
+      generation: 1,
+    },
+    url: input.filePath,
+  }));
+  mock.transport = {
+    client: {
+      browser: {
+        runtime: { materializeFile, release: vi.fn(async () => {}) },
+        events: async function* () {},
       },
-    };
-    const props = {
-      row: { workspaceId: "w", id: "s" },
-      id: "moving-preview",
-      root: "/root",
-      file: "/root/a.pdf",
-      visible: true,
-      presenter: {
-        captures: new Store<Record<string, string>>({}),
-        owner: new Store<string | null>(null),
-        register: () => () => {},
-        activate: async () => {},
-        refresh: async () => {},
-      },
-      blocked: () => false,
-    };
-    const state = {
-      lease: {
-        conversationKey: "session:w:s",
-        resourceId: props.id,
-        generation: 1,
-      },
-      url: props.file,
-    } as BrowserRuntimeState;
-    const qc = new QueryClient();
-    const tree = (leaf: string, show = true, twin = false) => (
-      <QueryClientProvider client={qc}>
-        <div key={leaf}>
-          {show ? <BrowserTab {...props} /> : null}
-          {twin ? <BrowserTab {...props} /> : null}
-        </div>
-      </QueryClientProvider>
-    );
-    const view = render(tree("first-leaf"));
-    try {
-      await waitFor(() => expect(materializeFile).toHaveBeenCalledOnce());
-      if (settled)
-        await act(async () => {
-          complete(state);
-        });
-      view.rerender(tree("second-leaf"));
-      await act(async () => {
-        complete(state);
-      });
-      await waitFor(() =>
-        expect(
-          view.queryByRole("region", { name: "sessions.browser.title" })
-        ).not.toBeNull()
+    },
+    orpc: profiles,
+  };
+  let fail = true;
+  const presenter = {
+    ...idlePresenter(),
+    register: (candidate: {
+      lease: BrowserRuntimeState["lease"];
+      failed?(error: unknown): void;
+      presented?(state: BrowserRuntimeState): void;
+    }) => {
+      queueMicrotask(() =>
+        fail
+          ? candidate.failed?.(
+              new Error("Browser runtime r is closed or does not exist")
+            )
+          : candidate.presented?.({
+              lease: candidate.lease,
+            } as BrowserRuntimeState)
       );
-      expect(close).not.toHaveBeenCalled();
-      view.rerender(tree("second-leaf", true, true));
-      await act(async () => {});
-      view.rerender(tree("second-leaf", false, true));
-      await act(async () => {});
-      expect(close).not.toHaveBeenCalled();
-      view.rerender(tree("second-leaf", false));
-      await waitFor(() => expect(close).toHaveBeenCalledOnce());
-      expect(close).toHaveBeenCalledWith(state.lease);
-    } finally {
-      view.unmount();
-      qc.clear();
-    }
-  }
-);
+      return () => {};
+    },
+  };
+  const onDraw = vi.fn();
+  const qc = new QueryClient();
+  const view = render(
+    <QueryClientProvider client={qc}>
+      <BrowserTab
+        row={{ workspaceId: "w", id: "s" }}
+        id="r"
+        root="/root"
+        file="/root/a.pdf"
+        visible
+        presenter={presenter}
+        blocked={() => false}
+        onDraw={onDraw}
+      />
+    </QueryClientProvider>
+  );
+  const alert = await view.findByRole("alert");
+  expect(onDraw).toHaveBeenLastCalledWith("failed");
+  expect(alert.textContent).toContain("is closed");
+  expect(
+    view.queryByRole("region", { name: "sessions.browser.title" })
+  ).toBeNull();
+  fail = false;
+  fireEvent.click(view.getByRole("button", { name: "sessions.common.retry" }));
+  await waitFor(() => expect(materializeFile).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(view.queryByRole("alert")).toBeNull());
+  expect(
+    view.getByRole("region", { name: "sessions.browser.title" })
+  ).toBeTruthy();
+  await waitFor(() => expect(onDraw).toHaveBeenLastCalledWith("drawn"));
+  view.unmount();
+  qc.clear();
+});

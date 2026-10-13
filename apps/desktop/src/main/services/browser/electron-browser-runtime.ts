@@ -46,6 +46,16 @@ type MaterializeOptions = { profileId?: string; localFile?: LocalFile };
 const localFileIdentity = (localFile: LocalFile): string =>
   `${localFile.file}\0${localFile.root}`;
 
+/** What a runtime was made from: a present rebuilds a closed one from it. */
+type RuntimeSource =
+  | { kind: "web"; url?: string; profileId?: string }
+  | { kind: "file"; file: string; root: string };
+
+/** A remount releases before its replacement acquires: the close waits this long for it. */
+const RELEASE_GRACE_MS = 1_000;
+/** Sources kept for runtimes that are no longer open, oldest dropped first. */
+const MAX_SOURCES = 256;
+
 /** What the local-file view's session lets through (spec 04 §12.8). */
 export const localFileRequestAllowed = (
   localFile: LocalFile,
@@ -119,6 +129,9 @@ const runtimeMapKey = (
   conversationKey: ConversationKey,
   resourceId: string
 ): string => JSON.stringify([conversationKey, resourceId]);
+
+const keyParts = (key: string): [ConversationKey, string] =>
+  JSON.parse(key) as [ConversationKey, string];
 
 const importedProfilePartition = (profileId: string): string =>
   `persist:bp-${profileId.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
@@ -312,6 +325,17 @@ export class ElectronBrowserRuntime {
    * sub-resources are locked to (`localFileIdentity`).
    */
   private readonly localKeys = new Map<string, string>();
+  /**
+   * runtime key → the viewers holding it open. Main owns the lifetime: the
+   * runtime closes when the last one releases, or with its conversation.
+   */
+  private readonly holders = new Map<string, Set<string>>();
+  private readonly releaseTimers = new Map<
+    string,
+    ReturnType<typeof setTimeout>
+  >();
+  /** runtime key → its source; outlives a released runtime, not an explicit close. */
+  private readonly sources = new Map<string, RuntimeSource>();
 
   constructor(
     private readonly getWindow: () => BrowserRuntimeWindow | null,
@@ -360,6 +384,12 @@ export class ElectronBrowserRuntime {
     });
     this.leases.set(key, lease);
     this.profiles.set(key, profileId);
+    if (fresh)
+      this.keepSource(key, {
+        kind: "web",
+        ...(url == null ? {} : { url }),
+        ...(profileId == null ? {} : { profileId }),
+      });
     if (url != null && fresh) await this.loadUrlQuietly(lease, url);
     return this.state(lease);
   }
@@ -378,6 +408,7 @@ export class ElectronBrowserRuntime {
     resourceId: string;
     file: string;
     root: string;
+    holder?: string;
   }): Promise<BrowserRuntimeState> {
     const conversationKey = checkedConversationKey(request.conversationKey);
     const resourceId = browserResourceId(request.resourceId);
@@ -394,7 +425,13 @@ export class ElectronBrowserRuntime {
     this.leases.set(key, lease);
     this.profiles.set(key, undefined);
     this.localKeys.set(key, identity);
+    this.hold(key, request.holder);
     if (fresh) {
+      this.keepSource(key, {
+        kind: "file",
+        file: request.file,
+        root: request.root,
+      });
       const view = this.registry.nativeView(lease);
       try {
         await view.webContents.loadURL(pathToFileURL(request.file).href);
@@ -414,10 +451,40 @@ export class ElectronBrowserRuntime {
       );
   }
 
+  /**
+   * Viewer `holder` lets go of the resource. The last one out closes it
+   * (after `RELEASE_GRACE_MS`, so a remount's re-acquire keeps it); its
+   * source stays, so a surface still showing it is rebuilt, not blank.
+   */
+  release(request: {
+    conversationKey: ConversationKey;
+    resourceId: string;
+    holder: string;
+  }): void {
+    const resourceId = browserResourceId(request.resourceId);
+    const direct = runtimeMapKey(
+      checkedConversationKey(request.conversationKey),
+      resourceId
+    );
+    // Promotion moves a draft's holders to the session's key.
+    const key = this.holders.get(direct)?.has(request.holder)
+      ? direct
+      : [...this.holders].find(
+          ([candidate, held]) =>
+            held.has(request.holder) && keyParts(candidate)[1] === resourceId
+        )?.[0];
+    const held = key == null ? undefined : this.holders.get(key);
+    if (key == null || held == null) return;
+    held.delete(request.holder);
+    if (held.size > 0) return;
+    this.holders.delete(key);
+    this.scheduleClose(key);
+  }
+
   async present(
     request: PresentBrowserRuntimeRequest
   ): Promise<BrowserRuntimeState> {
-    const lease = this.resolveLease(request.lease);
+    const lease = await this.presentable(request.lease);
     if (request.url != null) this.refuseLocalUrl(lease);
     const url = request.url == null ? undefined : checkedUrl(request.url);
     const previous = this.presentedLease;
@@ -523,7 +590,19 @@ export class ElectronBrowserRuntime {
   }
 
   close(leaseContract: BrowserRuntimeLeaseContract): void {
+    const requested = registryLease(leaseContract);
     const lease = this.resolveLease(leaseContract);
+    // A lease whose runtime was replaced names nothing open: never close
+    // the replacement, or another conversation's runtime (only a draft's
+    // lease follows its runtime, to the session it was promoted to).
+    if (
+      lease.generation !== requested.generation &&
+      (lease.conversationKey === requested.conversationKey ||
+        conversationRefFromKey(requested.conversationKey)?.kind !== "draft")
+    )
+      return;
+    // Closed on purpose: nothing rebuilds it.
+    this.forget(runtimeMapKey(lease.conversationKey, lease.resourceId));
     this.leases.delete(runtimeMapKey(lease.conversationKey, lease.resourceId));
     this.profiles.delete(
       runtimeMapKey(lease.conversationKey, lease.resourceId)
@@ -557,6 +636,7 @@ export class ElectronBrowserRuntime {
       this.leases.set(newKey, lease);
       this.profiles.set(newKey, profileId);
       if (localFile != null) this.localKeys.set(newKey, localFile);
+      this.moveOwnership(oldKey, newKey);
       this.currentLease.set(view, lease);
       if (
         this.presentedLease?.conversationKey === draftKey &&
@@ -688,6 +768,10 @@ export class ElectronBrowserRuntime {
       this.leases.clear();
       this.profiles.clear();
       this.localKeys.clear();
+      for (const timer of this.releaseTimers.values()) clearTimeout(timer);
+      this.releaseTimers.clear();
+      this.holders.clear();
+      this.sources.clear();
       this.presentedLease = null;
       this.presentedBy = null;
     }
@@ -954,6 +1038,123 @@ export class ElectronBrowserRuntime {
       this.profiles.delete(key);
       this.localKeys.delete(key);
     }
+    // Released runtimes' sources and holders go with their conversation.
+    for (const key of new Set([
+      ...this.sources.keys(),
+      ...this.holders.keys(),
+      ...this.releaseTimers.keys(),
+    ])) {
+      const [conversationKey, resourceId] = keyParts(key);
+      if (
+        predicate({
+          conversationKey,
+          resourceId: browserResourceId(resourceId),
+          generation: 0 as BrowserRuntimeLease["generation"],
+        })
+      )
+        this.forget(key);
+    }
+  }
+
+  private keepSource(key: string, source: RuntimeSource): void {
+    this.sources.delete(key);
+    this.sources.set(key, source);
+    for (const old of this.sources.keys()) {
+      if (this.sources.size <= MAX_SOURCES) break;
+      if (!this.leases.has(old)) this.sources.delete(old);
+    }
+  }
+
+  private hold(key: string, holder: string | undefined): void {
+    if (holder == null) return;
+    const timer = this.releaseTimers.get(key);
+    if (timer != null) clearTimeout(timer);
+    this.releaseTimers.delete(key);
+    this.holders.set(key, (this.holders.get(key) ?? new Set()).add(holder));
+  }
+
+  private scheduleClose(key: string): void {
+    const pending = this.releaseTimers.get(key);
+    if (pending != null) clearTimeout(pending);
+    this.releaseTimers.set(
+      key,
+      setTimeout(() => {
+        this.releaseTimers.delete(key);
+        if (this.holders.has(key) || !this.leases.has(key)) return;
+        try {
+          const source = this.sources.get(key);
+          // A rebuilt page reopens where it was, not where it started.
+          if (source?.kind === "web") {
+            const url = this.state(this.leases.get(key)!).url;
+            if (isHttpUrl(url)) source.url = url;
+          }
+          this.replace(key);
+        } catch (error) {
+          console.warn("[browser-runtime] release cleanup failed", error);
+        }
+      }, RELEASE_GRACE_MS)
+    );
+  }
+
+  /** Holders, a pending close and the source of `key`: an explicit close or a gone conversation. */
+  private forget(key: string): void {
+    const timer = this.releaseTimers.get(key);
+    if (timer != null) clearTimeout(timer);
+    this.releaseTimers.delete(key);
+    this.holders.delete(key);
+    this.sources.delete(key);
+  }
+
+  private moveOwnership(oldKey: string, newKey: string): void {
+    const holders = this.holders.get(oldKey);
+    const source = this.sources.get(oldKey);
+    const releasing = this.releaseTimers.has(oldKey);
+    this.forget(oldKey);
+    if (holders != null) this.holders.set(newKey, holders);
+    if (source != null) this.sources.set(newKey, source);
+    if (releasing) this.scheduleClose(newKey);
+  }
+
+  /**
+   * The runtime the lease's resource has now, whatever its generation; a
+   * draft's moved to its session on promotion. One closed underneath is
+   * rebuilt from its source (paths `materializeFile` checked; the view's
+   * own lock re-checks every load), so the pane is never left blank.
+   */
+  private async presentable(
+    leaseContract: BrowserRuntimeLeaseContract
+  ): Promise<BrowserRuntimeLease> {
+    const requested = registryLease(leaseContract);
+    const key = runtimeMapKey(requested.conversationKey, requested.resourceId);
+    const direct = this.leases.get(key);
+    if (direct != null) return direct;
+    if (conversationRefFromKey(requested.conversationKey)?.kind === "draft") {
+      const moved = this.resolveLease(leaseContract);
+      const live = this.leases.get(
+        runtimeMapKey(moved.conversationKey, moved.resourceId)
+      );
+      if (live != null && this.sameLease(live, moved)) return live;
+    }
+    const source = this.sources.get(key);
+    if (source == null) return requested;
+    const { conversationKey, resourceId } = requested;
+    const state =
+      source.kind === "file"
+        ? await this.materializeFile({
+            conversationKey,
+            resourceId,
+            file: source.file,
+            root: source.root,
+          })
+        : await this.materialize({
+            conversationKey,
+            resourceId,
+            ...(source.url == null ? {} : { url: source.url }),
+            ...(source.profileId == null
+              ? {}
+              : { profileId: source.profileId }),
+          });
+    return this.leases.get(key) ?? registryLease(state.lease);
   }
 
   private sameLease(

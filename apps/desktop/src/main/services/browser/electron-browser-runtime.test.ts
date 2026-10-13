@@ -645,4 +645,114 @@ describe("local files on the native surface (spec 04 §12.8, R4-T33)", () => {
       })
     ).resolves.toMatchObject({ url: "https://example.com/" });
   });
+
+  describe("lifetime: main counts the holders", () => {
+    const bounds = { x: 0, y: 0, width: 600, height: 400 };
+    const held = (runtime: ElectronBrowserRuntime, holder: string) =>
+      runtime.materializeFile({
+        conversationKey,
+        resourceId: "preview:report",
+        file,
+        root,
+        holder,
+      });
+    const release = (runtime: ElectronBrowserRuntime, holder: string) =>
+      runtime.release({
+        conversationKey,
+        resourceId: "preview:report",
+        holder,
+      });
+
+    it("two tabs share one view: one closing leaves the other presenting", async () => {
+      vi.useFakeTimers();
+      try {
+        const runtime = new ElectronBrowserRuntime(() => owner as never);
+        const first = await held(runtime, "tab-one");
+        const second = await held(runtime, "tab-two");
+        expect(second.lease).toEqual(first.lease);
+        expect(mocks.views).toHaveLength(1);
+
+        release(runtime, "tab-one");
+        await vi.advanceTimersByTimeAsync(5_000);
+        expect(mocks.views[0]!.webContents.close).not.toHaveBeenCalled();
+        await expect(
+          runtime.present({ lease: second.lease, presentationId: "b", bounds })
+        ).resolves.toMatchObject({ lease: second.lease, url: fileUrl });
+
+        release(runtime, "tab-two");
+        await vi.advanceTimersByTimeAsync(5_000);
+        expect(mocks.views[0]!.webContents.close).toHaveBeenCalledOnce();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("a remount's release and re-acquire keeps the same view", async () => {
+      vi.useFakeTimers();
+      try {
+        const runtime = new ElectronBrowserRuntime(() => owner as never);
+        const state = await held(runtime, "old-mount");
+        release(runtime, "old-mount");
+        await vi.advanceTimersByTimeAsync(100);
+        const again = await held(runtime, "new-mount");
+        await vi.advanceTimersByTimeAsync(5_000);
+        expect(again.lease).toEqual(state.lease);
+        expect(mocks.views).toHaveLength(1);
+        expect(mocks.views[0]!.webContents.close).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("presenting a runtime closed underneath rebuilds it from its file, never 'stale'", async () => {
+      vi.useFakeTimers();
+      try {
+        const runtime = new ElectronBrowserRuntime(() => owner as never);
+        const state = await held(runtime, "tab");
+        release(runtime, "tab");
+        await vi.advanceTimersByTimeAsync(5_000);
+        expect(mocks.views[0]!.webContents.close).toHaveBeenCalledOnce();
+
+        const shown = await runtime.present({
+          lease: state.lease,
+          presentationId: "surface",
+          bounds,
+        });
+        expect(mocks.views).toHaveLength(2);
+        expect(shown.url).toBe(fileUrl);
+        expect(shown.lease.generation).toBeGreaterThan(state.lease.generation);
+        expect(owner.contentView.addChildView).toHaveBeenLastCalledWith(
+          mocks.views[1]
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("an explicitly closed runtime stays closed and says so", async () => {
+      const runtime = new ElectronBrowserRuntime(() => owner as never);
+      const state = await held(runtime, "tab");
+      runtime.close(state.lease);
+      await expect(
+        runtime.present({ lease: state.lease, presentationId: "s", bounds })
+      ).rejects.toThrow(/is closed or does not exist/);
+      expect(mocks.views).toHaveLength(1);
+    });
+
+    it("closing a replaced lease never closes its replacement", async () => {
+      const runtime = new ElectronBrowserRuntime(() => owner as never);
+      const old = await held(runtime, "tab");
+      const replacement = await runtime.materializeFile({
+        conversationKey,
+        resourceId: "preview:report",
+        file: path.join(root, "other.html"),
+        root,
+      });
+      runtime.close(old.lease);
+      expect(mocks.views[1]!.webContents.close).not.toHaveBeenCalled();
+      await expect(
+        runtime.present({ lease: old.lease, presentationId: "s", bounds })
+      ).resolves.toMatchObject({ lease: replacement.lease });
+    });
+  });
 });

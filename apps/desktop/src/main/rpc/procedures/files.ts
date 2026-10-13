@@ -114,6 +114,16 @@ export const filesRouter = impl.files.router({
       throw hostFileError(input.filePath)(result.error);
     return { deck: result.deck, sizeBytes: result.sizeBytes };
   }),
+  pendingPreview: impl.files.pendingPreview.handler(({ input, context }) =>
+    context.deps.serviceHost.previewTargets.pending(input.conversationKey)
+  ),
+  previewHandled: impl.files.previewHandled.handler(({ input, context }) => {
+    context.deps.serviceHost.previewTargets.handled(
+      input.conversationKey,
+      input.id,
+      input.shown
+    );
+  }),
   events: impl.files.events.handler(({ context, signal }) =>
     stream<FilesEvent>({
       path: "files.events",
@@ -139,6 +149,7 @@ export const filesRouter = impl.files.router({
                   ...(event.conversationKey == null
                     ? {}
                     : { conversationKey: event.conversationKey }),
+                  ...(event.id == null ? {} : { id: event.id }),
                 }
               : null;
           }

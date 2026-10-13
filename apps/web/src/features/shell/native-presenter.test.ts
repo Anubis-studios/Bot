@@ -91,3 +91,64 @@ it("equivalent background re-registration preserves the user's selected owner", 
   replacement();
   await presenter.refresh();
 });
+it("a failed present reaches its candidate and is not re-presented every tick", async () => {
+  const present = vi.fn(async () => {
+    throw new Error("Browser runtime r is closed or does not exist");
+  });
+  const presenter = createNativePresenter({
+    capture: async () => ({ dataUrl: null }),
+    hide: async () => {},
+    present,
+  } as never);
+  const failed = vi.fn();
+  const unregister = presenter.register({
+    id: "tab",
+    lease: { conversationKey: "k", resourceId: "r", generation: 1 } as never,
+    visible: () => true,
+    blocked: () => false,
+    bounds: () => ({ x: 0, y: 0, width: 100, height: 100 }),
+    failed,
+  });
+  await presenter.refresh();
+  await presenter.refresh();
+  await presenter.refresh();
+  expect(present).toHaveBeenCalledOnce();
+  expect(failed).toHaveBeenCalledWith(
+    expect.objectContaining({ message: expect.stringContaining("is closed") })
+  );
+  expect(presenter.owner.state).toBeNull();
+  unregister();
+});
+it("a runtime main rebuilt hands its new lease to the surface without a second present", async () => {
+  const rebuilt = { conversationKey: "k", resourceId: "r", generation: 7 };
+  const present = vi.fn(async () => ({ lease: rebuilt, url: "file:///a.pdf" }));
+  const hide = vi.fn(async () => {});
+  const presenter = createNativePresenter({
+    capture: async () => ({ dataUrl: null }),
+    hide,
+    present,
+  } as never);
+  const presented = vi.fn();
+  const candidate = (generation: number) => ({
+    id: "tab",
+    lease: { conversationKey: "k", resourceId: "r", generation } as never,
+    visible: () => true,
+    blocked: () => false,
+    bounds: () => ({ x: 0, y: 0, width: 100, height: 100 }),
+    presented,
+  });
+  const first = presenter.register(candidate(1));
+  await presenter.refresh();
+  expect(presented).toHaveBeenCalledWith(
+    expect.objectContaining({ lease: rebuilt })
+  );
+  // The surface re-registers with the lease it was handed: the same view.
+  const second = presenter.register(candidate(7));
+  first();
+  await presenter.refresh();
+  expect(present).toHaveBeenCalledOnce();
+  expect(hide).not.toHaveBeenCalled();
+  expect(presenter.owner.state).toBe("tab");
+  second();
+  await presenter.refresh();
+});

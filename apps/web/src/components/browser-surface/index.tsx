@@ -1,6 +1,9 @@
-import type { BrowserRuntimeLease } from "@abacus-ai/contract/contracts";
+import type {
+  BrowserRuntimeLease,
+  BrowserRuntimeState,
+} from "@abacus-ai/contract/contracts";
 import { useSelector, type Store } from "@tanstack/react-store";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 interface Presenter {
   captures: Store<Record<string, string>>;
@@ -13,6 +16,8 @@ interface Presenter {
     bounds(): { x: number; y: number; width: number; height: number };
     visible(): boolean;
     blocked(): boolean;
+    presented?(state: BrowserRuntimeState): void;
+    failed?(error: unknown): void;
   }): () => void;
 }
 export const BrowserSurface = ({
@@ -20,11 +25,17 @@ export const BrowserSurface = ({
   presenter,
   blocked,
   visible,
+  onPresented,
+  onError,
 }: {
   lease: BrowserRuntimeLease;
   presenter: Presenter;
   blocked: (rect: DOMRect) => boolean;
   visible: boolean;
+  /** Main showed the resource; its lease is new when the runtime was rebuilt. */
+  onPresented?: (state: BrowserRuntimeState) => void;
+  /** Main could not show it: the owner shows its error instead of a blank pane. */
+  onError?: (error: unknown) => void;
 }) => {
   const { t } = useTranslation();
   const { conversationKey, resourceId, generation } = lease;
@@ -36,6 +47,10 @@ export const BrowserSurface = ({
   }, [visible, blocked]);
   const owner = useSelector(presenter.owner, (s) => s);
   const capture = useSelector(presenter.captures, (s) => s[id]);
+  const presented = useEffectEvent((state: BrowserRuntimeState) =>
+    onPresented?.(state)
+  );
+  const failed = useEffectEvent((error: unknown) => onError?.(error));
   useEffect(() => {
     const unregister = presenter.register({
       id,
@@ -53,6 +68,8 @@ export const BrowserSurface = ({
         document.visibilityState === "hidden" ||
         !!document.activeViewTransition ||
         live.current.blocked(node.current.getBoundingClientRect()),
+      presented: (state) => presented(state),
+      failed: (error) => failed(error),
     });
     return unregister;
   }, [conversationKey, resourceId, generation, presenter, id]);

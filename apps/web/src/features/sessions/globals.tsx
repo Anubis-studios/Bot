@@ -1,4 +1,7 @@
-import { conversationRefFromKey } from "@abacus-ai/contract/conversation-scope";
+import {
+  conversationRefFromKey,
+  type ConversationKey,
+} from "@abacus-ai/contract/conversation-scope";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useEffectEvent, useRef } from "react";
 import { useTranslation } from "react-i18next";
@@ -23,14 +26,16 @@ import { markSessionUnread } from "./data/unread-store";
 import { adoptAgentBrowser } from "./dock/agent-browser";
 import { recordBackgroundPreview } from "./files/preview-bridge";
 import { handleSessionRunFinished, notifySessionAsk } from "./notify";
+interface PreviewEvent {
+  conversationKey?: string;
+  path?: string;
+  url?: string;
+  id?: string;
+}
 export const SessionsGlobals = ({
   preview,
 }: {
-  preview: (event: {
-    conversationKey?: string;
-    path?: string;
-    url?: string;
-  }) => boolean;
+  preview: (event: PreviewEvent) => false | Promise<boolean>;
 }) => {
   const { t } = useTranslation();
   const transport = useSessionsTransport();
@@ -78,8 +83,24 @@ export const SessionsGlobals = ({
   const ask = useEffectEvent((id: string, key: string) =>
     notifySessionAsk(deps(), id, key)
   );
-  const show = useEffectEvent((event: Parameters<typeof preview>[0]) => {
-    if (!preview(event)) recordBackgroundPreview(db, event);
+  const show = useEffectEvent((event: PreviewEvent) => {
+    const drawn = preview(event);
+    // No pane of that conversation is mounted: main keeps the target until
+    // one mounts; meanwhile its session gets the tab and the unread mark.
+    if (drawn === false) recordBackgroundPreview(db, event);
+    // Once the page drew (or failed to): main forgets it and tells the agent.
+    else if (event.id != null && event.conversationKey != null) {
+      const { id, conversationKey } = event;
+      void drawn
+        .then((shown) =>
+          transport.client.files.previewHandled({
+            conversationKey: conversationKey as ConversationKey,
+            id,
+            shown,
+          })
+        )
+        .catch(() => undefined);
+    }
   });
   useEffect(() => {
     const abort = new AbortController();
@@ -152,7 +173,11 @@ export const SessionsGlobals = ({
       transport,
       (event) => {
         if (event.type === "preview-open")
-          show({ conversationKey: event.conversationKey, path: event.path });
+          show({
+            conversationKey: event.conversationKey,
+            path: event.path,
+            ...(event.id == null ? {} : { id: event.id }),
+          });
       },
       abort.signal
     );

@@ -3,8 +3,8 @@
  *
  * The tool takes a list; every item becomes a row of the chat's files card,
  * and only the first (the primary) goes to the preview pane. A bot's turn
- * sends nothing to the pane at all. Opening the pane is a notification rather
- * than a call, so what is asserted here is the broadcast.
+ * sends nothing to the pane at all. The broadcast is stored in main until a
+ * pane answers; the result claims the pane only when one answered in ~1 s.
  */
 import fs from "fs";
 import os from "os";
@@ -13,6 +13,7 @@ import path from "path";
 import { sessionConversationKey } from "@abacus-ai/contract/conversation-scope";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { PreviewTargets } from "../session/preview-targets";
 import { McpAgentToolsServer } from "./mcp-agent-tools-server";
 
 const sent = vi.fn();
@@ -55,7 +56,7 @@ const present = async (
 };
 
 beforeEach(() => {
-  sent.mockClear();
+  sent.mockReset();
 });
 
 describe("presenting URLs", () => {
@@ -204,6 +205,91 @@ describe("which pane it lands in", () => {
 
     const payload = sent.mock.calls[0]?.[1] as Record<string, unknown>;
     expect(payload).not.toHaveProperty("conversationKey");
+  });
+});
+
+describe("what the model is told about the pane", () => {
+  const key = sessionConversationKey("workspace-1", "session-1");
+  const run = async (
+    answer: ((id: string, targets: PreviewTargets) => void) | null,
+    extra: Record<string, unknown> = {},
+    delay = 20
+  ) => {
+    const targets = new PreviewTargets();
+    sent.mockImplementation((_bus, event: { id?: string }) => {
+      if (answer != null && event.id != null)
+        setTimeout(() => answer(event.id!, targets), delay);
+    });
+    const started = performance.now();
+    const result = await (
+      server({
+        previewTargets: targets,
+        conversationKeyForSession: () => key,
+        ...extra,
+      }) as unknown as Executable
+    ).executeTool(
+      "present_deliverable",
+      { items: [{ path: "http://localhost:5173", label: "The app" }] },
+      "session-1"
+    );
+    return {
+      text: result.content.map((part) => part.text ?? "").join(""),
+      took: performance.now() - started,
+      targets,
+    };
+  };
+
+  it("says it is open only once the pane reported its page drew", async () => {
+    const { text, took, targets } = await run((id, t) =>
+      t.handled(key, id, true)
+    );
+    expect(text).toContain("The app is open in the preview pane.");
+    expect(took).toBeLessThan(500);
+    expect(targets.pending(key)).toBeNull();
+  });
+
+  it("without an answer in ~1 s, says it opens when the user views the session, and keeps it", async () => {
+    const { text, took, targets } = await run(null);
+    expect(text).toContain(
+      "The app opens in the preview pane when the user views this session."
+    );
+    expect(text).not.toContain("is open in the preview pane");
+    expect(took).toBeGreaterThanOrEqual(950);
+    expect(took).toBeLessThan(1_500);
+    expect(targets.pending(key)).toEqual({
+      id: expect.any(String),
+      path: "http://localhost:5173",
+    });
+  });
+
+  it("a draw that failed (or a pane that declined it) leaves only the files card", async () => {
+    const { text } = await run((id, t) => t.handled(key, id, false));
+    expect(text).toContain(
+      "Listed in the chat as a files card the user can open."
+    );
+    expect(text).not.toContain("preview pane");
+  });
+
+  it("a draw slower than ~1 s gets the honest fallback, and the late answer still clears it", async () => {
+    const { text, took, targets } = await run(
+      (id, t) => t.handled(key, id, true),
+      {},
+      1_200
+    );
+    expect(text).toContain("when the user views this session");
+    expect(text).not.toContain("is open in the preview pane");
+    expect(took).toBeLessThan(1_150);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(targets.pending(key)).toBeNull();
+  });
+
+  it("a bot's turn stores and waits on nothing", async () => {
+    const { took, targets } = await run(null, {
+      botIdForSession: () => "bot-1",
+    });
+    expect(sent).not.toHaveBeenCalled();
+    expect(took).toBeLessThan(500);
+    expect(targets.pending(key)).toBeNull();
   });
 });
 

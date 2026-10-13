@@ -602,6 +602,8 @@ export type IpcEvent =
       path: string;
       /** The conversation that presented it; the item lands in that pane only. */
       conversationKey?: ConversationKey;
+      /** The stored target's id, which the pane acknowledges. */
+      id?: string;
     } & IpcEventBase)
   | ({ type: "mcp-cursor-move"; x: number; y: number } & IpcEventBase)
   | ({ type: "mcp-cursor-click" } & IpcEventBase)

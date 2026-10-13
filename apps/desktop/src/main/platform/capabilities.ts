@@ -61,6 +61,8 @@ export const WEB_HOST_ALLOWED = [
   "files.readImageAsDataUrl",
   "files.readText",
   "files.readPptx",
+  "files.pendingPreview",
+  "files.previewHandled",
   "files.events",
   "sessions.turnState",
   "agent.feedback",

@@ -133,6 +133,8 @@ export interface BrowserRuntimeOperations {
     resourceId: string;
     file: string;
     root: string;
+    /** A viewer holding it open until it `release`s. */
+    holder?: string;
   }): Promise<BrowserRuntimeState> | BrowserRuntimeState;
   present(
     request: PresentBrowserRuntimeRequest
@@ -145,6 +147,11 @@ export interface BrowserRuntimeOperations {
   ): Promise<BrowserRuntimeCapture> | BrowserRuntimeCapture;
   hide(request: HideBrowserRuntimeRequest): Promise<void> | void;
   close(lease: BrowserRuntimeLease): Promise<void> | void;
+  release(request: {
+    conversationKey: ConversationKey;
+    resourceId: string;
+    holder: string;
+  }): Promise<void> | void;
   promoteScope(
     request: PromoteBrowserRuntimeScopeRequest
   ): Promise<BrowserRuntimeLease[]> | BrowserRuntimeLease[];

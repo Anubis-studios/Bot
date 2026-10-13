@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  BrowserRuntimeNotFoundError,
   BrowserRuntimeRegistry,
   BrowserScopePromotionError,
   StaleBrowserRuntimeError,
@@ -93,7 +94,16 @@ describe("browser runtime registry", () => {
       `detach:${browserOne}@${lease.generation}`,
       `close:${browserOne}@${lease.generation}`,
     ]);
-    expect(() => registry.snapshot(lease)).toThrow(StaleBrowserRuntimeError);
+    expect(() => registry.snapshot(lease)).toThrow(BrowserRuntimeNotFoundError);
+  });
+
+  it("names a closed runtime closed, never stale", () => {
+    const lease = registry.materialize(session, browserOne);
+    registry.close(lease);
+
+    expect(() => registry.present(lease)).toThrow(BrowserRuntimeNotFoundError);
+    expect(() => registry.present(lease)).toThrow(/is closed/);
+    expect(() => registry.present(lease)).not.toThrow(/stale/);
   });
 
   it("rejects stale operations after rematerialization", () => {
@@ -161,18 +171,20 @@ describe("browser runtime registry", () => {
     const other = registry.materialize(otherSession, browserOne);
 
     registry.disposeScope(draft);
-    expect(() => registry.snapshot(draftOne)).toThrow(StaleBrowserRuntimeError);
+    expect(() => registry.snapshot(draftOne)).toThrow(
+      BrowserRuntimeNotFoundError
+    );
     expect(registry.snapshot(sessionTwo).resourceId).toBe(browserTwo);
     expect(registry.snapshot(other).resourceId).toBe(browserOne);
 
     registry.disposeWorkspace("workspace-one");
     expect(() => registry.snapshot(sessionTwo)).toThrow(
-      StaleBrowserRuntimeError
+      BrowserRuntimeNotFoundError
     );
     expect(registry.snapshot(other).resourceId).toBe(browserOne);
 
     registry.disposeAll();
-    expect(() => registry.snapshot(other)).toThrow(StaleBrowserRuntimeError);
+    expect(() => registry.snapshot(other)).toThrow(BrowserRuntimeNotFoundError);
     expect(host.detach).toHaveBeenCalledTimes(3);
   });
 
@@ -186,6 +198,6 @@ describe("browser runtime registry", () => {
     expect(() => registry.close(lease)).toThrow(AggregateError);
     expect(host.detach).toHaveBeenCalledOnce();
     expect(events).toContain(`close:${browserOne}@${lease.generation}`);
-    expect(() => registry.snapshot(lease)).toThrow(StaleBrowserRuntimeError);
+    expect(() => registry.snapshot(lease)).toThrow(BrowserRuntimeNotFoundError);
   });
 });

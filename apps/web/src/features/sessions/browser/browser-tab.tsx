@@ -33,6 +33,7 @@ import {
 import { Input } from "#renderer/ui/input";
 
 import { useSessionsTransport } from "../data/queries";
+import type { TabDraw } from "../dock/tab-draws";
 import { acquireLocalFile } from "./local-materialization";
 /** What a browser tab opens on when nothing asked for a page. */
 export const NEW_TAB_URL = "https://www.google.com/";
@@ -62,6 +63,7 @@ export const BrowserTab = ({
   blocked,
   scope,
   onState,
+  onDraw,
 }: {
   row: Pick<SessionRow, "workspaceId" | "id">;
   scope?: ConversationKey;
@@ -73,6 +75,8 @@ export const BrowserTab = ({
   presenter: ComponentProps<typeof BrowserSurface>["presenter"];
   blocked: ComponentProps<typeof BrowserSurface>["blocked"];
   onState?(state: { url: string; title: string }): void;
+  /** Whether the page actually drew: the native present succeeded or failed. */
+  onDraw?(draw: TabDraw): void;
 }) => {
   const { t } = useTranslation();
   const transport = useSessionsTransport();
@@ -92,6 +96,11 @@ export const BrowserTab = ({
     onState?.({ url: next.url, title: next.title });
   };
   const report = useEffectEvent(apply);
+  const draw = useEffectEvent((next: TabDraw) => onDraw?.(next));
+  useEffect(() => {
+    if (!visible) return;
+    return () => draw("hidden");
+  }, [visible]);
   useEffect(() => {
     let live = true;
     const local = file
@@ -116,7 +125,11 @@ export const BrowserTab = ({
           report(s);
         }
       })
-      .catch((e) => live && setError(String(e)));
+      .catch((e) => {
+        if (!live) return;
+        setError(String(e));
+        draw("failed");
+      });
     return () => {
       live = false;
       local?.release();
@@ -274,6 +287,16 @@ export const BrowserTab = ({
           presenter={presenter}
           visible={visible}
           blocked={blocked}
+          onPresented={(next) => {
+            // Main rebuilt a runtime closed underneath: follow its new lease.
+            if (next.lease.generation !== state.lease.generation) apply(next);
+            onDraw?.("drawn");
+          }}
+          onError={(e) => {
+            setState(null);
+            setError(String(e));
+            onDraw?.("failed");
+          }}
         />
       ) : null}
     </div>

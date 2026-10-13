@@ -42,7 +42,7 @@ export const SessionStartResources = ({
   children: ReactNode;
   register(
     key: string,
-    open: (event: { path?: string; url?: string }) => void
+    open: (event: { path?: string; url?: string }) => boolean
   ): () => void;
   presenter: ComponentProps<typeof BrowserSurface>["presenter"];
   blocked: ComponentProps<typeof BrowserSurface>["blocked"];
@@ -57,11 +57,11 @@ export const SessionStartResources = ({
   );
   const [selected, setSelected] = useState<string | null>(null);
   const receive = useEffectEvent((event: { path?: string; url?: string }) => {
-    if (!key || !workspace?.path) return;
+    if (!key || !workspace?.path) return false;
     const path = event.path?.startsWith(`${workspace.path}/`)
       ? event.path.slice(workspace.path.length + 1)
       : event.path;
-    if (path && !isRelativePath(path)) return;
+    if (path && !isRelativePath(path)) return false;
     const match = entries.tabs.find((tab) =>
       path ? tab.path === path : tab.url === event.url
     );
@@ -74,6 +74,7 @@ export const SessionStartResources = ({
       ...(path ? { path } : { url: event.url }),
     });
     setSelected(ref);
+    return true;
   });
   useEffect(
     () => (key ? register(key, (event) => receive(event)) : undefined),

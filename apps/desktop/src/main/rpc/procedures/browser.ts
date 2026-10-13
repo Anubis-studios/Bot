@@ -124,6 +124,7 @@ export const browserRouter = impl.browser.router({
           resourceId: input.resourceId,
           file: checked.file,
           root: checked.root,
+          ...(input.holder == null ? {} : { holder: input.holder }),
         });
       }
     ),
@@ -147,6 +148,12 @@ export const browserRouter = impl.browser.router({
       requireMainRenderer(context);
       await context.deps.browserRuntime.close(input);
     }),
+    release: impl.browser.runtime.release.handler(
+      async ({ input, context }) => {
+        requireMainRenderer(context);
+        await context.deps.browserRuntime.release(input);
+      }
+    ),
     promoteScope: impl.browser.runtime.promoteScope.handler(
       ({ input, context }) => {
         requireMainRenderer(context);

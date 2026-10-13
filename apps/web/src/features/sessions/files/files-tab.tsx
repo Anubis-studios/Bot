@@ -7,6 +7,7 @@ import { useSelector } from "@tanstack/react-store";
 // The tree adapter treats paths identity as a topology update.
 // eslint-disable-next-line no-restricted-imports
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffectEvent } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -54,8 +55,13 @@ export const SessionFilePreview = ({
   renderLocal,
   preview = false,
   inTab = preview,
+  visible = true,
+  onShown,
 }: {
   preview?: boolean;
+  visible?: boolean;
+  /** The in-page viewer (not a native view) is on screen: it counts as drawn. */
+  onShown?: () => void;
   /** Rendered in a dock tab that already shows the file name. */
   inTab?: boolean;
   root: string;
@@ -64,6 +70,14 @@ export const SessionFilePreview = ({
 }) => {
   const transport = useSessionsTransport();
   const outside = isAbsolutePreviewPath(path);
+  const native =
+    IS_ELECTRON &&
+    ["pdf", "html"].includes(previewKind(outside ? path : `${root}/${path}`));
+  const shown = useEffectEvent(() => onShown?.());
+  const viewer = !native && (outside || isRelativePath(path));
+  useEffect(() => {
+    if (viewer && visible) shown();
+  }, [viewer, visible, path]);
   if (!outside && !isRelativePath(path))
     return (
       <p role="alert" className="p-4">

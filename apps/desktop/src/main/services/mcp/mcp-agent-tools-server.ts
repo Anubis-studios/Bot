@@ -100,6 +100,10 @@ import {
   resolveSender,
   type SenderCandidate,
 } from "../messaging/sender-resolution";
+import type {
+  PreviewOutcome,
+  PreviewTargets,
+} from "../session/preview-targets";
 import { locateHostFile } from "../workspace/host-path";
 import type { SkillsService } from "../workspace/skills-service";
 import { McpHttpServer, type McpToolListing } from "./mcp-http-server";
@@ -137,6 +141,8 @@ const UNREAD_PER_CHAT_DEFAULT = 50;
 const UNREAD_MARKED_PEEK = 5;
 /** The server takes this much text in one WhatsApp message from AbacusAI Bot. */
 const MAX_BOT_NUMBER_TEXT = 4_000;
+/** How long `present_deliverable` waits to hear the pane showed it. */
+const PANE_ACK_MS = 1_000;
 
 type UnreadFetch =
   | {
@@ -216,6 +222,11 @@ export interface McpAgentToolsServerOptions {
    * renderer opens it in that pane and no other. Null for an unknown session.
    */
   conversationKeyForSession?: (sessionId: string) => ConversationKey | null;
+  /**
+   * Where `present_deliverable` keeps "show this" for the conversation's
+   * pane, and hears whether a pane showed it.
+   */
+  previewTargets?: Pick<PreviewTargets, "record" | "outcome">;
   /**
    * What the session's chat can do where a host lane says (the hosted
    * WhatsApp lane); null for every other session and bot, which are app
@@ -1391,21 +1402,34 @@ export class McpAgentToolsServer extends McpHttpServer {
   }
 
   /**
-   * Tell the renderer to show a path or URL in the pane of the conversation
-   * that produced it, not whatever chat is on screen. A notification, not a
-   * call: nothing here can know the pane rendered it, hence "sent".
+   * Show a path or URL in the pane of the conversation that produced it,
+   * not whatever chat is on screen. Main stores it until a pane of that
+   * conversation takes it, and waits up to `PANE_ACK_MS` to hear one did;
+   * "sent" when there is no conversation to store it under.
    */
-  private broadcastPreviewOpen(target: string, callerSession?: string): void {
+  private async openInPane(
+    target: string,
+    callerSession?: string
+  ): Promise<PreviewOutcome | "sent"> {
     const conversationKey =
       callerSession == null
         ? null
         : (this.options.conversationKeyForSession?.(callerSession) ?? null);
+    const targets = this.options.previewTargets;
+    const id =
+      conversationKey == null || targets == null
+        ? null
+        : targets.record(conversationKey, target);
+    // Listening before the event goes, so no answer can come first.
+    const outcome = id == null ? null : targets!.outcome(id, PANE_ACK_MS);
     emitHostEvent({
       type: "preview-open",
       path: target,
       ...(conversationKey == null ? {} : { conversationKey }),
+      ...(id == null ? {} : { id }),
       emittedAt: new Date().toISOString(),
     });
+    return outcome ?? "sent";
   }
 
   /**
@@ -1565,8 +1589,10 @@ export class McpAgentToolsServer extends McpHttpServer {
     // files card. A bot's turn opens nothing: a document jumping open over
     // the user's unrelated work reads as the app misbehaving.
     const forBot = this.isBotCaller(callerSession);
-    const toPane = !forBot && channel.pane;
-    if (toPane) this.broadcastPreviewOpen(first.target, callerSession);
+    const pane =
+      !forBot && channel.pane
+        ? await this.openInPane(first.target, callerSession)
+        : null;
 
     const summary = String(args.summary ?? "").trim();
     const lines = [
@@ -1576,9 +1602,13 @@ export class McpAgentToolsServer extends McpHttpServer {
           `- [${item.label}](${item.isUrl ? item.target : fileUrl(item.target)})`
       ),
       "",
-      toPane
-        ? `Listed in the chat as a files card; ${first.label} was sent to the preview pane.`
-        : "Listed in the chat as a files card the user can open.",
+      pane === "shown"
+        ? `Listed in the chat as a files card; ${first.label} is open in the preview pane.`
+        : pane === "waiting"
+          ? `Listed in the chat as a files card; ${first.label} opens in the preview pane when the user views this session.`
+          : pane === "sent"
+            ? `Listed in the chat as a files card; ${first.label} was sent to the preview pane.`
+            : "Listed in the chat as a files card the user can open.",
     ];
 
     if (missing.length > 0) {

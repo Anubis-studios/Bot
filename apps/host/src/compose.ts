@@ -134,6 +134,7 @@ export const composeNodeHost = async () => {
       capture: refuseBrowser,
       hide: refuseBrowser,
       close: refuseBrowser,
+      release: refuseBrowser,
       promoteScope: refuseBrowser,
     },
     update: {

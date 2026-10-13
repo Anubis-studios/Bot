@@ -68,6 +68,7 @@ import {
   openTab,
   panelTabsStore,
 } from "#renderer/features/sessions/dock/panel-tabs-store";
+import { awaitTabDraw } from "#renderer/features/sessions/dock/tab-draws";
 import {
   isAbsolutePreviewPath,
   previewTargetPath,
@@ -80,7 +81,10 @@ import {
   dispatchAppHotkey,
 } from "#renderer/features/shell/hotkeys";
 import { nativePresenterFor } from "#renderer/features/shell/platform-presenter";
-import { registerPreviewConsumer } from "#renderer/features/shell/preview-consumers";
+import {
+  claimStoredPreview,
+  registerPreviewConsumer,
+} from "#renderer/features/shell/preview-consumers";
 import { shellStore } from "#renderer/features/shell/shell-store";
 import { SidePanelOverride } from "#renderer/features/shell/side-panel-slot";
 import { TopBarSlot } from "#renderer/features/shell/top-bar-slots";
@@ -188,20 +192,34 @@ const DockHotkeys = ({
 };
 const PreviewRegistration = ({
   conversationKey,
+  files,
   open,
 }: {
   conversationKey: string;
-  open: (path?: string, url?: string) => void;
+  files: Parameters<typeof claimStoredPreview>[0];
+  open: (path?: string, url?: string) => boolean | Promise<boolean>;
 }) => {
   const receive = useEffectEvent(open);
-  useEffect(
-    () =>
-      registerPreviewConsumer({
-        owns: (key) => key === undefined || key === conversationKey,
-        open: (event) => receive(event.path, event.url),
-      }),
-    [conversationKey]
+  const claim = useEffectEvent(
+    (open: Parameters<typeof claimStoredPreview>[2], signal: AbortSignal) =>
+      claimStoredPreview(files, conversationKey, open, signal)
   );
+  useEffect(() => {
+    const consumer = {
+      owns: (key: string | undefined) =>
+        key === undefined || key === conversationKey,
+      open: (event: { path?: string; url?: string }) =>
+        receive(event.path, event.url),
+    };
+    const unregister = registerPreviewConsumer(consumer);
+    // What `present_deliverable` stored while this pane was not mounted.
+    const abort = new AbortController();
+    void claim(consumer.open, abort.signal);
+    return () => {
+      abort.abort();
+      unregister();
+    };
+  }, [conversationKey]);
   return null;
 };
 const SessionGone = () => {
@@ -353,12 +371,10 @@ const SessionRoute = () => {
     const ref = existing?.ref ?? `browser:${crypto.randomUUID()}`;
     openTab(key, { ref, title: url ?? t("sessions.dock.browser"), url });
     select(ref);
+    return ref;
   };
-  const openFile = (path: string) => {
-    if (isUrl(path)) {
-      openUrl(path);
-      return;
-    }
+  const openFile = (path: string): string | undefined => {
+    if (isUrl(path)) return openUrl(path);
     // Inside the checkout, or any absolute file the panel has a viewer for
     // (guest `/workspace/...` paths map onto the checkout). What it cannot
     // show goes to the OS: only reached from an explicit click.
@@ -380,24 +396,30 @@ const SessionRoute = () => {
       path: relative,
     });
     select(ref);
+    return ref;
   };
   return (
     <>
       <PreviewRegistration
         conversationKey={key}
+        files={transport.client.files}
         open={(path, url) => {
           // `present_deliverable` opens the panel unasked, so only what the
           // panel can show: a URL, or a workspace file with an in-app viewer.
           // Anything else never launches another app on its own.
-          if (path && isUrl(path)) openUrl(path);
+          let ref: string | undefined;
+          if (path && isUrl(path)) ref = openUrl(path);
           else if (path) {
             if (previewTargetPath(path, root) !== null && hasInAppViewer(path))
-              openFile(path);
+              ref = openFile(path);
           } else if (hasAgentBrowserTab(key)) {
             // The agent's own browser follows the agent; a second view
             // of the URL would not.
             select(AGENT_BROWSER_TAB);
-          } else if (url) openUrl(url);
+            ref = AGENT_BROWSER_TAB;
+          } else if (url) ref = openUrl(url);
+          // "Shown" only once the tab's page actually drew.
+          return ref == null ? false : awaitTabDraw(key, ref);
         }}
       />
       <TopBarSlot>

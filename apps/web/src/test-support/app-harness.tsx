@@ -5,7 +5,10 @@ import {
 } from "@abacus-ai/contract/contract";
 import type { RunFinishedNotice } from "@abacus-ai/contract/contract/ai";
 import type { MaterializeBrowserRuntimeFileRequest } from "@abacus-ai/contract/contract/browser";
-import type { FilesEvent } from "@abacus-ai/contract/contract/files";
+import type {
+  FilesEvent,
+  PendingPreview,
+} from "@abacus-ai/contract/contract/files";
 import type { TerminalEvent } from "@abacus-ai/contract/contract/terminal";
 /**
  * The whole app over test doubles: a memory transport answering the handful
@@ -187,6 +190,7 @@ const shellRouter = (
         ),
         present: os.browser.runtime.present.handler(({ input, context }) => {
           context.calls.push(["browser.runtime.present", input]);
+          if (options.present) return options.present(input);
           return {
             lease: input.lease,
             url: "about:blank",
@@ -204,6 +208,9 @@ const shellRouter = (
           }
         ),
         close: os.browser.runtime.close.handler(() => {}),
+        release: os.browser.runtime.release.handler(({ input, context }) => {
+          context.calls.push(["browser.runtime.release", input]);
+        }),
       },
     },
     models: { list: os.models.list.handler(() => options.models ?? []) },
@@ -327,6 +334,12 @@ const shellRouter = (
         lastUpdatedAt: "now",
       })),
       search: os.files.search.handler(() => ({ items: [] })),
+      pendingPreview: os.files.pendingPreview.handler(
+        ({ input }) => options.pendingPreview?.(input.conversationKey) ?? null
+      ),
+      previewHandled: os.files.previewHandled.handler(({ input, context }) => {
+        context.calls.push(["files.previewHandled", input]);
+      }),
       rename: os.files.rename.handler(async ({ input, context }) => {
         context.calls.push(["files.rename", input]);
         await options.renameFile?.(input);
@@ -377,11 +390,17 @@ export interface HarnessOptions {
   materializeFile?: (
     input: MaterializeBrowserRuntimeFileRequest
   ) => Promise<BrowserRuntimeState>;
+  /** The native present's answer; by default it succeeds with the lease. */
+  present?: (
+    input: Parameters<AppClient["browser"]["runtime"]["present"]>[0]
+  ) => Promise<BrowserRuntimeState>;
   beforeOpenChat?: () => Promise<void>;
   beforeHydrate?: () => Promise<void>;
   ai?: AiClient;
   runFinished?: () => AsyncGenerator<RunFinishedNotice>;
   filesEvents?: () => AsyncGenerator<FilesEvent>;
+  /** Main's stored `present_deliverable` target for a conversation. */
+  pendingPreview?: (conversationKey: string) => PendingPreview | null;
   terminalEvents?: () => AsyncGenerator<TerminalEvent>;
   fileTree?: FileTreeNode[];
   renameFile?: (
