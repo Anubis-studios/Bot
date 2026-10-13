@@ -1,6 +1,17 @@
 import { useParams, useSearch } from "@tanstack/react-router";
 import { useSelector } from "@tanstack/react-store";
-import { CheckCircle2, ChevronLeft, CircleAlert, Loader2 } from "lucide-react";
+import {
+  CheckCircle2,
+  ChevronLeft,
+  CircleAlert,
+  CirclePlay,
+  Loader2,
+  Pause,
+  Pencil,
+  Play,
+  SquareArrowOutUpRight,
+  Trash2,
+} from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -20,7 +31,6 @@ import {
   CollapsibleContent,
 } from "#renderer/ui/collapsible";
 import { Input } from "#renderer/ui/input";
-import { Switch } from "#renderer/ui/switch";
 
 import {
   runsView,
@@ -162,10 +172,22 @@ const RunsRail = ({
  * one is picked), the routine's facts and every run in the rail, and the
  * editor along the bottom. Narrow, the rail is the page until a run opens.
  */
+export interface RoutineAction {
+  id: string;
+  label: string;
+  icon: ReactNode;
+  onSelect(): void;
+}
 export const RoutinePage = ({
+  renderTitle,
   renderRunReport,
   renderRequests,
 }: {
+  /** The routine's identity and actions, for the title bar. */
+  renderTitle?: (title: {
+    identity: ReactNode;
+    actions: RoutineAction[];
+  }) => ReactNode;
   renderRunReport?: (runId: string) => ReactNode;
   /** The connector asks of these runs (the open run's are in its report). */
   renderRequests?: (sessionIds: ReadonlySet<string>) => ReactNode;
@@ -179,7 +201,23 @@ export const RoutinePage = ({
   const { routines, runs, workspaces, sessions, bots } = useRoutinesData();
   const row = routines.find((r) => r.id === routineId);
   const hostedOff = useHostedOff();
+  const [deleting, setDeleting] = useState(false);
   if (!row) return <RoutineGone />;
+  const state = routineState(row, runs, sessions, undefined, hostedOff);
+  const subtitle = [
+    scheduleLabel(row, t, i18n.language),
+    isHosted(row)
+      ? // An event routine has no time, so no zone to name.
+        row.hosted?.timezone != null &&
+        (row.schedule != null || row.runAt != null)
+        ? t("routines.hosted.info", { zone: row.hosted.timezone })
+        : t("routines.hosted.badge")
+      : (workspaces.find(
+          (w) =>
+            w.id === row.workspaceId && w.kind !== "routine" && w.kind !== "bot"
+        )?.label ?? t("phase5.ownFolder")),
+    ...(row.botName ? [t("phase5.madeBy", { name: row.botName })] : []),
+  ].join(" · ");
   const hosted = isHosted(row);
   const attempts = runsView(row, runs);
   // Only a run whose session is still here has a report to open.
@@ -289,110 +327,103 @@ export const RoutinePage = ({
   );
   return (
     <div className="flex size-full min-h-0 min-w-0 flex-col">
-      <header className="flex min-w-0 flex-wrap items-center gap-3 border-b px-4 py-3">
-        {!wide && selected != null && (
-          <Button
-            size="sm"
-            variant="ghost"
-            aria-label={t("phase5.closeRun")}
-            onClick={() => pick(undefined)}
-          >
-            <ChevronLeft />
-          </Button>
-        )}
-        <RoutineIdentity
-          bot={bots.find((b) => b.id === row.botId)}
-          state={routineState(row, runs, sessions, undefined, hostedOff)}
-          size={32}
-        />
-        <div className="me-auto min-w-0 flex-1 basis-48">
-          <h1 className="truncate text-sm font-semibold">{row.name}</h1>
-          <p className="text-muted-foreground truncate text-xs">
-            {scheduleLabel(row, t, i18n.language)} ·{" "}
-            {hosted
-              ? // An event routine has no time, so no zone to name.
-                row.hosted?.timezone != null &&
-                (row.schedule != null || row.runAt != null)
-                ? t("routines.hosted.info", { zone: row.hosted.timezone })
-                : t("routines.hosted.badge")
-              : (workspaces.find(
-                  (w) =>
-                    w.id === row.workspaceId &&
-                    w.kind !== "routine" &&
-                    w.kind !== "bot"
-                )?.label ?? t("phase5.ownFolder"))}
-            {row.botName && ` · ${t("phase5.madeBy", { name: row.botName })}`}
-          </p>
-        </div>
-        <div className="flex max-w-full flex-wrap items-center gap-2">
-          {showReport && (
-            <Button
-              size="sm"
-              variant="ghost"
-              nativeButton={false}
-              render={
-                <AppLink
-                  to="/sessions/$sessionId"
-                  params={{ sessionId: selected }}
-                />
-              }
-            >
-              {t("phase5.openSession")}
-            </Button>
-          )}
-          <Button size="sm" variant="secondary" onClick={runNow}>
-            {t("phase5.runNow")}
-          </Button>
-          <Button
-            size="sm"
-            variant="secondary"
-            nativeButton={false}
-            render={
-              <AppLink
-                to="/routines/$routineId/edit"
-                params={{ routineId: row.id }}
-                search={{ run }}
-                transition="none"
-              />
-            }
-          >
-            {t("phase5.edit")}
-          </Button>
-          <label className="flex items-center gap-2 text-xs">
-            <span>{t("routines.enabled")}</span>
-            <Switch
-              aria-label={t("phase5.routineOn")}
-              checked={row.enabled}
-              onCheckedChange={(enabled) =>
-                void db.collections.routines
-                  .update(row.id, (d) => {
-                    d.enabled = enabled;
-                  })
-                  .isPersisted.promise.catch((error: unknown) =>
-                    showSaveFailure(error, transport, t)
-                  )
-              }
+      <h1 className="sr-only">{row.name}</h1>
+      {renderTitle?.({
+        identity: (
+          <span className="flex min-w-0 items-center gap-2 text-[13px]">
+            <RoutineIdentity
+              bot={bots.find((b) => b.id === row.botId)}
+              state={state}
+              size={22}
             />
-          </label>
-          <ConfirmAction
-            title={t("phase5.deleteRoutine")}
-            description={t("phase5.deleteRoutineDescription", {
-              name: row.name,
-            })}
-            label={t("phase5.delete")}
-            onConfirm={async () => {
-              await navigate({ to: "/routines", replace: true });
-              try {
-                await db.collections.routines.delete(row.id).isPersisted
-                  .promise;
-              } catch (error) {
-                showError(t("phase5.failed"));
-                throw error;
-              }
-            }}
-          />
+            <span className="text-sidebar-foreground min-w-0 truncate font-medium">
+              {row.name}
+            </span>
+            <span className="text-muted-foreground min-w-0 truncate text-xs">
+              {state === "scheduled"
+                ? subtitle
+                : `${t(`phase5.states.${state}`)} · ${subtitle}`}
+            </span>
+          </span>
+        ),
+        actions: [
+          ...(showReport
+            ? [
+                {
+                  id: "open-session",
+                  label: t("phase5.openSession"),
+                  icon: <SquareArrowOutUpRight />,
+                  onSelect: () =>
+                    void navigate({
+                      to: "/sessions/$sessionId",
+                      params: { sessionId: selected },
+                    }),
+                },
+              ]
+            : []),
+          {
+            id: "run-now",
+            label: t("phase5.runNow"),
+            icon: <Play />,
+            onSelect: runNow,
+          },
+          {
+            id: "toggle",
+            label: t(row.enabled ? "phase5.pause" : "phase5.resume"),
+            icon: row.enabled ? <Pause /> : <CirclePlay />,
+            onSelect: () =>
+              void db.collections.routines
+                .update(row.id, (d) => {
+                  d.enabled = !row.enabled;
+                })
+                .isPersisted.promise.catch((error: unknown) =>
+                  showSaveFailure(error, transport, t)
+                ),
+          },
+          {
+            id: "edit",
+            label: t("phase5.edit"),
+            icon: <Pencil />,
+            onSelect: () =>
+              void navigate({
+                to: "/routines/$routineId/edit",
+                params: { routineId: row.id },
+                search: { run },
+                transition: "none",
+              }),
+          },
+          {
+            id: "delete",
+            label: t("phase5.delete"),
+            icon: <Trash2 />,
+            onSelect: () => setDeleting(true),
+          },
+        ],
+      })}
+      <ConfirmAction
+        open={deleting}
+        onOpenChange={setDeleting}
+        title={t("phase5.deleteRoutine")}
+        description={t("phase5.deleteRoutineDescription", { name: row.name })}
+        label={t("phase5.delete")}
+        onConfirm={async () => {
+          await navigate({ to: "/routines", replace: true });
+          try {
+            await db.collections.routines.delete(row.id).isPersisted.promise;
+          } catch (error) {
+            showError(t("phase5.failed"));
+            throw error;
+          }
+        }}
+      />
+      {!wide && selected != null && (
+        <div className="border-b px-2 py-1.5">
+          <Button size="sm" variant="ghost" onClick={() => pick(undefined)}>
+            <ChevronLeft />
+            {t("phase5.runs")}
+          </Button>
         </div>
-      </header>
+      )}
       {hosted && hostedOff && (
         <p role="status" className="text-muted-foreground px-4 pt-3 text-xs">
           {t("routines.hosted.unavailable")}

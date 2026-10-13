@@ -1,20 +1,130 @@
-import { createFileRoute, Outlet, notFound } from "@tanstack/react-router";
+import { sessionConversationKey } from "@abacus-ai/contract/conversation-scope";
+import {
+  createFileRoute,
+  Outlet,
+  notFound,
+  useNavigate,
+} from "@tanstack/react-router";
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
+import { hasInAppViewer, isUrl } from "#renderer/components/file-preview";
+import { TitleBarIconButton } from "#renderer/components/title-bar";
 import { loadFixtureRuntime } from "#renderer/features/chat/fixture-runtime";
 import { ChatView } from "#renderer/features/chat/kit/lazy-view";
 import { chatLoading } from "#renderer/features/chat/runtime/lazy-runtime";
 import { useConnectFlow } from "#renderer/features/library/connect-flow";
 import { ConnectorFieldsDialog } from "#renderer/features/library/connectors";
 import { runsView } from "#renderer/features/routines/data";
-import { RoutinePage, RoutineGone } from "#renderer/features/routines/page";
+import {
+  RoutinePage,
+  RoutineGone,
+  type RoutineAction,
+} from "#renderer/features/routines/page";
 import { RunRequests } from "#renderer/features/routines/run-requests";
-import { TopBarSlot } from "#renderer/features/shell/top-bar-slots";
+import {
+  deliverablesAfter,
+  rowEndIndex,
+  sessionDeliverablesCard,
+} from "#renderer/features/sessions/chat/deliverables";
+import {
+  openTab,
+  panelTabsStore,
+} from "#renderer/features/sessions/dock/panel-tabs-store";
+import {
+  isAbsolutePreviewPath,
+  previewTargetPath,
+} from "#renderer/features/sessions/files/preview-target";
+import {
+  TopBarSlot,
+  useTopBarActions,
+} from "#renderer/features/shell/top-bar-slots";
 import { RoutineSearch } from "#renderer/lib/navigation/search";
+import { IS_ELECTRON } from "#renderer/lib/platform";
+import { platformSystem } from "#renderer/lib/platform-system";
+/** The routine in the title bar: its identity, and its actions as icons. */
+const RoutineTitle = ({
+  identity,
+  actions,
+}: {
+  identity: ReactNode;
+  actions: RoutineAction[];
+}) => {
+  useTopBarActions(
+    actions.map((action) => ({
+      ...action,
+      render: (
+        <TitleBarIconButton label={action.label} onClick={action.onSelect}>
+          {action.icon}
+        </TitleBarIconButton>
+      ),
+    }))
+  );
+  return <TopBarSlot>{identity}</TopBarSlot>;
+};
 const RoutineRoute = () => {
   const { t } = useTranslation();
   const { transport, db, chat } = Route.useRouteContext();
   const flow = useConnectFlow();
+  const navigate = useNavigate();
+  // A run has no dock of its own: what its tools open (a file, a page, a
+  // subagent, a diff) opens in the run's session, where the dock shows it.
+  const handoff = (runId: string, root: string | null) => {
+    const row = db.collections.sessions.get(runId);
+    const key = row ? sessionConversationKey(row.workspaceId, runId) : null;
+    const openSessionTab = (tab: Parameters<typeof openTab>[1]) => {
+      if (key) openTab(key, tab);
+      void navigate({
+        to: "/sessions/$sessionId",
+        params: { sessionId: runId },
+        search: { tab: tab.ref },
+      });
+    };
+    const openUrl = (url: string) =>
+      openSessionTab({
+        ref:
+          (key
+            ? panelTabsStore.state[key]?.tabs.find(
+                (tab) => tab.ref.startsWith("browser:") && tab.url === url
+              )?.ref
+            : undefined) ?? `browser:${crypto.randomUUID()}`,
+        title: url,
+        url,
+      });
+    const openFile = (path: string) => {
+      if (isUrl(path)) return openUrl(path);
+      const target = previewTargetPath(path, root);
+      const inside = target !== null && !isAbsolutePreviewPath(target);
+      if (target === null || (!inside && !hasInAppViewer(target)))
+        return void platformSystem(transport.client).openPath({ path });
+      openSessionTab({
+        ref:
+          (key
+            ? panelTabsStore.state[key]?.tabs.find(
+                (tab) => tab.ref.startsWith("preview:") && tab.path === target
+              )?.ref
+            : undefined) ?? `preview:${crypto.randomUUID()}`,
+        title: path.split("/").at(-1) ?? path,
+        path: target,
+      });
+    };
+    return {
+      openUrl,
+      openFile,
+      openSubagent: (agent: string) =>
+        void navigate({
+          to: "/sessions/$sessionId",
+          params: { sessionId: runId },
+          search: { tab: "agents", agent },
+        }),
+      openDiff: (path: string, toolKey?: string) =>
+        void navigate({
+          to: "/sessions/$sessionId/diff",
+          params: { sessionId: runId },
+          search: { path, toolKey, source: toolKey ? "tool" : "git" },
+        }),
+    };
+  };
   const requests = (sessionIds: ReadonlySet<string>, className?: string) => (
     <RunRequests
       sessionIds={sessionIds}
@@ -32,37 +142,71 @@ const RoutineRoute = () => {
   );
   return (
     <>
-      <TopBarSlot>{t("shell.rail.routines")}</TopBarSlot>
       <RoutinePage
+        renderTitle={(title) => <RoutineTitle {...title} />}
         renderRequests={(sessionIds) =>
           requests(sessionIds, "mx-0 mb-0 max-w-none")
         }
-        renderRunReport={(runId) => (
-          <ChatView
-            threadId={runId}
-            skin="bot"
-            runtime={chat}
-            composer={{
-              mode: "full",
-              placeholder: "",
-              attachmentsBase: null,
-              showModeChip: false,
-              model: null,
-              readOnly: { reason: t("phase5.readOnlyRun") },
-            }}
-            slots={{
-              decorateMessage: (message, ctx) => ({
-                hidden: message.role === "user" && ctx.index === 0,
-              }),
-              banner: requests(new Set([runId])),
-            }}
-            workspaceRoot={
-              db.collections.workspaces.get(
-                db.collections.sessions.get(runId)?.workspaceId ?? ""
-              )?.path ?? null
-            }
-          />
-        )}
+        renderRunReport={(runId) => {
+          const root =
+            db.collections.workspaces.get(
+              db.collections.sessions.get(runId)?.workspaceId ?? ""
+            )?.path ?? null;
+          const open = handoff(runId, root);
+          return (
+            <ChatView
+              threadId={runId}
+              skin="session"
+              runtime={chat}
+              composer={{
+                mode: "full",
+                placeholder: "",
+                attachmentsBase: null,
+                showModeChip: false,
+                model: null,
+                readOnly: { reason: t("phase5.readOnlyRun") },
+              }}
+              onOpenFile={open.openFile}
+              onOpenSubagent={open.openSubagent}
+              onOpenDiff={open.openDiff}
+              slots={{
+                decorateMessage: (message, context) => {
+                  if (message.role !== "assistant") return null;
+                  const at = rowEndIndex(message, context);
+                  const files =
+                    at < 0
+                      ? null
+                      : deliverablesAfter(
+                          context.messages,
+                          at,
+                          context.runActive
+                        );
+                  return files == null
+                    ? null
+                    : {
+                        after: sessionDeliverablesCard(files, {
+                          workspaceRoot: root,
+                          onOpenFile: open.openFile,
+                          onOpenUrl: open.openUrl,
+                          onOpenExternal: (url) =>
+                            void platformSystem(transport.client).openExternal({
+                              url,
+                            }),
+                          onReveal: IS_ELECTRON
+                            ? (path) =>
+                                void transport.client.system.showItemInFolder({
+                                  path,
+                                })
+                            : undefined,
+                        }),
+                      };
+                },
+                banner: requests(new Set([runId])),
+              }}
+              workspaceRoot={root}
+            />
+          );
+        }}
       />
       <ConnectorFieldsDialog />
       <Outlet />
