@@ -612,9 +612,12 @@ export const NoticeRow = ({
   ) as keyof typeof SEVERITY_ICON;
   const Icon = SEVERITY_ICON[severity] ?? Info;
   const actions = (notice.value.actions as ErrorAction[] | undefined) ?? [];
-  // Main's own notice about the thread (a v1 history too large to read).
+  // Main's own notice about the thread (a v1 history too large to read, or
+  // a thread file a newer build wrote).
   const tooLarge =
     notice.name === "abacus.notice" && notice.value.kind === "too-large";
+  const foreign =
+    notice.name === "abacus.notice" && notice.value.kind === "foreign";
   const historyPath =
     typeof notice.value.path === "string" ? notice.value.path : null;
   const message = tooLarge
@@ -622,7 +625,9 @@ export const NoticeRow = ({
         size: formatBytes(Number(notice.value.size ?? 0)),
         limit: formatBytes(Number(notice.value.limit ?? 0)),
       })
-    : String(notice.value.message ?? "");
+    : foreign
+      ? t("chat.notice.historyForeign")
+      : String(notice.value.message ?? "");
   return (
     <Marker
       variant="border"

@@ -2,8 +2,8 @@ import type { RoutineRow } from "@abacus-ai/contract/contract/rows";
 
 import type { TableSources } from "./sources";
 
-/** Rows stay small: the run log is capped to the newest 20. */
-export const RECENT_RUNS = 20;
+/** Rows stay bounded: the run log is capped to the newest 500. */
+export const RECENT_RUNS = 500;
 
 /** Re-diffed on this period too: `nextRunAt` moves with the clock. */
 export const ROUTINES_CLOCK_MS = 60_000;

@@ -32,9 +32,11 @@ import path from "node:path";
  *   destinations it may cover (null: unknown, so all) so startup can keep
  *   writers off them (`isWriteBlocked`). The app still starts.
  *
- * A failure in this launch is recorded as `lastFailure` and stops the run;
- * the next launch retries from that step. `runMigrations` never throws.
- * Applied steps are never rolled back automatically.
+ * A step that fails in this launch (its commit undone at once) is recorded
+ * in `failures` and retried on the next launch; the later steps still run,
+ * since no step depends on another having applied. A failure that leaves an
+ * attempt unresolved, or the record unusable, stops the run. `runMigrations`
+ * never throws. Applied steps are never rolled back automatically.
  */
 import {
   completeAttempt,
@@ -133,7 +135,8 @@ export interface RunMigrationsResult {
   applied: number[];
   /** Ids committed in this run with work left (`plan.pending`): not recorded. */
   partial: number[];
-  failed: { id: number; name: string; error: string } | null;
+  /** The steps that failed in this run, in order. */
+  failed: { id: number; name: string; error: string }[];
   /** Staging directories found on launch, with what was done to them. */
   recovered: {
     staging: string;
@@ -203,7 +206,7 @@ export const runMigrations = async (
   const result: RunMigrationsResult = {
     applied: [],
     partial: [],
-    failed: null,
+    failed: [],
     recovered: [],
     unresolved: [],
   };
@@ -228,14 +231,12 @@ export const runMigrations = async (
   ): RunMigrationsResult => {
     const message = errorMessage(error);
     log(`step ${step.id} ${step.name} failed: ${message}`);
-    result.failed = { id: step.id, name: step.name, error: message };
+    result.failed.push({ id: step.id, name: step.name, error: message });
     if (record == null) return result;
-    record.lastFailure = {
-      id: step.id,
-      name: step.name,
-      at: now().toISOString(),
-      error: message,
-    };
+    record.failures = [
+      ...(record.failures ?? []).filter((entry) => entry.id !== step.id),
+      { id: step.id, name: step.name, at: now().toISOString(), error: message },
+    ];
     try {
       writeRecord(home, record, io);
     } catch (writeError) {
@@ -474,7 +475,8 @@ export const runMigrations = async (
       } catch (cleanupError) {
         log(`cannot delete ${staging}: ${errorMessage(cleanupError)}`);
       }
-      return fail(step, error);
+      fail(step, error);
+      continue;
     }
 
     const commit = formatStamp(now());
@@ -628,7 +630,9 @@ export const runMigrations = async (
         if (others.length > 0) next.partial = others;
         else delete next.partial;
       }
-      if (next.lastFailure?.id === step.id) delete next.lastFailure;
+      const failures = next.failures?.filter((entry) => entry.id !== step.id);
+      if (failures != null && failures.length > 0) next.failures = failures;
+      else delete next.failures;
       writeRecord(home, next, io);
       current = next;
       record = current;
@@ -668,7 +672,11 @@ export const runMigrations = async (
           log(`cannot delete ${staging}: ${errorMessage(cleanupError)}`);
         }
       }
-      return fail(step, error);
+      fail(step, error);
+      // An undo left for the next launch holds destinations later steps may
+      // plan over: nothing more runs.
+      if (result.unresolved.length > 0) return result;
+      continue;
     }
 
     // The record is the commit point. Completion failure must never undo it.
@@ -714,7 +722,7 @@ export const runMigrations = async (
     }
   }
 
-  // ── Housekeeping, on every launch that got here without a failure ─────
+  // ── Housekeeping, on every launch that got here ──────────────────────────
   try {
     io.rmdirSync(migratingRoot(home));
   } catch {

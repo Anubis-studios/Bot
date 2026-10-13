@@ -267,9 +267,9 @@ describe("DB table wiring (B-T3)", { timeout: 20_000 }, () => {
         createdAt: 1,
         lastRunAt: null,
         lastResult: null,
-        runs: Array.from({ length: 25 }, (_, i) => ({
+        runs: Array.from({ length: 600 }, (_, i) => ({
           id: `attempt-${i}`,
-          at: 100 - i,
+          at: 1000 - i,
           trigger: "schedule" as const,
           result: `run ${i}`,
           kind: "unknown" as const,
@@ -291,9 +291,9 @@ describe("DB table wiring (B-T3)", { timeout: 20_000 }, () => {
     const row = (batch as { changes: { value: Record<string, unknown> }[] })
       .changes[0]!.value;
     expect(row.runs).toBeUndefined();
-    expect(row.recentRuns).toHaveLength(20);
+    expect(row.recentRuns).toHaveLength(500);
     expect((row.recentRuns as { at: number }[])[0]).toMatchObject({
-      at: 100,
+      at: 1000,
     });
     await feed.close();
   });

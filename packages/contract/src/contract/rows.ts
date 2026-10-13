@@ -62,7 +62,7 @@ export type BotRow = Bot & {
   sponsoredFirstRun?: boolean;
 };
 
-/** `recentRuns`: at most 20, newest first. */
+/** `recentRuns`: at most 500, newest first. */
 export type RoutineRow = Omit<RoutineListItem, "runs"> & {
   recentRuns: RoutineRun[];
 };

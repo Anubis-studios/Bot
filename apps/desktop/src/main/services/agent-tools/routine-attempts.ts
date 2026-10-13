@@ -17,6 +17,8 @@ export const ROUTINE_RESULTS = {
   /** `paused: out of Abacus.AI credits`, `paused after N failed runs…`. */
   pausedPrefix: "paused",
   startFailedPrefix: "session failed to start: ",
+  /** The scheduler's, when firing threw (1.0.85 recorded it without a kind). */
+  fireFailedPrefix: "failed to start: ",
   startedPrefix: "started session ",
 } as const;
 
@@ -67,7 +69,10 @@ export const legacyKind = (result: string): RoutineRunKind => {
   if (result === ROUTINE_RESULTS.skippedOffline) return "skipped-offline";
   if (result === ROUTINE_RESULTS.noWorkspace) return "no-workspace";
   if (result === ROUTINE_RESULTS.timedOut) return "timed-out";
-  if (result.startsWith(ROUTINE_RESULTS.startFailedPrefix))
+  if (
+    result.startsWith(ROUTINE_RESULTS.startFailedPrefix) ||
+    result.startsWith(ROUTINE_RESULTS.fireFailedPrefix)
+  )
     return "start-failed";
   if (result.startsWith(ROUTINE_RESULTS.startedPrefix)) return "started";
   if (result.startsWith(ROUTINE_RESULTS.pausedPrefix)) return "paused";

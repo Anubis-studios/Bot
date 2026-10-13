@@ -1,7 +1,7 @@
 /**
- * Searching past conversations across two stores: desktop transcripts
- * (`<home>/transcripts/<session>.json`) and pi's session logs
- * (`<home>/agent/sessions/<cwd>/*.jsonl`). A desktop session owns several logs,
+ * Searching past conversations across two stores: desktop conversations
+ * (`<home>/threads/<session>.json`, else the v1 `<home>/transcripts/` file)
+ * and pi's session logs (`<home>/agent/sessions/<cwd>/*.jsonl`). A desktop session owns several logs,
  * so logs `local-code.json` claims are skipped in favour of the transcript;
  * unclaimed logs are reported even when that duplicates a conversation, since
  * one that cannot be found is worse than one found twice. Substring match only.
@@ -33,6 +33,7 @@ export interface SessionHit {
 }
 
 const transcriptsDir = (): string => path.join(abacusBotDir(), "transcripts");
+const threadsDir = (): string => path.join(abacusBotDir(), "threads");
 const sessionLogsDir = (): string => path.join(agentDir(), "sessions");
 
 /**
@@ -204,8 +205,9 @@ interface DesktopSession {
  */
 const readDesktopSessions = (): Map<string, DesktopSession> => {
   const parsed = readJson(path.join(abacusBotDir(), "local-code.json"));
-  const sessions = (parsed as { agent?: { agentSessions?: unknown } } | null)
-    ?.agent?.agentSessions;
+  const sessions = (
+    parsed as { localCode?: { agentSessions?: unknown } } | null
+  )?.localCode?.agentSessions;
   const byId = new Map<string, DesktopSession>();
 
   if (!Array.isArray(sessions)) return byId;
@@ -260,48 +262,51 @@ const ownerOf = (
 };
 
 const searchTranscripts = (needle: string, skip: Set<string>): SessionHit[] => {
-  let files: string[];
-
-  try {
-    files = fs
-      .readdirSync(transcriptsDir())
-      .filter((name) => name.endsWith(".json"));
-  } catch {
-    // No transcripts directory is the normal state before the app has written
-    // one, not an error.
-    return [];
-  }
-
   const sessions = readDesktopSessions();
   const hits: SessionHit[] = [];
+  // A thread file is the session's current history; its v1 transcript is not.
+  const searched = new Set<string>();
 
-  for (const name of files) {
-    const file = path.join(transcriptsDir(), name);
-    const parsed = readJson(file);
-    if (parsed == null) continue;
+  for (const [dir, field] of [
+    [threadsDir(), "messages"],
+    [transcriptsDir(), "segments"],
+  ] as const) {
+    let files: string[];
 
-    const sessionId = path.basename(name, ".json");
-    if (skip.has(sessionId)) continue;
+    try {
+      files = fs.readdirSync(dir).filter((name) => name.endsWith(".json"));
+    } catch {
+      // No directory is the normal state before the app has written one, not
+      // an error.
+      continue;
+    }
 
-    const excerpts = excerptsIn(
-      (parsed as { segments?: unknown }).segments,
-      needle
-    );
-    if (excerpts.length === 0) continue;
+    for (const name of files) {
+      const sessionId = path.basename(name, ".json");
+      if (skip.has(sessionId) || searched.has(sessionId)) continue;
 
-    const session = sessions.get(sessionId);
-    const label = typeof session?.label === "string" ? session.label : null;
+      const file = path.join(dir, name);
+      const parsed = readJson(file) as Record<string, unknown> | null;
+      if (parsed == null || !Array.isArray(parsed[field])) continue;
+      searched.add(sessionId);
 
-    hits.push({
-      sessionId,
-      origin: "desktop",
-      updatedAt:
-        parseTime(session?.updatedAt) ||
-        parseTime((parsed as { updatedAt?: unknown }).updatedAt) ||
-        mtimeOf(file),
-      title: label,
-      excerpts,
-    });
+      const excerpts = excerptsIn(parsed[field], needle);
+      if (excerpts.length === 0) continue;
+
+      const session = sessions.get(sessionId);
+      const label = typeof session?.label === "string" ? session.label : null;
+
+      hits.push({
+        sessionId,
+        origin: "desktop",
+        updatedAt:
+          parseTime(session?.updatedAt) ||
+          parseTime(parsed.updatedAt) ||
+          mtimeOf(file),
+        title: label,
+        excerpts,
+      });
+    }
   }
 
   return hits;

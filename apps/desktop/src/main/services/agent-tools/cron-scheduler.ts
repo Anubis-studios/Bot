@@ -146,7 +146,15 @@ export class CronScheduler {
 
   private async fire(jobId: string, once: boolean): Promise<void> {
     // Retire before the run: a run longer than a tick would fire twice.
-    if (once) retireOnceJob(jobId);
+    if (once) {
+      try {
+        retireOnceJob(jobId);
+      } catch (err) {
+        // Unretired, it is still due next minute.
+        console.error("[cron] could not retire a one-off job:", err);
+        return;
+      }
+    }
     try {
       await this.runJob(jobId, "schedule");
     } catch (err) {

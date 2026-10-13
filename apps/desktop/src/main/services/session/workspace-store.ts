@@ -51,6 +51,93 @@ function migrateFromUserDataIfNeeded(): void {
 
 migrateFromUserDataIfNeeded();
 
+const writeFileAtomic = (file: string, text: string): void => {
+  const temp = `${file}.tmp`;
+  fs.writeFileSync(temp, text, { encoding: "utf8", mode: 0o600 });
+  fs.renameSync(temp, file);
+};
+
+const parses = (text: string): boolean => {
+  try {
+    JSON.parse(text);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * The longest prefix of a torn file that ends after a whole record (a
+ * value two containers below the root, or shallower), closed. Null when
+ * nothing whole is left.
+ */
+function salvageTornJson(text: string): string | null {
+  const stack: string[] = [];
+  let cut = -1;
+  let close = "";
+  const mark = (at: number) => {
+    if (stack.length === 0 || stack.length > 3) return;
+    cut = at;
+    close = [...stack].reverse().join("");
+  };
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (char === '"') {
+      for (i++; i < text.length && text[i] !== '"'; i++)
+        if (text[i] === "\\") i++;
+    } else if (char === "{" || char === "[") {
+      stack.push(char === "{" ? "}" : "]");
+      if (stack.length > 1) mark(i + 1);
+    } else if (char === "}" || char === "]") {
+      stack.pop();
+      mark(i + 1);
+    } else if (char === ",") mark(i);
+  }
+  if (cut < 0) return null;
+  const salvaged = `${text.slice(0, cut)}${close}`;
+  return parses(salvaged) ? salvaged : null;
+}
+
+/**
+ * `clearInvalidConfig` reads a file that does not parse (a torn write) as
+ * empty and overwrites it on the next write: keep its bytes beside it, then
+ * put back the last copy that parsed, else the whole records it still holds.
+ * A file that parses is that copy for the next launch.
+ */
+function keepUnparsableStoreFile(): void {
+  const file = path.join(abacusBotHome(), STORE_FILE);
+  const backup = `${file}.bak`;
+  try {
+    const text = fs.readFileSync(file, "utf8");
+    if (parses(text)) {
+      writeFileAtomic(backup, text);
+      return;
+    }
+    fs.copyFileSync(
+      file,
+      `${file}.corrupt-${Date.now()}`,
+      fs.constants.COPYFILE_EXCL
+    );
+    const last = fs.existsSync(backup) ? fs.readFileSync(backup, "utf8") : "";
+    const restored = parses(last) ? last : salvageTornJson(text);
+    if (restored == null) {
+      console.error(
+        `[workspace-store] ${STORE_FILE} does not parse and nothing in it could be recovered; its bytes are kept beside it`
+      );
+      return;
+    }
+    writeFileAtomic(file, restored);
+    console.warn(
+      `[workspace-store] ${STORE_FILE} did not parse; restored from ${restored === last ? `${STORE_FILE}.bak` : "its whole records"}`
+    );
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT")
+      console.error(`[workspace-store] could not check ${STORE_FILE}`, error);
+  }
+}
+
+keepUnparsableStoreFile();
+
 // Singleton shared by WorkspaceService and AgentSessionManagerService so
 // concurrent persist() calls cannot race.
 const store = new Store<WorkspaceStoreSchema>({

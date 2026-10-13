@@ -79,7 +79,8 @@ export interface MigrationRecord {
   applied: AppliedMigration[];
   /** Absent when no step is part way. */
   partial?: PartialMigration[];
-  lastFailure?: MigrationFailure;
+  /** One per step whose last attempt failed; cleared once it applies. */
+  failures?: MigrationFailure[];
 }
 
 export type RecordRead =
@@ -171,15 +172,23 @@ export const readRecordState = (
     (!Array.isArray(parsed.partial) || !parsed.partial.every(isPartial))
   )
     return { status: "corrupt", error: "bad partial entries" };
-  if (parsed.lastFailure !== undefined && !isFailure(parsed.lastFailure))
-    return { status: "corrupt", error: "bad lastFailure" };
+  // `lastFailure`: the single failure records held before `failures`.
+  const failures: unknown[] = [
+    ...(Array.isArray(parsed.failures) ? parsed.failures : []),
+    ...(parsed.lastFailure === undefined ? [] : [parsed.lastFailure]),
+  ];
+  if (
+    (parsed.failures !== undefined && !Array.isArray(parsed.failures)) ||
+    !failures.every(isFailure)
+  )
+    return { status: "corrupt", error: "bad failures" };
   const record: MigrationRecord = {
     version: RECORD_VERSION,
     applied: parsed.applied,
   };
   if (Array.isArray(parsed.partial) && parsed.partial.length > 0)
     record.partial = parsed.partial as PartialMigration[];
-  if (isFailure(parsed.lastFailure)) record.lastFailure = parsed.lastFailure;
+  if (failures.length > 0) record.failures = failures as MigrationFailure[];
   return { status: "ok", record };
 };
 

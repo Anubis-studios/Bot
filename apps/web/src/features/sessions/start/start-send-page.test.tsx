@@ -4,7 +4,8 @@ import { implement } from "@orpc/server";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
-import { renderApp } from "#renderer/test-support/app-harness";
+import { fixturePrefs } from "#renderer/data/fixture-db/rows";
+import { defaultSeed, renderApp } from "#renderer/test-support/app-harness";
 
 import {
   newStartDraft,
@@ -34,9 +35,11 @@ const saved = (stage: StartDraft["stage"] = "created"): StartDraft => ({
 });
 const mount = (
   send: Parameters<typeof os.ai.send.handler>[0],
-  existing?: StartDraft
+  existing?: StartDraft,
+  seed = defaultSeed()
 ) =>
   renderApp("/sessions/new", {
+    seed,
     beforeRender: (db) => {
       if (existing) db.sessions.upsert(optimisticSession(existing));
     },
@@ -336,5 +339,48 @@ it("shares an automatic resume across a double mount and navigates the current m
     second.view.unmount();
     await second.cleanup();
     await first.cleanup();
+  }
+}, 20000);
+
+it("starts a new session on the model 1.0.85 kept for its workspace", async () => {
+  startDraftStore.setState(() => ({
+    ...newStartDraft(),
+    workspaceId: "default",
+  }));
+  const prefs = fixturePrefs();
+  const sends = vi.fn(async ({ input }: SendContext) => ({
+    runId: input.runId,
+    status: "started" as const,
+  }));
+  const h = await mount(sends, undefined, {
+    ...defaultSeed(),
+    prefs: {
+      ...prefs,
+      models: {
+        ...prefs.models,
+        perWorkspace: { default: "deepseek/deepseek-v4-pro" },
+      },
+    },
+  });
+  try {
+    const field = await screen.findByRole("textbox", {
+      name: /Tell the agent/,
+    });
+    fireEvent.change(field, { target: { value: "List the files" } });
+    await waitFor(() =>
+      expect(
+        screen
+          .getByRole("button", { name: "Send" })
+          .getAttribute("aria-disabled")
+      ).not.toBe("true")
+    );
+    fireEvent.keyDown(field, { key: "Enter" });
+    await waitFor(() => expect(sends).toHaveBeenCalledOnce());
+    expect(sends.mock.calls[0]![0].input.forwardedProps).toMatchObject({
+      model: "deepseek/deepseek-v4-pro",
+    });
+  } finally {
+    h.view.unmount();
+    await h.cleanup();
   }
 }, 20000);

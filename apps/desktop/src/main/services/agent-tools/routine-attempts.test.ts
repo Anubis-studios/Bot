@@ -32,7 +32,7 @@ describe("legacyKind", () => {
     ["paused: out of Abacus.AI credits", "paused"],
     ["paused after 3 failed runs in a row", "paused"],
     ["something an older build wrote", "unknown"],
-    ["failed to start: boom", "unknown"],
+    ["failed to start: boom", "start-failed"],
   ])("%s → %s", (result, kind) => {
     expect(legacyKind(result)).toBe(kind);
   });

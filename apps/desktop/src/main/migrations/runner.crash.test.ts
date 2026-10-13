@@ -297,7 +297,7 @@ const cleanOps = async (crossVolume: boolean): Promise<string[]> => {
   setup();
   const h = harness(root, Infinity, crossVolume);
   const result = await run([step], { io: h.io });
-  expect(result).toMatchObject({ applied: [1], failed: null });
+  expect(result).toMatchObject({ applied: [1], failed: [] });
   expect(userState()).toEqual(COMMITTED);
   return h.ops;
 };
@@ -348,7 +348,7 @@ describe.each([
         });
         const where = `kill ${killAt} at "${ops[killAt - 1]}"`;
         expect(recovery.unresolved, where).toEqual([]);
-        expect(recovery.failed, where).toBeNull();
+        expect(recovery.failed, where).toEqual([]);
         if (recorded) expect(userState(), where).toEqual(COMMITTED);
         else expectRolledBack(userState());
         expect(
@@ -362,7 +362,7 @@ describe.each([
         const next = await run([step], {
           io: harness(root, Infinity, crossVolume).io,
         });
-        expect(next.failed, where).toBeNull();
+        expect(next.failed, where).toEqual([]);
         expect(userState(), where).toEqual(COMMITTED);
         expect(
           readRecord(home).applied.filter((applied) => applied.id === 1),
@@ -385,7 +385,7 @@ describe.each([
       setup();
       const clean = harness(root, Infinity, crossVolume);
       const failed = await run([step], { ...throwing, io: clean.io });
-      expect(failed.failed?.error).toBe("EIO");
+      expect(failed.failed[0]?.error).toBe("EIO");
       expectRolledBack(userState());
       const total = clean.ops.length;
       // The undo's own restore is among the kill points.
@@ -409,6 +409,52 @@ describe.each([
         });
         expect(recovery.unresolved, where).toEqual([]);
         expectRolledBack(userState());
+      }
+    });
+
+    it("a step after a failing one commits, and a kill at any point of that launch is settled by the next", async () => {
+      const broken: MigrationStep = {
+        id: 1,
+        name: "broken",
+        plan: async () => {
+          throw new Error("EACCES");
+        },
+      };
+      const steps = [broken, { ...step, id: 2 }];
+      setup();
+      const clean = harness(root, Infinity, crossVolume);
+      expect(await run(steps, { io: clean.io })).toMatchObject({
+        applied: [2],
+        failed: [{ id: 1, error: "EACCES" }],
+      });
+      expect(userState()).toEqual(COMMITTED);
+
+      for (let killAt = 1; killAt <= clean.ops.length; killAt++) {
+        setup();
+        const h = harness(root, killAt, crossVolume);
+        await run(steps, { io: h.io });
+        expect(h.killed()).toBe(true);
+        const where = `kill ${killAt} at "${clean.ops[killAt - 1]}"`;
+
+        const next = await run(steps, {
+          io: harness(root, Infinity, crossVolume).io,
+        });
+        expect(next.unresolved, where).toEqual([]);
+        expect(
+          next.failed.map((failure) => failure.id),
+          where
+        ).toEqual([1]);
+        expect(userState(), where).toEqual(COMMITTED);
+        const record = readRecord(home);
+        expect(
+          record.applied.map((entry) => entry.id),
+          where
+        ).toEqual([2]);
+        expect(
+          record.failures?.map((failure) => failure.id),
+          where
+        ).toEqual([1]);
+        expect(fs.existsSync(migratingRoot(home)), where).toBe(false);
       }
     });
 
@@ -453,7 +499,7 @@ describe.each([
           io: harness(root, Infinity, crossVolume).io,
         });
         expect(final.unresolved, where).toEqual([]);
-        expect(final.failed, where).toBeNull();
+        expect(final.failed, where).toEqual([]);
         expectRolledBack(userState());
 
         const next = await run([step], {
@@ -527,7 +573,7 @@ const settle = async (
   for (let launch = 0; launch < max; launch++) {
     const result = await run(steps, { io: cleanIo(crossVolume) });
     expect(result.unresolved, where).toEqual([]);
-    expect(result.failed, where).toBeNull();
+    expect(result.failed, where).toEqual([]);
     if (result.applied.length === 0 && result.partial.length === 0) return;
   }
   throw new Error(`${where}: still running steps after ${max} launches`);
@@ -840,7 +886,7 @@ describe(
         (io) => run([], { io }),
         async (where) => {
           const next = await run([], {});
-          expect(next.failed, where).toBeNull();
+          expect(next.failed, where).toEqual([]);
           expect(
             fs
               .readdirSync(backups)
@@ -896,7 +942,7 @@ for (const crossVolume of [false, true]) {
     const snap = snapshot();
     const steps = [finalLegacyPrefs(), archiveTranscriptsV1()];
     const result = await run(steps, {});
-    expect(result.failed).toBeNull();
+    expect(result.failed).toEqual([]);
     const expected = userState();
     await everyKill(
       snap,

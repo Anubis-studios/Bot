@@ -52,7 +52,8 @@ export interface AiActiveRun {
 /**
  * A live `agent.notification`, a non-terminal `agent.error`, or main's own
  * `abacus.notice` about the thread (a history too large to read: `value`
- * `{ kind: "too-large", size, limit, path, notificationKey: "abacus.history" }`).
+ * `{ kind: "too-large", size, limit, path, notificationKey: "abacus.history" }`;
+ * a thread file a newer build wrote: `{ kind: "foreign", notificationKey }`).
  */
 export interface AiNotice {
   /** The relay seq it arrived at. */

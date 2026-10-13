@@ -5287,7 +5287,7 @@ export class ServiceHost {
         (key) => (key ?? "").trim().length > 0
       )
     ) {
-      recordRun(jobId, "skipped: signed out", trigger);
+      recordRun(jobId, "skipped: signed out", trigger, { kind: "skipped" });
       this.emitEvent({
         type: "cronjobs-updated",
         emittedAt: new Date().toISOString(),

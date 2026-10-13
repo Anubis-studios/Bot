@@ -50,7 +50,7 @@ it("R7-T14: three partial commits retain their evidence after cleanup and rebuil
     },
   };
   for (let i = 0; i < 3; i++) {
-    expect(await run([step])).toMatchObject({ partial: [4], failed: null });
+    expect(await run([step])).toMatchObject({ partial: [4], failed: [] });
     expect(fs.existsSync(path.join(home, ".migrating"))).toBe(false);
     fs.writeFileSync(
       path.join(backupsRoot(home), "restore-index.jsonl"),
@@ -97,7 +97,7 @@ it("a completion publish failure cannot roll back a recorded commit; restart com
   expect(completedAttempts(home)).toEqual([]);
   expect(await run([step])).toMatchObject({
     recovered: [expect.objectContaining({ action: "finished" })],
-    failed: null,
+    failed: [],
   });
   expect(completedAttempts(home)).toHaveLength(1);
   const entries = rebuildRestoreIndex(home);

@@ -6,7 +6,7 @@ import type { AbacusAccountInfo } from "@abacus-ai/contract/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { connectInProcess, fakeDeps } from "./rpc/testing";
-import { listJobs } from "./services/agent-tools/cron-store";
+import { createJob, listJobs } from "./services/agent-tools/cron-store";
 import { HostedRoutineRefusal } from "./services/agent-tools/hosted-routines";
 import { McpAgentToolsServer } from "./services/mcp/mcp-agent-tools-server";
 
@@ -236,5 +236,27 @@ describe("a routine run the network let down", () => {
     expect(readLastRoutineRun(dir)?.outcome).toBe("offline");
     expect(service.pauseRoutine).not.toHaveBeenCalled();
     expect(service.pauseIfFailingRepeatedly).not.toHaveBeenCalled();
+  });
+});
+
+describe("a routine fired while signed out", () => {
+  it("records the run as skipped", async () => {
+    const job = createJob({ prompt: "p", schedule: "0 9 * * *" });
+    const startRoutineRun = (
+      ServiceHost.prototype as unknown as {
+        startRoutineRun(
+          id: string,
+          trigger: string,
+          payload: null
+        ): Promise<string>;
+      }
+    ).startRoutineRun;
+    await expect(
+      startRoutineRun.call({ emitEvent: vi.fn() }, job.id, "schedule", null)
+    ).resolves.toBe("skipped");
+    expect(listJobs()[0]?.runs[0]).toMatchObject({
+      result: "skipped: signed out",
+      kind: "skipped",
+    });
   });
 });

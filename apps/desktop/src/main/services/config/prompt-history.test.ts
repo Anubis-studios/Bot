@@ -15,6 +15,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 let home = "";
 vi.mock("../../paths", () => ({ abacusBotHome: () => home }));
 
+const { draftConversationKey, sessionConversationKey } =
+  await import("@abacus-ai/contract/conversation-scope");
 const { addPromptToHistory, readPromptHistory, PROMPT_HISTORY_LIMIT } =
   await import("./prompt-history");
 
@@ -106,5 +108,50 @@ describe("recording prompts", () => {
     home = ada;
     expect(readPromptHistory("s1")).toEqual(["ada's prompt"]);
     fs.rmSync(other, { recursive: true, force: true });
+  });
+});
+
+describe("history from 1.0.85", () => {
+  const writeLegacy = () =>
+    fs.writeFileSync(
+      path.join(home, "prompt-history.json"),
+      `${JSON.stringify({
+        scopes: {
+          "session:s1": ["fix the build", "run the tests"],
+          "workspace:ws1": ["start a new feature"],
+        },
+      })}\n`
+    );
+
+  it("shows a session's and a workspace's old history under their new keys", () => {
+    writeLegacy();
+
+    expect(readPromptHistory(sessionConversationKey("ws1", "s1"))).toEqual([
+      "fix the build",
+      "run the tests",
+    ]);
+    expect(readPromptHistory(draftConversationKey("ws1", "d1"))).toEqual([
+      "start a new feature",
+    ]);
+    expect(readPromptHistory(sessionConversationKey("ws1", "s2"))).toEqual([]);
+  });
+
+  it("carries the old history forward on the next send and keeps the legacy key", () => {
+    writeLegacy();
+    const key = sessionConversationKey("ws1", "s1");
+
+    expect(addPromptToHistory(key, "ship it")).toEqual([
+      "ship it",
+      "fix the build",
+      "run the tests",
+    ]);
+    const file = JSON.parse(
+      fs.readFileSync(path.join(home, "prompt-history.json"), "utf8")
+    );
+    expect(file.scopes["session:s1"]).toEqual([
+      "fix the build",
+      "run the tests",
+    ]);
+    expect(file.scopes["workspace:ws1"]).toEqual(["start a new feature"]);
   });
 });

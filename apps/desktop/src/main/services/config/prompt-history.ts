@@ -1,6 +1,11 @@
 import fs from "fs";
 import path from "path";
 
+import {
+  type ConversationKey,
+  conversationRefFromKey,
+} from "@abacus-ai/contract/conversation-scope";
+
 import { abacusBotHome } from "../../paths";
 
 /**
@@ -40,9 +45,25 @@ const asPrompts = (value: unknown): string[] =>
         .slice(0, PROMPT_HISTORY_LIMIT)
     : [];
 
+/** 1.0.85 kept history under `session:<id>` and `workspace:<id>`. */
+const legacyScope = (scope: string): string | null => {
+  const ref = conversationRefFromKey(scope as ConversationKey);
+  if (ref == null) return null;
+  return ref.kind === "session"
+    ? `session:${ref.sessionId}`
+    : `workspace:${ref.workspaceId}`;
+};
+
+const scopePrompts = (file: HistoryFile, scope: string): string[] => {
+  const own = file.scopes?.[scope];
+  if (own !== undefined) return asPrompts(own);
+  const legacy = legacyScope(scope);
+  return legacy == null ? [] : asPrompts(file.scopes?.[legacy]);
+};
+
 /** Newest first. Empty when there is no history for the scope, or none at all. */
 export const readPromptHistory = (scope: string): string[] =>
-  asPrompts(readFile().scopes?.[scope]);
+  scopePrompts(readFile(), scope);
 
 /**
  * Record a prompt, newest first, and return the list as it now stands.
@@ -56,7 +77,7 @@ export const addPromptToHistory = (scope: string, prompt: string): string[] => {
   const file = readFile();
   const next = [
     text,
-    ...asPrompts(file.scopes?.[scope]).filter((entry) => entry !== text),
+    ...scopePrompts(file, scope).filter((entry) => entry !== text),
   ].slice(0, PROMPT_HISTORY_LIMIT);
 
   try {
