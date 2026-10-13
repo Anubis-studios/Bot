@@ -121,6 +121,7 @@ export const runsView = (
             started: "running",
             "start-failed": "failed",
             skipped: "skipped",
+            "skipped-offline": "skipped-offline",
             "no-workspace": "failed",
             unknown: "unknown",
             paused: "paused",

@@ -29,7 +29,10 @@ import {
 
 import { setHostConnectivity, setReachabilityProbe } from "../connectivity.js";
 import { currentMode } from "../current-mode.js";
-import { NETWORK_UNREACHABLE_MESSAGE } from "../network-wait.js";
+import {
+  NETWORK_UNREACHABLE_CODE,
+  NETWORK_UNREACHABLE_MESSAGE,
+} from "../network-wait.js";
 import { type DesktopEvent } from "../protocol.js";
 import { AgentMode } from "../protocol.js";
 import { BotSession } from "./bot-session.js";
@@ -499,7 +502,10 @@ describe("a bot whose network goes", () => {
     );
     expect(failures).toHaveLength(1);
     expect(failures[0]).toMatchObject({
-      error: { message: NETWORK_UNREACHABLE_MESSAGE, code: "turn_failed" },
+      error: {
+        message: NETWORK_UNREACHABLE_MESSAGE,
+        code: NETWORK_UNREACHABLE_CODE,
+      },
     });
     expect(cooldowns()).toBe("");
   });

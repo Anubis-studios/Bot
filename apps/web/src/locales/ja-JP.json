@@ -3197,6 +3197,8 @@
       "completed": "Completed",
       "failed": "Failed",
       "skipped": "Skipped",
+      "skipped-offline": "スキップ: オフライン",
+      "offline": "Abacus に接続できませんでした",
       "unknown": "Unknown",
       "paused": "Paused"
     },

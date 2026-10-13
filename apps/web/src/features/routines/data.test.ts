@@ -131,6 +131,47 @@ describe("R5-T10 attempt history", () => {
       sessionId: null,
     });
   });
+  it("shows a fire the network kept from running, and a run it cut short, as their own", () => {
+    const row = fixtureRoutines()[0]!;
+    row.recentRuns = [
+      {
+        id: "held",
+        kind: "skipped-offline",
+        at: 2,
+        trigger: "schedule",
+        result: "skipped: no network connection before the next run",
+        sessionId: null,
+        attemptId: null,
+      },
+      {
+        id: "start",
+        kind: "started",
+        at: 1,
+        trigger: "schedule",
+        result: "started session run",
+        sessionId: "run",
+        attemptId: null,
+      },
+    ];
+    const list = runsView(row, [
+      {
+        routineId: row.id,
+        sessionId: "run",
+        workspaceId: "w",
+        startedAt: new Date(1).toISOString(),
+        updatedAt: new Date(2).toISOString(),
+        outcome: "offline",
+        trigger: "schedule",
+        attemptId: "start",
+        result: null,
+      },
+    ]);
+    expect(list.map((view) => view.outcome)).toEqual([
+      "skipped-offline",
+      "offline",
+    ]);
+    expect(routineState(row, [], [])).not.toBe("failed");
+  });
 });
 describe("R5-T8/T9 form values", () => {
   it("refuses whitespace-only instructions and persists parsed trimming", () => {

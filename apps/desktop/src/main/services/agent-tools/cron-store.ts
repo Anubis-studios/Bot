@@ -87,6 +87,11 @@ export interface CronJob {
   reach?: RoutineReach | null;
   /** The server would not take it: it stays here, paused, with this reason. */
   notMoved?: string | null;
+  /**
+   * When a fire came due with the network down; it runs once the network is
+   * back. On disk so a restart before then still runs it.
+   */
+  heldSince?: number | null;
 }
 
 const FILE = (): string => path.join(abacusBotHome(), "cronjobs.json");
@@ -410,6 +415,19 @@ export const markNotMoved = (id: string, reason: string): CronJob => {
   write(jobs);
   return updated;
 };
+
+/** Hold a job for the network (`at`), or let it go (null). */
+export const setHeld = (id: string, at: number | null): void => {
+  const jobs = readForWrite();
+  const index = jobs.findIndex((job) => job.id === id);
+  if (index < 0 || (jobs[index].heldSince ?? null) === at) return;
+  jobs[index] = { ...jobs[index], heldSince: at };
+  write(jobs);
+};
+
+/** Jobs held for the network, as of the last write (a restart included). */
+export const heldJobs = (): CronJob[] =>
+  read().filter((job) => job.heldSince != null);
 
 export const removeJob = (id: string): void => {
   const jobs = readForWrite();

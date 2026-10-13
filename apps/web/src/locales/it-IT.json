@@ -3197,6 +3197,8 @@
       "completed": "Completed",
       "failed": "Failed",
       "skipped": "Skipped",
+      "skipped-offline": "Saltata: offline",
+      "offline": "Impossibile raggiungere Abacus",
       "unknown": "Unknown",
       "paused": "Paused"
     },

@@ -3197,6 +3197,8 @@
       "completed": "Completed",
       "failed": "Failed",
       "skipped": "Skipped",
+      "skipped-offline": "건너뜀: 오프라인",
+      "offline": "Abacus에 연결할 수 없음",
       "unknown": "Unknown",
       "paused": "Paused"
     },

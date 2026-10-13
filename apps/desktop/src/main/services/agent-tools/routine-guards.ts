@@ -4,7 +4,10 @@
  * overlapping fire is skipped, an overlong run is failed, and a routine that
  * keeps failing is paused until someone looks.
  */
-import type { RoutineRunItem } from "@abacus-ai/contract/contracts";
+import type {
+  RoutineRunItem,
+  RoutineRunOutcome,
+} from "@abacus-ai/contract/contracts";
 
 /** How long a run may go before it is presumed stuck. */
 export const ROUTINE_RUN_TIMEOUT_MS = 30 * 60 * 1000;
@@ -75,7 +78,8 @@ export class NetworkWaitClock {
 export const consecutiveFailures = (runs: RoutineRunItem[]): number => {
   let count = 0;
   for (const run of runs) {
-    if (run.outcome === "running") continue;
+    // A run the network let down says nothing about the routine itself.
+    if (run.outcome === "running" || run.outcome === "offline") continue;
     if (run.outcome !== "failed") break;
     count += 1;
   }
@@ -84,6 +88,27 @@ export const consecutiveFailures = (runs: RoutineRunItem[]): number => {
 
 export const shouldPauseAfter = (runs: RoutineRunItem[]): boolean =>
   consecutiveFailures(runs) >= ROUTINE_FAILURES_BEFORE_PAUSE;
+
+/** The agent's code for a turn that waited out its budget for the network. */
+const NETWORK_UNREACHABLE_CODE = "network_unreachable";
+
+/**
+ * How an event ends a run: an error fails it (or files it `offline` when
+ * the network never came back), idle completes it; anything else, nothing.
+ */
+export const runOutcomeOf = (event: {
+  type: string;
+  status?: string;
+  error?: { code?: string };
+}): Exclude<RoutineRunOutcome, "running"> | null => {
+  if (event.type === "error")
+    return event.error?.code === NETWORK_UNREACHABLE_CODE
+      ? "offline"
+      : "failed";
+  return event.type === "status_changed" && event.status === "idle"
+    ? "completed"
+    : null;
+};
 
 /**
  * A run stopped by an empty Abacus.AI balance, which every later fire would

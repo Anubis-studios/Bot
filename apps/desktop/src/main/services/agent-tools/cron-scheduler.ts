@@ -1,16 +1,19 @@
 /**
  * The scheduler half of cron: a minute tick that fires due jobs. What a run
  * actually does (spawn a session, send the prompt) is injected by the host.
- * A fire due while the network is down, or slept through, is held and runs
- * once when the network is back.
+ * A fire due while the network is down, or slept through, is held (on disk,
+ * so a restart keeps it) and runs once when the network is back.
  */
 import {
   dueJobs,
   getJob,
+  heldJobs,
   missedJobs,
   recordRun,
   retireOnceJob,
+  setHeld,
 } from "./cron-store";
+import { ROUTINE_RESULTS } from "./routine-attempts";
 
 type RunJob = (jobId: string, trigger: "schedule") => Promise<void>;
 
@@ -28,8 +31,6 @@ export class CronScheduler {
   /** Last minute fired, so two ticks in one minute cannot double-fire. */
   private lastCronMinute = "";
   private lastTickAt: number | null = null;
-  /** Jobs waiting for the network; several missed fires are one entry. */
-  private readonly held = new Set<string>();
   private releasing: Promise<void> | null = null;
 
   constructor(
@@ -45,7 +46,7 @@ export class CronScheduler {
 
   /** Whether this job is held until the network is back. */
   isHeld(jobId: string): boolean {
-    return this.held.has(jobId);
+    return getJob(jobId)?.heldSince != null;
   }
 
   /**
@@ -71,17 +72,16 @@ export class CronScheduler {
 
   /** The network is back (or the machine woke): run what was held, once each. */
   async release(): Promise<void> {
-    if (this.held.size === 0) return;
+    if (heldJobs().length === 0) return;
     if (this.releasing != null) return this.releasing;
     this.releasing = (async () => {
       if (!(await this.networkReady())) return;
-      const jobs = [...this.held];
-      this.held.clear();
+      const jobs = heldJobs();
+      for (const job of jobs) setHeld(job.id, null);
       this.onHeldChange();
-      for (const id of jobs) {
-        const job = getJob(id);
-        if (job == null || !job.enabled) continue;
-        await this.fire(id, job.runAt != null);
+      for (const job of jobs) {
+        if (!job.enabled) continue;
+        await this.fire(job.id, job.runAt != null);
       }
     })();
     try {
@@ -113,20 +113,31 @@ export class CronScheduler {
         ? missedJobs(new Date(lastTickAt), now)
         : [];
     const dueIds = new Set(due.map((job) => job.id));
-    for (const job of missed) if (!dueIds.has(job.id)) this.held.add(job.id);
+    for (const job of missed)
+      if (!dueIds.has(job.id) && job.heldSince == null)
+        setHeld(job.id, now.getTime());
 
     if (
-      (due.length > 0 || this.held.size > 0) &&
+      (due.length > 0 || heldJobs().length > 0) &&
       !(await this.networkReady())
     ) {
-      for (const job of due) this.held.add(job.id);
+      for (const job of due) {
+        // Its next fire came with the network still down: the held one is
+        // skipped, said so, and this one waits in its place.
+        if (job.heldSince != null && job.runAt == null)
+          recordRun(job.id, ROUTINE_RESULTS.skippedOffline, "schedule", {
+            kind: "skipped-offline",
+          });
+        if (job.heldSince == null || job.runAt == null)
+          setHeld(job.id, now.getTime());
+      }
       this.onHeldChange();
       return;
     }
 
     for (const job of due) {
       // A due fire is the same run a held one would have been.
-      this.held.delete(job.id);
+      if (job.heldSince != null) setHeld(job.id, null);
       await this.fire(job.id, job.runAt != null);
     }
     if (missed.length > 0) this.onHeldChange();

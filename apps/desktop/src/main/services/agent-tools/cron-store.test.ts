@@ -465,6 +465,38 @@ describe("a fire that comes due without a network", () => {
     expect(runs).toEqual([job.id]);
   });
 
+  it("files a held fire as skipped offline when its next fire comes first, never failed", async () => {
+    const job = createJob({ schedule: "*/5 * * * *", prompt: "x" });
+    const { cron } = scheduler();
+
+    await cron.tick(new Date(2026, 9, 13, 9, 0));
+    await cron.tick(new Date(2026, 9, 13, 9, 5));
+    await cron.tick(new Date(2026, 9, 13, 9, 10));
+
+    const kinds = getJob(job.id)?.runs.map((entry) => entry.kind);
+    expect(kinds).toEqual(["skipped-offline", "skipped-offline"]);
+    expect(getJob(job.id)?.runs[0]?.result).toMatch(/no network/);
+    // The newest fire is still held, to run when the network is back.
+    expect(cron.isHeld(job.id)).toBe(true);
+  });
+
+  it("keeps a held fire across a restart, shown as held, and runs it once when back", async () => {
+    const job = createJob({ schedule: "0 9 * * *", prompt: "x" });
+    await scheduler().cron.tick(new Date(2026, 9, 13, 9, 0));
+
+    // A new process: nothing in memory, the hold read off disk.
+    const { cron, runs, state } = scheduler();
+    expect(cron.isHeld(job.id)).toBe(true);
+    await cron.tick(new Date(2026, 9, 13, 9, 30));
+    expect(runs).toEqual([]);
+
+    state.online = true;
+    await cron.tick(new Date(2026, 9, 13, 9, 31));
+    await cron.release();
+    expect(runs).toEqual([job.id]);
+    expect(cron.isHeld(job.id)).toBe(false);
+  });
+
   it("runs a held fire on the first tick back, beside nothing else", async () => {
     const job = createJob({ schedule: "0 9 * * *", prompt: "x" });
     const { cron, runs, state } = scheduler();

@@ -34,7 +34,10 @@ process.env.ABACUSAI_BOT_MODEL_STALL_MS = "700";
 process.env.ABACUSAI_BOT_BUSY_WAIT_MS = "20";
 
 import { setHostConnectivity, setReachabilityProbe } from "./connectivity.js";
-import { NETWORK_UNREACHABLE_MESSAGE } from "./network-wait.js";
+import {
+  NETWORK_UNREACHABLE_CODE,
+  NETWORK_UNREACHABLE_MESSAGE,
+} from "./network-wait.js";
 import {
   AgentMode,
   AgentStatus,
@@ -1268,6 +1271,8 @@ describe("OpenLLM", () => {
       const reported = harness.agent("error").map((event) => event.error);
       expect(reported).toHaveLength(1);
       expect(reported[0]?.message).toBe(NETWORK_UNREACHABLE_MESSAGE);
+      // Its own code: a routine files it apart from its failures.
+      expect(reported[0]?.code).toBe(NETWORK_UNREACHABLE_CODE);
       expect(reported[0]?.message).not.toBe(OPENLLM_POOL_EXHAUSTED_MESSAGE);
       expect(harness.agent("turn_complete").length).toBeGreaterThan(0);
       expect(cooldowns()).toBe("");

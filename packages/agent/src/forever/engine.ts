@@ -68,6 +68,7 @@ import {
   BUSY_RETRY_PROMPT,
   BusyWait,
   BUSY_WAIT_ROUNDS,
+  NETWORK_UNREACHABLE_CODE,
   NETWORK_UNREACHABLE_MESSAGE,
   NetworkWait,
   failedCallStreamed,
@@ -1089,7 +1090,7 @@ export class ForeverEngine {
           type: "error",
           error: {
             message: NETWORK_UNREACHABLE_MESSAGE,
-            code: "turn_failed",
+            code: NETWORK_UNREACHABLE_CODE,
             detail: suspect.failure,
           },
         },

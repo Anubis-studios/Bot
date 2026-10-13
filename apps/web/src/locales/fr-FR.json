@@ -3197,6 +3197,8 @@
       "completed": "Completed",
       "failed": "Failed",
       "skipped": "Skipped",
+      "skipped-offline": "Ignorée : hors ligne",
+      "offline": "Abacus injoignable",
       "unknown": "Unknown",
       "paused": "Paused"
     },

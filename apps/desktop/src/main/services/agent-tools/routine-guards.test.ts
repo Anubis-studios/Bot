@@ -7,6 +7,7 @@ import {
   NetworkWaitClock,
   ranOutOfAbacusCredits,
   ROUTINE_FAILURES_BEFORE_PAUSE,
+  runOutcomeOf,
   shouldPauseAfter,
   stuckRuns,
 } from "./routine-guards";
@@ -105,5 +106,34 @@ describe("the out-of-credits pause", () => {
       false
     );
     expect(ranOutOfAbacusCredits({})).toBe(false);
+  });
+});
+
+describe("a run the network let down", () => {
+  it("is filed offline, apart from a failure", () => {
+    expect(
+      runOutcomeOf({ type: "error", error: { code: "network_unreachable" } })
+    ).toBe("offline");
+    expect(
+      runOutcomeOf({ type: "error", error: { code: "turn_failed" } })
+    ).toBe("failed");
+    expect(runOutcomeOf({ type: "status_changed", status: "idle" })).toBe(
+      "completed"
+    );
+    expect(runOutcomeOf({ type: "text_delta" })).toBeNull();
+  });
+
+  it("never counts toward the pause, nor breaks a real streak", () => {
+    const offline = Array.from({ length: 5 }, () => run("offline"));
+    expect(shouldPauseAfter(offline)).toBe(false);
+    expect(
+      consecutiveFailures([
+        run("failed"),
+        run("offline"),
+        run("failed"),
+        run("offline"),
+        run("completed"),
+      ])
+    ).toBe(2);
   });
 });

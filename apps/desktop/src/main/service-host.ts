@@ -277,6 +277,7 @@ import {
   ranOutOfAbacusCredits,
   ROUTINE_FAILURES_BEFORE_PAUSE,
   ROUTINE_RUN_TIMEOUT_MS,
+  runOutcomeOf,
   shouldPauseAfter,
   stuckRuns,
 } from "./services/agent-tools/routine-guards";
@@ -4603,12 +4604,7 @@ export class ServiceHost {
       this.routineRunText.set(sessionId, text);
       return;
     }
-    const outcome =
-      event.type === "error"
-        ? "failed"
-        : event.type === "status_changed" && event.status === AgentStatus.Idle
-          ? "completed"
-          : null;
+    const outcome = runOutcomeOf(event);
     if (outcome == null) return;
     this.routineNetworkWaits.forget(sessionId);
     // An error's trailing idle must not overwrite the failure.
@@ -4626,7 +4622,8 @@ export class ServiceHost {
       outcome,
       reply: text.join("").trim(),
     });
-    if (event.type !== "error") return;
+    // Offline is not the routine's failure: no pause, no streak.
+    if (outcome !== "failed" || event.type !== "error") return;
     // No credits fails every fire the same way until the user tops up.
     if (ranOutOfAbacusCredits(event.error))
       this.pauseRoutine(session.routineId, "paused: out of Abacus.AI credits");

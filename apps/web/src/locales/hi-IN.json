@@ -3197,6 +3197,8 @@
       "completed": "Completed",
       "failed": "Failed",
       "skipped": "Skipped",
+      "skipped-offline": "छोड़ा गया: ऑफ़लाइन",
+      "offline": "Abacus से कनेक्ट नहीं हो सका",
       "unknown": "Unknown",
       "paused": "Paused"
     },

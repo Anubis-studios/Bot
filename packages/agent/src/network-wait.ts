@@ -22,6 +22,9 @@ export const NETWORK_WAIT_TURN_MS = 10 * 60_000;
 export const NETWORK_WAIT_ROUTINE_MS = 60 * 60_000;
 const NETWORK_BACKOFF_MS = [2_000, 4_000, 8_000, 16_000, 30_000];
 
+/** The error code a turn ends with when the network never came back; a routine files it apart from failures. */
+export const NETWORK_UNREACHABLE_CODE = "network_unreachable";
+
 export const NETWORK_UNREACHABLE_MESSAGE =
   "Couldn't reach Abacus — check your connection.";
 

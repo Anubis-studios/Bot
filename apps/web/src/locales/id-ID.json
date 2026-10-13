@@ -3197,6 +3197,8 @@
       "completed": "Completed",
       "failed": "Failed",
       "skipped": "Skipped",
+      "skipped-offline": "Dilewati: offline",
+      "offline": "Tidak dapat menjangkau Abacus",
       "unknown": "Unknown",
       "paused": "Paused"
     },

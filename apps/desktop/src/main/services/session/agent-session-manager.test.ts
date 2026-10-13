@@ -516,6 +516,13 @@ describe("the per-account session stash", () => {
     ).toBeNull();
   });
 
+  it("keeps a run the network let down offline, whatever idle follows", () => {
+    const run = service.create(WORKSPACE, "routine-1", null, "schedule");
+    service.setRunOutcome(run.id, "offline");
+    service.setRunOutcome(run.id, "completed");
+    expect(service.listByRoutine("routine-1")[0]?.runOutcome).toBe("offline");
+  });
+
   it("keeps one editor session per routine, off every list", () => {
     const first = service.editorFor("routine-1", WORKSPACE);
     const again = service.editorFor("routine-1", WORKSPACE);

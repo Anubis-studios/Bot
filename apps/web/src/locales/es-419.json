@@ -3197,6 +3197,8 @@
       "completed": "Completed",
       "failed": "Failed",
       "skipped": "Skipped",
+      "skipped-offline": "Omitida: sin conexión",
+      "offline": "No se pudo conectar con Abacus",
       "unknown": "Unknown",
       "paused": "Paused"
     },
