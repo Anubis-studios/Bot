@@ -65,7 +65,7 @@ it.each([
       client: { auth: { web: { start, complete } } },
     } as unknown as Transport;
     const settled = vi.fn();
-    expect(startSignIn(transport, "signin", undefined, settled)).toBe(true);
+    expect(startSignIn(transport, "signin", settled)).toBe(true);
     expect(onboardingStore.state.signIn?.status).toBe("pending");
     await vi.waitFor(() =>
       expect(onboardingStore.state.signIn?.status).toBe("failed")

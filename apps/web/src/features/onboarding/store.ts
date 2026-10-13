@@ -8,7 +8,6 @@ import { SignInFailure } from "#renderer/lib/sign-in-failure";
 export interface SignInAttempt {
   id: string;
   intent: "signup" | "signin";
-  profileId?: string;
   status: "pending" | "failed" | "cancelled" | "succeeded";
   outcome: AbacusAuthOutcome | null;
 }
@@ -19,22 +18,17 @@ export const onboardingStore = new Store<{
 export const startSignIn = (
   transport: Transport,
   intent: "signup" | "signin",
-  profileId: string | undefined,
   settled: (outcome: AbacusAuthOutcome) => void | Promise<void>
 ): boolean => {
   if (onboardingStore.state.signIn?.status === "pending") return false;
   const attempt: SignInAttempt = {
     id: crypto.randomUUID(),
     intent,
-    ...(profileId ? { profileId } : {}),
     status: "pending",
     outcome: null,
   };
   onboardingStore.setState((state) => ({ ...state, signIn: attempt }));
-  void signInAbacus(transport, {
-    intent,
-    ...(profileId ? { browserProfileId: profileId } : {}),
-  })
+  void signInAbacus(transport, { intent })
     .catch((error: unknown): AbacusAuthOutcome => ({
       ok: false,
       error: error instanceof SignInFailure ? error.message : "auth-failed",

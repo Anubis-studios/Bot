@@ -9,7 +9,6 @@ import { useTranslation } from "react-i18next";
 import { useDb } from "#renderer/data/db";
 import { connectErrorText } from "#renderer/lib/connect-page";
 import type { OnboardingStepId } from "#renderer/lib/navigation/areas";
-import { IS_ELECTRON } from "#renderer/lib/platform";
 
 import { ConnectFailed } from "./connect";
 import { ensureFirstBot, firstBotStore } from "./first-bot";
@@ -83,19 +82,6 @@ export const OnboardingStepPage = (props: OnboardingPageProps) => {
   const [busy, setBusy] = useState(false);
   const heading = useRef<HTMLHeadingElement>(null);
   const bot = first.state === "ready" ? first.result.bot : null;
-  const profiles = useQuery({
-    ...transport.orpc.auth.abacus.browserProfiles.queryOptions({ input: {} }),
-    enabled: IS_ELECTRON && (step === "welcome" || step === "connect"),
-  });
-  const refetchProfiles = profiles.refetch;
-  useEffect(() => {
-    if (!IS_ELECTRON || step !== "welcome") return;
-    const focus = () => {
-      void refetchProfiles();
-    };
-    window.addEventListener("focus", focus);
-    return () => window.removeEventListener("focus", focus);
-  }, [step, refetchProfiles]);
   const models = useQuery({
     ...transport.orpc.models.list.queryOptions({ input: {} }),
     enabled: step === "models",
@@ -244,7 +230,7 @@ export const OnboardingStepPage = (props: OnboardingPageProps) => {
           ),
         retry:
           attempt?.status === "failed"
-            ? () => props.signIn(attempt.intent, attempt.profileId)
+            ? () => props.signIn(attempt.intent)
             : null,
       });
       if (primary) {
@@ -288,16 +274,9 @@ export const OnboardingStepPage = (props: OnboardingPageProps) => {
               }
         }
       />
-      {step === "welcome" && (
-        <WelcomeStep ctx={ctx} profiles={profiles.data} heading={heading} />
-      )}
+      {step === "welcome" && <WelcomeStep ctx={ctx} heading={heading} />}
       {step === "connect" && (
-        <ConnectStep
-          ctx={ctx}
-          attempt={attempt}
-          profiles={profiles.data}
-          heading={heading}
-        />
+        <ConnectStep ctx={ctx} attempt={attempt} heading={heading} />
       )}
       {step === "connected" && <ConnectedStep ctx={ctx} heading={heading} />}
       {step === "models" && (

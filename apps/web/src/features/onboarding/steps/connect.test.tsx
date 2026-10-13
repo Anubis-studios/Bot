@@ -7,12 +7,11 @@ import { fixedT, initI18n } from "#renderer/lib/i18n";
 import { ConnectStep } from "./connect";
 import type { StepContext } from "./context";
 
-it("retries the chosen sign-in, opens the browser, and waits for cancellation before changing intent", async () => {
+it("retries the chosen sign-in and waits for cancellation before changing intent", async () => {
   await initI18n();
   let finishCancel!: () => void;
   const signIn = vi.fn(),
-    navigate = vi.fn(async () => {}),
-    openInBrowser = vi.fn(async () => {});
+    navigate = vi.fn(async () => {});
   const cancelSignIn = vi.fn(
     () =>
       new Promise<void>((resolve) => {
@@ -24,7 +23,6 @@ it("retries the chosen sign-in, opens the browser, and waits for cancellation be
       signIn,
       navigate,
       cancelSignIn,
-      transport: { client: { auth: { abacus: { openInBrowser } } } },
     },
     t: fixedT(),
     busy: false,
@@ -40,20 +38,14 @@ it("retries the chosen sign-in, opens the browser, and waits for cancellation be
       attempt={{
         id: "attempt",
         intent: "signup",
-        profileId: "chosen-profile",
         status: "failed",
         outcome: { ok: false, error: "offline" },
       }}
-      profiles={[]}
       heading={createRef()}
     />
   );
   fireEvent.click(screen.getByRole("button", { name: "Try again" }));
-  expect(signIn).toHaveBeenCalledWith("signup", "chosen-profile");
-  fireEvent.click(
-    screen.getByRole("button", { name: "Use my browser instead" })
-  );
-  expect(openInBrowser).toHaveBeenCalledWith({});
+  expect(signIn).toHaveBeenCalledWith("signup");
   signIn.mockClear();
   fireEvent.click(screen.getByRole("button", { name: "Sign in another way" }));
   expect(signIn).not.toHaveBeenCalled();

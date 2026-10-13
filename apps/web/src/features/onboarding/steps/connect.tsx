@@ -1,9 +1,8 @@
 /**
  * `connect` (canvas OnboardConnect): the live sign-in attempt. One spinner
- * card while the browser is open ("Continue with {browser} · {profile}"
- * when a profile was picked), the error line and Try again when it failed,
- * and the quiet row: Use my browser instead · Sign in another way · Cancel.
- * The browser build connects the site's own session instead (no hop).
+ * card while the browser is open, the error line and Try again when it
+ * failed, and the quiet row: Sign in another way · Cancel. The browser build
+ * connects the site's own session instead (no hop).
  */
 import type { Ref } from "react";
 
@@ -15,7 +14,6 @@ import { signInFailureCopy } from "#renderer/lib/sign-in-failure";
 import type { SignInAttempt } from "../store";
 import type { StepContext } from "./context";
 import { StepBody, StepButton, StepLink, StepLinks, StepTitle } from "./kit";
-import type { BrowserProfile } from "./welcome";
 
 export const failureCopy = (
   attempt: SignInAttempt
@@ -33,19 +31,14 @@ export const failureCopy = (
 export const ConnectStep = ({
   ctx,
   attempt,
-  profiles,
   heading,
 }: {
   ctx: StepContext;
   attempt: SignInAttempt | null;
-  profiles: readonly BrowserProfile[] | undefined;
   heading: Ref<HTMLHeadingElement>;
 }) => {
   const { t, props, perform } = ctx;
   const waiting = (props.preview && !attempt) || attempt?.status === "pending";
-  const profile = attempt?.profileId
-    ? profiles?.find((entry) => entry.id === attempt.profileId)
-    : undefined;
   const sessionExpired =
     !IS_ELECTRON &&
     attempt?.status === "failed" &&
@@ -80,14 +73,6 @@ export const ConnectStep = ({
                   : "onboarding.webSignIn.waiting"
               )}
             </span>
-            {profile && (
-              <span className="onboarding-quiet block">
-                {t("onboarding.continueWithBrowser", {
-                  browser: profile.browserName,
-                  profile: profile.profileName,
-                })}
-              </span>
-            )}
           </span>
         </div>
       )}
@@ -97,24 +82,13 @@ export const ConnectStep = ({
             {t(failureCopy(attempt).key, failureCopy(attempt).values)}
           </p>
           <div className="mt-4">
-            <StepButton
-              onClick={() => props.signIn(attempt.intent, attempt.profileId)}
-            >
+            <StepButton onClick={() => props.signIn(attempt.intent)}>
               {t("onboarding.pages.retry")}
             </StepButton>
           </div>
         </>
       )}
       <StepLinks className="mt-4">
-        {IS_ELECTRON && (
-          <StepLink
-            onClick={() =>
-              void props.transport.client.auth.abacus.openInBrowser({})
-            }
-          >
-            {t("onboarding.openInBrowserCta")}
-          </StepLink>
-        )}
         {IS_ELECTRON ? (
           <StepLink
             onClick={() =>

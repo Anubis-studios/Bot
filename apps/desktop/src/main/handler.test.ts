@@ -16,7 +16,6 @@ const handlers = new Map<string, (...args: unknown[]) => unknown>();
 
 vi.mock("./services/providers/sign-in-session", () => ({
   clearSignInSession: vi.fn(async () => undefined),
-  rememberSessionAccount: vi.fn(),
 }));
 vi.mock("./login-item", () => ({ registerLoginItem: vi.fn() }));
 vi.mock("electron", () => ({
@@ -64,7 +63,6 @@ vi.mock("./profile-home", () => ({
 }));
 vi.mock("./services/providers/abacus-auth-service", () => ({
   cancelAbacusAuth: vi.fn(),
-  openAbacusAuthInBrowser: vi.fn(),
   startAbacusAuth: vi.fn(async () => ({ ok: true, key: "s2_key" })),
 }));
 vi.mock("./services/providers/abacus-connector-service", () => ({
@@ -158,7 +156,7 @@ beforeEach(() => {
     operations.adoptAbacusCredential(...(args as [string, "web"]))
   );
   handlers.set("auth", (_event, ...args) =>
-    operations.startAbacusAuth(...(args as [boolean, boolean]))
+    operations.startAbacusAuth(...(args as [boolean]))
   );
   handlers.set("save", (_event, ...args) =>
     operations.saveApiKey(...(args as [string, string]))

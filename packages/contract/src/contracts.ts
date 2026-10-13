@@ -729,17 +729,6 @@ export type OpenRouterAuthOutcome =
 /** Same contract: the key never leaves main. */
 /** Which first-screen button started an Abacus.AI sign-in. */
 export type AbacusAuthIntent = "signup" | "signin";
-/** A Chromium profile offered at sign-in. */
-export interface BrowserSignInProfile {
-  id: string;
-  browserName: string;
-  profileName: string;
-  /** The OS default browser's default profile; listed even without a session. */
-  isDefault?: boolean;
-  /** Its cookie store names abacus.ai, so it may sign in in one click. */
-  hasAbacusSession?: boolean;
-}
-
 export type AbacusAuthOutcome =
   | { ok: true }
   | { ok: false; error: string; cancelled?: boolean };

@@ -13,10 +13,6 @@ import { shell } from "electron";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("electron", () => ({ shell: { openExternal: vi.fn() } }));
-// The browser arm: these tests are about the listener, not the surface.
-vi.mock("./abacus-signin-config", () => ({
-  resolveSignInVariant: async () => "browser",
-}));
 
 const openExternal = vi.mocked(shell.openExternal);
 

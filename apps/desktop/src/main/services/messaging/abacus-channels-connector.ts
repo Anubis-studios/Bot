@@ -280,8 +280,7 @@ export class AbacusChannelsConnector implements MessagingConnector {
       this.linkWindow.focus();
       return;
     }
-    // Discord's app-profile card needs a desktop-width viewport; same size as
-    // the sign-in window, so the two read as one flow.
+    // Discord's app-profile card needs a desktop-width viewport.
     const win = new BrowserWindow({
       width: 1000,
       height: 720,

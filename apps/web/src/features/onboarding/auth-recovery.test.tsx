@@ -104,8 +104,8 @@ it("cancel after credentials are saved skips signup without allowing a stale han
   });
   const original = signInStore.startSignIn;
   vi.spyOn(signInStore, "startSignIn").mockImplementation(
-    (transport, intent, profile, callback) =>
-      original(transport, intent, profile, async (outcome) => {
+    (transport, intent, callback) =>
+      original(transport, intent, async (outcome) => {
         try {
           await callback(outcome);
         } finally {

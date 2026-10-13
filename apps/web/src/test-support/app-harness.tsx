@@ -232,7 +232,6 @@ const shellRouter = (
     auth: {
       openRouter: { cancel: os.auth.openRouter.cancel.handler(() => {}) },
       abacus: {
-        browserProfiles: os.auth.abacus.browserProfiles.handler(() => []),
         start: os.auth.abacus.start.handler(async ({ input, context }) => {
           context.calls.push(["auth.abacus.start", input]);
           const outcome = await (options.authStart?.() ?? {

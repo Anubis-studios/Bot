@@ -25,16 +25,10 @@ export const authRouter = impl.auth.router({
       context.deps.host.shouldAutoSignIn()
     ),
     start: impl.auth.abacus.start.handler(({ input, context }) =>
-      context.deps.host.startAbacusAuth(input?.intent, input?.browserProfileId)
-    ),
-    browserProfiles: impl.auth.abacus.browserProfiles.handler(({ context }) =>
-      context.deps.host.listBrowserSignInProfiles()
+      context.deps.host.startAbacusAuth(input?.intent)
     ),
     cancel: impl.auth.abacus.cancel.handler(({ context }) => {
       context.deps.host.cancelAbacusAuth();
-    }),
-    openInBrowser: impl.auth.abacus.openInBrowser.handler(({ context }) => {
-      context.deps.host.openAbacusAuthInBrowser();
     }),
     signOut: impl.auth.abacus.signOut.handler(({ input, context }) =>
       context.deps.host.signOutAbacus(input)

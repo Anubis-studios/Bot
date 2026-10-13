@@ -72,18 +72,12 @@ export interface HostPlatformOperations {
   webAuth?: (
     adopt: (key: string, surface: "web") => Promise<AdoptCredentialResult>
   ) => WebAuth;
-  startAbacusAuth: (
-    intent: "signin" | "signup",
-    profile?: string
-  ) => Promise<any>;
+  startAbacusAuth: (intent: "signin" | "signup") => Promise<any>;
   startOpenRouterAuth: () => Promise<any>;
   cancelAbacusAuth: () => void;
-  openAbacusAuthInBrowser: () => void;
-  listBrowserSignInProfiles: () => any;
   shouldAutoSignIn: () => Promise<boolean>;
   cancelOpenRouterAuth: () => void;
   clearSignInSession: () => Promise<void>;
-  rememberSessionAccount: (email: string) => void;
   registerLoginItem: () => void;
   relaunch: () => void;
   requestMicrophoneAccess: () => Promise<any>;
@@ -111,12 +105,9 @@ export const createHostOperations = (
     startAbacusAuth,
     startOpenRouterAuth,
     cancelAbacusAuth,
-    openAbacusAuthInBrowser,
-    listBrowserSignInProfiles,
     shouldAutoSignIn,
     cancelOpenRouterAuth,
     clearSignInSession,
-    rememberSessionAccount,
     registerLoginItem,
     requestMicrophoneAccess,
   } = platform;
@@ -221,8 +212,8 @@ export const createHostOperations = (
    */
   const adoptAbacusCredential = async (
     rawKey: string,
-    /** Where the key was minted; the app's own window keeps that account's session. */
-    surface?: "in_app" | "browser" | "web"
+    /** Where the key was minted: a web host has no desktop profile. */
+    surface?: "web"
   ): Promise<AdoptCredentialResult> => {
     cancelIdentification();
     const revision = adoptionRevision;
@@ -265,11 +256,7 @@ export const createHostOperations = (
       return { ok: false, error: "unidentified-account" };
     }
 
-    // The sign-in partition is this account's only when it signed in there;
-    // a browser sign-in or a pasted key leaves whatever it held nobody's.
-    if (surface === "in_app" && account.email != null)
-      rememberSessionAccount(account.email);
-    else await clearSignInSession();
+    await clearSignInSession();
 
     const legacyKey = legacyProfileKeyFor(account);
     const aliases =
@@ -318,8 +305,7 @@ export const createHostOperations = (
           )
         : 0;
 
-    // A sign-in still out would mint a key for an account that is leaving;
-    // the partition is nobody's from here.
+    // A sign-in still out would mint a key for an account that is leaving.
     cancelAbacusAuth();
     await clearSignInSession();
 
@@ -392,14 +378,10 @@ export const createHostOperations = (
   };
 
   const signInToAbacus = async (
-    intent: unknown,
-    browserProfileId: unknown
+    intent: unknown
   ): Promise<AbacusAuthOutcome> => {
     const result = await startAbacusAuth(
-      intent === "signin" ? "signin" : "signup",
-      // Only an id from the listing resolves to a profile; anything else is
-      // a plain sign-in.
-      typeof browserProfileId === "string" ? browserProfileId : undefined
+      intent === "signin" ? "signin" : "signup"
     );
     if (result.ok !== true) {
       return {
@@ -409,7 +391,7 @@ export const createHostOperations = (
       };
     }
 
-    const adopted = await adoptAbacusCredential(result.key, result.surface);
+    const adopted = await adoptAbacusCredential(result.key);
     if (!adopted.ok) return adopted;
 
     // Warm the catalog for same-profile sign-ins. A profile switch relaunches,
@@ -481,8 +463,6 @@ export const createHostOperations = (
     setDefaultModel: (modelId: string) => setDefaultModel(modelId),
     sessionHomePath: () => sessionDefaultWorkspace(),
     cancelAbacusAuth: () => cancelAbacusAuth(),
-    openAbacusAuthInBrowser: () => openAbacusAuthInBrowser(),
-    listBrowserSignInProfiles: () => listBrowserSignInProfiles(),
     cancelOpenRouterAuth: () => cancelOpenRouterAuth(),
     fetchReferralSummary: () => fetchReferralSummary(),
     listReferralGmailContacts: () => listReferralGmailContacts(),

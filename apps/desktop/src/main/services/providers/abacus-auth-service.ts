@@ -8,17 +8,7 @@ import { app, shell } from "electron";
 import { bringToFront } from "../../bring-to-front";
 import { readSettings } from "../config/settings";
 import { reportFunnelStep } from "../debug-sync/funnel-beacon";
-import {
-  browserSignInCookies,
-  defaultSignInProfile,
-  providerSignInCookies,
-} from "./abacus-browser-profiles";
 import { abacusAppHost, abacusUserAgent } from "./abacus-host";
-import {
-  resolveSignInVariant,
-  type SignInVariant,
-} from "./abacus-signin-config";
-import { openSignInWindow, type SignInWindow } from "./abacus-signin-window";
 import { handoffPage } from "./handoff-page";
 
 /**
@@ -41,12 +31,7 @@ const ABACUS_TIMEOUT =
   "Timed out waiting for Abacus.AI sign-in. Sign in at abacus.ai, then press Connect again.";
 
 export type AbacusAuthResult =
-  | {
-      ok: true;
-      key: string;
-      /** Where the account signed in: the app's own window holds its session afterwards, the browser does. */
-      surface: "in_app" | "browser";
-    }
+  | { ok: true; key: string }
   | { ok: false; error: string; cancelled?: boolean };
 
 /**
@@ -67,13 +52,8 @@ const RESULT_LINGER_MS = 15_000;
 const codeChallengeFor = (verifier: string): string =>
   crypto.createHash("sha256").update(verifier).digest("base64url");
 
-// How long the in-app window stays on the "connected" page: long enough for
-// its script to read the outcome and send the beacon, short enough to feel
-// like the app moved on by itself.
-const WINDOW_CLOSE_DELAY_MS = 1500;
-
 /** One in-flight attempt at a time, same rationale as the OpenRouter service. */
-let inFlight: { close: () => void; openInBrowser?: () => void } | null = null;
+let inFlight: { close: () => void } | null = null;
 
 export const cancelAbacusAuth = (): void => {
   inFlight?.close();
@@ -81,28 +61,11 @@ export const cancelAbacusAuth = (): void => {
 };
 
 /**
- * Move an in-flight sign-in to the system browser: for a user who would
- * rather use the session and passwords their browser already has.
- */
-export const openAbacusAuthInBrowser = (): void => {
-  inFlight?.openInBrowser?.();
-};
-
-/**
- * In the in-app arm, sign-up opens the app window with the default browser's
- * provider sessions, and so does `signin` ("I already have an account") when
- * that browser can hand them over; otherwise `signin` uses the browser, where
- * an existing abacus.ai session finishes it in one step. The browser arm is
- * always the browser. The arm is resolved either way, so the account is
- * stamped the same whichever button was pressed.
+ * Sign-in in the system browser, where an existing abacus.ai session finishes
+ * it in one step. `signup` opens the sign-up form, `signin` the sign-in one.
  */
 export const startAbacusAuth = async (
-  intent: AbacusAuthIntent = "signup",
-  /**
-   * A Chromium profile the user picked on the sign-in screen: its Abacus.AI
-   * session signs in, in the app window, whatever the arm or intent.
-   */
-  browserProfileId?: string
+  intent: AbacusAuthIntent = "signup"
 ): Promise<AbacusAuthResult> => {
   cancelAbacusAuth();
 
@@ -113,13 +76,10 @@ export const startAbacusAuth = async (
 
   return new Promise<AbacusAuthResult>((resolve) => {
     let settled = false;
-    let variant: SignInVariant = "browser";
-    let browserRequested = false;
     let accepted = false;
     let timer: NodeJS.Timeout | null = null;
     let linger: NodeJS.Timeout | null = null;
     let outcome: ExchangeOutcome = { state: "pending" };
-    let signInWindow: SignInWindow | null = null;
     const abort = new AbortController();
 
     const closeServer = (): void => {
@@ -194,16 +154,8 @@ export const startAbacusAuth = async (
         return;
       }
 
-      void exchange(code, verifier, variant, abort.signal).then(
-        ({ result, reason }) =>
-          finish(
-            // The window, when it is still ours, is where the account signed
-            // in; its session is the app's to ride on afterwards.
-            result.ok && signInWindow != null && !browserRequested
-              ? { ...result, surface: "in_app" }
-              : result,
-            reason
-          )
+      void exchange(code, verifier, abort.signal).then(({ result, reason }) =>
+        finish(result, reason)
       );
     });
 
@@ -241,12 +193,6 @@ export const startAbacusAuth = async (
       else if (reason != null) outcome = { state: "failed", reason };
       if (outcome.state === "pending") closeServer();
       else linger = setTimeout(closeServer, RESULT_LINGER_MS);
-      const win = signInWindow;
-      signInWindow = null;
-      if (win != null) {
-        if (outcome.state === "pending") win.close();
-        else setTimeout(win.close, WINDOW_CLOSE_DELAY_MS);
-      }
       // A browser sign-in left the user in the browser: bring them back.
       // win.focus() alone does not activate an app in the background on
       // macOS; stealing focus is the point here, the user just finished.
@@ -269,18 +215,30 @@ export const startAbacusAuth = async (
       finish({ ok: false, error: error.message });
     });
 
-    // Register before the config lookup so cancellation and newer attempts
-    // also supersede a sign-in whose surface has not been resolved yet.
-    inFlight = { close, openInBrowser: () => openInBrowser() };
+    inFlight = { close };
 
-    let authUrl: URL | null = null;
-    const openInBrowser = (): void => {
+    // Port 0 lets the OS pick; loopback-only so nothing off-machine reaches it.
+    server.listen(0, "127.0.0.1", () => {
       if (settled) return;
-      browserRequested = true;
-      if (authUrl == null) return;
-      signInWindow?.close();
-      signInWindow = null;
-      void shell.openExternal(authUrl.toString()).catch((error: unknown) => {
+      const { port } = server.address() as AddressInfo;
+
+      timer = setTimeout(() => {
+        finish({
+          ok: false,
+          error: ABACUS_TIMEOUT,
+        });
+      }, AUTH_TIMEOUT_MS);
+
+      const url = new URL(SIGNIN_PATH, abacusAppHost());
+      if (intent === "signup") url.searchParams.set("isSignUp", "1");
+      url.searchParams.set("AbacusAIBot", "1");
+      url.searchParams.set("botChallenge", codeChallengeFor(verifier));
+      url.searchParams.set("botPort", String(port));
+      url.searchParams.set("botPath", callbackPath);
+      reportFunnelStep("signup_clicked", "browser");
+      console.log(`[abacus-auth] sign-in intent: ${intent}`);
+
+      void shell.openExternal(url.toString()).catch((error: unknown) => {
         finish(
           {
             ok: false,
@@ -292,101 +250,6 @@ export const startAbacusAuth = async (
           undefined,
           "open_browser"
         );
-      });
-    };
-
-    void Promise.all([
-      resolveSignInVariant(),
-      browserProfileId != null
-        ? browserSignInCookies(browserProfileId)
-        : Promise.resolve([]),
-    ]).then(async ([resolvedVariant, seedCookies]) => {
-      if (settled) return;
-      variant = resolvedVariant;
-      // An unreadable profile falls back to the plain flow for the intent.
-      const seeded = seedCookies.length > 0;
-      const defaultProfile =
-        !seeded && variant === "in_app"
-          ? await defaultSignInProfile().catch(() => null)
-          : null;
-      if (settled) return;
-      const inWindow =
-        !browserRequested &&
-        (seeded ||
-          (variant === "in_app" &&
-            (intent === "signup" || defaultProfile != null)));
-      // Which way this attempt went, for the funnel: a short code only.
-      const surface = !inWindow
-        ? "browser"
-        : seeded
-          ? "window_session"
-          : defaultProfile != null
-            ? "window_providers"
-            : "window";
-
-      // Port 0 lets the OS pick; loopback-only so nothing off-machine reaches it.
-      server.listen(0, "127.0.0.1", () => {
-        const { port } = server.address() as AddressInfo;
-
-        timer = setTimeout(() => {
-          finish({
-            ok: false,
-            error: ABACUS_TIMEOUT,
-          });
-        }, AUTH_TIMEOUT_MS);
-
-        const url = new URL(SIGNIN_PATH, abacusAppHost());
-        if (intent === "signup") url.searchParams.set("isSignUp", "1");
-        url.searchParams.set("AbacusAIBot", "1");
-        url.searchParams.set("botChallenge", codeChallengeFor(verifier));
-        url.searchParams.set("botPort", String(port));
-        url.searchParams.set("botPath", callbackPath);
-        authUrl = url;
-        reportFunnelStep(
-          "signup_clicked",
-          browserRequested ? "browser" : surface
-        );
-
-        console.log(
-          `[abacus-auth] sign-in surface: ${variant} intent: ${intent}${seeded ? " seeded" : ""}${defaultProfile != null ? ` default: ${defaultProfile.browserName}` : ""}`
-        );
-        if (browserRequested || !inWindow) {
-          openInBrowser();
-          return;
-        }
-        // Started only once the window is certain (a headless browser launch
-        // is not free), and before it opens so the read overlaps the page
-        // load. A picked profile's flow keeps provider sign-ins as they were.
-        const providerCookies = seeded
-          ? undefined
-          : defaultProfile != null
-            ? providerSignInCookies(defaultProfile)
-            : Promise.resolve(null);
-        void openSignInWindow({
-          url: url.toString(),
-          port,
-          callbackPath,
-          onHandOff: openInBrowser,
-          onDismissed: () => {
-            // Closed once the code landed: the exchange is under way and the
-            // key is moments away; only a close before that is a cancel.
-            if (!browserRequested && !accepted) close();
-          },
-          ...(seeded ? { seedCookies } : {}),
-          ...(providerCookies != null ? { providerCookies } : {}),
-        })
-          .then((win) => {
-            if (win == null) {
-              if (!browserRequested) openInBrowser();
-              return;
-            }
-            // A cancel or browser hand-off may happen while storage is clearing.
-            if (settled || browserRequested) win.close();
-            else signInWindow = win;
-          })
-          .catch(() => {
-            if (!browserRequested) openInBrowser();
-          });
       });
     });
   });
@@ -406,7 +269,6 @@ const reasonCode = (value: string): string =>
 const exchange = async (
   code: string,
   verifier: string,
-  variant: SignInVariant,
   signal: AbortSignal
 ): Promise<{ result: AbacusAuthResult; reason?: string }> => {
   try {
@@ -416,13 +278,7 @@ const exchange = async (
         "content-type": "application/json",
         "user-agent": abacusUserAgent(),
       },
-      // The arm this install was assigned, stamped on the account at its first
-      // connect so the experiment reads sign-ups per arm.
-      body: JSON.stringify({
-        authCode: code,
-        verifier,
-        signinVariant: variant,
-      }),
+      body: JSON.stringify({ authCode: code, verifier }),
       signal,
     });
 
@@ -451,7 +307,7 @@ const exchange = async (
 
     if (key.length === 0) return { result: genericFailure, reason: "no_key" };
 
-    return { result: { ok: true, key, surface: "browser" } };
+    return { result: { ok: true, key } };
   } catch (error) {
     console.warn(
       `[abacus-auth] exchange error: ${error instanceof Error ? error.message : String(error)}`

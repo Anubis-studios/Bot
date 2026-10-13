@@ -15,7 +15,7 @@ export interface OnboardingPageProps {
   transport: Transport;
   facts: FlowFacts;
   navigate(step: OnboardingStepId): Promise<void>;
-  signIn(intent: "signup" | "signin", profileId?: string): void;
+  signIn(intent: "signup" | "signin"): void;
   cancelSignIn(): Promise<void>;
   /** `keepFirstBot`: save the step's previewed bot even though the exit is not that bot. */
   complete(

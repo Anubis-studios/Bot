@@ -84,9 +84,9 @@ const OnboardingRoute = () => {
       if (step === "connectors") releaseOnboardingConnect();
     };
   }, [db, transport, step]);
-  const auth = (intent: "signup" | "signin", profileId?: string) => {
+  const auth = (intent: "signup" | "signin") => {
     if (
-      startSignIn(transport, intent, profileId, async (outcome) => {
+      startSignIn(transport, intent, async (outcome) => {
         const attemptId = onboardingStore.state.signIn?.id;
         if (step === "models") {
           void queryClient.invalidateQueries();
@@ -326,14 +326,6 @@ export const Route = createFileRoute("/_bare/onboarding/$step")({
     if (context.provisional) return { facts: UNKNOWN_FACTS };
     const { signal } = abortController;
     if (cause === "preload") return { facts: await factsOf(context, signal) };
-    if (IS_ELECTRON && params.step === "welcome")
-      await warm(
-        context.queryClient.ensureQueryData(
-          context.transport.orpc.auth.abacus.browserProfiles.queryOptions({
-            input: {},
-          })
-        )
-      );
     if (params.step === "connected")
       await context.transport.client.account.abacus(
         { refresh: true },

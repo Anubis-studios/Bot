@@ -101,28 +101,16 @@ export const AccountPage = () => {
             />
           )}
           {pending && (
-            <>
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  attempt.current++;
-                  setPending(false);
-                  if (IS_ELECTRON) void transport.client.auth.abacus.cancel({});
-                }}
-              >
-                {t("phase5.cancel")}
-              </Button>
-              {IS_ELECTRON && (
-                <Button
-                  variant="ghost"
-                  onClick={() =>
-                    void transport.client.auth.abacus.openInBrowser({})
-                  }
-                >
-                  {t("phase5.continueBrowser")}
-                </Button>
-              )}
-            </>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                attempt.current++;
+                setPending(false);
+                if (IS_ELECTRON) void transport.client.auth.abacus.cancel({});
+              }}
+            >
+              {t("phase5.cancel")}
+            </Button>
           )}
           <Button
             variant="secondary"

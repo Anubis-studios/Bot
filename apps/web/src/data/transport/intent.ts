@@ -22,7 +22,7 @@ const READS: Record<string, string> = {
   account: "abacus state upgradeUrl usage vaultUrl",
   agent: "queue.get skills state",
   ai: "attention hydrate joinRun runFinished subscribe",
-  auth: "abacus.browserProfiles abacus.shouldAutoSignIn",
+  auth: "abacus.shouldAutoSignIn",
   bots: "chatPreviews events senderChats",
   browser: "events permissions.list profiles.list status",
   connectors: "events requests statuses",

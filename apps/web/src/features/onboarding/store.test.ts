@@ -21,9 +21,9 @@ describe("R6-T7 sign-in tokens", () => {
     const transport = {
       client: { auth: { abacus: { start, cancel: async () => {} } } },
     } as unknown as Transport;
-    expect(startSignIn(transport, "signin", undefined, vi.fn())).toBe(true);
+    expect(startSignIn(transport, "signin", vi.fn())).toBe(true);
     expect(onboardingStore.state.signIn?.status).toBe("pending");
-    expect(startSignIn(transport, "signup", undefined, vi.fn())).toBe(false);
+    expect(startSignIn(transport, "signup", vi.fn())).toBe(false);
     expect(start).toHaveBeenCalledOnce();
     gate.resolve({ ok: true });
     await gate.promise;
@@ -39,10 +39,10 @@ describe("R6-T7 sign-in tokens", () => {
     const transport = {
       client: { auth: { abacus: { start, cancel: async () => {} } } },
     } as unknown as Transport;
-    startSignIn(transport, "signin", undefined, settled);
+    startSignIn(transport, "signin", settled);
     const oldId = onboardingStore.state.signIn!.id;
     await cancelSignIn(transport);
-    startSignIn(transport, "signin", undefined, settled);
+    startSignIn(transport, "signin", settled);
     expect(onboardingStore.state.signIn!.id).not.toBe(oldId);
     old.resolve({ ok: true });
     await Promise.resolve();
@@ -63,10 +63,10 @@ it("keeps one attempt pending until account settlement finishes", async () => {
   const transport = {
     client: { auth: { abacus: { start, cancel: async () => {} } } },
   } as unknown as Transport;
-  startSignIn(transport, "signin", undefined, settled);
+  startSignIn(transport, "signin", settled);
   await vi.waitFor(() => expect(settled).toHaveBeenCalledOnce());
   expect(onboardingStore.state.signIn?.status).toBe("pending");
-  expect(startSignIn(transport, "signin", undefined, vi.fn())).toBe(false);
+  expect(startSignIn(transport, "signin", vi.fn())).toBe(false);
   account.resolve();
   await vi.waitFor(() =>
     expect(onboardingStore.state.signIn?.status).toBe("succeeded")

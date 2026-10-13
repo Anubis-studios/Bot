@@ -4,7 +4,6 @@ import * as v from "valibot";
 import type {
   AbacusAuthOutcome,
   AbacusSignOutResult,
-  BrowserSignInProfile,
   OpenRouterAuthOutcome,
 } from "../contracts";
 import { mutation, query } from "./base";
@@ -33,18 +32,11 @@ export const auth = {
         v.optional(
           v.object({
             intent: v.optional(v.picklist(["signup", "signin"])),
-            browserProfileId: v.optional(v.string()),
           })
         )
       )
       .output(type<AbacusAuthOutcome>()),
-    /** Chromium profiles offered as "Continue with …". */
-    browserProfiles: query
-      .input(NoInput)
-      .output(type<BrowserSignInProfile[]>()),
     cancel: mutation.input(NoInput).output(type<void>()),
-    /** Move an in-flight sign-in from the app window to the browser. */
-    openInBrowser: mutation.input(NoInput).output(type<void>()),
     /** Stashes this account's sessions; other keys go too unless kept. */
     signOut: mutation
       .input(v.object({ keepOtherApiKeys: v.boolean() }))
