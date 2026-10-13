@@ -52,6 +52,7 @@ describe("R2-T15 status", () => {
               maxAttempts: 5,
               delayMs: 1,
               isNetworkError: false,
+              waitingForConnection: false,
             },
           },
         },
@@ -59,6 +60,25 @@ describe("R2-T15 status", () => {
         agents: 0,
       })
     ).toBe('chat.busy.retrying{"attempt":2,"max":5}');
+    expect(
+      busyLabel(t, {
+        state: {
+          ...state,
+          activity: {
+            ...state.activity,
+            retry: {
+              attempt: 3,
+              maxAttempts: 0,
+              delayMs: 8_000,
+              isNetworkError: true,
+              waitingForConnection: true,
+            },
+          },
+        },
+        running: [],
+        agents: 0,
+      })
+    ).toBe("chat.busy.waitingForConnection");
     expect(
       busyLabel(t, {
         state: {

@@ -392,6 +392,29 @@ export class OpenLlmRotation {
     );
   }
 
+  /** The candidate ready soonest and when, ignoring nothing but refused classes. */
+  soonest(
+    candidates: ModelChoice[]
+  ): { id: string; readyAt: number } | undefined {
+    const now = this.now();
+    let best: { id: string; readyAt: number } | undefined;
+    for (const choice of candidates) {
+      if (this.inRefusedScope(choice, now)) continue;
+      const readyAt = this.readyAt(choice);
+      if (best == null || readyAt < best.readyAt)
+        best = { id: choice.id, readyAt };
+    }
+    return best;
+  }
+
+  /** When a model may run again: its cooldown over and its quota window open. */
+  private readyAt(choice: ModelChoice): number {
+    return Math.max(
+      this.cooldownUntil.get(choice.id) ?? 0,
+      this.quotaBlockedUntil(choice)
+    );
+  }
+
   /**
    * The best candidate not cooling down, or when all are, the one whose
    * cooldown expires soonest: "everything failed recently" must not become
@@ -410,11 +433,7 @@ export class OpenLlmRotation {
     );
 
     // Out until its cooldown ends and its spent quota window reopens.
-    const readyAt = (choice: ModelChoice): number =>
-      Math.max(
-        this.cooldownUntil.get(choice.id) ?? 0,
-        this.quotaBlockedUntil(choice)
-      );
+    const readyAt = (choice: ModelChoice): number => this.readyAt(choice);
     const ready = eligible.find((choice) => readyAt(choice) <= now);
 
     if (ready != null) return ready;

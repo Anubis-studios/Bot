@@ -292,6 +292,7 @@ export interface CustomValues {
     maxAttempts: number;
     delayMs: number;
     isNetworkError: boolean;
+    waitingForConnection?: boolean;
   };
   "run.ack": {
     runId: string;

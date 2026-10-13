@@ -527,7 +527,8 @@ export const SCENARIOS: GoldenScenario[] = [
     // §7.1 OpenLLM rotation, exhausted: a turn-origin error from rotation.
     name: "openllm-exhausted",
     mode: YOLO,
-    env: NO_KEYS,
+    // The busy pool's waits for its soonest model, at no length.
+    env: { ...NO_KEYS, ABACUSAI_BOT_BUSY_WAIT_MS: "0" },
     setup: openLlmPool,
     reply: () => ({ fail: { status: 429, message: "rate limited upstream" } }),
     steps: [

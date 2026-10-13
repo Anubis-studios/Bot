@@ -5,6 +5,7 @@ import path from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { setMigrationWriteBlocks } from "../../migrations/write-block";
+import { CronScheduler } from "./cron-scheduler";
 import {
   createJob,
   onCronStoreWrite,
@@ -14,6 +15,7 @@ import {
   getJob,
   jobForWebhookToken,
   listJobs,
+  missedJobs,
   recordRun,
   removeJob,
   updateJob,
@@ -436,5 +438,121 @@ describe("full access and a rewrite", () => {
     expect(updateJob(job.id, { prompt: "b", access: "full" }).access).toBe(
       "full"
     );
+  });
+});
+
+describe("a fire that comes due without a network", () => {
+  /** A scheduler whose network the test controls, and the runs it started. */
+  const scheduler = () => {
+    const state = { online: false, held: 0 };
+    const runs: string[] = [];
+    const cron = new CronScheduler(
+      async (id) => {
+        runs.push(id);
+      },
+      async () => state.online,
+      () => {
+        state.held += 1;
+      }
+    );
+    return { cron, runs, state };
+  };
+
+  it("is held, not failed, and runs once when the network is back", async () => {
+    const job = createJob({ schedule: "*/5 * * * *", prompt: "x" });
+    const { cron, runs, state } = scheduler();
+
+    await cron.tick(new Date(2026, 9, 13, 9, 0));
+    expect(runs).toEqual([]);
+    expect(cron.isHeld(job.id)).toBe(true);
+    expect(state.held).toBeGreaterThan(0);
+    // Nothing in its history says it failed.
+    expect(getJob(job.id)?.runs).toEqual([]);
+
+    state.online = true;
+    await cron.release();
+    expect(runs).toEqual([job.id]);
+    expect(cron.isHeld(job.id)).toBe(false);
+  });
+
+  it("collapses every missed fire into one run", async () => {
+    const job = createJob({ schedule: "*/5 * * * *", prompt: "x" });
+    const { cron, runs, state } = scheduler();
+
+    for (const minute of [0, 5, 10, 15])
+      await cron.tick(new Date(2026, 9, 13, 9, minute));
+    state.online = true;
+    await cron.release();
+    await cron.release();
+
+    expect(runs).toEqual([job.id]);
+  });
+
+  it("files a held fire as skipped offline when its next fire comes first, never failed", async () => {
+    const job = createJob({ schedule: "*/5 * * * *", prompt: "x" });
+    const { cron } = scheduler();
+
+    await cron.tick(new Date(2026, 9, 13, 9, 0));
+    await cron.tick(new Date(2026, 9, 13, 9, 5));
+    await cron.tick(new Date(2026, 9, 13, 9, 10));
+
+    const kinds = getJob(job.id)?.runs.map((entry) => entry.kind);
+    expect(kinds).toEqual(["skipped-offline", "skipped-offline"]);
+    expect(getJob(job.id)?.runs[0]?.result).toMatch(/no network/);
+    // The newest fire is still held, to run when the network is back.
+    expect(cron.isHeld(job.id)).toBe(true);
+  });
+
+  it("keeps a held fire across a restart, shown as held, and runs it once when back", async () => {
+    const job = createJob({ schedule: "0 9 * * *", prompt: "x" });
+    await scheduler().cron.tick(new Date(2026, 9, 13, 9, 0));
+
+    // A new process: nothing in memory, the hold read off disk.
+    const { cron, runs, state } = scheduler();
+    expect(cron.isHeld(job.id)).toBe(true);
+    await cron.tick(new Date(2026, 9, 13, 9, 30));
+    expect(runs).toEqual([]);
+
+    state.online = true;
+    await cron.tick(new Date(2026, 9, 13, 9, 31));
+    await cron.release();
+    expect(runs).toEqual([job.id]);
+    expect(cron.isHeld(job.id)).toBe(false);
+  });
+
+  it("runs a held fire on the first tick back, beside nothing else", async () => {
+    const job = createJob({ schedule: "0 9 * * *", prompt: "x" });
+    const { cron, runs, state } = scheduler();
+
+    await cron.tick(new Date(2026, 9, 13, 9, 0));
+    state.online = true;
+    await cron.tick(new Date(2026, 9, 13, 9, 1));
+
+    expect(runs).toEqual([job.id]);
+  });
+
+  it("runs once after a sleep that slept through its fires", async () => {
+    const job = createJob({ schedule: "*/10 * * * *", prompt: "x" });
+    const { cron, runs, state } = scheduler();
+    state.online = true;
+
+    await cron.tick(new Date(2026, 9, 13, 8, 51));
+    // Asleep from 8:51 to 9:37: four fires missed, one run.
+    await cron.tick(new Date(2026, 9, 13, 9, 37));
+
+    expect(runs).toEqual([job.id]);
+    expect(
+      missedJobs(new Date(2026, 9, 13, 8, 51), new Date(2026, 9, 13, 9, 37))
+    ).toHaveLength(1);
+  });
+
+  it("never probes the network on a tick with nothing due", async () => {
+    createJob({ schedule: "0 9 * * *", prompt: "x" });
+    const ready = vi.fn(async () => true);
+    const cron = new CronScheduler(async () => {}, ready);
+
+    await cron.tick(new Date(2026, 9, 13, 10, 0));
+
+    expect(ready).not.toHaveBeenCalled();
   });
 });

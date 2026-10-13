@@ -511,6 +511,9 @@ export class AguiEmitter {
             maxAttempts: event.maxAttempts,
             delayMs: event.delayMs,
             isNetworkError: event.isNetworkError,
+            ...(event.waitingForConnection === true
+              ? { waitingForConnection: true }
+              : {}),
           }),
         ];
 

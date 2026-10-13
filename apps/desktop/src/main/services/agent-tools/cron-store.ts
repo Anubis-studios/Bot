@@ -87,6 +87,11 @@ export interface CronJob {
   reach?: RoutineReach | null;
   /** The server would not take it: it stays here, paused, with this reason. */
   notMoved?: string | null;
+  /**
+   * When a fire came due with the network down; it runs once the network is
+   * back. On disk so a restart before then still runs it.
+   */
+  heldSince?: number | null;
 }
 
 const FILE = (): string => path.join(abacusBotHome(), "cronjobs.json");
@@ -419,6 +424,19 @@ export const markNotMoved = (id: string, reason: string): CronJob => {
   return updated;
 };
 
+/** Hold a job for the network (`at`), or let it go (null). */
+export const setHeld = (id: string, at: number | null): void => {
+  const jobs = readForWrite();
+  const index = jobs.findIndex((job) => job.id === id);
+  if (index < 0 || (jobs[index].heldSince ?? null) === at) return;
+  jobs[index] = { ...jobs[index], heldSince: at };
+  write(jobs);
+};
+
+/** Jobs held for the network, as of the last write (a restart included). */
+export const heldJobs = (): CronJob[] =>
+  read().filter((job) => job.heldSince != null);
+
 export const removeJob = (id: string): void => {
   const jobs = readForWrite();
   const remaining = jobs.filter((job) => job.id !== id);
@@ -525,6 +543,24 @@ export const dueJobs = (at: Date = new Date()): CronJob[] =>
       return false;
     }
   });
+
+/**
+ * Scheduled jobs that had a fire after `from` and before `to`'s minute: what
+ * a machine asleep (or a stalled tick) missed. The current minute is dueJobs'.
+ */
+export const missedJobs = (from: Date, to: Date): CronJob[] => {
+  const minute = new Date(to.getTime());
+  minute.setSeconds(0, 0);
+  return read().filter((job) => {
+    if (!job.enabled || job.runAt != null || job.schedule == null) return false;
+    try {
+      const next = nextRun(job.schedule, from);
+      return next != null && next.getTime() < minute.getTime();
+    } catch {
+      return false;
+    }
+  });
+};
 
 /** A once job has fired: it is done, and stays in the list as a record. */
 export const retireOnceJob = (id: string): void => {

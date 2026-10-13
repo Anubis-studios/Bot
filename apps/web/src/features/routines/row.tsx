@@ -36,6 +36,7 @@ import { runRoutineNow, showSaveFailure } from "./hosted-sync";
 type State = ReturnType<typeof routineState>;
 const moods: Partial<Record<State, AvatarMood>> = {
   "needs-you": "waiting",
+  waiting: "waiting",
   running: "working",
   failed: "blocked",
   paused: "asleep",

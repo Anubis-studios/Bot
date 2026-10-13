@@ -11,6 +11,7 @@ import type { RoutineRun, RoutineRunKind } from "@abacus-ai/contract/routines";
 /** Every result string main records, verbatim or as a prefix. */
 export const ROUTINE_RESULTS = {
   skipped: "skipped: the previous run is still going",
+  skippedOffline: "skipped: no network connection before the next run",
   noWorkspace: "no workspace to run in",
   timedOut: "failed: the run was stopped after 30 minutes",
   /** `paused: out of Abacus.AI credits`, `paused after N failed runs…`. */
@@ -28,6 +29,7 @@ export const ATTEMPT_KINDS: ReadonlySet<RoutineRunKind> = new Set([
   "started",
   "start-failed",
   "skipped",
+  "skipped-offline",
   "no-workspace",
   "unknown",
 ]);
@@ -64,6 +66,7 @@ export const legacyAttemptId = (
 /** The kind main's exact result strings mean; `unknown` otherwise. */
 export const legacyKind = (result: string): RoutineRunKind => {
   if (result === ROUTINE_RESULTS.skipped) return "skipped";
+  if (result === ROUTINE_RESULTS.skippedOffline) return "skipped-offline";
   if (result === ROUTINE_RESULTS.noWorkspace) return "no-workspace";
   if (result === ROUTINE_RESULTS.timedOut) return "timed-out";
   if (

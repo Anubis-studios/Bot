@@ -98,6 +98,8 @@ export const busyLabel = (
 ): string => {
   const { state, running, agents } = input;
   if (state.permissions.items.length > 0) return t("chat.busy.needsYou");
+  if (state.activity.retry?.waitingForConnection === true)
+    return t("chat.busy.waitingForConnection");
   if (state.activity.retry != null)
     return t("chat.busy.retrying", {
       attempt: state.activity.retry.attempt,
