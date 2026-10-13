@@ -291,8 +291,13 @@ describe.skipIf(!ready.runnable)("R2-T32 real session in Electron", () => {
     expect(provider.calls[0]!.userText.join("\n")).toContain(
       `@${join(workspace, "a.txt")}`
     );
-    expect(await app.evaluate<string>("document.body.textContent")).toContain(
-      "live output"
+    await app.evaluate(
+      `document.querySelector('[data-slot="tool-group"] button').click()`
+    );
+    await app.until(
+      `document.querySelector('[data-slot="tool-cluster"]').textContent.includes("live output")`,
+      15000,
+      "bash output in the opened run"
     );
     await clickButton("Allow once", '[data-slot="permission-card"]');
     await app.until(
