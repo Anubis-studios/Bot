@@ -98,6 +98,8 @@ const shellRouter = (
 ) => {
   let onboarded = options.onboarded ?? true;
   let signedIn = options.signedIn ?? onboarded;
+  /** Stored preview targets a pane has answered (see files.pendingPreview). */
+  const handledPreviews = new Set<string>();
   const relay = fixtureRuntime("bot-golden-plain", {}, "bot-test")!.relay;
   return {
     system: {
@@ -334,10 +336,13 @@ const shellRouter = (
         lastUpdatedAt: "now",
       })),
       search: os.files.search.handler(() => ({ items: [] })),
-      pendingPreview: os.files.pendingPreview.handler(
-        ({ input }) => options.pendingPreview?.(input.conversationKey) ?? null
-      ),
+      // As main: a target a pane has answered is forgotten.
+      pendingPreview: os.files.pendingPreview.handler(({ input }) => {
+        const stored = options.pendingPreview?.(input.conversationKey) ?? null;
+        return stored != null && handledPreviews.has(stored.id) ? null : stored;
+      }),
       previewHandled: os.files.previewHandled.handler(({ input, context }) => {
+        handledPreviews.add(input.id);
         context.calls.push(["files.previewHandled", input]);
       }),
       rename: os.files.rename.handler(async ({ input, context }) => {

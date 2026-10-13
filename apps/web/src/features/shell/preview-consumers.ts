@@ -62,6 +62,9 @@ const settlePreview = (
  * one `present_deliverable` left while the user was elsewhere (or before a
  * reload).
  */
+/** Stored targets this renderer has taken: two panes mounting at once open it once. */
+const claimedPreviews = new Set<string>();
+
 export const claimStoredPreview = async (
   files: PreviewFiles,
   conversationKey: string,
@@ -71,7 +74,9 @@ export const claimStoredPreview = async (
   const stored = await files
     .pendingPreview({ conversationKey: conversationKey as ConversationKey })
     .catch(() => null);
-  if (stored == null || signal.aborted) return;
+  if (stored == null || signal.aborted || claimedPreviews.has(stored.id))
+    return;
+  claimedPreviews.add(stored.id);
   const event = { conversationKey, path: stored.path, id: stored.id };
   settlePreview(files, event, await open(event));
 };
