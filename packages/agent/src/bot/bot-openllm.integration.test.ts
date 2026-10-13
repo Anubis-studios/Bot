@@ -27,7 +27,12 @@ import {
   vi,
 } from "vitest";
 
-import { setHostConnectivity, setReachabilityProbe } from "../connectivity.js";
+import {
+  hostAttached,
+  markHostGone,
+  setHostConnectivity,
+  setReachabilityProbe,
+} from "../connectivity.js";
 import { currentMode } from "../current-mode.js";
 import {
   NETWORK_UNREACHABLE_CODE,
@@ -418,8 +423,37 @@ describe("a bot whose network goes", () => {
   afterEach(() => {
     setHostConnectivity("unknown");
     setReachabilityProbe(null);
+    hostAttached();
     delete process.env.ABACUSAI_BOT_NETWORK_WAIT_MS;
     provider.script(() => ({ say: "ok" }));
+  });
+
+  it("stops waiting when the host goes away, and asks no model again", async () => {
+    provider.script(() => ({ drop: true }));
+    setHostConnectivity("offline");
+    const { session, events } = botSession();
+    await session.start();
+    const sent = session.send("hi");
+
+    const deadline = Date.now() + 10_000;
+    while (
+      !agentEvents(events).some(
+        (event) => event.type === "retry" && event.waitingForConnection === true
+      )
+    ) {
+      if (Date.now() > deadline) throw new Error("never waited");
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    const calls = provider.calls.length;
+
+    markHostGone();
+    await sent;
+
+    expect(provider.calls.length).toBe(calls);
+    expect(
+      agentEvents(events).filter((event) => event.type === "error")
+    ).toEqual([]);
+    expect(cooldowns()).toBe("");
   });
 
   it("waits for the connection on the same model, then answers", async () => {

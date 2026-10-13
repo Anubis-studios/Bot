@@ -33,7 +33,12 @@ process.env.ABACUSAI_BOT_MODEL_STALL_MS = "700";
 // A busy pool's wait for its soonest model, which is up to a minute for real.
 process.env.ABACUSAI_BOT_BUSY_WAIT_MS = "20";
 
-import { setHostConnectivity, setReachabilityProbe } from "./connectivity.js";
+import {
+  hostAttached,
+  markHostGone,
+  setHostConnectivity,
+  setReachabilityProbe,
+} from "./connectivity.js";
 import {
   NETWORK_UNREACHABLE_CODE,
   NETWORK_UNREACHABLE_MESSAGE,
@@ -1222,7 +1227,29 @@ describe("OpenLLM", () => {
     afterEach(() => {
       setHostConnectivity("unknown");
       setReachabilityProbe(null);
+      hostAttached();
       delete process.env.ABACUSAI_BOT_NETWORK_WAIT_MS;
+    });
+
+    it("stops waiting when the host goes away, and asks no model again", async () => {
+      const harness = session({ mode: "yolo" });
+      provider.script(() => ({ drop: true }));
+      setHostConnectivity("offline");
+      await harness.session.start();
+      const sent = harness.session.send("hi");
+      await harness.until(() =>
+        harness
+          .agent("retry")
+          .some((event) => event.waitingForConnection === true)
+      );
+      const calls = provider.calls.length;
+
+      markHostGone();
+      await sent;
+
+      expect(provider.calls.length).toBe(calls);
+      expect(harness.agent("error")).toEqual([]);
+      expect(cooldowns()).toBe("");
     });
 
     it("waits for the connection without blaming the model, then replays the call", async () => {

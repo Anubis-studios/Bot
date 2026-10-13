@@ -4,7 +4,12 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { setHostConnectivity, setReachabilityProbe } from "./connectivity.js";
+import {
+  hostAttached,
+  markHostGone,
+  setHostConnectivity,
+  setReachabilityProbe,
+} from "./connectivity.js";
 import {
   BusyWait,
   failedCallStreamed,
@@ -252,10 +257,37 @@ describe("network and busy waits", () => {
     vi.useRealTimers();
     setHostConnectivity("unknown");
     setReachabilityProbe(null);
+    hostAttached();
     delete process.env.ABACUSAI_BOT_ROUTINE_RUN;
   });
 
   describe("the wait for the network", () => {
+    it("ends the moment the host goes away, and never starts after", async () => {
+      const wait = new NetworkWait(() => Date.now());
+      const next = wait.next(NETWORK_WAIT_TURN_MS, () => {});
+      markHostGone();
+      expect(await next).toBe("cancelled");
+
+      const waits: number[] = [];
+      expect(
+        await wait.next(NETWORK_WAIT_TURN_MS, (_attempt, delay) =>
+          waits.push(delay)
+        )
+      ).toBe("cancelled");
+      expect(waits).toEqual([]);
+
+      const busy = new BusyWait();
+      expect(await busy.wait(5_000)).toBe(false);
+      expect(busy.rounds).toBe(0);
+    });
+
+    it("a busy-pool wait ends when the host goes away", async () => {
+      const busy = new BusyWait();
+      const waited = busy.wait(30_000);
+      markHostGone();
+      expect(await waited).toBe(false);
+    });
+
     it("backs off 2s, 4s, 8s, 16s, then every 30s", async () => {
       const wait = new NetworkWait(() => Date.now());
       const delays: number[] = [];

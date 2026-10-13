@@ -8,6 +8,8 @@ import type { AgentSession } from "@earendil-works/pi-coding-agent";
 import {
   abacusReachable,
   hostConnectivity,
+  hostIsGone,
+  onHostGone,
   onConnectivityRestored,
 } from "./connectivity.js";
 import {
@@ -183,6 +185,7 @@ export class NetworkWait {
     budgetMs: number,
     onWait: (attempt: number, delayMs: number) => void
   ): Promise<NetworkWaitOutcome> {
+    if (hostIsGone()) return Promise.resolve("cancelled");
     const now = this.now();
     this.startedAt ??= now;
     const left = this.startedAt + budgetMs - now;
@@ -200,11 +203,13 @@ export class NetworkWait {
       const done = (outcome: NetworkWaitOutcome): void => {
         clearTimeout(timer);
         unsubscribe();
+        unsubscribeGone();
         this.cancelWait = null;
         resolve(outcome);
       };
       const timer = setTimeout(() => done("retry"), delayMs);
       const unsubscribe = onConnectivityRestored(() => done("retry"));
+      const unsubscribeGone = onHostGone(() => done("cancelled"));
       this.cancelWait = () => done("cancelled");
     });
   }
@@ -263,7 +268,7 @@ export class BusyWait {
 
   /** Wait toward a model ready in `readyInMs`; false when no round is left or Stop ended it. */
   wait(readyInMs: number): Promise<boolean> {
-    if (!this.available) return Promise.resolve(false);
+    if (!this.available || hostIsGone()) return Promise.resolve(false);
     const delayMs = this.delayFor(readyInMs);
     this.roundsUsed += 1;
     this.spentMs += delayMs;
@@ -271,10 +276,12 @@ export class BusyWait {
     return new Promise((resolve) => {
       const done = (ok: boolean): void => {
         clearTimeout(timer);
+        unsubscribeGone();
         this.cancelWait = null;
         resolve(ok);
       };
       const timer = setTimeout(() => done(true), delayMs);
+      const unsubscribeGone = onHostGone(() => done(false));
       this.cancelWait = () => done(false);
     });
   }

@@ -38,7 +38,7 @@ import {
   userProfilePrompt,
   type AbacusBotConfig,
 } from "./config.js";
-import { hostConnectivity } from "./connectivity.js";
+import { hostConnectivity, hostIsGone } from "./connectivity.js";
 import { setCurrentMode, setUnattendedPolicy } from "./current-mode.js";
 import {
   customInstructionsPrompt,
@@ -1974,6 +1974,8 @@ export class AbacusBotSession {
       }
     );
 
+    // The host went away mid-wait: the turn ends as stopped, not failed.
+    if (hostIsGone()) this.interrupted = true;
     if (outcome === "cancelled" || this.interrupted) {
       this.finishTurn();
       return;
@@ -2029,6 +2031,8 @@ export class AbacusBotSession {
     });
 
     const waited = await this.busyWait.wait(soonest.readyInMs);
+    // The host went away mid-wait: the turn ends as stopped, not failed.
+    if (hostIsGone()) this.interrupted = true;
 
     if (!waited || this.interrupted) {
       this.finishTurn();

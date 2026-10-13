@@ -12,7 +12,11 @@ import * as readline from "node:readline";
 import type { Readable } from "node:stream";
 
 import type { BotSession } from "../bot/bot-session.js";
-import { setHostConnectivity } from "../connectivity.js";
+import {
+  hostAttached,
+  markHostGone,
+  setHostConnectivity,
+} from "../connectivity.js";
 import { tagEvent } from "../event-meta.js";
 import {
   AgentStatus,
@@ -138,6 +142,7 @@ export class HostCore {
 
   /** Starts the session; a failure is reported as today and rethrown. */
   async start(): Promise<void> {
+    hostAttached();
     try {
       await this.session.start();
     } catch (error) {
@@ -227,6 +232,9 @@ export class HostCore {
 
     // stdin closed. Disposing mid-turn aborts the provider request, and for
     // piped use EOF arrives right after the prompt, so let turns finish first.
+    // A turn waiting on the network or a busy pool has no one left to wait
+    // for, so those waits end and the process can exit.
+    markHostGone();
     await Promise.allSettled(this.inFlight);
   }
 

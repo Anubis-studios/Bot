@@ -33,6 +33,31 @@ export function onConnectivityRestored(listener: () => void): () => void {
   };
 }
 
+let hostGone = false;
+const goneListeners = new Set<() => void>();
+
+/** Whether the host closed this process's stdin: no one is left to answer. */
+export const hostIsGone = (): boolean => hostGone;
+
+/** A host attached: someone is listening again. */
+export function hostAttached(): void {
+  hostGone = false;
+}
+
+/** The host went away; waits end so the process can exit. */
+export function markHostGone(): void {
+  if (hostGone) return;
+  hostGone = true;
+  for (const listener of Array.from(goneListeners)) listener();
+}
+
+export function onHostGone(listener: () => void): () => void {
+  goneListeners.add(listener);
+  return () => {
+    goneListeners.delete(listener);
+  };
+}
+
 const PROBE_TIMEOUT_MS = 5_000;
 
 /** Any HTTP answer counts: the question is the network, not the account. */
