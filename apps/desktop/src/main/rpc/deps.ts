@@ -63,6 +63,8 @@ export interface AppOperations {
   homeDir(): string;
   /** Where the app keeps its own files. */
   botHome(): string;
+  /** Upgraded from the old renderer, as found at launch. */
+  legacyInstall(): boolean;
   restartApp(): void;
   deleteAllData(): void;
   /** `once`: the persisted first-time report (`reportFunnelStepOnce`). */

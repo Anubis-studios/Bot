@@ -13,6 +13,7 @@ import {
   FixtureDb,
   fixtureTransport,
 } from "#renderer/data/fixture-db/fixture-db";
+import { fixturePrefs } from "#renderer/data/fixture-db/rows";
 import { createQueryClient } from "#renderer/data/query-client";
 import {
   createMemoryTransport,
@@ -32,15 +33,16 @@ import { reloadIfShellChanged, staleBuildCheck } from "./stale-build";
 
 const os = implement(contract).$context<{ ready: unknown[] }>();
 
-const routerWith = (info: () => unknown) =>
+const routerWith = (
+  info: () => unknown,
+  account: () => Promise<unknown> = async () => ({
+    account: null,
+    apps: [],
+    onboarded: true,
+  })
+) =>
   ({
-    account: {
-      state: os.account.state.handler(() => ({
-        account: null,
-        apps: [],
-        onboarded: true,
-      })),
-    },
+    account: { state: os.account.state.handler(account as never) },
     system: { info: os.system.info.handler(info as never) },
     window: {
       ready: os.window.ready.handler(({ input, context }) => {
@@ -56,10 +58,13 @@ afterEach(async () => {
 
 const setup = (
   info: () => unknown = () => SYSTEM_INFO,
-  db = new FixtureDb()
+  db = new FixtureDb(),
+  account?: () => Promise<unknown>
 ) => {
   const ready: unknown[] = [];
-  const transport = createMemoryTransport(routerWith(info), { ready });
+  const transport = createMemoryTransport(routerWith(info, account), {
+    ready,
+  });
   const appDb = createDb(fixtureTransport(db), { retryDelayMs: () => 5 });
   const { collections } = appDb;
   open.push(
@@ -200,6 +205,35 @@ describe("bootstrap", () => {
       ])
     );
   });
+
+  it.each([
+    [false, null, undefined],
+    [true, null, true],
+    [true, "models", undefined],
+  ])(
+    "an account that never answers is taken as onboarded only for an upgrade past onboarding (legacyInstall %s, step %s)",
+    async (legacyInstall, onboardingStep, onboarded) => {
+      const s = setup(
+        () => ({ ...SYSTEM_INFO, legacyInstall }),
+        new FixtureDb({ prefs: fixturePrefs({ onboardingStep }) }),
+        () => new Promise(() => undefined)
+      );
+      const queryClient = createQueryClient();
+      const result = await bootstrap({
+        getTransport: async () => s.transport,
+        queryClient,
+        getDb: () => s.appDb,
+        onTransportLost: s.lost,
+        timeouts: { account: 50 },
+      });
+      expect(result.ok).toBe(true);
+      expect(
+        queryClient.getQueryData<{ onboarded: boolean }>(
+          s.transport.orpc.account.state.queryKey({ input: {} })
+        )?.onboarded
+      ).toBe(onboarded);
+    }
+  );
 
   it("fails when the prefs snapshot rejects", async () => {
     const db = new FixtureDb();

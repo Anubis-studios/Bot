@@ -57,6 +57,7 @@ describe("the router over a WebSocket (A-T5)", () => {
           appVersion: () => "9.9.9",
           homeDir: () => "/h",
           botHome: () => "/h/.abacusai-bot",
+          legacyInstall: () => false,
         },
         host: { sessionHomePath: () => "/h/AbacusAI" },
         serviceHost: { getMetadata: () => ({ materialIconsBasePath: null }) },

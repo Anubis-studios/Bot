@@ -15,6 +15,7 @@ const impl = implement(contract).$context<{ calls: string[] }>();
 
 const INFO: SystemInfo = {
   appVersion: "1.2.3",
+  legacyInstall: false,
   platform: "darwin",
   arch: "arm64",
   versions: { electron: "44.4.5" },

@@ -17,6 +17,7 @@
       "browserHomepage": "legacy",
       "creditsExhaustedAt": "default",
       "defaultMode": "default",
+      "dismissals.newLookSeenAt": "default",
       "dismissals.referralCardUntil": "default",
       "dismissals.routeLlmNudgeAt": "default",
       "dismissals.routeLlmNudges": "default",
@@ -75,6 +76,7 @@
       "creditsExhaustedAt": null,
       "defaultMode": "YOLO",
       "dismissals": {
+        "newLookSeenAt": null,
         "referralCardUntil": null,
         "routeLlmNudgeAt": null,
         "routeLlmNudges": 0,

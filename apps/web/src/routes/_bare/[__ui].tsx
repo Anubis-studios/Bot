@@ -41,6 +41,7 @@ import {
   NotificationsPage,
 } from "#renderer/features/settings/personal";
 import { TourGallery } from "#renderer/features/tour/gallery";
+import { NewLookCard } from "#renderer/features/tour/new-look";
 import {
   ONBOARDING_STEPS,
   type OnboardingStepId,
@@ -99,6 +100,7 @@ const extension = {
       {[
         ...ONBOARDING_STEPS.map((step) => `onboarding-${step}`),
         "tour",
+        "new-look",
         ...[
           "idle",
           "working",
@@ -132,6 +134,10 @@ const extension = {
       <OnboardingGallery step={props.fixture.slice(11) as OnboardingStepId} />
     ) : props.fixture.startsWith("notch-") ? (
       <NotchGallery state={props.fixture.slice(6)} />
+    ) : props.fixture === "new-look" ? (
+      <div className="relative h-40 transform-gpu">
+        <NewLookCard onTour={() => undefined} onDismiss={() => undefined} />
+      </div>
     ) : props.fixture.startsWith("tour") ? (
       <TourGallery stop={props.fixture.slice(5) || "welcome"} />
     ) : isSessionsGalleryFixture(props.fixture) ? (

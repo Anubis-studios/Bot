@@ -184,6 +184,8 @@ export const PREFS_GROUP_ENTRIES = {
     routeLlmNudges: v.pipe(v.number(), v.integer(), v.minValue(0)),
     routeLlmNudgeAt: NullableTimestamp,
     routeLlmSwitched: v.boolean(),
+    /** The upgrade's new-look notice, dismissed. */
+    newLookSeenAt: NullableTimestamp,
   },
   motion: { reduce: v.picklist(["system", "on", "off"]) },
   sounds: {

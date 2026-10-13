@@ -21,6 +21,7 @@ import {
   getTitlebarDensity,
   linuxNativeFrameKey,
   persistLinuxNativeFrame,
+  seedLinuxNativeFrame,
   setTitlebarDensity,
   useLinuxNativeFrame,
 } from "./window-chrome-settings";
@@ -66,4 +67,18 @@ it("reprobes when the Electron version or desktop changes", () => {
     false
   );
   expect(useLinuxNativeFrame(linuxNativeFrameKey("44.4.1", "KDE"))).toBe(false);
+});
+
+it("seeds the native frame for an upgrade only when nothing is stored", () => {
+  seedLinuxNativeFrame(linuxNativeFrameKey("44.4.1", "GNOME"));
+  expect(state.get("linuxNativeFrameKey")).toBe(
+    linuxNativeFrameKey("44.4.1", "GNOME")
+  );
+  seedLinuxNativeFrame(linuxNativeFrameKey("44.4.2", "GNOME"));
+  expect(state.get("linuxNativeFrameKey")).toBe(
+    linuxNativeFrameKey("44.4.1", "GNOME")
+  );
+  state.set("linuxNativeFrameKey", "");
+  seedLinuxNativeFrame();
+  expect(state.get("linuxNativeFrameKey")).toBe("");
 });

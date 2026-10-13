@@ -105,8 +105,10 @@ import {
   requestDataReset,
 } from "./services/config/delete-all-data";
 import {
+  detectLegacyInstall,
   importLegacyPrefsAtStartup,
   importLegacySoundOptOut,
+  importLegacyTourSeen,
 } from "./services/config/legacy-prefs";
 import { createLoginItem } from "./services/config/login-item";
 import { notificationSilent } from "./services/config/notification-policy";
@@ -170,6 +172,7 @@ import {
 import {
   getTitlebarDensity,
   persistLinuxNativeFrame,
+  seedLinuxNativeFrame,
   setTitlebarDensity,
   useLinuxNativeFrame,
 } from "./window-chrome-settings";
@@ -187,6 +190,12 @@ if (isolatedDevelopmentUserData) {
 } else {
   app.setPath("userData", join(abacusBotHome(), "electron"));
 }
+
+/** Read before the migrations write `prefs.json`. */
+const legacyInstall = detectLegacyInstall(
+  app.getPath("userData"),
+  abacusBotHome()
+);
 
 /** What CI greps for to know the app started; packaged-startup.test.ts pins it. */
 const SMOKE_TEST_READY = "[smoke] main process ready";
@@ -1235,6 +1244,7 @@ const appOperations: AppOperations = {
   appVersion: () => app.getVersion(),
   homeDir: () => os.homedir(),
   botHome: () => abacusBotHome(),
+  legacyInstall: () => legacyInstall,
 
   // Relaunch after adding skills so new agent processes load them at startup.
   restartApp() {
@@ -1594,6 +1604,7 @@ app
     }
 
     app.setAppUserModelId("ai.abacus.bot");
+    if (legacyInstall && process.platform === "linux") seedLinuxNativeFrame();
 
     // Serve the renderer CSP as a response header too (see renderer-csp.ts).
     session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
@@ -1641,6 +1652,8 @@ app
             prefsStore
           );
           importLegacySoundOptOut(prefsStore, readLegacySoundOptOut());
+          if (legacyInstall)
+            importLegacyTourSeen(prefsStore, readAccountState().onboarded);
         } catch (error) {
           console.error("[legacy-prefs] startup import failed", error);
         }
