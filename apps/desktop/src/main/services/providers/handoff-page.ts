@@ -24,8 +24,6 @@ export interface HandoffPageOptions {
   body: string;
   /** The badge on the logo: a green check, or an amber mark for a failure. */
   tone?: "ok" | "warn";
-  /** Trusted markup under the text, such as the new-account plan note. */
-  extra?: string;
   /** Trusted inline script. The page's ids (`title`, `body`, `badge`, `badge-ok`, `badge-warn`) are stable for it. */
   script?: string;
 }
@@ -34,7 +32,6 @@ export const handoffPage = ({
   title,
   body,
   tone = "ok",
-  extra = "",
   script = "",
 }: HandoffPageOptions): string => `<!doctype html>
 <html lang="en">
@@ -61,12 +58,6 @@ export const handoffPage = ({
   .badge.warn { background: #f59e0b; }
   h1 { margin: 32px 0 0; font-size: 30px; line-height: 36px; font-weight: 700; letter-spacing: -0.02em; }
   #body { margin: 12px 0 0; font-size: 18px; line-height: 28px; color: #525252; overflow-wrap: anywhere; }
-  .plan {
-    margin-top: 32px; width: 100%; box-sizing: border-box; padding: 14px 16px; border-radius: 14px;
-    background: #f5f5f5; display: flex; gap: 12px; align-items: flex-start; text-align: left;
-    font-size: 14px; line-height: 20px; color: #525252;
-  }
-  .plan b { display: block; color: #0a0a0a; font-weight: 600; margin-bottom: 2px; }
   [hidden] { display: none !important; }
 </style>
 </head>
@@ -78,7 +69,6 @@ export const handoffPage = ({
     </div>
     <h1 id="title">${escapeHtml(title)}</h1>
     <p id="body">${escapeHtml(body)}</p>
-    ${extra}
   </div>
 ${script.length > 0 ? `  <script>${script}</script>\n` : ""}</body>
 </html>`;

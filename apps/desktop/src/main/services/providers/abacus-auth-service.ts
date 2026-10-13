@@ -320,11 +320,10 @@ const exchange = async (
 };
 
 /**
- * The tab shown after the redirect; the plan link is for a new account. Its
- * script polls the listener for the exchange outcome: a failure is shown in
- * the tab (the app can only say "try again") and reported to Abacus.AI as a
- * short code through the browser, which reaches it even when the app's own
- * request could not. Without the script the page is exactly what it was.
+ * The tab shown after the redirect. Its script polls the listener for the
+ * exchange outcome: a failure is shown in the tab (the app can only say "try
+ * again") and reported to Abacus.AI as a short code through the browser, which
+ * reaches it even when the app's own request could not. Without the script the page is exactly what it was.
  */
 const responsePage = (): string => {
   let build = "packaged";
@@ -348,7 +347,6 @@ const responsePage = (): string => {
   return handoffPage({
     title: "You're signed in",
     body: "Go back to AbacusAI Bot. You can close this tab.",
-    extra: `<div class="plan" id="plan"><div><b>Your free plan is active</b>DeepSeek, Muse, Gemini and more coding models are ready to use.</div></div>`,
     script: `
   (function () {
     var beacon = ${JSON.stringify(reportEnabled ? beacon.toString() : "")};
@@ -380,7 +378,6 @@ const responsePage = (): string => {
         document.getElementById("body").textContent =
           "Abacus.AI signed you in, but the app could not complete the connection (" + reason + "). " +
           "Go back to the app and try again. If you are running the app from source, the terminal has the full error on a line starting with [abacus-auth].";
-        document.getElementById("plan").hidden = true;
         report("failed", reason);
       }).catch(function () { setTimeout(poll, 500); });
     }
