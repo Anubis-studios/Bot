@@ -30,7 +30,6 @@ import {
   phase5FixtureIds,
   RoutineSidebarGallery,
 } from "#renderer/features/routines/gallery";
-import { RunReportFrame } from "#renderer/features/routines/page";
 import {
   sessionsGallerySections,
   isSessionsGalleryFixture,
@@ -176,7 +175,7 @@ function Phase5View({ fixture }: { fixture: string }) {
     "settings-notifications": <NotificationsPage />,
     "settings-keyboard": <KeyboardPage />,
     "routine-report": reportReplayState.current ? (
-      <RunReportFrame runId="routine-gallery-report" onClose={() => {}}>
+      <div className="h-full">
         <ChatView
           threadId="routine-gallery-report"
           runtime={reportReplayState.current.runtime}
@@ -196,7 +195,7 @@ function Phase5View({ fixture }: { fixture: string }) {
             }),
           }}
         />
-      </RunReportFrame>
+      </div>
     ) : null,
   };
   return (

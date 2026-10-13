@@ -1470,6 +1470,7 @@
     "onDemand": "On demand",
     "triggers": {
       "manual": "Manuel",
+      "create": "On creation",
       "schedule": "Planifié",
       "webhook": "Webhook"
     },
@@ -3134,10 +3135,8 @@
     "routineOn": "Routine on",
     "runs": "Runs",
     "showMore": "Show more",
-    "runGone": "This run was removed.",
     "routineGone": "This routine is gone.",
     "allRoutines": "All routines",
-    "runReport": "Run report",
     "openSession": "Open as a session",
     "closeRun": "Close run",
     "readOnlyRun": "A run of this routine. It's a report, not a conversation.",

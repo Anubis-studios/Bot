@@ -1,13 +1,11 @@
 import { useParams, useSearch } from "@tanstack/react-router";
 import { useSelector } from "@tanstack/react-store";
-import { Activity, useEffect, useState, type ReactNode } from "react";
+import { CheckCircle2, ChevronLeft, CircleAlert, Loader2 } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { usePanelRef } from "react-resizable-panels";
 
 import { EmptyState } from "#renderer/components/empty-state";
 import { ConfirmAction } from "#renderer/components/form-kit/confirm";
-import { PageToolbar } from "#renderer/components/form-kit/page";
-import { createPaneWidthWriter, usePrefs } from "#renderer/data/db/prefs";
 import { isRpcError } from "#renderer/data/query-client";
 import { persistedStore } from "#renderer/lib/continuity/registry";
 import { AppLink } from "#renderer/lib/navigation/app-link";
@@ -22,14 +20,15 @@ import {
   CollapsibleContent,
 } from "#renderer/ui/collapsible";
 import { Input } from "#renderer/ui/input";
-import {
-  ResizableHandle,
-  ResizablePanel,
-  ResizablePanelGroup,
-} from "#renderer/ui/resizable";
 import { Switch } from "#renderer/ui/switch";
 
-import { runsView, scheduleLabel, routineState, useRoutinesData } from "./data";
+import {
+  runsView,
+  scheduleLabel,
+  routineState,
+  useRoutinesData,
+  type RunView,
+} from "./data";
 import { isHosted } from "./hosted";
 import { HostedResults } from "./hosted-results";
 import { runRoutineNow, showSaveFailure, useHostedOff } from "./hosted-sync";
@@ -49,94 +48,120 @@ export const RoutineGone = () => {
     />
   );
 };
-export const RunReportFrame = ({
-  runId,
-  children,
-  onClose,
+const RUN_GROUPS = ["running", "completed", "failed"] as const;
+/** Every fire of a routine, newest first, grouped so a running one is never buried. */
+const RunsRail = ({
+  attempts,
+  openable,
+  selected,
+  onSelect,
 }: {
-  runId: string;
-  children?: ReactNode;
-  onClose(): void;
+  attempts: RunView[];
+  openable: readonly RunView[];
+  selected: string | undefined;
+  onSelect(sessionId: string): void;
 }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const [limit, setLimit] = useState(50);
+  const shown = attempts.slice(0, limit);
+  const groups = [
+    ...RUN_GROUPS.map((outcome) => ({
+      outcome,
+      items: shown.filter((a) => a.outcome === outcome),
+    })),
+    {
+      outcome: "other",
+      items: shown.filter(
+        (a) => !(RUN_GROUPS as readonly string[]).includes(a.outcome)
+      ),
+    },
+  ];
   return (
-    <section
-      aria-label={t("phase5.runReport")}
-      className="[&_.min-h-13>span]:text-foreground flex h-full flex-col"
-    >
-      <header className="flex min-h-11 min-w-0 flex-wrap items-center gap-2 border-b px-3 py-2 text-sm">
-        <span className="mr-auto font-semibold">{t("phase5.runReport")}</span>
-        <Button
-          size="sm"
-          variant="secondary"
-          nativeButton={false}
-          render={
-            <AppLink to="/sessions/$sessionId" params={{ sessionId: runId }} />
-          }
-        >
-          {t("phase5.openSession")}
+    <section aria-label={t("phase5.runs")} className="flex flex-col gap-3">
+      <h2 className="flex items-baseline justify-between text-sm font-semibold">
+        {t("phase5.runs")}
+        <span className="text-muted-foreground text-xs font-normal tabular-nums">
+          {attempts.length}
+        </span>
+      </h2>
+      {attempts.length === 0 && (
+        <p className="text-muted-foreground text-xs">
+          {t("routines.noRunsYet")}
+        </p>
+      )}
+      {groups.map(({ outcome, items }) =>
+        items.length === 0 ? null : (
+          <div key={outcome} className="flex flex-col gap-1">
+            {outcome !== "other" && (
+              <h3 className="text-muted-foreground text-[11px] font-medium tracking-wide uppercase">
+                {t(`phase5.outcomes.${outcome}`)}
+              </h3>
+            )}
+            {items.map((a) => {
+              const content = (
+                <>
+                  {a.outcome === "running" ? (
+                    <Loader2 className="text-primary size-3.5 shrink-0 animate-spin" />
+                  ) : a.outcome === "failed" ? (
+                    <CircleAlert className="text-destructive size-3.5 shrink-0" />
+                  ) : (
+                    <CheckCircle2 className="text-muted-foreground size-3.5 shrink-0" />
+                  )}
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <time className="truncate">
+                      {new Date(a.at).toLocaleString(i18n.language, {
+                        dateStyle: "medium",
+                        timeStyle: "short",
+                      })}
+                    </time>
+                    <span className="text-muted-foreground truncate">
+                      {t(`phase5.outcomes.${a.outcome}`)} ·{" "}
+                      {t(
+                        ["manual", "create", "schedule", "webhook"].includes(
+                          a.trigger
+                        )
+                          ? `routines.triggers.${a.trigger}`
+                          : "routines.triggers.schedule"
+                      )}
+                    </span>
+                  </span>
+                </>
+              );
+              return openable.includes(a) ? (
+                <Button
+                  key={a.id}
+                  variant={selected === a.sessionId ? "secondary" : "ghost"}
+                  className="h-auto min-w-0 justify-start gap-2 px-2 py-1.5 text-left text-xs font-normal whitespace-normal"
+                  aria-pressed={selected === a.sessionId}
+                  onClick={() => onSelect(a.sessionId!)}
+                >
+                  {content}
+                </Button>
+              ) : (
+                <div
+                  key={a.id}
+                  className="text-muted-foreground flex items-center gap-2 px-2 py-1.5 text-xs"
+                >
+                  {content}
+                </div>
+              );
+            })}
+          </div>
+        )
+      )}
+      {attempts.length > limit && (
+        <Button variant="ghost" size="sm" onClick={() => setLimit(limit + 50)}>
+          {t("phase5.showMore")}
         </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          aria-label={t("phase5.closeRun")}
-          onClick={onClose}
-        >
-          {t("phase5.close")}
-        </Button>
-      </header>
-      <div className="min-h-0 flex-1">{children}</div>
+      )}
     </section>
   );
 };
-const ReportLayout = ({
-  open,
-  report,
-  children,
-}: {
-  open: boolean;
-  report: ReactNode;
-  children: ReactNode;
-}) => {
-  const wide = useMediaQuery("(min-width: 1100px)");
-  const { db } = useAppContext();
-  const prefs = usePrefs();
-  const [writer] = useState(() => createPaneWidthWriter(db, "routines.run"));
-  const panelRef = usePanelRef();
-  useEffect(() => () => writer.flush(), [writer]);
-  useEffect(() => {
-    if (!wide) return;
-    if (open) panelRef.current?.expand();
-    else panelRef.current?.collapse();
-  }, [open, wide, panelRef]);
-  const body = <Activity mode={open ? "visible" : "hidden"}>{report}</Activity>;
-  if (!wide)
-    return (
-      <div className="flex size-full min-w-0">
-        {!open && children}
-        <aside className={open ? "size-full min-w-0" : "hidden"}>{body}</aside>
-      </div>
-    );
-  return (
-    <ResizablePanelGroup orientation="horizontal">
-      <ResizablePanel minSize={240}>{children}</ResizablePanel>
-      <ResizableHandle className={open ? "ml-2" : "hidden"} />
-      <ResizablePanel
-        panelRef={panelRef}
-        collapsible
-        collapsedSize={0}
-        defaultSize={open ? (prefs.panes["routines.run"] ?? 420) : 0}
-        minSize={360}
-        maxSize={560}
-        onResize={(size) => {
-          if (open && size.inPixels >= 360) writer.write(size.inPixels);
-        }}
-      >
-        <aside className="h-full min-w-0 border-l">{body}</aside>
-      </ResizablePanel>
-    </ResizablePanelGroup>
-  );
-};
+/**
+ * A routine's page: the selected run's report in the pane (the newest until
+ * one is picked), the routine's facts and every run in the rail, and the
+ * editor along the bottom. Narrow, the rail is the page until a run opens.
+ */
 export const RoutinePage = ({
   renderRunReport,
   renderRequests,
@@ -150,310 +175,286 @@ export const RoutinePage = ({
   const { routineId } = useParams({ strict: false }) as { routineId: string };
   const { run } = useSearch({ strict: false }) as { run?: string };
   const navigate = useAppNavigate();
-  const [lastRun, setLastRun] = useState(run);
-  if (run && run !== lastRun) setLastRun(run);
+  const wide = useMediaQuery("(min-width: 1100px)");
   const { routines, runs, workspaces, sessions, bots } = useRoutinesData();
   const row = routines.find((r) => r.id === routineId);
-  const [limit, setLimit] = useState(50);
   const hostedOff = useHostedOff();
   if (!row) return <RoutineGone />;
+  const hosted = isHosted(row);
   const attempts = runsView(row, runs);
-  const clear = () =>
+  // Only a run whose session is still here has a report to open.
+  const openable = attempts.filter(
+    (a) => !a.note && runs.some((r) => r.sessionId === a.sessionId)
+  );
+  // The picked run while it exists; wide, else the newest.
+  const selected =
+    openable.find((a) => a.sessionId === run)?.sessionId ??
+    (wide ? (openable[0]?.sessionId ?? undefined) : undefined);
+  const pick = (sessionId: string | undefined) =>
     void navigate({
-      search: (p) => ({ ...p, run: undefined }),
+      search: (p) => ({ ...p, run: sessionId }),
       transition: "none",
     });
   const runNow = () => runRoutineNow(row, transport, t);
-  return (
-    <ReportLayout
-      open={!!run}
-      report={
-        lastRun ? (
-          <RunReportFrame runId={lastRun} onClose={clear}>
-            {runs.some((r) => r.sessionId === lastRun) ? (
-              renderRunReport?.(lastRun)
-            ) : (
-              <div className="flex h-full items-center justify-center p-6">
-                <EmptyState
-                  title={t("phase5.runGone")}
-                  action={
-                    <Button variant="secondary" onClick={clear}>
-                      {t("phase5.closeRun")}
-                    </Button>
-                  }
-                />
-              </div>
-            )}
-          </RunReportFrame>
-        ) : null
-      }
-    >
-      <div
-        className={
-          run
-            ? "hidden min-w-0 flex-1 overflow-auto xl:block"
-            : "min-w-0 flex-1 overflow-auto"
-        }
-      >
-        <div className="content-col page-column @container/routine">
-          <PageToolbar>
-            <div className="phone:basis-full flex min-w-0 flex-1 basis-72 items-center gap-3">
-              <RoutineIdentity
-                bot={bots.find((b) => b.id === row.botId)}
-                state={routineState(row, runs, sessions, undefined, hostedOff)}
-                size={40}
-              />
-              <div className="mr-auto min-w-0 flex-1 basis-48">
-                <h1 className="page-title">{row.name}</h1>
-                <p className="text-muted-foreground text-xs [overflow-wrap:anywhere]">
-                  {scheduleLabel(row, t, i18n.language)} ·{" "}
-                  {isHosted(row)
-                    ? // An event routine has no time, so no zone to name.
-                      row.hosted?.timezone != null &&
-                      (row.schedule != null || row.runAt != null)
-                      ? t("routines.hosted.info", { zone: row.hosted.timezone })
-                      : t("routines.hosted.badge")
-                    : (workspaces.find(
-                        (w) =>
-                          w.id === row.workspaceId &&
-                          w.kind !== "routine" &&
-                          w.kind !== "bot"
-                      )?.label ?? t("phase5.ownFolder"))}
-                  {row.botName &&
-                    ` · ${t("phase5.madeBy", { name: row.botName })}`}
-                </p>
-              </div>
-            </div>
-            <div className="flex max-w-full flex-wrap items-center gap-2">
-              <Button size="sm" variant="secondary" onClick={runNow}>
-                {t("phase5.runNow")}
-              </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                nativeButton={false}
-                render={
-                  <AppLink
-                    to="/routines/$routineId/edit"
-                    params={{ routineId: row.id }}
-                    search={{ run }}
-                    transition="none"
-                  />
-                }
-              >
-                {t("phase5.edit")}
-              </Button>
-              <label className="flex items-center gap-2 text-xs">
-                <span>{t("routines.enabled")}</span>
-                <Switch
-                  aria-label={t("phase5.routineOn")}
-                  checked={row.enabled}
-                  onCheckedChange={(enabled) =>
-                    void db.collections.routines
-                      .update(row.id, (d) => {
-                        d.enabled = enabled;
-                      })
-                      .isPersisted.promise.catch((error: unknown) =>
-                        showSaveFailure(error, transport, t)
-                      )
-                  }
-                />
-              </label>
-              <ConfirmAction
-                title={t("phase5.deleteRoutine")}
-                description={t("phase5.deleteRoutineDescription", {
-                  name: row.name,
-                })}
-                label={t("phase5.delete")}
-                onConfirm={async () => {
-                  await navigate({ to: "/routines", replace: true });
-                  try {
-                    await db.collections.routines.delete(row.id).isPersisted
-                      .promise;
-                  } catch (error) {
-                    showError(t("phase5.failed"));
-                    throw error;
-                  }
-                }}
-              />
-            </div>
-          </PageToolbar>
-          {renderRequests?.(
-            new Set(
-              sessions
-                .filter((s) => s.routineId === row.id && s.id !== run)
-                .map((s) => s.id)
-            )
-          )}
-          {isHosted(row) && hostedOff && (
-            <p role="status" className="text-muted-foreground text-xs">
-              {t("routines.hosted.unavailable")}
-            </p>
-          )}
-          <div className="grid grid-cols-1 gap-2 @min-[440px]:grid-cols-3">
-            {[
-              [
-                t("phase5.nextLabel"),
-                row.nextRunAt
-                  ? new Date(row.nextRunAt).toLocaleString(i18n.language)
-                  : "—",
-              ],
-              [
-                t("phase5.last"),
-                row.lastRunAt
-                  ? new Date(row.lastRunAt).toLocaleString(i18n.language)
-                  : t("phase5.never"),
-              ],
-              [
-                t("phase5.trigger"),
-                row.webhookToken
-                  ? t("phase5.webhook")
-                  : scheduleLabel(row, t, i18n.language),
-              ],
-            ].map(([label, value]) => (
-              <div key={label} className="bg-card rounded-xl p-3">
-                <div className="text-muted-foreground text-xs">{label}</div>
-                <div className="mt-1 text-sm [overflow-wrap:anywhere]">
-                  {value}
-                </div>
-              </div>
-            ))}
+  const showReport = !hosted && selected != null;
+  const facts = [
+    [
+      t("phase5.nextLabel"),
+      row.nextRunAt
+        ? new Date(row.nextRunAt).toLocaleString(i18n.language)
+        : "—",
+    ],
+    [
+      t("phase5.last"),
+      row.lastRunAt
+        ? new Date(row.lastRunAt).toLocaleString(i18n.language)
+        : t("phase5.never"),
+    ],
+    [
+      t("phase5.trigger"),
+      row.webhookToken
+        ? t("phase5.webhook")
+        : scheduleLabel(row, t, i18n.language),
+    ],
+  ];
+  const longPrompt =
+    row.prompt.length > 240 || row.prompt.split("\n").length > 4;
+  const rail = (
+    <aside className="flex min-h-0 min-w-0 flex-col gap-5 overflow-y-auto p-4">
+      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-xs">
+        {facts.map(([label, value]) => (
+          <div key={label} className="contents">
+            <dt className="text-muted-foreground">{label}</dt>
+            <dd className="[overflow-wrap:anywhere]">{value}</dd>
           </div>
-          {row.webhookUrl && (
-            <div className="flex items-center gap-2">
-              <code className="min-w-0 truncate">{row.webhookUrl}</code>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() =>
-                  void navigator.clipboard
-                    .writeText(row.webhookUrl!)
-                    .then(() => showInfo(t("phase5.copied")))
-                    .catch(() => showError(t("phase5.failed")))
-                }
-              >
-                {t("phase5.copy")}
-              </Button>
+        ))}
+      </dl>
+      {row.webhookUrl && (
+        <div className="flex items-center gap-2 text-xs">
+          <code className="min-w-0 truncate">{row.webhookUrl}</code>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() =>
+              void navigator.clipboard
+                .writeText(row.webhookUrl!)
+                .then(() => showInfo(t("phase5.copied")))
+                .catch(() => showError(t("phase5.failed")))
+            }
+          >
+            {t("phase5.copy")}
+          </Button>
+        </div>
+      )}
+      {row.webhookPublicPending && (
+        <p className="text-muted-foreground text-xs">
+          {t("routines.webhookPublicPending")}
+        </p>
+      )}
+      <section>
+        <h2 className="text-muted-foreground mb-2 text-xs">
+          {t("phase5.instruction")}
+        </h2>
+        <Collapsible className="bg-card group/instruction rounded-xl p-3 text-[13px]">
+          <div
+            className={`${longPrompt ? "line-clamp-4" : ""} [overflow-wrap:anywhere] whitespace-pre-wrap group-data-[open]/instruction:hidden`}
+          >
+            {row.prompt}
+          </div>
+          <CollapsibleContent className="[overflow-wrap:anywhere] whitespace-pre-wrap">
+            {row.prompt}
+          </CollapsibleContent>
+          {longPrompt && (
+            <CollapsibleTrigger render={<Button variant="ghost" size="sm" />}>
+              <span className="group-data-[open]/instruction:hidden">
+                {t("chat.permission.showAll")}
+              </span>
+              <span className="hidden group-data-[open]/instruction:inline">
+                {t("chat.code.showLess")}
+              </span>
+            </CollapsibleTrigger>
+          )}
+        </Collapsible>
+      </section>
+      <RoutineReachPanel row={row} />
+      {!hosted && (
+        <RunsRail
+          attempts={attempts}
+          openable={openable}
+          selected={selected}
+          onSelect={pick}
+        />
+      )}
+    </aside>
+  );
+  return (
+    <div className="flex size-full min-h-0 min-w-0 flex-col">
+      <header className="flex min-w-0 flex-wrap items-center gap-3 border-b px-4 py-3">
+        {!wide && selected != null && (
+          <Button
+            size="sm"
+            variant="ghost"
+            aria-label={t("phase5.closeRun")}
+            onClick={() => pick(undefined)}
+          >
+            <ChevronLeft />
+          </Button>
+        )}
+        <RoutineIdentity
+          bot={bots.find((b) => b.id === row.botId)}
+          state={routineState(row, runs, sessions, undefined, hostedOff)}
+          size={32}
+        />
+        <div className="me-auto min-w-0 flex-1 basis-48">
+          <h1 className="truncate text-sm font-semibold">{row.name}</h1>
+          <p className="text-muted-foreground truncate text-xs">
+            {scheduleLabel(row, t, i18n.language)} ·{" "}
+            {hosted
+              ? // An event routine has no time, so no zone to name.
+                row.hosted?.timezone != null &&
+                (row.schedule != null || row.runAt != null)
+                ? t("routines.hosted.info", { zone: row.hosted.timezone })
+                : t("routines.hosted.badge")
+              : (workspaces.find(
+                  (w) =>
+                    w.id === row.workspaceId &&
+                    w.kind !== "routine" &&
+                    w.kind !== "bot"
+                )?.label ?? t("phase5.ownFolder"))}
+            {row.botName && ` · ${t("phase5.madeBy", { name: row.botName })}`}
+          </p>
+        </div>
+        <div className="flex max-w-full flex-wrap items-center gap-2">
+          {showReport && (
+            <Button
+              size="sm"
+              variant="ghost"
+              nativeButton={false}
+              render={
+                <AppLink
+                  to="/sessions/$sessionId"
+                  params={{ sessionId: selected }}
+                />
+              }
+            >
+              {t("phase5.openSession")}
+            </Button>
+          )}
+          <Button size="sm" variant="secondary" onClick={runNow}>
+            {t("phase5.runNow")}
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            nativeButton={false}
+            render={
+              <AppLink
+                to="/routines/$routineId/edit"
+                params={{ routineId: row.id }}
+                search={{ run }}
+                transition="none"
+              />
+            }
+          >
+            {t("phase5.edit")}
+          </Button>
+          <label className="flex items-center gap-2 text-xs">
+            <span>{t("routines.enabled")}</span>
+            <Switch
+              aria-label={t("phase5.routineOn")}
+              checked={row.enabled}
+              onCheckedChange={(enabled) =>
+                void db.collections.routines
+                  .update(row.id, (d) => {
+                    d.enabled = enabled;
+                  })
+                  .isPersisted.promise.catch((error: unknown) =>
+                    showSaveFailure(error, transport, t)
+                  )
+              }
+            />
+          </label>
+          <ConfirmAction
+            title={t("phase5.deleteRoutine")}
+            description={t("phase5.deleteRoutineDescription", {
+              name: row.name,
+            })}
+            label={t("phase5.delete")}
+            onConfirm={async () => {
+              await navigate({ to: "/routines", replace: true });
+              try {
+                await db.collections.routines.delete(row.id).isPersisted
+                  .promise;
+              } catch (error) {
+                showError(t("phase5.failed"));
+                throw error;
+              }
+            }}
+          />
+        </div>
+      </header>
+      {hosted && hostedOff && (
+        <p role="status" className="text-muted-foreground px-4 pt-3 text-xs">
+          {t("routines.hosted.unavailable")}
+        </p>
+      )}
+      {!hosted &&
+        renderRequests?.(
+          new Set(
+            sessions
+              .filter((s) => s.routineId === row.id && s.id !== selected)
+              .map((s) => s.id)
+          )
+        )}
+      {hosted && !wide ? (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {rail}
+          <div className="px-4 pb-4">
+            <HostedResults row={row} />
+          </div>
+        </div>
+      ) : (
+        <div className="flex min-h-0 flex-1">
+          {(wide || selected != null) && (
+            <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+              {hosted ? (
+                <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                  <HostedResults row={row} />
+                </div>
+              ) : selected != null ? (
+                <div className="min-h-0 flex-1">
+                  {renderRunReport?.(selected)}
+                </div>
+              ) : (
+                <div className="flex flex-1 items-center justify-center p-6">
+                  <EmptyState
+                    icon="routines"
+                    title={t("routines.noRunsYet")}
+                    action={
+                      <Button variant="secondary" onClick={runNow}>
+                        {t("phase5.runNow")}
+                      </Button>
+                    }
+                  />
+                </div>
+              )}
+            </main>
+          )}
+          {(wide || selected == null) && (
+            <div
+              className={
+                wide
+                  ? "flex w-72 shrink-0 flex-col border-s"
+                  : "flex min-w-0 flex-1 flex-col"
+              }
+            >
+              {rail}
             </div>
           )}
-          {row.webhookPublicPending && (
-            <p className="text-muted-foreground text-xs">
-              {t("routines.webhookPublicPending")}
-            </p>
-          )}
-          <section>
-            <h2 className="text-muted-foreground mb-2 text-xs">
-              {t("phase5.instruction")}
-            </h2>
-            <Collapsible className="bg-card group/instruction rounded-xl p-4 text-[13px]">
-              <div
-                className={`${row.prompt.length > 240 || row.prompt.split("\n").length > 4 ? "line-clamp-4" : ""} [overflow-wrap:anywhere] whitespace-pre-wrap group-data-[open]/instruction:hidden`}
-              >
-                {row.prompt}
-              </div>
-              <CollapsibleContent className="[overflow-wrap:anywhere] whitespace-pre-wrap">
-                {row.prompt}
-              </CollapsibleContent>
-              {(row.prompt.length > 240 ||
-                row.prompt.split("\n").length > 4) && (
-                <CollapsibleTrigger
-                  render={<Button variant="ghost" size="sm" />}
-                >
-                  <span className="group-data-[open]/instruction:hidden">
-                    {t("chat.permission.showAll")}
-                  </span>
-                  <span className="hidden group-data-[open]/instruction:inline">
-                    {t("chat.code.showLess")}
-                  </span>
-                </CollapsibleTrigger>
-              )}
-            </Collapsible>
-          </section>
-          <RoutineReachPanel row={row} />
-          {isHosted(row) ? (
-            <HostedResults row={row} />
-          ) : (
-            <section>
-              <h2 className="mb-2 text-sm font-semibold">{t("phase5.runs")}</h2>
-              <p className="text-muted-foreground mb-2 text-xs">
-                {t("phase5.freshSession")}
-              </p>
-              <div className="flex flex-col gap-1">
-                {attempts.slice(0, limit).map((a) => {
-                  const content = (
-                    <>
-                      <span className="w-20 shrink-0">
-                        {t(`phase5.outcomes.${a.outcome}`)}
-                      </span>
-                      <time className="w-28 shrink-0 text-xs">
-                        {new Date(a.at).toLocaleString(i18n.language, {
-                          month: "short",
-                          day: "numeric",
-                          hour: "numeric",
-                          minute: "2-digit",
-                        })}
-                      </time>
-                      <span className="line-clamp-2 min-w-32 flex-1">
-                        {a.result &&
-                        !/^(?:started session\s+)?[a-f0-9-]{32,}$/i.test(
-                          a.result.trim()
-                        )
-                          ? a.result
-                          : t(`phase5.outcomes.${a.outcome}`)}
-                      </span>
-                      <span className="text-muted-foreground text-xs">
-                        {t(
-                          ["manual", "schedule", "webhook"].includes(a.trigger)
-                            ? `routines.triggers.${a.trigger}`
-                            : "routines.triggers.schedule"
-                        )}
-                      </span>
-                    </>
-                  );
-                  return a.sessionId && !a.note ? (
-                    <Button
-                      key={a.id}
-                      variant={run === a.sessionId ? "secondary" : "ghost"}
-                      className="h-auto min-h-14 min-w-0 flex-wrap justify-start gap-x-3 gap-y-1 py-2 text-left whitespace-normal"
-                      aria-pressed={run === a.sessionId}
-                      onClick={() =>
-                        void navigate({
-                          search: (p) => ({
-                            ...p,
-                            run: run === a.sessionId ? undefined : a.sessionId!,
-                          }),
-                          transition: "none",
-                        })
-                      }
-                    >
-                      {content}
-                    </Button>
-                  ) : (
-                    <div
-                      key={a.id}
-                      className="text-muted-foreground flex min-h-12 items-center gap-3 px-2 text-xs"
-                    >
-                      {content}
-                    </div>
-                  );
-                })}
-              </div>
-              {attempts.length === 0 && (
-                <p className="text-muted-foreground text-xs">
-                  {t("routines.noRunsYet")}
-                </p>
-              )}
-              {attempts.length > limit && (
-                <Button variant="ghost" onClick={() => setLimit(limit + 50)}>
-                  {t("phase5.showMore")}
-                </Button>
-              )}
-            </section>
-          )}
-          {!isHosted(row) && <EditorChat key={row.id} routineId={row.id} />}
         </div>
-      </div>
-    </ReportLayout>
+      )}
+      {!hosted && <EditorChat key={row.id} routineId={row.id} />}
+    </div>
   );
 };
 type Exchange = { user: string; reply: string };
@@ -501,15 +502,24 @@ export const EditorChat = ({ routineId }: { routineId: string }) => {
   };
   if (gone) return <RoutineGone />;
   return (
-    <section className="bg-card flex flex-col gap-3 rounded-xl p-4">
-      <h2 className="text-sm font-medium">{t("phase5.editByChat")}</h2>
-      {log.map((x, i) => (
-        <div key={i} className="flex flex-col gap-2 text-xs">
-          <p className="bg-muted self-end rounded-xl px-3 py-2">{x.user}</p>
-          <p>{x.reply}</p>
+    <section
+      aria-label={t("phase5.editByChat")}
+      className="flex flex-col gap-2 border-t px-4 py-3"
+    >
+      {log.length > 0 && (
+        <div className="flex max-h-32 flex-col gap-2 overflow-y-auto">
+          {log.map((x, i) => (
+            <div key={i} className="flex flex-col gap-1 text-xs">
+              <p className="bg-muted self-end rounded-xl px-3 py-2">{x.user}</p>
+              <p>{x.reply}</p>
+            </div>
+          ))}
         </div>
-      ))}
-      <div aria-live="polite">
+      )}
+      <div
+        aria-live="polite"
+        className="text-muted-foreground text-xs empty:hidden"
+      >
         {busy ? t("phase5.changing") : log.at(-1)?.reply}
       </div>
       <form

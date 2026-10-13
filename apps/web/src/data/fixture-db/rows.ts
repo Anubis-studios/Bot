@@ -7,6 +7,7 @@ import type {
   BotRow,
   PrefsRow,
   RoutineRow,
+  RoutineRunRow,
   SessionRow,
   WorkspaceRow,
 } from "@abacus-ai/contract/contract";
@@ -211,6 +212,20 @@ export const fixtureRoutines = (now = Date.now()): RoutineRow[] => [
     webhookPublicPending: false,
     botName: null,
     recentRuns: [],
+  },
+];
+
+export const fixtureRoutineRuns = (now = Date.now()): RoutineRunRow[] => [
+  {
+    sessionId: "routine-run",
+    workspaceId: "routine-folder",
+    routineId: "morning-digest",
+    attemptId: null,
+    startedAt: new Date(minutesAgo(now, 60 * 3)).toISOString(),
+    updatedAt: new Date(minutesAgo(now, 60 * 3 - 2)).toISOString(),
+    outcome: "completed",
+    trigger: "schedule",
+    result: "Sent",
   },
 ];
 

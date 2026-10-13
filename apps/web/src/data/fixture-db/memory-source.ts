@@ -17,6 +17,7 @@ import type { FixtureTable } from "./fixture-table";
 import {
   fixtureBots,
   fixturePrefs,
+  fixtureRoutineRuns,
   fixtureRoutines,
   fixtureSessions,
   fixtureWorkspaces,
@@ -74,6 +75,7 @@ const defaultFixtureSeed = (): FixtureSeed => ({
   sessions: fixtureSessions(),
   workspaces: fixtureWorkspaces(),
   routines: fixtureRoutines(),
+  routineRuns: fixtureRoutineRuns(),
 });
 
 /**
