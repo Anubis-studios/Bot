@@ -191,16 +191,19 @@ export class SeqClock {
 
 /**
  * Why the history is not all there (the thread store's `ThreadNotice`): a
- * v1 transcript too large to read. Served as the session-scoped notice
- * `abacus.notice` (spec 02 §4.1), keyed so it appears once.
+ * v1 transcript too large to read, or a newer build's thread file. Served
+ * as the session-scoped notice `abacus.notice` (spec 02 §4.1), keyed so it
+ * appears once.
  */
-export type ThreadHistoryNotice = {
-  kind: "too-large";
-  /** Absolute v1 transcript path, when the file store provides it. */
-  path?: string;
-  size: number;
-  limit: number;
-};
+export type ThreadHistoryNotice =
+  | {
+      kind: "too-large";
+      /** Absolute v1 transcript path, when the file store provides it. */
+      path?: string;
+      size: number;
+      limit: number;
+    }
+  | { kind: "foreign" };
 
 /** The notice key of a thread-history notice. */
 export const HISTORY_NOTICE_KEY = "abacus.history";

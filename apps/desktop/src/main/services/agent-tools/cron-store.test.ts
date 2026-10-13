@@ -302,6 +302,29 @@ describe("damaged history and migration recovery", () => {
     expect(saved).toHaveLength(2);
   });
 
+  it("lists the readable routines past an entry without an id, and keeps that entry verbatim across a save", () => {
+    const a = createJob({ prompt: "a" });
+    const file = path.join(home, "cronjobs.json");
+    const raw = JSON.parse(fs.readFileSync(file, "utf8"));
+    const bad = [{ prompt: "no id", runs: [] }, null, { id: 7 }];
+    fs.writeFileSync(file, JSON.stringify([raw[0], ...bad]));
+
+    expect(listJobs().map((job) => job.id)).toEqual([a.id]);
+    const b = createJob({ prompt: "b" });
+    updateJob(a.id, { name: "changed" });
+    removeJob(b.id);
+
+    const saved = JSON.parse(fs.readFileSync(file, "utf8"));
+    const readable = (job: { id?: unknown } | null) =>
+      typeof job?.id === "string";
+    expect(
+      saved
+        .filter(readable)
+        .map((job: { id: string; name: string }) => [job.id, job.name])
+    ).toEqual([[a.id, "changed"]]);
+    expect(saved.filter((job: never) => !readable(job))).toEqual(bad);
+  });
+
   it("refuses to overwrite a corrupt nonempty job file", () => {
     const file = path.join(home, "cronjobs.json");
     fs.writeFileSync(file, "{broken");

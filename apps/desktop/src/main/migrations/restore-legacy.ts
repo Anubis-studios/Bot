@@ -74,7 +74,7 @@ export const restoreLegacyHome = async (
     appVersion: "restore",
     log: () => {},
   });
-  if (recovery.failed || recovery.unresolved.length)
+  if (recovery.failed.length || recovery.unresolved.length)
     throw new Error(`Unresolved migration in ${home}`);
   const recordState = readRecordState(home);
   if (recordState.status !== "ok" && recordState.status !== "missing")

@@ -85,3 +85,43 @@ describe("an oversized thread's hydrate", () => {
     expect(plain.abacus.notices).toEqual([]);
   });
 });
+
+describe("a newer build's thread file", () => {
+  it.each([
+    ["without v1", false],
+    ["with v1 served in its place", true],
+  ])("carries a foreign abacus.notice %s", async (_, withV1) => {
+    const threads = path.join(home, "threads");
+    fs.mkdirSync(threads, { recursive: true });
+    fs.writeFileSync(
+      path.join(threads, "new-1.json"),
+      JSON.stringify({ version: 4, threadId: "new-1", messages: [] })
+    );
+    if (withV1) {
+      fs.mkdirSync(path.join(home, "transcripts"), { recursive: true });
+      fs.writeFileSync(
+        path.join(home, "transcripts", "new-1.json"),
+        JSON.stringify({
+          version: 1,
+          sessionId: "new-1",
+          updatedAt: new Date(0).toISOString(),
+          segments: [{ id: "u1", type: "text", source: "user", content: "hi" }],
+        })
+      );
+    }
+    const store = new ThreadStore({ home: () => home, log: () => undefined });
+
+    const client = connectInProcess(fakeDeps({ ai: relayOver(store) })).client;
+    const hydrated = await client.ai.hydrate({ threadId: "new-1" });
+    expect(hydrated.messages.map((message) => message.id)).toEqual(
+      withV1 ? ["u1"] : []
+    );
+    expect(hydrated.abacus.notices).toEqual([
+      {
+        seq: expect.any(Number),
+        name: "abacus.notice",
+        value: { kind: "foreign", notificationKey: HISTORY_NOTICE_KEY },
+      },
+    ]);
+  });
+});

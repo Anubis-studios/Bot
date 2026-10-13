@@ -37,6 +37,7 @@ import { writeFileAtomicSync } from "@abacus-ai/agent/atomic-file";
 import type { UIMessage } from "@abacus-ai/contract/contract";
 import {
   decideConversion,
+  isSameOrNewer,
   parseClearMarker,
   parseThreadTwin,
   parseTranscriptV1,
@@ -72,8 +73,13 @@ export const MAX_TRANSCRIPT_BYTES = 64 * 1024 * 1024;
  */
 export const MAX_STREAMED_TRANSCRIPT_BYTES = 512 * 1024 * 1024;
 
-/** Why a thread shows no history although its v1 file exists. */
-export type ThreadNotice = { kind: "too-large"; size: number; limit: number };
+/**
+ * Why a thread's history is not all shown: its v1 file is too large to
+ * read, or its thread file is a newer build's (`foreign`, left as it is).
+ */
+export type ThreadNotice =
+  | { kind: "too-large"; size: number; limit: number }
+  | { kind: "foreign" };
 
 /** How long the dual-write waits for more saves of the same thread. */
 
@@ -127,6 +133,49 @@ const twinOf = (read: ReadResult): ThreadTwin => {
 /** The twin at `file`, as the conversion rules see it. */
 export const readThreadTwin = (file: string): ThreadTwin =>
   twinOf(readTextChecked(file));
+
+/**
+ * Spec 07 R7: an `agui` thread whose v1 file an older build saved after the
+ * migration (a downgrade, then this build again), with the turns that build
+ * added appended. A v1 segment counts as added when it is stamped after the
+ * migrated v1 file's time and no message holds it yet, so turns the relay
+ * has since persisted are not appended twice. Neither file is changed.
+ */
+const withNewerV1 = (
+  file: ThreadFileV2,
+  v1: V1Meta,
+  segments: readonly unknown[]
+): ThreadFileV2 => {
+  const from =
+    file.source.kind === "agui" ? file.source.migratedFrom : undefined;
+  if (from == null || isSameOrNewer(from.updatedAt, v1.updatedAt)) return file;
+  const known = new Set<unknown>(
+    file.messages.flatMap((message) => [
+      message.id,
+      ...(
+        (message.metadata as { abacus?: { segments?: { id?: unknown }[] } })
+          ?.abacus?.segments ?? []
+      ).map((segment) => segment.id),
+    ])
+  );
+  const since = Date.parse(from.updatedAt);
+  const added = segments.filter((segment) => {
+    const { id, at } = (segment ?? {}) as { id?: unknown; at?: unknown };
+    return (
+      typeof id === "string" &&
+      !known.has(id) &&
+      typeof at === "number" &&
+      at > since
+    );
+  });
+  if (added.length === 0) return file;
+  const { messages } = v1ToThreadFile({
+    threadId: file.threadId,
+    updatedAt: v1.updatedAt,
+    segments: added,
+  });
+  return { ...file, messages: [...file.messages, ...messages] };
+};
 
 /**
  * The exact header this build's v1-derived writer produces
@@ -408,8 +457,9 @@ export class ThreadStore {
   }
 
   /**
-   * `readCurrentFile`, plus why there is no history when a v1 file exists
-   * but is too large to read at all (for the relay to surface).
+   * `readCurrentFile`, plus why the history is not all there (for the relay
+   * to surface): a v1 file too large to read at all, or a newer build's
+   * thread file.
    */
   readCurrentWithNotice(sessionId: string): {
     file: ThreadFileV2 | null;
@@ -420,7 +470,9 @@ export class ThreadStore {
     if (threadFile == null || transcriptFile == null) return { file: null };
     const marker = this.readMarker(sessionId);
     const v1 = this.readV1(transcriptFile);
-    const file = this.current(sessionId, threadFile, marker, v1);
+    const twin = twinOf(this.held.read(threadFile));
+    const file = this.current(sessionId, threadFile, twin, marker, v1);
+    if (twin.status === "foreign") return { file, notice: { kind: "foreign" } };
     return file === null && marker === null && v1.status === "tooLarge"
       ? {
           file,
@@ -436,10 +488,10 @@ export class ThreadStore {
   private current(
     sessionId: string,
     threadFile: string,
+    twin: ThreadTwin,
     marker: ClearMarker | null,
     v1: V1Read
   ): ThreadFileV2 | null {
-    const twin = twinOf(this.held.read(threadFile));
     const proven =
       marker !== null &&
       v1.status === "ok" &&
@@ -464,7 +516,10 @@ export class ThreadStore {
           : null;
     }
 
-    if (twin.status === "ok" && twin.source.kind === "agui") return twin.file;
+    if (twin.status === "ok" && twin.source.kind === "agui")
+      return v1.status === "ok" && (marker === null || proven)
+        ? withNewerV1(twin.file, v1.meta, v1.segments)
+        : twin.file;
     switch (v1.status) {
       case "missing":
         // Transition: v1 is the source of truth, so a derived twin without

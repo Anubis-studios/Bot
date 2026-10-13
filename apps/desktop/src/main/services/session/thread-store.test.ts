@@ -735,6 +735,90 @@ describe("C-T7 r3: oversized v1 history (cut-over r2 #8, #9)", () => {
   });
 });
 
+describe("C-T7: a newer build's thread file", () => {
+  it.each([
+    ["a newer version", { ...aguiThread("s1"), version: 4 }],
+    [
+      "an unknown source kind",
+      { ...aguiThread("s1"), source: { kind: "sqlite-v3" } },
+    ],
+  ])("with %s answers with a foreign notice, with or without v1", (_, file) => {
+    const { threads, transcripts } = make();
+    put(v2File("s1"), file);
+    const bytes = fs.readFileSync(v2File("s1"), "utf8");
+    expect(threads.readCurrentWithNotice("s1")).toEqual({
+      file: null,
+      notice: { kind: "foreign" },
+    });
+    transcripts.write("s1", SEGMENTS);
+    const read = threads.readCurrentWithNotice("s1");
+    expect(ids(read.file?.messages ?? [])).toEqual(["u1", "b1"]);
+    expect(read.notice).toEqual({ kind: "foreign" });
+    expect(fs.readFileSync(v2File("s1"), "utf8")).toBe(bytes);
+  });
+});
+
+describe("C-T7: turns an older build added after a downgrade (spec 07 R7)", () => {
+  const MIGRATED_AT = "2026-09-01T00:00:00.000Z";
+  const LATER = Date.parse("2026-09-10T00:00:00.000Z");
+  const owned = (extra: Array<{ id: string }> = []) => ({
+    ...aguiThread("s1"),
+    source: { kind: "agui", migratedFrom: { updatedAt: MIGRATED_AT } },
+    messages: [
+      ...v1ToThreadFile({
+        threadId: "s1",
+        updatedAt: MIGRATED_AT,
+        segments: SEGMENTS,
+      }).messages,
+      { id: "n1", role: "user", parts: [] },
+      ...extra.map((message) => ({ ...message, role: "user", parts: [] })),
+    ],
+  });
+  const v1 = (updatedAt: string, segments: unknown[]) =>
+    put(v1File("s1"), { version: 1, sessionId: "s1", updatedAt, segments });
+  const downgraded = [
+    // Restamped by the older build's next save: still the migrated turns.
+    ...SEGMENTS.map((segment) => ({ ...segment, at: LATER })),
+    { type: "text", id: "u9", source: "user", content: "back", at: LATER },
+    { type: "text", id: "b9", source: "bot", content: "hello", at: LATER },
+  ];
+
+  it("appends the v1 turns stamped after the migration, once, and keeps both files", async () => {
+    const { threads } = make();
+    put(v2File("s1"), owned());
+    v1(new Date(LATER).toISOString(), downgraded);
+    const twin = fs.readFileSync(v2File("s1"), "utf8");
+    const legacy = fs.readFileSync(v1File("s1"), "utf8");
+
+    expect(ids(await threads.readCurrent("s1"))).toEqual([
+      "u1",
+      "b1",
+      "n1",
+      "u9",
+      "b9",
+    ]);
+    expect(fs.readFileSync(v2File("s1"), "utf8")).toBe(twin);
+    expect(fs.readFileSync(v1File("s1"), "utf8")).toBe(legacy);
+
+    // Once the relay persisted them, they are not appended again.
+    put(v2File("s1"), owned([{ id: "u9" }, { id: "b9" }]));
+    expect(ids(await threads.readCurrent("s1"))).toEqual([
+      "u1",
+      "b1",
+      "n1",
+      "u9",
+      "b9",
+    ]);
+  });
+
+  it("appends nothing while v1 is no newer than the migration", async () => {
+    const { threads } = make();
+    put(v2File("s1"), owned());
+    v1(MIGRATED_AT, downgraded);
+    expect(ids(await threads.readCurrent("s1"))).toEqual(["u1", "b1", "n1"]);
+  });
+});
+
 describe("C-T7 through ServiceHost", () => {
   /** The real ServiceHost, with the collaborators the paths call faked. */
   const makeHost = async () => {

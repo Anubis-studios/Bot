@@ -51,6 +51,26 @@ function migrateFromUserDataIfNeeded(): void {
 
 migrateFromUserDataIfNeeded();
 
+/**
+ * `clearInvalidConfig` reads a file that does not parse (a torn write) as
+ * empty and overwrites it on the next write: keep its bytes beside it first.
+ */
+function keepUnparsableStoreFile(): void {
+  const file = path.join(abacusBotHome(), STORE_FILE);
+  try {
+    JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch (error) {
+    if (!(error instanceof SyntaxError)) return;
+    try {
+      fs.copyFileSync(file, `${file}.corrupt-${Date.now()}`);
+    } catch {
+      // Non-fatal, as above.
+    }
+  }
+}
+
+keepUnparsableStoreFile();
+
 // Singleton shared by WorkspaceService and AgentSessionManagerService so
 // concurrent persist() calls cannot race.
 const store = new Store<WorkspaceStoreSchema>({

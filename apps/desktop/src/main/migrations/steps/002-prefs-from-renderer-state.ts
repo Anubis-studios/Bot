@@ -75,9 +75,13 @@ export const prefsFromRendererState = (
       file: staged,
       ...(options.now == null ? {} : { now: options.now }),
     });
-    const retired = readRetiredPrefs(
-      path.join(ctx.userData, RETIRED_PREFS_FILE)
-    );
+    let retired: ReturnType<typeof readRetiredPrefs> = null;
+    try {
+      retired = readRetiredPrefs(path.join(ctx.userData, RETIRED_PREFS_FILE));
+    } catch (error) {
+      // Read as no record, so it cannot fail the step.
+      ctx.log(`${RETIRED_PREFS_FILE} ignored: ${String(error)}`);
+    }
     const stats = importLegacyPrefs(
       prefs,
       (key) => legacy.get(key),

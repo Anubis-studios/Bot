@@ -14,6 +14,7 @@ import path from "node:path";
 import type { RoutineRun } from "@abacus-ai/contract/routines";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { legacyAttemptId } from "../../services/agent-tools/routine-attempts";
 import {
   backupsRoot,
   migratingRoot,
@@ -197,7 +198,7 @@ describe("R5-T41 step 5 routine-attempt-ids", () => {
   it("classifies every legacy entry, recovers sessions and links the timeout", async () => {
     const original = legacyHome();
     const result = await run();
-    expect(result).toMatchObject({ applied: [5], failed: null });
+    expect(result).toMatchObject({ applied: [5], failed: [] });
 
     const [a, b, c] = stored();
     const runs = a!.runs;
@@ -258,7 +259,7 @@ describe("R5-T41 step 5 routine-attempt-ids", () => {
     expect(stored()[0]!.runs.map((entry) => entry.id)).toEqual(fallback);
 
     const again = await run({ rerun: [5] });
-    expect(again).toMatchObject({ applied: [5], failed: null });
+    expect(again).toMatchObject({ applied: [5], failed: [] });
     expect(fs.readFileSync(cronjobs()).equals(after)).toBe(true);
     expect(readRecord(home).applied.at(-1)?.stats).toMatchObject({
       migrated: 0,
@@ -276,7 +277,7 @@ describe("R5-T41 step 5 routine-attempt-ids", () => {
   });
 
   it("writes nothing without a file, or with one that does not parse", async () => {
-    await expect(run()).resolves.toMatchObject({ applied: [5], failed: null });
+    await expect(run()).resolves.toMatchObject({ applied: [5], failed: [] });
     expect(fs.existsSync(cronjobs())).toBe(false);
 
     fs.writeFileSync(cronjobs(), "{corrupt");
@@ -400,6 +401,37 @@ describe("R5-T41 step 5 routine-attempt-ids", () => {
       sessionId: "s-failed",
     });
   });
+  it("classifies 1.0.85's `failed to start: …` as a start failure, with the same id; an entry migrated before is left as it is", async () => {
+    const legacy = {
+      at: T0,
+      trigger: "schedule",
+      result: "failed to start: no workspace to run in",
+    };
+    const earlier = { ...legacy, at: T0 - 60_000 };
+    const migrated = {
+      ...earlier,
+      id: legacyAttemptId("job-g", earlier, 0),
+      kind: "unknown",
+      sessionId: null,
+      attemptId: null,
+    };
+    fs.writeFileSync(
+      cronjobs(),
+      JSON.stringify([job("job-g", [legacy, migrated])])
+    );
+
+    await run();
+    const [fresh, kept] = stored()[0]!.runs;
+    expect(fresh).toMatchObject({
+      id: legacyAttemptId("job-g", legacy, 0),
+      kind: "start-failed",
+    });
+    expect(kept).toEqual(migrated);
+
+    const after = fs.readFileSync(cronjobs());
+    await run({ rerun: [5] });
+    expect(fs.readFileSync(cronjobs()).equals(after)).toBe(true);
+  });
 });
 
 // The runner's journal protocol for this step's commit (spec 00 C.1): a
@@ -479,7 +511,7 @@ describe("R5-T41 kill points", () => {
       );
 
       const next = await run();
-      expect(next.failed).toBeNull();
+      expect(next.failed).toEqual([]);
       expect({ k, file: fs.readFileSync(cronjobs(), "utf8") }).toEqual({
         k,
         file: committed,

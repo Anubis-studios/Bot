@@ -48,7 +48,7 @@ beforeEach(() => {
   run.mockResolvedValue({
     applied: [],
     partial: [],
-    failed: null,
+    failed: [],
     recovered: [],
     unresolved: [],
   });
@@ -102,7 +102,7 @@ describe("startup migrations", () => {
 
     run.mockResolvedValue({
       applied: [],
-      failed: { id: 2, name: "x", error: "recovery failed" },
+      failed: [{ id: 2, name: "x", error: "recovery failed" }],
       recovered: [],
       unresolved: [
         {
@@ -126,7 +126,7 @@ describe("startup migrations", () => {
     // Unknown destinations (an unreadable journal) block everything.
     run.mockResolvedValue({
       applied: [],
-      failed: null,
+      failed: [],
       recovered: [],
       unresolved: [
         { staging: "s", id: null, name: null, destinations: null, error: "" },

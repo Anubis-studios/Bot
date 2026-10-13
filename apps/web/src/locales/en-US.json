@@ -2742,6 +2742,7 @@
     },
     "notice": {
       "dismiss": "Dismiss",
+      "historyForeign": "This conversation was saved by a newer version of the app, so some of it may not show here.",
       "historyTooLarge": "Earlier history is too large to show here ({{size}}, the limit is {{limit}}).",
       "showInFolder": "Show in folder"
     },

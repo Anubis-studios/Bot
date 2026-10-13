@@ -135,7 +135,7 @@ describe("C-T3 runner", () => {
     const first = await run(steps);
     expect(first).toMatchObject({
       applied: [1, 2],
-      failed: null,
+      failed: [],
       unresolved: [],
     });
     expect(calls).toEqual(["first", "second"]);
@@ -154,7 +154,7 @@ describe("C-T3 runner", () => {
     expect(fs.existsSync(migratingRoot(home))).toBe(false);
 
     const second = await run(steps);
-    expect(second).toMatchObject({ applied: [], failed: null });
+    expect(second).toMatchObject({ applied: [], failed: [] });
     expect(calls).toEqual(["first", "second"]);
   });
 
@@ -234,7 +234,7 @@ describe("C-T3 runner", () => {
     expect(new Set(ticksAt).size).toBeGreaterThan(1);
   });
 
-  it("a throwing plan leaves no staging, records the failure, stops, and retries next launch", async () => {
+  it("a throwing plan leaves no staging, records the failure, runs the later steps, and retries next launch", async () => {
     const calls: string[] = [];
     let broken = true;
     const steps: MigrationStep[] = [
@@ -252,20 +252,80 @@ describe("C-T3 runner", () => {
     ];
 
     const first = await run(steps);
-    expect(first.failed).toMatchObject({ id: 1, error: "disk on fire" });
-    expect(calls).toEqual(["flaky"]);
+    expect(first).toMatchObject({
+      applied: [2],
+      failed: [{ id: 1, error: "disk on fire" }],
+    });
+    expect(calls).toEqual(["flaky", "later"]);
     expect(fs.existsSync(path.join(migratingRoot(home), "1-flaky"))).toBe(
       false
     );
     expect(readRecord(home)).toMatchObject({
-      applied: [],
-      lastFailure: { id: 1, name: "flaky", error: "disk on fire" },
+      applied: [{ id: 2 }],
+      failures: [{ id: 1, name: "flaky", error: "disk on fire" }],
     });
 
     broken = false;
     const second = await run(steps);
-    expect(second).toMatchObject({ applied: [1, 2], failed: null });
-    expect(readRecord(home).lastFailure).toBeUndefined();
+    expect(second).toMatchObject({ applied: [1], failed: [] });
+    expect(readRecord(home).failures).toBeUndefined();
+  });
+
+  it("records each failing step's own failure, and clears only the one that then applies", async () => {
+    const broken = new Set([1, 3]);
+    const flaky = (id: number): MigrationStep => ({
+      id,
+      name: `flaky-${id}`,
+      plan: async () => {
+        if (broken.has(id)) throw new Error(`EACCES ${id}`);
+        return { writes: [], removals: [], stats: {} };
+      },
+    });
+    const steps = [flaky(1), fileStep(2, "between", () => []), flaky(3)];
+
+    const first = await run(steps);
+    expect(first.applied).toEqual([2]);
+    expect(first.failed.map((failure) => failure.id)).toEqual([1, 3]);
+    expect(readRecord(home).failures?.map((failure) => failure.id)).toEqual([
+      1, 3,
+    ]);
+
+    broken.delete(3);
+    const second = await run(steps);
+    expect(second).toMatchObject({ applied: [3], failed: [{ id: 1 }] });
+    expect(readRecord(home).failures).toMatchObject([
+      { id: 1, error: "EACCES 1" },
+    ]);
+  });
+
+  it("a commit that throws is undone, and the later steps still commit", async () => {
+    const a = path.join(home, "a.json");
+    const b = path.join(home, "b.json");
+    fs.writeFileSync(a, "A-OLD");
+    const steps = [
+      fileStep(1, "first", () => [
+        { dest: a, content: "A-NEW", kind: "replace-user" },
+      ]),
+      fileStep(2, "second", () => [{ dest: b, content: "B", kind: "create" }]),
+    ];
+    const result = await run(steps, {
+      hooks: {
+        afterMove: (_, dest) => {
+          if (dest === a) throw new Error("EIO");
+        },
+      },
+    });
+    expect(result).toMatchObject({
+      applied: [2],
+      failed: [{ id: 1, error: "EIO" }],
+      unresolved: [],
+    });
+    expect([read(a), read(b)]).toEqual(["A-OLD", "B"]);
+    expect(fs.existsSync(migratingRoot(home))).toBe(false);
+
+    const next = await run(steps);
+    expect(next).toMatchObject({ applied: [1], failed: [] });
+    expect([read(a), read(b)]).toEqual(["A-NEW", "B"]);
   });
 
   describe("plan validation", () => {
@@ -282,7 +342,7 @@ describe("C-T3 runner", () => {
         removals: [],
         stats: {},
       });
-      expect(result.failed?.error).toMatch(/not in the staging/);
+      expect(result.failed[0]?.error).toMatch(/not in the staging/);
       expect(fs.existsSync(path.join(home, "x"))).toBe(false);
     });
 
@@ -307,7 +367,7 @@ describe("C-T3 runner", () => {
             },
           },
         ]);
-        expect(result.failed?.error).toMatch(/not under the home/);
+        expect(result.failed[0]?.error).toMatch(/not under the home/);
       }
     });
 
@@ -330,7 +390,7 @@ describe("C-T3 runner", () => {
           },
         },
       ]);
-      expect(result.failed?.error).toMatch(/used twice/);
+      expect(result.failed[0]?.error).toMatch(/used twice/);
       expect(read(path.join(home, "a"))).toBeNull();
     });
   });
@@ -382,7 +442,7 @@ describe("C-T3 runner", () => {
       ]);
 
       const next = await run([step]);
-      expect(next).toMatchObject({ applied: [1], failed: null });
+      expect(next).toMatchObject({ applied: [1], failed: [] });
       expect([read(user), read(created), read(derived)]).toEqual([
         "USER-NEW",
         "CREATED",
@@ -458,7 +518,7 @@ describe("C-T3 runner", () => {
           },
         },
       });
-      expect(result.failed).toMatchObject({ id: 1, error: "EIO" });
+      expect(result.failed).toMatchObject([{ id: 1, error: "EIO" }]);
       expect(result.unresolved).toEqual([]);
       expect([read(user), read(created), read(derived)]).toEqual([
         "USER-ORIGINAL",
@@ -466,7 +526,7 @@ describe("C-T3 runner", () => {
         "DERIVED-OLD",
       ]);
       expect(fs.existsSync(staging())).toBe(false);
-      expect(readRecord(home).lastFailure?.id).toBe(1);
+      expect(readRecord(home).failures?.[0]?.id).toBe(1);
     });
 
     it("finishes a recorded commit whose staging survived (the real window), without undoing it", async () => {
@@ -561,7 +621,7 @@ describe("C-T3 runner", () => {
         step,
         fileStep(2, "later", () => [], { calls }),
       ]);
-      expect(result.failed?.error).toMatch(/recovery failed/);
+      expect(result.failed[0]?.error).toMatch(/recovery failed/);
       expect(calls).toEqual([]);
       expect(result.unresolved[0]).toMatchObject({ id: 1, name: "three" });
       expect(isWriteBlocked(result, user)).toBe(true);
@@ -592,7 +652,7 @@ describe("C-T3 runner", () => {
       expect(fs.existsSync(path.join(staging(), JOURNAL_NAME))).toBe(true);
       expect(isWriteBlocked(result, user)).toBe(true);
       // Only the log (its `undone` lines for earlier operations) and the
-      // record's lastFailure changed.
+      // record's failures changed.
       const after = tree(root);
       for (const rel of Object.keys({ ...before, ...after }))
         if (!rel.endsWith(LOG_NAME) && !rel.endsWith("migrations.json"))
@@ -672,10 +732,10 @@ describe("C-T3 runner", () => {
         step,
         fileStep(2, "later", () => [], { calls }),
       ]);
-      expect(result.failed?.error).toMatch(/recovery failed/);
+      expect(result.failed[0]?.error).toMatch(/recovery failed/);
       expect(result.unresolved).toHaveLength(1);
       expect(calls).toEqual([]);
-      // Nothing touched but the record's lastFailure.
+      // Nothing touched but the record's failures.
       const after = tree(root);
       delete before[path.relative(root, recordFile(home))];
       delete after[path.relative(root, recordFile(home))];
@@ -859,7 +919,7 @@ describe("C-T3 runner", () => {
         io,
       });
       expect(calls).toEqual([]);
-      expect(result.failed?.error).toMatch(/cannot read/);
+      expect(result.failed[0]?.error).toMatch(/cannot read/);
       expect(readRecordState(home).status).toBe("corrupt");
     });
   });
@@ -980,7 +1040,7 @@ describe("C-T3 runner", () => {
       );
 
       const result = await run([], { now: () => now });
-      expect(result).toMatchObject({ failed: null, unresolved: [] });
+      expect(result).toMatchObject({ failed: [], unresolved: [] });
       expect(
         fs
           .readdirSync(backups)
@@ -1065,7 +1125,7 @@ describe("C-T3 runner: pending work", () => {
     ]);
 
     const first = await run([step, after]);
-    expect(first).toMatchObject({ applied: [], partial: [7], failed: null });
+    expect(first).toMatchObject({ applied: [], partial: [7], failed: [] });
     expect(read(out)).toBe("launch 1");
     expect(readRecord(home).applied.map((entry) => entry.id)).toEqual([]);
     expect(fs.existsSync(migratingRoot(home))).toBe(false);
@@ -1074,7 +1134,7 @@ describe("C-T3 runner: pending work", () => {
     expect(second).toMatchObject({
       applied: [7, 8],
       partial: [],
-      failed: null,
+      failed: [],
     });
     expect([read(out), read(later)]).toEqual(["launch 1", "launch 2"]);
     expect(readRecord(home).applied.map((entry) => entry.id)).toEqual([7, 8]);
@@ -1113,7 +1173,7 @@ describe("C-T3 runner: pending work", () => {
         action: "undone",
       },
     ]);
-    expect(next).toMatchObject({ partial: [7], failed: null });
+    expect(next).toMatchObject({ partial: [7], failed: [] });
     expect(read(out)).toBe("x");
   });
 

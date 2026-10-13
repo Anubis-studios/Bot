@@ -238,7 +238,7 @@ describe("C-T4 step 1 transcripts-v2", () => {
     const newerBefore = fs.readFileSync(path.join(threads(), "newer.json"));
 
     const first = await run();
-    expect(first).toMatchObject({ applied: [1], failed: null });
+    expect(first).toMatchObject({ applied: [1], failed: [] });
     expect(hashes(transcripts())).toEqual(legacy);
 
     expect(readJson(path.join(threads(), "fresh.json"))).toEqual(
@@ -306,9 +306,9 @@ describe("C-T4 step 1 transcripts-v2", () => {
 
     // A second run is a no-op; a forced rerun finds everything current.
     const settled = hashes(home);
-    expect(await run()).toMatchObject({ applied: [], failed: null });
+    expect(await run()).toMatchObject({ applied: [], failed: [] });
     expect(hashes(home)).toEqual(settled);
-    expect(await run([1])).toMatchObject({ applied: [1], failed: null });
+    expect(await run([1])).toMatchObject({ applied: [1], failed: [] });
     expect(readRecord(home).applied.at(-1)?.stats).toMatchObject({
       converted: 0,
       upToDate: 7,
@@ -329,7 +329,7 @@ describe("C-T4 step 1 transcripts-v2", () => {
 
   it("does nothing without a transcripts folder", async () => {
     const first = await run();
-    expect(first).toMatchObject({ applied: [1], failed: null });
+    expect(first).toMatchObject({ applied: [1], failed: [] });
     expect(fs.existsSync(threads())).toBe(false);
     expect(readRecord(home).applied[0]?.stats).toMatchObject({
       files: 0,
@@ -346,7 +346,7 @@ describe("C-T4 step 1 transcripts-v2", () => {
       // The file name is the thread id.
       put(transcripts(), `${source.sessionId}.json`, source);
     }
-    expect(await run()).toMatchObject({ applied: [1], failed: null });
+    expect(await run()).toMatchObject({ applied: [1], failed: [] });
     for (const name of fixtures) {
       const source = readJson(path.join(SHARED_FIXTURES, "v1", name));
       const written = readJson(
@@ -392,7 +392,7 @@ describe("C-T4 step 1 transcripts-v2", () => {
       log: () => undefined,
       onProgress: runnerProgress,
     });
-    expect(result).toMatchObject({ applied: [1], failed: null });
+    expect(result).toMatchObject({ applied: [1], failed: [] });
     expect(fs.readdirSync(threads())).toHaveLength(45);
     const midway = runnerProgress.mock.calls.filter(
       ([done, total]) => done > 0 && done < total
@@ -404,7 +404,7 @@ describe("C-T4 step 1 transcripts-v2", () => {
 it("step 1 treats a non-directory transcripts path as empty so later steps can run", async () => {
   fs.writeFileSync(transcripts(), "keep this non-directory");
   const result = await run();
-  expect(result.failed).toBeNull();
+  expect(result.failed).toEqual([]);
   expect(result.applied).toContain(1);
   expect(fs.readFileSync(transcripts(), "utf8")).toBe(
     "keep this non-directory"

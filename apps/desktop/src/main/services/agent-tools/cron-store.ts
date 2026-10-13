@@ -114,9 +114,16 @@ const held = new HeldFiles({
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value != null && typeof value === "object" && !Array.isArray(value);
 
+/** An entry main can read as a job; any other is kept, never listed. */
+const isJobEntry = (
+  value: unknown
+): value is Record<string, unknown> & { id: string } =>
+  isRecord(value) && typeof value.id === "string";
+
 /**
  * The jobs on disk (or held), or null when the file is there but cannot be
- * read as a job list. A missing or blank file is no jobs.
+ * read as a job list. A missing or blank file is no jobs; an entry that is
+ * not a job is left out (`write` keeps it).
  */
 const load = (): CronJob[] | null => {
   const file = held.read(FILE());
@@ -130,10 +137,8 @@ const load = (): CronJob[] | null => {
     return null;
   }
   if (!Array.isArray(parsed)) return null;
-  if (!parsed.every((job) => isRecord(job) && typeof job.id === "string"))
-    return null;
   // Older files lack the newer fields; they were all plain cron jobs.
-  return (parsed as CronJob[]).map((job) => ({
+  return (parsed.filter(isJobEntry) as unknown as CronJob[]).map((job) => ({
     ...job,
     name:
       job.name ?? deriveName(typeof job.prompt === "string" ? job.prompt : ""),
@@ -194,12 +199,14 @@ const write = (jobs: CronJob[]): void => {
   // The public list omits entries it cannot interpret. Keep those bytes as
   // JSON values when saving another edit instead of silently deleting them.
   const source = held.read(FILE());
-  const raw: Array<{ id: string; runs?: unknown[] }> =
+  const raw: unknown[] =
     source.status === "ok" && source.text.trim() !== ""
       ? JSON.parse(source.text)
       : [];
   const stored = jobs.map((job) => {
-    const old = raw.find((entry) => entry.id === job.id)?.runs;
+    const old = raw
+      .filter(isJobEntry)
+      .find((entry) => entry.id === job.id)?.runs;
     if (!Array.isArray(old)) return job;
     const malformed = old.filter((entry) => !isStoredRun(entry));
     if (malformed.length === 0) return job;
@@ -217,7 +224,8 @@ const write = (jobs: CronJob[]): void => {
       runs: [...job.runs.filter((run) => !existing.has(run.id)), ...preserved],
     };
   });
-  held.write(FILE(), `${JSON.stringify(stored, null, 2)}\n`);
+  const unread = raw.filter((entry) => !isJobEntry(entry));
+  held.write(FILE(), `${JSON.stringify([...stored, ...unread], null, 2)}\n`);
   for (const listener of Array.from(writeListeners)) {
     try {
       listener();

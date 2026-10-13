@@ -195,6 +195,24 @@ describe("abacus.notice (main's own history notice)", () => {
       })
     );
   });
+
+  it("renders the foreign history notice, with no Show in folder", async () => {
+    const relay = new FakeRelay();
+    relay.emitAll([
+      ...b.sessionReady(),
+      b.custom("abacus.notice", {
+        kind: "foreign",
+        notificationKey: "abacus.history",
+      }),
+    ]);
+    current = await renderRelay(relay, "session");
+    expect(
+      await screen.findByText(
+        "This conversation was saved by a newer version of the app, so some of it may not show here."
+      )
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Show in folder" })).toBeNull();
+  });
 });
 
 describe("R2-T14 sub-agents", () => {

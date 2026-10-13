@@ -99,7 +99,7 @@ describe("C-T5 step 2 golden", () => {
     fs.writeFileSync(source, bytes);
 
     const result = await run();
-    expect(result.failed).toBeNull();
+    expect(result.failed).toEqual([]);
     const actual = sortKeys({
       stats: readRecord(home).applied[0]?.stats,
       prefs: readJson(prefs),
@@ -243,6 +243,17 @@ describe("C-T5 provenance", () => {
         "utf8"
       )
     ).toBe("{corrupt");
+  });
+
+  it("imports as if no retirement record exists when renderer-state.retired.json is corrupt", async () => {
+    legacy({ theme: "dark" });
+    const retired = path.join(userData, "renderer-state.retired.json");
+    fs.writeFileSync(retired, "{half");
+
+    const result = await run();
+    expect(result).toMatchObject({ applied: [2], failed: [] });
+    expect(storedPrefs().row).toMatchObject({ theme: "dark" });
+    expect(fs.readFileSync(retired, "utf8")).toBe("{half");
   });
 
   it("runs with no renderer-state.json at all", async () => {

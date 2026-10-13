@@ -143,7 +143,7 @@ describe("C-T9 step 4 archive-transcripts-v1", () => {
 
     const step4 = archiveTranscriptsV1();
     const first = await run([transcriptsV2(), step4]);
-    expect(first).toMatchObject({ applied: [], partial: [4], failed: null });
+    expect(first).toMatchObject({ applied: [], partial: [4], failed: [] });
     expect(readRecord(home).applied.map((entry) => entry.id)).toEqual([1]);
 
     expect(archived()).toEqual([
@@ -190,7 +190,7 @@ describe("C-T9 step 4 archive-transcripts-v1", () => {
 
     // The next launch finishes the job and records the step.
     const second = await run([transcriptsV2(), step4]);
-    expect(second).toMatchObject({ applied: [4], partial: [], failed: null });
+    expect(second).toMatchObject({ applied: [4], partial: [], failed: [] });
     expect(readRecord(home).applied.at(-1)).toMatchObject({
       id: 4,
       stats: { archived: 2, kept: 1, converted: 0, quarantined: 0 },
@@ -375,7 +375,7 @@ describe("C-T9 step 4 archive-transcripts-v1", () => {
     try {
       const result = await run([archiveTranscriptsV1()]);
       expect(result.applied).toEqual([]);
-      expect(result.failed).not.toBeNull();
+      expect(result.failed).not.toEqual([]);
     } finally {
       spy.mockRestore();
     }
@@ -447,7 +447,7 @@ describe("C-T9 step 4 archive-transcripts-v1", () => {
       put(threads(), ".archive-index.json", index);
       const result = await run([archiveTranscriptsV1()]);
       expect(result.applied).toEqual([]);
-      expect(result.failed).not.toBeNull();
+      expect(result.failed).not.toEqual([]);
       // The twin of a thread the lost index may have listed is kept.
       expect(fs.existsSync(path.join(threads(), "gone.json"))).toBe(true);
     }

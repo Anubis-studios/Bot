@@ -93,7 +93,7 @@ it("R7-T15 restores both profiles through two cycles from each cycle's latest ev
   );
   for (const home of [base, secondary]) {
     seed(home);
-    expect((await migrate(home)).failed).toBeNull();
+    expect((await migrate(home)).failed).toEqual([]);
     write(path.join(backupsRoot(home), "restore-index.jsonl"), "{torn");
   }
   const first = await restoreLegacyFiles(base);

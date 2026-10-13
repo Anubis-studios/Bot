@@ -46,7 +46,7 @@ it("R7-T14: N+1 retires mapped keys with backups; N imports without resetting an
     steps: [finalLegacyPrefs()],
     log: () => {},
   });
-  expect(result.failed).toBeNull();
+  expect(result.failed).toEqual([]);
   expect(JSON.parse(fs.readFileSync(source, "utf8"))).toEqual({
     unmapped: "keep",
   });

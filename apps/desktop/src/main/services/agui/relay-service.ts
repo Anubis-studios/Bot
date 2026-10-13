@@ -238,6 +238,7 @@ const toHistory = (
     return { messages: [], runs: [], ...(notice != null && { notice }) };
   if (file.source.kind === "agui")
     return {
+      ...(notice != null && { notice }),
       messages: file.messages,
       runs: Array.isArray(file.runs) ? (file.runs as RunOutcomeRecord[]) : [],
       ...(file.source.migratedFrom != null && {
@@ -245,6 +246,7 @@ const toHistory = (
       }),
     };
   return {
+    ...(notice != null && { notice }),
     messages: file.messages,
     runs: [],
     migratedFrom: { updatedAt: file.source.updatedAt },
@@ -1123,8 +1125,10 @@ export class AguiRelayService implements AguiSource {
             ? this.#files.readCurrentWithNotice(threadId)
             : { file: this.#files.readCurrentFile(threadId) };
         const transcriptPath =
-          result.notice != null ? this.#files.transcriptPath?.(threadId) : null;
-        return result.notice != null && transcriptPath != null
+          result.notice?.kind === "too-large"
+            ? this.#files.transcriptPath?.(threadId)
+            : null;
+        return result.notice?.kind === "too-large" && transcriptPath != null
           ? {
               ...result,
               notice: { ...result.notice, path: path.resolve(transcriptPath) },

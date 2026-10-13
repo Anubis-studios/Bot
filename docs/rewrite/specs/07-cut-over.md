@@ -1108,7 +1108,7 @@ The final list of changed and removed items is generated from the `retired` and 
    - `prefs.json` is authoritative. The read-only startup import (C11) merges any `renderer-state.json` change N−1 made into leaves still marked `legacy`, and never over a `user` choice;
    - v1 files that N−1 wrote after the downgrade are newer than their v1-derived twins, and `readCurrentFile`'s repair (kept in N) converts them on open.
 
-   A thread N already owned (`agui` twin) keeps its AG-UI history: turns added to it under N−1 are not shown by N, but the model context has them. That is a known limitation (§18 R7).
+   A thread N already owned (`agui` twin) keeps its AG-UI history, and `readCurrentFile` appends the turns N−1 added to it: the v1 segments stamped after `migratedFrom.updatedAt` that no message holds yet (§18 R7). Neither file is changed.
 
    N−1's store writers may drop fields N added. N treats every such field as optional with a default (R7-T13, re-upgrade leg).
 
@@ -1362,7 +1362,7 @@ The new budgets do not replace them.
 | R4 | First-launch migration on a very large home (many GB of transcripts) takes minutes. The runner blocks the main window while it runs. | R7-T32 reports the 50 MB, 200 MB and 1 GB points. If 1 GB exceeds 3 min, step 1 becomes incremental: convert on hydrate, and let the runner do only the index. That decision is made before C14. |
 | R5 | The shared experience target (`latest.zip`) makes N−1 clients refuse N experiences at every check for the whole rollout. | §6.4. The cost is measured in R7-T3. Staged rollout keeps the window short. |
 | R6 | The JXA probe or haptics trigger a TCC prompt on a notarized build. | R7-T17 on the signed RC. Per 06 r4, a failed probe disables the companion on that display (no inference), and haptics default off beyond 150 ms latency. |
-| R7 | Turns added under N−1 to a thread N already owned are not shown after re-upgrading. The model context has them. | Documented (§12.3). A later relay change can append v1-newer segments to an `agui` thread on hydrate if support sees it. |
+| R7 | Turns added under N−1 to a thread N already owned are not shown after re-upgrading. The model context has them. | `readCurrentFile` appends the v1-newer segments to the `agui` thread on hydrate (§12.3). |
 | R8 | Cleared or archived history is misread across partial commits, downgrades and failed AG-UI deletions. | Orphans and markers are on HEAD. C1 adds per-thread archive records and marker-retirement proof. N decides each thread from them. R7-T14 checks after every partial commit and kill point (§9.3). |
 | R9 | A gallery or fixture dist reaches a release because the screenshot and acceptance runs share `dist/renderer`. | C4's guard in `beforePack` and `build-experience.js` (R7-T31). |
 | R10 | A prerequisite (P3–P6; P1 and P2 are done) slips, and the flip ships with it open. | §2 item 2 makes each an entry criterion with an owner. The C5 gate re-runs their tests (R7-T3, R7-T7, R7-T14, R7-T27). The relay findings are fixed on HEAD (relay fix log r1 and r2). |
