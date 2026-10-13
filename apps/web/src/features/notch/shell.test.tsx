@@ -460,9 +460,11 @@ it("forwarded movement through transparent margins releases mouse routing", asyn
     configurable: true,
     value: hit,
   });
-  fireEvent.pointerMove(window, { clientX: 280, clientY: 10 });
-  expect(view.notch.setInteractive).toHaveBeenLastCalledWith({
-    interactive: true,
+  await waitFor(() => {
+    fireEvent.pointerMove(window, { clientX: 280, clientY: 10 });
+    expect(view.notch.setInteractive).toHaveBeenLastCalledWith({
+      interactive: true,
+    });
   });
   hit.mockReturnValue(document.body);
   fireEvent.pointerMove(window, { clientX: 10, clientY: 200 });
