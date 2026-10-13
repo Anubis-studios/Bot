@@ -93,3 +93,43 @@ export const settleSkippedViewTransitions = (doc: Document): boolean => {
   target[SETTLED] = true;
   return true;
 };
+
+/**
+ * A view transition calls its update only after it has captured the old
+ * state, which takes a rendered frame. A window the compositor is not
+ * showing (another workspace on Wayland) gets no frames, so a route
+ * transition started there holds the old page until the window is shown
+ * again; `backgroundThrottling: false` does not help, the document stays
+ * `visible`. A transition whose update has not run after `ms` is skipped,
+ * which runs the update at once.
+ */
+const UNCAPTURED = Symbol.for("abacus.uncapturedViewTransition");
+
+export const skipUncapturedViewTransitions = (
+  doc: Document,
+  ms = 250
+): boolean => {
+  const target = doc as Document & { [UNCAPTURED]?: true };
+  if (target[UNCAPTURED]) return true;
+  if (typeof doc.startViewTransition !== "function") return false;
+  const original = doc.startViewTransition.bind(doc) as StartViewTransition;
+  doc.startViewTransition = ((
+    arg?: StartViewTransitionOptions | ViewTransitionUpdateCallback
+  ) => {
+    const update = typeof arg === "function" ? arg : arg?.update;
+    let called = false;
+    const transition = original({
+      ...(typeof arg === "object" ? arg : {}),
+      update: () => {
+        called = true;
+        return update?.();
+      },
+    });
+    setTimeout(() => {
+      if (!called) transition.skipTransition();
+    }, ms);
+    return transition;
+  }) as StartViewTransition;
+  target[UNCAPTURED] = true;
+  return true;
+};

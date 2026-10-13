@@ -42,6 +42,7 @@ import { DEFAULT_LOOK, resolveLook } from "#renderer/lib/look";
 import {
   guardSingleViewTransition,
   settleSkippedViewTransitions,
+  skipUncapturedViewTransitions,
 } from "#renderer/lib/navigation/single-transition";
 import { installTransitionTypes } from "#renderer/lib/navigation/transition-types";
 import { IS_ELECTRON } from "#renderer/lib/platform";
@@ -98,6 +99,9 @@ if (!IS_ELECTRON) {
 // TanStack/router#7906: a route transition the browser skips (hidden window)
 // must not surface as an unhandled rejection.
 settleSkippedViewTransitions(document);
+// A window the compositor is not showing renders no frames: navigate without
+// the transition rather than hold the old page until it is shown.
+skipUncapturedViewTransitions(document);
 // Dev and the acceptance build: a second view transition in one commit is
 // reported (and counted for R1-T11b).
 if (import.meta.env.DEV || import.meta.env.VITE_UI_GALLERY === "1")

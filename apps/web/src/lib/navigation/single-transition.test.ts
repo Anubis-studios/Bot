@@ -5,6 +5,7 @@ import {
   guardSingleViewTransition,
   isSkippedTransition,
   settleSkippedViewTransitions,
+  skipUncapturedViewTransitions,
 } from "./single-transition";
 
 const fakeDocument = () => {
@@ -139,5 +140,52 @@ describe("settleSkippedViewTransitions (TanStack/router#7906)", () => {
   it("leaves a document without view transitions alone", () => {
     const doc = {} as Document;
     expect(settleSkippedViewTransitions(doc)).toBe(false);
+  });
+});
+
+describe("skipUncapturedViewTransitions", () => {
+  const capturingDocument = () => {
+    const calls: { update: () => unknown; types?: string[] }[] = [];
+    const transition = { skipTransition: vi.fn() };
+    const doc = {
+      startViewTransition: (arg: {
+        update: () => unknown;
+        types?: string[];
+      }) => {
+        calls.push(arg);
+        return transition;
+      },
+    } as unknown as Document;
+    return { doc, calls, transition };
+  };
+
+  it("skips a transition whose update has not run in time", () => {
+    vi.useFakeTimers();
+    const { doc, transition } = capturingDocument();
+    skipUncapturedViewTransitions(doc, 250);
+    doc.startViewTransition(() => undefined);
+    vi.advanceTimersByTime(249);
+    expect(transition.skipTransition).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(transition.skipTransition).toHaveBeenCalledOnce();
+    vi.useRealTimers();
+  });
+
+  it("leaves a captured transition alone and keeps its update and types", () => {
+    vi.useFakeTimers();
+    const { doc, calls, transition } = capturingDocument();
+    skipUncapturedViewTransitions(doc, 250);
+    const update = vi.fn();
+    doc.startViewTransition({ update, types: ["push"] });
+    calls[0]!.update();
+    vi.advanceTimersByTime(1_000);
+    expect(update).toHaveBeenCalledOnce();
+    expect(calls[0]!.types).toEqual(["push"]);
+    expect(transition.skipTransition).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it("leaves a document without view transitions alone", () => {
+    expect(skipUncapturedViewTransitions({} as Document)).toBe(false);
   });
 });
