@@ -119,7 +119,15 @@ const FOCUSED_ENTRYPOINTS: Record<string, readonly string[]> = {
     "store",
     "whatsapp",
   ],
-  routines: ["form", "gallery", "globals", "page", "run-requests", "sidebar"],
+  routines: [
+    "data",
+    "form",
+    "gallery",
+    "globals",
+    "page",
+    "run-requests",
+    "sidebar",
+  ],
   sessions: [
     "browser/browser-tab",
     "browser/ask-host",
