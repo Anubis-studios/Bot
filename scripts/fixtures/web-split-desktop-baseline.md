@@ -8,7 +8,22 @@ renderer, a chunk split by a stray import), not against features. A feature
 that needs more is measured, reviewed and recorded here as a new baseline,
 in a commit of its own that says by how much it grew.
 
-## Current: `27f265ae` (the tool UI redesign, #436)
+## Current: `cb77304c` (the routine page's runs, #455)
+
+**401 / 7435804 / 2499819.** Records the renderer with the routine page's
+run report, runs rail and title-bar actions (#455). Against `27f265ae`: +6
+chunks (+1.52%), -9701 bytes (-0.13%), -1984 gzip bytes (-0.08%). Main at
+`665924aa` stood at 395 chunks. The six are shared modules Rollup now splits
+out because the routine route imports them too: five lucide icons, the title
+bar and the sessions deliverables card, less `resizable`, which folds back
+in. The 1% allowance is unchanged.
+
+Measured from a clean local build of `cb77304c` (frozen-lockfile install,
+Linux x64); this baseline-only change touches no renderer code.
+
+## History
+
+### `27f265ae` (the tool UI redesign, #436)
 
 **395 / 7445505 / 2501803.** Records the renderer at the merge of main into
 the tool UI branch (#436): grouped tool runs, the sessions deliverables card,
@@ -21,8 +36,6 @@ just under the 1% allowance). The 1% allowance is unchanged.
 Measured from a local build of the merged tree (`check:react-compiler` build,
 macOS arm64); the chunk count equals what CI reported on this branch (395).
 This baseline-only change touches no renderer code.
-
-## History
 
 ### `bc75d297c` (the Routines landing)
 
