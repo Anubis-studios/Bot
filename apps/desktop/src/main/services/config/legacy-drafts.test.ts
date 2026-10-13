@@ -64,6 +64,7 @@ it("answers system.info when the v1.0.85 state cannot be read", async () => {
         homeDir: () => home,
         appVersion: () => "1.1.0",
         botHome: () => home,
+        legacyInstall: () => true,
       },
       host: { sessionHomePath: () => home },
       serviceHost: { getMetadata: () => ({ materialIconsBasePath: "" }) },
