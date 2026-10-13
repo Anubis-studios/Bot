@@ -36,23 +36,33 @@ export const ScheduleSchema = v.pipe(
     }
   }, "schedule-invalid")
 );
-export const RoutineFormSchema = v.object({
-  name: v.pipe(v.string(), v.trim(), v.maxLength(80, "too-long")),
-  prompt: v.pipe(
-    v.string(),
-    v.trim(),
-    v.minLength(1, "instruction-required"),
-    v.maxLength(16000, "too-long")
-  ),
-  schedule: ScheduleSchema,
-  workspaceId: v.nullable(v.string()),
-  webhook: v.boolean(),
-  testRun: v.boolean(),
-  /** The pages its runs may read under, one per line. */
-  sources: v.string(),
-  /** The account data its runs may read. */
-  reads: v.array(v.picklist(["gmail.search", "gmail.read", "calendar.read"])),
-});
+/** `saved`: the routine's stored text, which keeps its length even over a cap. */
+export const routineFormSchema = (saved?: { name: string; prompt: string }) =>
+  v.object({
+    name: v.pipe(
+      v.string(),
+      v.trim(),
+      v.check((s) => s.length <= 80 || s === saved?.name.trim(), "too-long")
+    ),
+    prompt: v.pipe(
+      v.string(),
+      v.trim(),
+      v.minLength(1, "instruction-required"),
+      v.check(
+        (s) => s.length <= 16000 || s === saved?.prompt.trim(),
+        "too-long"
+      )
+    ),
+    schedule: ScheduleSchema,
+    workspaceId: v.nullable(v.string()),
+    webhook: v.boolean(),
+    testRun: v.boolean(),
+    /** The pages its runs may read under, one per line. */
+    sources: v.string(),
+    /** The account data its runs may read. */
+    reads: v.array(v.picklist(["gmail.search", "gmail.read", "calendar.read"])),
+  });
+export const RoutineFormSchema = routineFormSchema();
 export type RoutineValues = v.InferOutput<typeof RoutineFormSchema>;
 export const valuesForRoutine = (row?: RoutineRow): RoutineValues => ({
   name: row?.name ?? "",

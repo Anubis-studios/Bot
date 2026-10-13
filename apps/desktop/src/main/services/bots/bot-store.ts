@@ -38,34 +38,47 @@ export const botDir = (botId: string): string =>
 export const personaPath = (botId: string): string =>
   path.join(botDir(botId), "persona.md");
 
-// Mutations read raw accessories so unrelated edits do not backfill old rows.
-const read = (normalizeAccessory = true): Bot[] => {
+// The stored array, or null when the file is there but unreadable.
+const readRecords = (): unknown[] | null => {
   try {
     const parsed: unknown = JSON.parse(fs.readFileSync(FILE(), "utf8"));
-    if (!Array.isArray(parsed)) return [];
-    return (parsed as Array<Bot & { connectorIds?: unknown }>).map((bot) => {
-      // Old records still carry the field; dropped here so the next write
-      // sheds it.
-      const { connectorIds: _dropped, ...rest } = bot;
-      return {
-        ...rest,
-        ...(normalizeAccessory
-          ? { avatarAccessory: rest.avatarAccessory ?? "none" }
-          : {}),
-        model: rest.model ?? null,
-        persona: rest.persona ?? "",
-        sponsoredUntil: rest.sponsoredUntil ?? null,
-        // Bots from before the flag: a chat that exists was kicked off.
-        kickstartedAt:
-          rest.kickstartedAt ??
-          (rest.sessionId != null ? (rest.createdAt ?? Date.now()) : null),
-        avatarShape: rest.avatarShape ?? defaultAvatarShape(rest.name),
-      };
-    });
-  } catch {
-    return [];
+    return Array.isArray(parsed) ? parsed : null;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "ENOENT" ? [] : null;
   }
 };
+
+const isBotRecord = (
+  record: unknown
+): record is Bot & { connectorIds?: unknown } =>
+  record != null &&
+  typeof record === "object" &&
+  typeof (record as Bot).id === "string" &&
+  typeof (record as Bot).name === "string";
+
+// Mutations read raw accessories so unrelated edits do not backfill old rows.
+const read = (normalizeAccessory = true): Bot[] =>
+  (readRecords() ?? []).filter(isBotRecord).map((bot) => {
+    // Old records still carry the field; dropped here so the next write
+    // sheds it.
+    const { connectorIds: _dropped, ...rest } = bot;
+    return {
+      ...rest,
+      ...(normalizeAccessory
+        ? { avatarAccessory: rest.avatarAccessory ?? "none" }
+        : {}),
+      title: rest.title ?? "",
+      model: rest.model ?? null,
+      persona: rest.persona ?? "",
+      sponsoredUntil: rest.sponsoredUntil ?? null,
+      // Bots from before the flag: a chat that exists was kicked off.
+      kickstartedAt:
+        rest.kickstartedAt ??
+        (rest.sessionId != null ? (rest.createdAt ?? Date.now()) : null),
+      avatarColor: rest.avatarColor ?? defaultAvatarColor(rest.name),
+      avatarShape: rest.avatarShape ?? defaultAvatarShape(rest.name),
+    };
+  });
 
 const writeListeners = new Set<() => void>();
 
@@ -80,8 +93,16 @@ export const onBotStoreWrite = (listener: () => void): (() => void) => {
   };
 };
 
+// Records this version cannot read are written back as they were.
 const write = (bots: Bot[]): void => {
-  writeFileAtomicSync(FILE(), `${JSON.stringify(bots, null, 2)}\n`);
+  const records = readRecords();
+  if (records == null)
+    throw new Error("bots.json could not be read, so it was not changed.");
+  const kept = records.filter((record) => !isBotRecord(record));
+  writeFileAtomicSync(
+    FILE(),
+    `${JSON.stringify([...bots, ...kept], null, 2)}\n`
+  );
   for (const listener of Array.from(writeListeners)) {
     try {
       listener();

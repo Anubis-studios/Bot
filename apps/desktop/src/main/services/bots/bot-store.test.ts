@@ -211,3 +211,47 @@ describe("the chat wallpaper", () => {
     expect(getBot(bot.id)?.wallpaper).toBeNull();
   });
 });
+
+describe("a bots.json from 1.0.85", () => {
+  const file = () => path.join(home, "bots.json");
+  const scout = {
+    id: "bot-1",
+    name: "Scout",
+    title: "",
+    description: "Watch the news.",
+    persona: "",
+    avatarShape: "circle",
+    workspaceId: "ws1",
+    sessionId: "s1",
+    model: null,
+    createdAt: 1,
+    updatedAt: 1,
+  };
+  const nameless = { id: "bot-2", description: "No name.", createdAt: 2 };
+
+  it("lists the good bots past a bad record, and defaults a missing color", () => {
+    fs.writeFileSync(file(), JSON.stringify([scout, nameless]));
+
+    expect(listBots().map((bot) => bot.id)).toEqual(["bot-1"]);
+    expect(getBot("bot-1")?.avatarColor).toMatch(/^#/);
+  });
+
+  it("writes the bad record back verbatim", () => {
+    fs.writeFileSync(file(), JSON.stringify([scout, nameless]));
+
+    updateBot("bot-1", { title: "Reporter" });
+
+    const stored = JSON.parse(fs.readFileSync(file(), "utf8"));
+    expect(stored).toHaveLength(2);
+    expect(stored[1]).toEqual(nameless);
+    expect(stored[0].title).toBe("Reporter");
+  });
+
+  it("never writes over a file it could not read", () => {
+    fs.writeFileSync(file(), "[{ not json");
+
+    expect(listBots()).toEqual([]);
+    expect(() => createBot({ name: "New", description: "x" })).toThrow();
+    expect(fs.readFileSync(file(), "utf8")).toBe("[{ not json");
+  });
+});

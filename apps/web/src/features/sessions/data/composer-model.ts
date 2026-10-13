@@ -27,7 +27,11 @@ import { useCreditsAccount } from "#renderer/lib/use-credits-account";
 
 import { useCheckoutQueries, useSessionsTransport } from "./queries";
 import { setSessionModel } from "./session-actions";
-export const useSessionComposerModel = (row?: SessionRow, draftId?: string) => {
+export const useSessionComposerModel = (
+  row?: SessionRow,
+  draftId?: string,
+  draftWorkspaceId?: string | null
+) => {
   const { t } = useTranslation();
   const db = useDb();
   const prefs = usePrefs();
@@ -53,7 +57,14 @@ export const useSessionComposerModel = (row?: SessionRow, draftId?: string) => {
   const savedModel = useSelector(draftStore, (state) =>
     draftId ? state[draftId]?.model : undefined
   );
-  const value = row?.model ?? (draftId ? savedModel : draftModel) ?? null;
+  const value =
+    row?.model ??
+    (draftId
+      ? savedModel !== undefined
+        ? savedModel
+        : (prefs.models.perWorkspace[draftWorkspaceId ?? ""] ?? null)
+      : draftModel) ??
+    null;
   const selected = resolveConfiguredModel({
     requested: value,
     defaultModel: settings.data?.defaultModel,

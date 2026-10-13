@@ -56,7 +56,7 @@ import { browserTimeZone, isHosted } from "./hosted";
 import { routineRefusal, type RoutineRefusalText } from "./refusal";
 import { RoutineRefusalNotice } from "./refusal-notice";
 import {
-  RoutineFormSchema,
+  routineFormSchema,
   valuesForRoutine,
   dirtyPatch,
   droppedSources,
@@ -143,9 +143,9 @@ export const RoutineDialog = ({
       mode: "blur",
       modeAfterSubmission: "change",
     }),
-    validators: { onDynamic: RoutineFormSchema },
+    validators: { onDynamic: routineFormSchema(row) },
     onSubmit: async ({ value }) => {
-      const parsed = v.parse(RoutineFormSchema, value);
+      const parsed = v.parse(routineFormSchema(row), value);
       setError(null);
       setScheduleError(null);
       setRefusal(null);

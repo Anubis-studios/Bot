@@ -35,7 +35,11 @@ const SessionsNewRoute = () => {
   const draft = useSelector(startDraftStore, (s) => s);
   const search = Route.useSearch();
   const navigate = useAppNavigate();
-  const model = useSessionComposerModel(undefined, `draft:${draft.id}`);
+  const model = useSessionComposerModel(
+    undefined,
+    `draft:${draft.id}`,
+    draft.workspaceId ?? workspaceId
+  );
   useEffect(() => {
     if (
       draftId === startDraftStore.state.id &&

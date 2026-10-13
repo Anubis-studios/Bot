@@ -40,6 +40,27 @@ const writeTranscript = (
   );
 };
 
+/** A thread file, in the shape the desktop's thread store writes. */
+const writeThread = (
+  sessionId: string,
+  messages: unknown[],
+  updatedAt = "2026-02-01T00:00:00.000Z"
+): void => {
+  const dir = path.join(home, "threads");
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, `${sessionId}.json`),
+    JSON.stringify({
+      version: 3,
+      threadId: sessionId,
+      updatedAt,
+      source: { kind: "agui" },
+      messages,
+    }),
+    "utf8"
+  );
+};
+
 /** One bot message, as the renderer persists it. */
 const botSays = (content: string): unknown => ({
   type: "text",
@@ -118,7 +139,7 @@ const writeDesktopStore = (sessions: unknown[]): void => {
   fs.mkdirSync(home, { recursive: true });
   fs.writeFileSync(
     path.join(home, "local-code.json"),
-    JSON.stringify({ agent: { agentSessions: sessions } }),
+    JSON.stringify({ localCode: { agentSessions: sessions } }),
     "utf8"
   );
 };
@@ -188,6 +209,42 @@ describe("conversations held in the app", () => {
     ]);
 
     expect(searchSessions("parser")[0]?.title).toBe("rewrite the parser");
+  });
+
+  it("finds a conversation held only in a thread file", () => {
+    writeThread("s1", [
+      {
+        id: "m1",
+        role: "user",
+        parts: [{ type: "text", text: "where is the retry?" }],
+      },
+      {
+        id: "m2",
+        role: "assistant",
+        parts: [{ type: "text", text: "It lives in fetchWithBackoff." }],
+      },
+    ]);
+
+    const [hit] = searchSessions("fetchWithBackoff");
+
+    expect(hit?.sessionId).toBe("s1");
+    expect(hit?.origin).toBe("desktop");
+  });
+
+  it("reads the thread file over the v1 transcript of the same session", () => {
+    writeTranscript("s1", [botSays("an old draft of the plan")]);
+    writeThread("s1", [
+      {
+        id: "m1",
+        role: "assistant",
+        parts: [{ type: "text", text: "the final plan" }],
+      },
+    ]);
+
+    expect(searchSessions("old draft")).toEqual([]);
+    expect(searchSessions("final plan").map((hit) => hit.sessionId)).toEqual([
+      "s1",
+    ]);
   });
 
   it("has no title to show when the app never recorded one", () => {
@@ -764,7 +821,7 @@ describe("files that are not what they should be", () => {
 
     fs.writeFileSync(
       path.join(home, "local-code.json"),
-      JSON.stringify({ agent: { agentSessions: "nope" } }),
+      JSON.stringify({ localCode: { agentSessions: "nope" } }),
       "utf8"
     );
 

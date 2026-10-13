@@ -10,6 +10,7 @@ import {
 import { routineState, runsView, stats } from "./data";
 import {
   RoutineFormSchema,
+  routineFormSchema,
   valuesForRoutine,
   dirtyPatch,
   nextPreview,
@@ -136,6 +137,25 @@ describe("R5-T8/T9 form values", () => {
         prompt: " Summarise ",
       })
     ).toMatchObject({ name: "Brief", prompt: "Summarise" });
+  });
+  it("saves a 1.0.85 routine over the caps until its long text is edited", () => {
+    // 1.0.85 had no caps on either field.
+    const saved = valuesForRoutine({
+      ...fixtureRoutines()[0]!,
+      name: "n".repeat(120),
+      prompt: "p".repeat(20000),
+    });
+    const schema = routineFormSchema(saved);
+    expect(
+      v.safeParse(schema, { ...saved, webhook: !saved.webhook }).success
+    ).toBe(true);
+    expect(
+      v.safeParse(schema, { ...saved, name: `${saved.name}!` }).success
+    ).toBe(false);
+    expect(
+      v.safeParse(schema, { ...saved, prompt: `${saved.prompt}!` }).success
+    ).toBe(false);
+    expect(v.safeParse(RoutineFormSchema, saved).success).toBe(false);
   });
   it("preserves a custom cron, previews with main's parser and patches only edits", () => {
     const row = { ...fixtureRoutines()[0]!, schedule: "*/7 4,9 * * 1-5" };

@@ -57,7 +57,15 @@ export class CronScheduler {
 
     for (const job of dueJobs(now)) {
       // Retire before the run: a run longer than a tick would fire twice.
-      if (job.runAt != null) retireOnceJob(job.id);
+      if (job.runAt != null) {
+        try {
+          retireOnceJob(job.id);
+        } catch (err) {
+          // Unretired, it is still due next minute.
+          console.error("[cron] could not retire a one-off job:", err);
+          continue;
+        }
+      }
       try {
         await this.runJob(job.id, "schedule");
       } catch (err) {
