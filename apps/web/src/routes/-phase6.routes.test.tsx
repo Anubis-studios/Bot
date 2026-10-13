@@ -491,6 +491,7 @@ it.each(["whatsapp", "telegram", "discord"] as const)(
       })),
     };
     const writes: { platformId: string; enabled?: boolean }[] = [];
+    const released: string[] = [];
     harness = await renderApp("/onboarding/connectors", {
       onboarded: false,
       signedIn: true,
@@ -502,6 +503,9 @@ it.each(["whatsapp", "telegram", "discord"] as const)(
             return snapshot;
           }),
           showLogin: os.messaging.showLogin.handler(() => {}),
+          releaseLogin: os.messaging.releaseLogin.handler(({ input }) => {
+            released.push(input.platformId);
+          }),
           pairShared: os.messaging.pairShared.handler(() => snapshot),
         },
       },
@@ -534,12 +538,9 @@ it.each(["whatsapp", "telegram", "discord"] as const)(
         "/onboarding/connectors"
       );
       await waitFor(() =>
-        expect(
-          writes.some(
-            (write) => write.platformId === platform && write.enabled === false
-          )
-        ).toBe(true)
+        expect(released).toEqual(Array(attempt + 1).fill(platform))
       );
+      expect(writes.some((write) => write.enabled === false)).toBe(false);
     }
     expect(
       harness.collections.prefs.get("app")?.onboardingPairing ?? []
