@@ -30,6 +30,15 @@ describe("R5-T6 routine state and local day stats", () => {
     expect(routineState(routine, [], [session])).toBe("needs-you");
     expect(routineState(routine, [], [])).toBe("paused");
   });
+  it("says a routine held for the network is waiting, not failed", () => {
+    const routine = {
+      ...fixtureRoutines()[0]!,
+      enabled: true,
+      waitingForConnection: true,
+    };
+    expect(routineState(routine, [], [])).toBe("waiting");
+    expect(routineState({ ...routine, enabled: false }, [], [])).toBe("paused");
+  });
   it.each([
     ["once", { schedule: null, runAt: 123 }],
     ["webhook", { schedule: null, webhookToken: "token" }],

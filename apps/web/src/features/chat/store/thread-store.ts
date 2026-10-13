@@ -49,6 +49,8 @@ interface RetryInfo {
   maxAttempts: number;
   delayMs: number;
   isNetworkError: boolean;
+  /** The turn is paused until the network is back. */
+  waitingForConnection: boolean;
 }
 
 export interface Notice {

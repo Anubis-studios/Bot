@@ -39,6 +39,7 @@ import {
   loadConfig,
   PROVIDER_API_KEY_ENV,
 } from "../config.js";
+import { hostConnectivity } from "../connectivity.js";
 import {
   fetchHold,
   setCurrentMode,
@@ -63,7 +64,25 @@ import {
 import { McpToolSync } from "../mcp/tool-sync.js";
 import { buildMcpToolDefinitions, mcpToolCaller } from "../mcp/tools.js";
 import { MidTaskInbox, type MidTaskMessage } from "../mid-task-inbox.js";
-import { endedOnLeakedToolCall } from "../openllm-failures.js";
+import {
+  BUSY_RETRY_PROMPT,
+  BusyWait,
+  BUSY_WAIT_ROUNDS,
+  NETWORK_UNREACHABLE_MESSAGE,
+  NetworkWait,
+  failedCallStreamed,
+  networkContinuation,
+  networkEvidence,
+  networkSuspect,
+  networkWaitBudgetMs,
+  runMadeProgress,
+  type NetworkSuspect,
+} from "../network-wait.js";
+import {
+  endedOnLeakedToolCall,
+  isBusyFailure,
+  networkVerdict,
+} from "../openllm-failures.js";
 import {
   OPENLLM_CONTINUATION_PROMPT,
   OPENLLM_CONTINUATION_TYPE,
@@ -193,6 +212,14 @@ export class ForeverEngine {
    */
   private pendingOpenLlmRotation: { failure: string; nextId: string } | null =
     null;
+  /** Set at `agent_end` when the call failed in a way that may be the network's. */
+  private pendingNetworkFailure: NetworkSuspect | null = null;
+  /** Set at `agent_end` when every pool model is busy and a wait is left this turn. */
+  private pendingBusyWait: { failure: string } | null = null;
+  private readonly networkWait = new NetworkWait();
+  private readonly busyWait = new BusyWait();
+  /** The turn already ended on "couldn't reach Abacus"; pi's error is not a second one. */
+  private networkFailureReported = false;
   /** A model call gone silent; see stall-watch.ts. */
   private readonly stallWatch = new StallWatch({
     turnRunning: () => this.turnRunning,
@@ -636,6 +663,11 @@ export class ForeverEngine {
     // A rotation left over from a stopped turn must not fire here.
     this.pendingOpenLlmRotation = null;
     this.router.beginTurn();
+    this.pendingNetworkFailure = null;
+    this.pendingBusyWait = null;
+    this.networkWait.reset();
+    this.busyWait.reset();
+    this.networkFailureReported = false;
     // The sponsored window closing (or opening) changes the headers the
     // Abacus provider was registered with; a run must not carry the marker
     // past its deadline, nor miss it.
@@ -835,9 +867,13 @@ export class ForeverEngine {
       this.pendingOpenLlmRotation != null ||
       this.pendingLanguageRepair != null ||
       this.pendingToolArrival != null ||
-      this.pendingStall != null
+      this.pendingStall != null ||
+      this.pendingNetworkFailure != null ||
+      this.pendingBusyWait != null
     ) {
       if (this.interrupted) {
+        this.pendingNetworkFailure = null;
+        this.pendingBusyWait = null;
         this.continuingPastMalformedToolCall = false;
         this.pendingContextCompaction = null;
         this.pendingOpenLlmRotation = null;
@@ -853,6 +889,22 @@ export class ForeverEngine {
         const stalled = this.pendingStall.modelId;
         this.pendingStall = null;
         await this.recoverFromStall(stalled);
+
+        continue;
+      }
+
+      if (this.pendingNetworkFailure != null) {
+        const suspect = this.pendingNetworkFailure;
+        this.pendingNetworkFailure = null;
+        await this.recoverFromNetworkFailure(suspect);
+
+        continue;
+      }
+
+      if (this.pendingBusyWait != null) {
+        const busy = this.pendingBusyWait;
+        this.pendingBusyWait = null;
+        await this.waitForBusyPool(busy.failure);
 
         continue;
       }
@@ -922,33 +974,169 @@ export class ForeverEngine {
    * be emitted; the router picks the candidate here so that promise is never
    * made for a fallback that does not exist.
    */
-  private shouldRotateOpenLlm(
-    messages: readonly unknown[]
-  ): { failure: string; nextId: string } | null {
-    if (!this.openLlmActive || this.interrupted) return null;
+  private shouldRotateOpenLlm(messages: readonly unknown[]): {
+    rotation: { failure: string; nextId: string } | null;
+    busy: { failure: string } | null;
+  } {
+    const none = { rotation: null, busy: null };
+    if (!this.openLlmActive || this.interrupted) return none;
 
     const failure =
       endedOnProviderError(messages) ?? endedOnLeakedToolCall(messages);
-    const registry = this.registry;
     const current = this.session?.model;
 
     if (failure == null) {
       // The model answered: proof it works, else its failure count only climbs.
       if (current != null)
         this.router.succeeded(`${current.provider}/${current.id}`);
-      return null;
+      return none;
     }
-    if (registry == null) return null;
 
-    const next = this.router.failed(registry, failure, current);
+    return this.routeAfterFailure(failure);
+  }
 
-    if (next == null) {
-      process.stderr.write(
-        `[abacusai-bot-agent] bot pool not rotating after "${failure.slice(0, 80)}": no other candidate\n`
+  /**
+   * The pool's answer to a provider failure: the next model, or, when every
+   * model is busy and the turn has a wait left, a wait for the soonest one.
+   */
+  private routeAfterFailure(
+    failure: string,
+    network?: Parameters<OpenLlmRouter["failed"]>[3]
+  ): {
+    rotation: { failure: string; nextId: string } | null;
+    busy: { failure: string } | null;
+  } {
+    const registry = this.registry;
+    if (registry == null) return { rotation: null, busy: null };
+
+    const next = this.router.failed(
+      registry,
+      failure,
+      this.session?.model,
+      network
+    );
+    if (next != null && "nextId" in next)
+      return { rotation: { failure, nextId: next.nextId }, busy: null };
+
+    const busy =
+      isBusyFailure(failure) &&
+      this.busyWait.available &&
+      !this.router.poolShut(registry);
+    process.stderr.write(
+      `[abacusai-bot-agent] bot pool not rotating after "${failure.slice(0, 80)}": no other candidate${busy ? "; waiting for the soonest" : ""}\n`
+    );
+
+    return { rotation: null, busy: busy ? { failure } : null };
+  }
+
+  /**
+   * The call failed in a way that may be the network's. If it is, the turn
+   * waits for the connection and picks up where it stopped; if the Abacus
+   * API answers, it is a provider failure and goes the usual way.
+   */
+  private async recoverFromNetworkFailure(
+    suspect: NetworkSuspect
+  ): Promise<void> {
+    const evidence = suspect.confirmed
+      ? null
+      : await networkEvidence(suspect.failure);
+    const network =
+      evidence == null ||
+      networkVerdict(suspect.failure, evidence) === "network";
+
+    if (this.interrupted) {
+      this.finishTurn();
+      return;
+    }
+
+    if (!network) {
+      const route = this.openLlmActive
+        ? this.routeAfterFailure(suspect.failure, evidence ?? undefined)
+        : { rotation: null, busy: null };
+      this.pendingOpenLlmRotation = route.rotation;
+      this.pendingBusyWait = route.busy;
+      if (route.rotation == null && route.busy == null) this.finishTurn();
+      return;
+    }
+
+    const budgetMs = networkWaitBudgetMs();
+    const outcome = await this.networkWait.next(
+      budgetMs,
+      (attempt, delayMs) => {
+        process.stderr.write(
+          `[abacusai-bot-agent] network unavailable ("${suspect.failure.slice(0, 80)}"); waiting ${delayMs}ms (attempt ${attempt}, budget ${budgetMs}ms)\n`
+        );
+        this.emitAgentEvent({
+          type: "retry",
+          attempt,
+          maxAttempts: 0,
+          delayMs,
+          isNetworkError: true,
+          waitingForConnection: true,
+        });
+      }
+    );
+
+    if (outcome === "cancelled" || this.interrupted) {
+      this.finishTurn();
+      return;
+    }
+
+    if (outcome === "gave-up") {
+      this.networkFailureReported = true;
+      this.emitAgentEvent(
+        {
+          type: "error",
+          error: {
+            message: NETWORK_UNREACHABLE_MESSAGE,
+            code: "turn_failed",
+            detail: suspect.failure,
+          },
+        },
+        { origin: "turn" }
       );
+      this.finishTurn();
+      return;
     }
 
-    return next == null ? null : { failure, nextId: next.nextId };
+    const session = this.session;
+    if (session == null) {
+      this.finishTurn();
+      return;
+    }
+    await networkContinuation(session, suspect.streamed);
+  }
+
+  /**
+   * Every pool model is cooling down after saying it is busy: wait for the
+   * soonest (bounded), then ask it again, before saying they are all busy.
+   */
+  private async waitForBusyPool(failure: string): Promise<void> {
+    const registry = this.registry;
+    const soonest =
+      registry != null ? this.router.soonestReady(registry) : null;
+
+    if (soonest == null || this.interrupted) {
+      this.finishTurn();
+      return;
+    }
+
+    this.emitAgentEvent({
+      type: "retry",
+      attempt: this.busyWait.rounds + 1,
+      maxAttempts: BUSY_WAIT_ROUNDS,
+      delayMs: this.busyWait.delayFor(soonest.readyInMs),
+      isNetworkError: false,
+    });
+
+    const waited = await this.busyWait.wait(soonest.readyInMs);
+
+    if (!waited || this.interrupted) {
+      this.finishTurn();
+      return;
+    }
+
+    this.pendingOpenLlmRotation = { failure, nextId: soonest.nextId };
   }
 
   /**
@@ -965,6 +1153,7 @@ export class ForeverEngine {
     const session = this.session;
     if (rotation == null || runtime == null || session == null) return;
 
+    const failed = session.model;
     const resolved = resolveModel(
       runtime,
       rotation.nextId,
@@ -1003,7 +1192,11 @@ export class ForeverEngine {
     await session.sendCustomMessage(
       {
         customType: OPENLLM_CONTINUATION_TYPE,
-        content: OPENLLM_CONTINUATION_PROMPT,
+        // After a busy wait the same model may be asked again.
+        content:
+          `${failed?.provider}/${failed?.id}` === rotation.nextId
+            ? BUSY_RETRY_PROMPT
+            : OPENLLM_CONTINUATION_PROMPT,
         display: false,
       },
       { triggerTurn: true }
@@ -1032,10 +1225,21 @@ export class ForeverEngine {
     const seconds = modelStallMs() / 1000;
     const registry = this.registry;
 
+    // Silence while the network is down is the network's, not the model's.
+    const connectivity = hostConnectivity();
+    if (connectivity === "offline" || connectivity === "degraded") {
+      this.pendingNetworkFailure = {
+        failure: `no reply in ${Math.round(seconds)}s`,
+        streamed: failedCallStreamed(this.session?.messages ?? []),
+        confirmed: true,
+      };
+      return;
+    }
+
     if (this.openLlmActive && registry != null) {
       const failure = `no reply in ${Math.round(seconds)}s`;
       const next = this.router.failed(registry, failure, this.session?.model);
-      if (next != null) {
+      if (next != null && "nextId" in next) {
         this.pendingOpenLlmRotation = { failure, nextId: next.nextId };
         return;
       }
@@ -1093,7 +1297,7 @@ export class ForeverEngine {
         this.openLlmActive && registry != null
           ? this.router.failed(registry, failure, session.model)
           : null;
-      if (next != null) {
+      if (next != null && "nextId" in next) {
         this.pendingOpenLlmRotation = { failure, nextId: next.nextId };
         return;
       }
@@ -1128,7 +1332,12 @@ export class ForeverEngine {
   }
 
   private reportTurnFailure(): void {
-    if (this.interrupted || this.stallFailureReported) return;
+    if (
+      this.interrupted ||
+      this.stallFailureReported ||
+      this.networkFailureReported
+    )
+      return;
 
     // The budget extension aborted the run; pi records that as an error with
     // "This operation was aborted" for text, which reads as a provider fault.
@@ -1282,6 +1491,9 @@ export class ForeverEngine {
 
   async stop(): Promise<void> {
     this.interrupted = true;
+    // A turn waiting for the network or a busy pool ends now, not after the wait.
+    this.networkWait.cancel();
+    this.busyWait.cancel();
     this.reply.abandon();
     this.stallWatch.clear();
     this.rejectAllPending("Interrupted.");
@@ -1507,6 +1719,8 @@ export class ForeverEngine {
 
   async resetConversation(): Promise<void> {
     this.interrupted = true;
+    this.networkWait.cancel();
+    this.busyWait.cancel();
     this.rejectAllPending("Conversation reset.");
     this.pendingSteers.clear();
     this.session?.clearQueue();
@@ -1817,10 +2031,35 @@ export class ForeverEngine {
         );
         this.lastTurnUsage = turnUsage(event.messages as never);
 
+        // A call that answered ends any outage this turn was riding out.
+        if (runMadeProgress(event.messages)) this.networkWait.reset();
+        // The network's failure is checked (and waited out) before anything
+        // reads it as the model's: no cooldown, no rotation, no compaction.
+        // A hidden turn has nobody waiting, so it neither waits nor blames.
+        const suspect =
+          this.interrupted || event.willRetry
+            ? null
+            : networkSuspect(
+                endedOnProviderError(event.messages),
+                event.messages
+              );
+        if (suspect != null && !this.hiddenTurn) {
+          this.pendingNetworkFailure = suspect;
+          this.continuingPastMalformedToolCall = false;
+          this.pendingContextCompaction = null;
+          this.pendingOpenLlmRotation = null;
+          this.pendingBusyWait = null;
+          this.pendingLanguageRepair = null;
+          this.pendingToolArrival = null;
+
+          return;
+        }
+
         // A hidden housekeeping turn is not carried on: nobody is waiting on
         // it, and a continuation would run more hidden work. Its provider
         // failure still puts the model out, so the next turn starts elsewhere.
-        if (this.hiddenTurn) this.shouldRotateOpenLlm(event.messages);
+        if (this.hiddenTurn && suspect == null)
+          this.shouldRotateOpenLlm(event.messages);
         this.continuingPastMalformedToolCall =
           !this.hiddenTurn &&
           this.shouldContinuePastMalformedToolCall(event.messages);
@@ -1830,12 +2069,14 @@ export class ForeverEngine {
             : this.shouldCompactAndRetry(event.messages);
         // A malformed call is retried on the same model, not rotated, and an
         // outgrown transcript does not fit the next model either.
-        this.pendingOpenLlmRotation =
+        const route =
           this.hiddenTurn ||
           this.continuingPastMalformedToolCall ||
           this.pendingContextCompaction != null
-            ? null
+            ? { rotation: null, busy: null }
             : this.shouldRotateOpenLlm(event.messages);
+        this.pendingOpenLlmRotation = route.rotation;
+        this.pendingBusyWait = event.willRetry ? null : route.busy;
         // Only a turn that ended cleanly is judged on its language; a hidden
         // housekeeping turn has no reader.
         this.pendingLanguageRepair =
@@ -1843,6 +2084,7 @@ export class ForeverEngine {
           this.continuingPastMalformedToolCall ||
           this.pendingContextCompaction != null ||
           this.pendingOpenLlmRotation != null ||
+          this.pendingBusyWait != null ||
           this.languageRepairsThisTurn > 0
             ? null
             : replyLanguageMismatch(event.messages);
@@ -1854,6 +2096,7 @@ export class ForeverEngine {
           this.continuingPastMalformedToolCall ||
           this.pendingContextCompaction != null ||
           this.pendingOpenLlmRotation != null ||
+          this.pendingBusyWait != null ||
           this.pendingLanguageRepair != null ||
           this.toolArrivalsThisTurn > 0
             ? []
@@ -1864,6 +2107,7 @@ export class ForeverEngine {
           !this.continuingPastMalformedToolCall &&
           this.pendingContextCompaction == null &&
           this.pendingOpenLlmRotation == null &&
+          this.pendingBusyWait == null &&
           this.pendingLanguageRepair == null &&
           this.pendingToolArrival == null &&
           this.pendingStall == null

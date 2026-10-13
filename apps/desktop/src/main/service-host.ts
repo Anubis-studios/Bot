@@ -273,8 +273,10 @@ import {
 } from "./services/agent-tools/routine-attempts";
 import {
   hasRunInFlight,
+  NetworkWaitClock,
   ranOutOfAbacusCredits,
   ROUTINE_FAILURES_BEFORE_PAUSE,
+  ROUTINE_RUN_TIMEOUT_MS,
   shouldPauseAfter,
   stuckRuns,
 } from "./services/agent-tools/routine-guards";
@@ -337,6 +339,7 @@ import {
   readSettings,
   credentialFor,
 } from "./services/config/settings";
+import { ConnectivityService } from "./services/connectivity/connectivity-service";
 import {
   ConnectWatcher,
   type ConnectedOffer,
@@ -1295,9 +1298,19 @@ export class ServiceHost {
     flushPermissions: (decision, server) =>
       this.builtinToolPermissions.flushPending(decision, server),
   });
-  private readonly cronScheduler = new CronScheduler(async (jobId, trigger) => {
-    await this.runRoutine(jobId, trigger);
-  });
+  /** Whether this machine can reach Abacus; see connectivity-service.ts. */
+  readonly connectivity = new ConnectivityService();
+  private readonly cronScheduler = new CronScheduler(
+    async (jobId, trigger) => {
+      await this.runRoutine(jobId, trigger);
+    },
+    async () => (await this.connectivity.ensureFresh()) === "online",
+    () =>
+      this.emitEvent({
+        type: "cronjobs-updated",
+        emittedAt: new Date().toISOString(),
+      })
+  );
   private readonly webhookService = new WebhookService(
     async (jobId, trigger, payload) => {
       await this.runRoutine(jobId, trigger, payload);
@@ -2164,6 +2177,14 @@ export class ServiceHost {
       }
       // `agent.setModel`'s answer, whatever the turn filter decides below.
       this.modelSwitches.feed(sessionId, payload);
+      // An agent waiting for the network: main probes too, so it can say when
+      // the network is back and cut every agent's wait short.
+      if (
+        payload.type === "event" &&
+        payload.event.type === "retry" &&
+        payload.event.waitingForConnection === true
+      )
+        this.connectivity.reportFailure();
       // Post-Stop sessions drop everything but terminal events, so a stale
       // tail cannot leak into the renderer.
       const passedFilter = this.sessionTurnStateService.filterDesktopEvent(
@@ -4523,6 +4544,16 @@ export class ServiceHost {
   }
 
   startCronScheduler(): void {
+    // Every agent hears of a change at once; a routine held for the network
+    // runs when it is back.
+    this.connectivity.onChange(({ state, resumed }) => {
+      this.agentManagerService.broadcastCommand({
+        type: "connectivity",
+        state,
+        ...(resumed ? { resumed: true } : {}),
+      });
+      if (state === "online") void this.cronScheduler.release();
+    });
     this.cronScheduler.everyMinute(() => this.reapStuckRoutineRuns());
     this.cronScheduler.start();
     void this.webhookService.start().catch((err: unknown) => {
@@ -4534,12 +4565,17 @@ export class ServiceHost {
 
   stopCronScheduler(): void {
     this.cronScheduler.stop();
+    this.connectivity.stop();
     this.webhookService.stop();
     this.webhookRelay.stop();
   }
 
   /** What each running routine session has said so far, for its run file. */
   private readonly routineRunText = new Map<string, string[]>();
+  /** Hosted routine runs on this computer: routine runs, though not stamped with a routine. */
+  private readonly hostedRunSessions = new Set<string>();
+  /** Time routine runs spent waiting for the network; the reaper allows it. */
+  private readonly routineNetworkWaits = new NetworkWaitClock();
 
   /** Starts that deletion must let finish before collecting run sessions. */
   private readonly routineRunStarts = new Map<
@@ -4556,6 +4592,11 @@ export class ServiceHost {
     if (payload.type !== "event") return;
     if (!this.agentSessionManagerService.isRoutineSession(sessionId)) return;
     const event = payload.event;
+    this.routineNetworkWaits.note(
+      sessionId,
+      event.type === "retry" && event.waitingForConnection === true,
+      Date.now()
+    );
     if (event.type === "text_delta") {
       const text = this.routineRunText.get(sessionId) ?? [];
       text.push(event.content);
@@ -4569,6 +4610,7 @@ export class ServiceHost {
           ? "completed"
           : null;
     if (outcome == null) return;
+    this.routineNetworkWaits.forget(sessionId);
     // An error's trailing idle must not overwrite the failure.
     if (!this.agentSessionManagerService.setRunOutcome(sessionId, outcome))
       return;
@@ -4606,6 +4648,7 @@ export class ServiceHost {
     const target = await this.ensureRoutineWorkspace(HOSTED_RUNS_FOLDER);
     if (target == null) return { outcome: "not-started", text: "" };
     const session = this.agentSessionManagerService.create(target);
+    this.hostedRunSessions.add(session.id);
     // Held before it can start; a session that cannot be held never runs.
     if (
       !this.agentSessionManagerService.holdUnattended(
@@ -4763,7 +4806,13 @@ export class ServiceHost {
   /** A run still "running" after half an hour hung and blocks later fires. */
   reapStuckRoutineRuns(now: number = Date.now()): void {
     for (const job of listJobs()) {
-      for (const run of stuckRuns(this.listRoutineRuns(job.id), now)) {
+      for (const run of stuckRuns(
+        this.listRoutineRuns(job.id),
+        now,
+        ROUTINE_RUN_TIMEOUT_MS,
+        (sessionId) => this.routineNetworkWaits.waitedMs(sessionId, now)
+      )) {
+        this.routineNetworkWaits.forget(run.sessionId);
         this.stopAgentTurn({
           workspaceId: run.workspaceId,
           sessionId: run.sessionId,
@@ -4997,6 +5046,9 @@ export class ServiceHost {
             ? (this.botService.list().find((bot) => bot.id === job.botId)
                 ?.name ?? null)
             : null,
+        ...(this.cronScheduler.isHeld(job.id)
+          ? { waitingForConnection: true }
+          : {}),
       }));
     return [...local, ...this.hostedRoutines.list()];
   }
@@ -5457,6 +5509,15 @@ export class ServiceHost {
         : {}),
       // Read once by the agent runtime and removed from its environment.
       ABACUSAI_BOT_CHECKOUT_TOKEN: this.checkoutToken,
+      // Kept current afterwards by the `connectivity` command.
+      ABACUSAI_BOT_CONNECTIVITY: this.connectivity.state,
+      // A routine's run (a bot's routine, a hosted one) may wait out a long
+      // outage; a turn a person sent waits ten minutes.
+      ...(sessionId != null &&
+      (this.agentSessionManagerService.isRoutineSession(sessionId) ||
+        this.hostedRunSessions.has(sessionId))
+        ? { ABACUSAI_BOT_ROUTINE_RUN: "1" }
+        : {}),
       // Routine chats compact early; see ROUTINE_CONTEXT_CAP_TOKENS.
       ...(sessionId != null &&
       this.agentSessionManagerService.isRoutineSession(sessionId)

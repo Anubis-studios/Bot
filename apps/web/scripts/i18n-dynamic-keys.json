@@ -849,7 +849,8 @@
       "once",
       "webhook",
       "manual",
-      "scheduled"
+      "scheduled",
+      "waiting"
     ],
     "sources": ["features/routines/sidebar.tsx"]
   },

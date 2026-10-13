@@ -7,6 +7,8 @@ import { describe, expect, it } from "vitest";
 import {
   classifyFailure,
   endedOnLeakedToolCall,
+  isBusyFailure,
+  networkVerdict,
   retryHintMs,
 } from "./openllm-failures.js";
 
@@ -161,5 +163,70 @@ describe("a tool call written as text", () => {
       endedOnLeakedToolCall([assistant([{ type: "text", text: "All done." }])])
     ).toBeNull();
     expect(endedOnLeakedToolCall([])).toBeNull();
+  });
+});
+
+describe("a failure of the network", () => {
+  it.each([
+    "Connection error.",
+    "fetch failed",
+    "getaddrinfo ENOTFOUND routellm.abacus.ai",
+    "connect ECONNREFUSED 127.0.0.1:443",
+    "read ECONNRESET",
+    "socket hang up",
+    "Request timed out.",
+  ])("%s is the network's while the machine is offline", (failure) => {
+    expect(networkVerdict(failure, { connectivity: "offline" })).toBe(
+      "network"
+    );
+    expect(
+      classifyFailure(failure, "abacus", NOON, { connectivity: "degraded" })
+    ).toEqual({ network: true });
+  });
+
+  it("asks for a probe when the host thinks the network is fine", () => {
+    expect(
+      networkVerdict("Request timed out.", { connectivity: "online" })
+    ).toBe("unknown");
+    expect(
+      networkVerdict("Request timed out.", {
+        connectivity: "online",
+        abacusReachable: false,
+      })
+    ).toBe("network");
+  });
+
+  it("stays the provider's when the Abacus API answers", () => {
+    expect(
+      classifyFailure("Request timed out.", "abacus", NOON, {
+        connectivity: "online",
+        abacusReachable: true,
+      })
+    ).toEqual({});
+  });
+
+  it("is never an HTTP answer, a gateway timeout included", () => {
+    for (const failure of [
+      "504 Gateway Timeout",
+      "429 rate limited upstream",
+      "502 upstream connect error",
+    ])
+      expect(networkVerdict(failure, { connectivity: "offline" })).toBe(
+        "provider"
+      );
+  });
+});
+
+describe("a busy provider", () => {
+  it.each([
+    ["429 rate limited upstream", true],
+    ["503 Service Unavailable", true],
+    ["529 Overloaded", true],
+    ["The model is overloaded, try later", true],
+    ["429 Rate limit reached for requests per day (RPD)", false],
+    ["404 model not found", false],
+    ["401 Invalid API Key", false],
+  ])("%s busy: %s", (failure, busy) => {
+    expect(isBusyFailure(failure)).toBe(busy);
   });
 });

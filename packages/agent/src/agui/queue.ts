@@ -12,6 +12,7 @@ import * as readline from "node:readline";
 import type { Readable } from "node:stream";
 
 import type { BotSession } from "../bot/bot-session.js";
+import { setHostConnectivity } from "../connectivity.js";
 import { tagEvent } from "../event-meta.js";
 import {
   AgentStatus,
@@ -269,6 +270,11 @@ export class HostCore {
 
       case "refresh_providers":
         await this.session.refreshProviders();
+
+        return;
+
+      case "connectivity":
+        setHostConnectivity(command.state, command.resumed === true);
 
         return;
 

@@ -1,3 +1,7 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const fetchMock = vi.hoisted(() => vi.fn());
@@ -15,8 +19,12 @@ vi.mock("./abacus-host", () => ({
 
 vi.stubGlobal("fetch", fetchMock);
 
-const { abacusCredentialRejected, clearAbacusCache, fetchAbacusAccount } =
-  await import("./abacus");
+const {
+  abacusCredentialRejected,
+  clearAbacusCache,
+  fetchAbacusAccount,
+  fetchAbacusModels,
+} = await import("./abacus");
 
 beforeEach(() => {
   fetchMock.mockReset();
@@ -196,5 +204,34 @@ describe("whether the key has been refused outright", () => {
     fetchMock.mockResolvedValueOnce(new Response(null, { status: 403 }));
 
     await expect(fetchAbacusAccount(true)).resolves.toBeNull();
+  });
+});
+
+describe("fetchAbacusModels without a network", () => {
+  it("offers the account's last fetched list after a restart", async () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "desktop-abacus-"));
+    vi.stubEnv("ABACUSAI_BOT_HOME", home);
+    try {
+      fetchMock.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: [
+              { id: "model-a", model_type: "text_generation", agentic: true },
+            ],
+          }),
+          { status: 200 }
+        )
+      );
+      const live = await fetchAbacusModels();
+      expect(live.map((model) => model.id)).toEqual(["abacus/model-a"]);
+
+      // A new process: nothing cached in memory, and the network is gone.
+      clearAbacusCache();
+      fetchMock.mockRejectedValueOnce(new TypeError("fetch failed"));
+      expect(await fetchAbacusModels()).toEqual(live);
+    } finally {
+      vi.unstubAllEnvs();
+      fs.rmSync(home, { recursive: true, force: true });
+    }
   });
 });

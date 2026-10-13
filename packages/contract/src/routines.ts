@@ -149,6 +149,8 @@ export interface RoutineListItem extends Routine {
   botName: string | null;
   /** Set on a hosted routine's row. */
   hosted?: HostedRoutineInfo;
+  /** A fire came due with the network down: it runs once the network is back. */
+  waitingForConnection?: boolean;
 }
 
 export interface RoutineCreateInput {

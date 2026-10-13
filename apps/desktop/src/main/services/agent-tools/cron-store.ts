@@ -518,6 +518,24 @@ export const dueJobs = (at: Date = new Date()): CronJob[] =>
     }
   });
 
+/**
+ * Scheduled jobs that had a fire after `from` and before `to`'s minute: what
+ * a machine asleep (or a stalled tick) missed. The current minute is dueJobs'.
+ */
+export const missedJobs = (from: Date, to: Date): CronJob[] => {
+  const minute = new Date(to.getTime());
+  minute.setSeconds(0, 0);
+  return read().filter((job) => {
+    if (!job.enabled || job.runAt != null || job.schedule == null) return false;
+    try {
+      const next = nextRun(job.schedule, from);
+      return next != null && next.getTime() < minute.getTime();
+    } catch {
+      return false;
+    }
+  });
+};
+
 /** A once job has fired: it is done, and stays in the list as a record. */
 export const retireOnceJob = (id: string): void => {
   const job = getJob(id);

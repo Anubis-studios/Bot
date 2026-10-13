@@ -270,3 +270,92 @@ describe("the sources beyond Abacus, Gemini and OpenRouter", () => {
     ).toEqual({ nextId: "groq/qwen/qwen3.8-27b" });
   });
 });
+
+describe("a failure of the network", () => {
+  it("writes no cooldown, keeps the model in the turn, and names no next model", () => {
+    const store = memoryStore();
+    const router = new OpenLlmRouter(() => 1_000, store, memoryQuotaStore());
+
+    const step = router.failed(
+      registry,
+      "Request timed out.",
+      { provider: "abacus", id: "muse-spark-1.3-contributor" },
+      { connectivity: "offline" }
+    );
+
+    expect(step).toEqual({ network: true });
+    expect(store.read()).toEqual({});
+    expect(router.pick(registry)?.id).toBe("abacus/muse-spark-1.3-contributor");
+  });
+
+  it("is the model's when the Abacus API answers the probe", () => {
+    const store = memoryStore();
+    const router = new OpenLlmRouter(() => 1_000, store, memoryQuotaStore());
+
+    const step = router.failed(
+      registry,
+      "Request timed out.",
+      { provider: "abacus", id: "muse-spark-1.3-contributor" },
+      { connectivity: "online", abacusReachable: true }
+    );
+
+    expect(step).toEqual({ nextId: "gemini/gemini-3.6-flash" });
+    expect(Object.keys(store.read())).toEqual([
+      "abacus/muse-spark-1.3-contributor",
+    ]);
+  });
+});
+
+describe("a pool where every model is busy", () => {
+  it("names the model ready soonest, and lets the turn ask it again", () => {
+    pool.models = [
+      choice("openrouter/big:free"),
+      choice("openrouter/small:free"),
+    ];
+    let now = 1_000;
+    const router = new OpenLlmRouter(
+      () => now,
+      memoryStore(),
+      memoryQuotaStore()
+    );
+    // big:free names its wait; small:free gets the default five minutes.
+    router.failed(registry, "429: rate limited. Please try again in 20s.", {
+      provider: "openrouter",
+      id: "big:free",
+    });
+    expect(
+      router.failed(registry, "429: rate limited upstream", {
+        provider: "openrouter",
+        id: "small:free",
+      })
+    ).toBeNull();
+
+    now += 5_000;
+    expect(router.soonestReady(registry)).toEqual({
+      nextId: "openrouter/big:free",
+      readyInMs: 15_000,
+    });
+    // Asked again after the wait, it fails over to what is left, as before.
+    expect(
+      router.failed(registry, "429: rate limited upstream", {
+        provider: "openrouter",
+        id: "big:free",
+      })
+    ).toBeNull();
+  });
+
+  it("has nothing to wait for when the account shut the pool", () => {
+    pool.models = [choice("abacus/muse-spark-1.3-contributor")];
+    const router = new OpenLlmRouter(
+      () => 1_000,
+      memoryStore(),
+      memoryQuotaStore()
+    );
+    router.failed(registry, OUT_OF_CREDITS, {
+      provider: "abacus",
+      id: "muse-spark-1.3-contributor",
+    });
+
+    expect(router.soonestReady(registry)).toBeNull();
+  });
+});

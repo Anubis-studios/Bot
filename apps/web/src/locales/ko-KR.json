@@ -2645,6 +2645,7 @@
       "tools_one": "Running {{count}} tool",
       "tools_other": "Running {{count}} tools",
       "typing": "Typing",
+      "waitingForConnection": "연결 대기 중…",
       "working": "Working"
     },
     "code": {
@@ -3188,7 +3189,8 @@
       "once": "Once",
       "webhook": "웹훅",
       "manual": "On demand",
-      "scheduled": "Scheduled"
+      "scheduled": "Scheduled",
+      "waiting": "연결 대기 중"
     },
     "outcomes": {
       "running": "Running",

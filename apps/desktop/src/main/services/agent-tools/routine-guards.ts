@@ -23,13 +23,53 @@ export const hasRunInFlight = (runs: RoutineRunItem[]): boolean =>
 export const stuckRuns = (
   runs: RoutineRunItem[],
   now: number,
-  timeoutMs: number = ROUTINE_RUN_TIMEOUT_MS
+  timeoutMs: number = ROUTINE_RUN_TIMEOUT_MS,
+  /** Time a run spent waiting for the network, which the timeout does not count. */
+  networkWaitMs: (sessionId: string) => number = () => 0
 ): RoutineRunItem[] =>
   runs.filter(
     (run) =>
       run.outcome === "running" &&
-      now - new Date(run.startedAt).getTime() > timeoutMs
+      now - new Date(run.startedAt).getTime() >
+        timeoutMs + networkWaitMs(run.sessionId)
   );
+
+/**
+ * How long each run has spent waiting for the network, read off its events:
+ * a "waiting for connection" retry starts a wait, anything else ends it. The
+ * agent bounds the wait itself, so a run is never reaped mid-wait.
+ */
+export class NetworkWaitClock {
+  private readonly since = new Map<string, number>();
+  private readonly total = new Map<string, number>();
+
+  note(sessionId: string, waiting: boolean, now: number): void {
+    const started = this.since.get(sessionId);
+    if (waiting) {
+      if (started == null) this.since.set(sessionId, now);
+      return;
+    }
+    if (started == null) return;
+    this.since.delete(sessionId);
+    this.total.set(
+      sessionId,
+      (this.total.get(sessionId) ?? 0) + Math.max(0, now - started)
+    );
+  }
+
+  waitedMs(sessionId: string, now: number): number {
+    const started = this.since.get(sessionId);
+    return (
+      (this.total.get(sessionId) ?? 0) +
+      (started != null ? Math.max(0, now - started) : 0)
+    );
+  }
+
+  forget(sessionId: string): void {
+    this.since.delete(sessionId);
+    this.total.delete(sessionId);
+  }
+}
 
 /** Newest runs failed in a row; runs still going are not counted either way. */
 export const consecutiveFailures = (runs: RoutineRunItem[]): number => {

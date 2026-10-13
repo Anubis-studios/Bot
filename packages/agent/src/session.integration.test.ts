@@ -30,7 +30,11 @@ import {
 // A model call that goes quiet is given up on after this long; the real
 // window is two minutes, which no test should sit through.
 process.env.ABACUSAI_BOT_MODEL_STALL_MS = "700";
+// A busy pool's wait for its soonest model, which is up to a minute for real.
+process.env.ABACUSAI_BOT_BUSY_WAIT_MS = "20";
 
+import { setHostConnectivity, setReachabilityProbe } from "./connectivity.js";
+import { NETWORK_UNREACHABLE_MESSAGE } from "./network-wait.js";
 import {
   AgentMode,
   AgentStatus,
@@ -1177,6 +1181,14 @@ describe("OpenLLM", () => {
     await harness.session.send("hi");
     await harness.until(() => harness.agent("error").length > 0);
 
+    // Every model busy: the pool waits for the soonest one a few rounds
+    // before giving up, each round a "retrying" line, never a network one.
+    const retries = harness.agent("retry");
+    expect(retries.map((event) => event.attempt)).toEqual([1, 2, 3]);
+    expect(retries.every((event) => event.waitingForConnection !== true)).toBe(
+      true
+    );
+
     // A pool that is down is reported, not spun on forever: the turn ends,
     // and the error names what the provider said.
     expect(harness.agent("turn_complete").length).toBeGreaterThan(0);
@@ -1190,6 +1202,133 @@ describe("OpenLLM", () => {
     expect(reported?.message).not.toMatch(/429|upstream|https?:\/\//);
     expect(reported?.detail).toBeUndefined();
     expect(reported?.actions).toEqual([{ type: "switch-model" }]);
+  });
+
+  describe("when the network goes", () => {
+    const cooldowns = (): string => {
+      try {
+        return fs.readFileSync(
+          path.join(home, "openllm-cooldowns.json"),
+          "utf8"
+        );
+      } catch {
+        return "";
+      }
+    };
+
+    afterEach(() => {
+      setHostConnectivity("unknown");
+      setReachabilityProbe(null);
+      delete process.env.ABACUSAI_BOT_NETWORK_WAIT_MS;
+    });
+
+    it("waits for the connection without blaming the model, then replays the call", async () => {
+      const harness = session({ mode: "yolo" });
+      let offline = true;
+      provider.script(() => (offline ? { drop: true } : { say: "back again" }));
+      setHostConnectivity("offline");
+      await harness.session.start();
+      // Not awaited: the send is what is waiting.
+      const sent = harness.session.send("hi");
+
+      await harness.until(() =>
+        harness
+          .agent("retry")
+          .some((event) => event.waitingForConnection === true)
+      );
+      const waitingOn = provider.calls.length;
+      offline = false;
+      // Back online: the turn goes on at once, not at the end of its backoff.
+      setHostConnectivity("online");
+      await sent;
+
+      expect(harness.agent("turn_complete").length).toBeGreaterThan(0);
+      expect(harness.text).toContain("back again");
+      expect(harness.agent("error")).toEqual([]);
+      // The same model is asked again: no rotation, no cooldown on disk.
+      const models = provider.calls.map((call) => call.model);
+      expect(new Set(models)).toEqual(new Set(["big:free"]));
+      expect(provider.calls.length).toBeGreaterThan(waitingOn);
+      expect(cooldowns()).not.toContain("big:free");
+      // Nothing had streamed, so the replay asks for the answer afresh.
+      expect(provider.calls.at(-1)?.userText.join("\n")).toMatch(
+        /connection dropped before your reply/i
+      );
+    });
+
+    it("ends honestly once the wait runs out, never as a busy pool", async () => {
+      const harness = session({ mode: "yolo" });
+      provider.script(() => ({ drop: true }));
+      setHostConnectivity("offline");
+      process.env.ABACUSAI_BOT_NETWORK_WAIT_MS = "300";
+      await harness.session.start();
+      await harness.session.send("hi");
+      await harness.until(() => harness.agent("error").length > 0);
+
+      const reported = harness.agent("error").map((event) => event.error);
+      expect(reported).toHaveLength(1);
+      expect(reported[0]?.message).toBe(NETWORK_UNREACHABLE_MESSAGE);
+      expect(reported[0]?.message).not.toBe(OPENLLM_POOL_EXHAUSTED_MESSAGE);
+      expect(harness.agent("turn_complete").length).toBeGreaterThan(0);
+      expect(cooldowns()).toBe("");
+    });
+
+    it.each([
+      ["a turn a person sent", undefined, 10 * 60_000],
+      ["a routine's run", "1", 60 * 60_000],
+    ])("gives %s its budget", async (_origin, routine, budgetMs) => {
+      if (routine != null) process.env.ABACUSAI_BOT_ROUTINE_RUN = routine;
+      const log = captureLog();
+      try {
+        const harness = session({ mode: "yolo" });
+        provider.script(() => ({ drop: true }));
+        setHostConnectivity("offline");
+        await harness.session.start();
+        void harness.session.send("hi");
+        await harness.until(() => harness.agent("retry").length > 0);
+        await harness.session.stop();
+
+        expect(log.lines.join("")).toContain(`budget ${budgetMs}ms`);
+      } finally {
+        log.restore();
+        delete process.env.ABACUSAI_BOT_ROUTINE_RUN;
+      }
+    });
+
+    it("stops at once when the user stops a turn that is waiting", async () => {
+      const harness = session({ mode: "yolo" });
+      provider.script(() => ({ drop: true }));
+      setHostConnectivity("offline");
+      await harness.session.start();
+      void harness.session.send("hi");
+      await harness.until(() => harness.agent("retry").length > 0);
+
+      await harness.session.stop();
+      await harness.until(
+        () => harness.agent("turn_complete").length > 0,
+        2_000
+      );
+      expect(harness.agent("error")).toEqual([]);
+    });
+
+    it("treats a dropped call as the model's when the Abacus API still answers", async () => {
+      const harness = session({ mode: "yolo" });
+      provider.script((call) =>
+        call.model === "big:free" ? { drop: true } : { say: "from small" }
+      );
+      setHostConnectivity("online");
+      setReachabilityProbe(async () => true);
+      await harness.session.start();
+      await harness.session.send("hi");
+      await harness.until(() => harness.agent("turn_complete").length > 0);
+
+      // The usual provider path: the failed model sits out, the next takes over.
+      expect(harness.text).toContain("from small");
+      expect(
+        harness.agent("retry").some((event) => event.waitingForConnection)
+      ).toBe(false);
+      expect(cooldowns()).toContain("big:free");
+    });
   });
 
   it("says the pool is used up, not busy, when the account shut every source", async () => {
