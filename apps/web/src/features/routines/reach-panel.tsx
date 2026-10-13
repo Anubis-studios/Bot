@@ -1,12 +1,6 @@
 import type { RoutineRow } from "@abacus-ai/contract/contract/rows";
 import { useTranslation } from "react-i18next";
 
-import { ConfirmAction } from "#renderer/components/form-kit/confirm";
-import { showError } from "#renderer/lib/toast";
-import { useAppContext } from "#renderer/lib/use-app-context";
-import { Item } from "#renderer/ui/item";
-import { Switch } from "#renderer/ui/switch";
-
 import { isHosted } from "./hosted";
 
 /** A connector read, in words. */
@@ -43,15 +37,14 @@ export const pausedReasonKey = (reason: string): string => {
 };
 
 /**
- * What a routine's runs may reach, and a local one's full access: the user's
- * own click; the agent cannot make it.
+ * What a hosted routine's runs may reach. A routine on this computer always
+ * runs with full access, so it has nothing to show here.
  */
 export const RoutineReachPanel = ({ row }: { row: RoutineRow }) => {
   const { t } = useTranslation();
-  const { db } = useAppContext();
-  // A local routine's reach is what main kept of what was asked.
-  const reach = row.hosted ?? row.reach ?? { sources: [], reads: [] };
-  const watchUrl = row.hosted?.watchUrl ?? null;
+  if (!isHosted(row) || row.hosted == null) return null;
+  const reach = row.hosted;
+  const watchUrl = reach.watchUrl ?? null;
   const items = [
     ...reach.reads.map((read) => t(readKey(read))),
     ...reach.sources,
@@ -72,47 +65,10 @@ export const RoutineReachPanel = ({ row }: { row: RoutineRow }) => {
           {watchUrl}
         </p>
       )}
-      {row.hosted?.pausedReason != null && !row.enabled && (
+      {reach.pausedReason != null && !row.enabled && (
         <p className="text-muted-foreground text-xs">
-          {t(pausedReasonKey(row.hosted.pausedReason))}
+          {t(pausedReasonKey(reach.pausedReason))}
         </p>
-      )}
-      {!isHosted(row) && (
-        <Item size="sm" className="rounded-(--pane-radius)">
-          {row.access !== "unattended" ? (
-            <Switch
-              aria-label={t("routines.reach.fullAccess")}
-              checked
-              onCheckedChange={() =>
-                void db.collections.routines
-                  .update(row.id, (d) => {
-                    d.access = "unattended";
-                  })
-                  .isPersisted.promise.catch(() =>
-                    showError(t("phase5.failed"))
-                  )
-              }
-            />
-          ) : (
-            <ConfirmAction
-              title={t("routines.reach.fullAccessTitle")}
-              description={t("routines.reach.fullAccessDescription")}
-              label={t("routines.reach.fullAccessConfirm")}
-              onConfirm={async () => {
-                await db.collections.routines.update(row.id, (d) => {
-                  d.access = "full";
-                }).isPersisted.promise;
-              }}
-            />
-          )}
-          <span className="min-w-0 flex-1">
-            {t(
-              row.access !== "unattended"
-                ? "routines.reach.fullAccessOn"
-                : "routines.reach.unattended"
-            )}
-          </span>
-        </Item>
       )}
     </section>
   );

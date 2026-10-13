@@ -1514,21 +1514,11 @@
       "away_other": "{{count}} results came in while you were away."
     },
     "reach": {
-      "sourcesLabel": "Pages it may read (one address per line)",
-      "sourcesPlaceholder": "https://news.example.com/tech/",
-      "readsLabel": "Account data it may read",
       "gmailSearch": "Search Gmail",
       "gmailRead": "Read Gmail messages",
       "calendarRead": "Read Google Calendar",
-      "lead": "Its runs search the web and read only what is listed here. They never send messages or change files.",
       "reads": "Reads:",
       "searchOnly": "web search only",
-      "fullAccess": "Full access",
-      "fullAccessTitle": "Give this routine full access?",
-      "fullAccessDescription": "Its runs can then run commands, change files and send messages, with nobody watching. Only do this for a routine you wrote yourself.",
-      "fullAccessConfirm": "Give full access",
-      "fullAccessOn": "Full access: its runs can run commands, change files and send messages.",
-      "unattended": "Runs read only. Give it full access…",
       "watches": "Watches:",
       "dropped": "Left out, since a routine cannot read them: {{items}}"
     },
