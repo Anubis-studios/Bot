@@ -184,7 +184,6 @@ const OnboardingRoute = () => {
     );
   const create = async (id: string) =>
     previewFirstBot(id, t("bots.templates.chief-of-staff.name"));
-  const showFirstBot = useEffectEvent(() => void go("first-bot"));
   const automaticallySignIn = useEffectEvent(() => {
     if (onboardingStore.state.signIn?.status !== "pending") auth("signin");
   });
@@ -195,17 +194,7 @@ const OnboardingRoute = () => {
       void startWebsiteSignIn(transport, automaticallySignIn).catch(() => {});
     if (facts.signedIn && facts.googleSignIn)
       void startFirstRunGmail(transport, true).catch(() => {});
-    // A website sign-up skips the setup screens but still picks: its bot, or building.
-    if (facts.signedIn && facts.webSignup && step === "connected")
-      showFirstBot();
-  }, [
-    step,
-    facts.provisional,
-    facts.signedIn,
-    facts.googleSignIn,
-    facts.webSignup,
-    transport,
-  ]);
+  }, [step, facts.provisional, facts.signedIn, facts.googleSignIn, transport]);
   const connect = async (id: string) => {
     const entry = connectorById(id);
     if (IS_ELECTRON && entry?.kind === "messaging") {
@@ -273,7 +262,6 @@ const factsOf = async (
   return {
     signedIn: canSignOutOfAbacus(settings),
     payingTier: isPayingAbacusTier(account?.subscription_tier),
-    webSignup: account?.web_signup === true,
     googleSignIn: account?.google_sign_in === true,
     ownsBot: context.db.collections.bots.toArray.some(
       (bot) => bot.channel == null

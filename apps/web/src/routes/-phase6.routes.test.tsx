@@ -265,7 +265,7 @@ it("final setup retries a failed completion without duplicating its created Chie
   expect(harness.collections.bots.toArray).toHaveLength(1);
 });
 
-it("a website signup is offered its sponsored Chief, or building", async () => {
+it("a website signup is welcomed and set up like any sign-in, then offered its Chief", async () => {
   const seed = defaultSeed();
   seed.bots = [];
   seed.routines = [];
@@ -293,23 +293,20 @@ it("a website signup is offered its sponsored Chief, or building", async () => {
       },
     },
   });
+  // The welcome screen stays: a website signup is not sent past it.
+  expect(
+    await screen.findByRole("button", { name: "Get started" })
+  ).toBeTruthy();
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(harness.router.state.location.pathname).toBe("/onboarding/connected");
+  // Then the setup screens, as for any sign-in.
+  fireEvent.click(screen.getByRole("button", { name: "Get started" }));
   await waitFor(() =>
-    expect(harness!.router.state.location.pathname).toBe(
-      "/onboarding/first-bot"
+    expect(harness!.router.state.location.pathname).toMatch(
+      /^\/onboarding\/(models|connectors)$/
     )
   );
-  expect(
-    await screen.findByRole("button", { name: "Start building" })
-  ).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: "Say hello" }));
-  await waitFor(() =>
-    expect(harness!.router.state.location.pathname).toMatch(/^\/bots\/bot-/)
-  );
-  expect(harness.collections.bots.toArray).toHaveLength(1);
-  expect(harness.collections.bots.toArray[0]).toMatchObject({
-    sponsoredFirstRun: true,
-  });
-  expect(harness.collections.routines.toArray).toHaveLength(0);
+  expect(harness.collections.bots.toArray).toHaveLength(0);
 });
 
 /**

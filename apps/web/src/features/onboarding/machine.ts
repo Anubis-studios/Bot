@@ -13,7 +13,6 @@ export interface FlowFacts {
   signedIn: boolean;
   payingTier: boolean;
   ownsBot: boolean;
-  webSignup?: boolean;
   /** The account signs in with Google (the desktop then opens its consent). */
   googleSignIn?: boolean;
   /** Not from the host yet (spec 09 D12): render, but act on nothing. */
