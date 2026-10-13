@@ -44,7 +44,12 @@ export class BootError extends Error {
   }
 }
 
-const BOOT_TIMEOUTS = { transport: 5_000, system: 3_000, prefs: 5_000 };
+const BOOT_TIMEOUTS = {
+  transport: 5_000,
+  system: 3_000,
+  prefs: 5_000,
+  account: 2_000,
+};
 
 interface Boot {
   transport: Transport;
@@ -180,18 +185,22 @@ export const bootstrap = async (deps: BootstrapDeps): Promise<BootResult> => {
       new Promise((_, reject) => {
         accountTimer = setTimeout(
           () => reject(new Error("account timeout")),
-          2000
+          timeouts.account
         );
       }),
     ]);
   } catch (error) {
-    console.warn("[boot] account unavailable; allowing shell", error);
+    console.warn("[boot] account unavailable", error);
     await deps.queryClient.cancelQueries({ queryKey: accountOptions.queryKey });
-    deps.queryClient.setQueryData(accountOptions.queryKey, {
-      account: null,
-      apps: [],
-      onboarded: true,
-    });
+    if (
+      system.legacyInstall &&
+      db.collections.prefs.get("app")?.onboardingStep == null
+    )
+      deps.queryClient.setQueryData(accountOptions.queryKey, {
+        account: null,
+        apps: [],
+        onboarded: true,
+      });
   } finally {
     clearTimeout(accountTimer);
   }

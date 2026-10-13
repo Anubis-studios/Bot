@@ -1837,6 +1837,11 @@
     "next": "次へ",
     "progress": "ステップ {{current}} / {{total}}",
     "replay": "ツアーを見る",
+    "newLook": {
+      "message": "AbacusAI Bot のデザインが新しくなりました。ボット、セッション、ルーティンはそのまま引き継がれています。",
+      "start": "簡単なツアーを見る",
+      "dismiss": "OK"
+    },
     "stops": {
       "sessions": {
         "title": "セッション",

@@ -85,6 +85,7 @@ const PHONE_QUERY = "(max-width: 799px)";
 /** Until the host answers `system.info`: the browser's own view. */
 const PLACEHOLDER_SYSTEM: SystemInfo = {
   appVersion: "",
+  legacyInstall: false,
   platform: "linux",
   arch: "",
   versions: {},

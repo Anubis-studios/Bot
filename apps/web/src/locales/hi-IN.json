@@ -1837,6 +1837,11 @@
     "next": "आगे",
     "progress": "चरण {{current}} / {{total}}",
     "replay": "टूर देखें",
+    "newLook": {
+      "message": "AbacusAI Bot का नया रूप आ गया है। आपके बॉट, सेशन और रूटीन साथ आ गए हैं।",
+      "start": "छोटा टूर लें",
+      "dismiss": "समझ गया"
+    },
     "stops": {
       "sessions": {
         "title": "सत्र",

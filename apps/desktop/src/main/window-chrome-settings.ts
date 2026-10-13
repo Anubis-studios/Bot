@@ -46,3 +46,9 @@ export function useLinuxNativeFrame(key = linuxNativeFrameKey()): boolean {
 export function persistLinuxNativeFrame(key = linuxNativeFrameKey()): void {
   settingsStore().set("linuxNativeFrameKey", key);
 }
+
+/** The old renderer always used the native frame; an upgrade keeps it. */
+export function seedLinuxNativeFrame(key = linuxNativeFrameKey()): void {
+  if (settingsStore().get("linuxNativeFrameKey") === undefined)
+    persistLinuxNativeFrame(key);
+}

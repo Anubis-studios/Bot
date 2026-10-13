@@ -1837,6 +1837,11 @@
     "next": "Lanjut",
     "progress": "Langkah {{current}} dari {{total}}",
     "replay": "Ikuti tur",
+    "newLook": {
+      "message": "AbacusAI Bot punya tampilan baru. Bot, sesi, dan rutinitas Anda ikut terbawa.",
+      "start": "Ikuti tur singkat",
+      "dismiss": "Mengerti"
+    },
     "stops": {
       "sessions": {
         "title": "Sesi",

@@ -10,6 +10,8 @@ import { NoInput } from "./ids";
 export interface SystemInfo {
   appVersion: string;
   legacyComposerDrafts?: Record<string, string>;
+  /** Upgraded from the old renderer (1.0.85 or earlier). */
+  legacyInstall: boolean;
   platform: string;
   arch: string;
   versions: Record<string, string | undefined>;

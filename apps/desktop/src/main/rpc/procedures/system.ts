@@ -53,6 +53,7 @@ export const systemRouter = impl.system.router({
     return {
       appVersion: app.appVersion(),
       legacyComposerDrafts: pendingLegacyDrafts(app.botHome()),
+      legacyInstall: app.legacyInstall(),
       platform: process.platform,
       arch: process.arch,
       versions: { ...process.versions },
