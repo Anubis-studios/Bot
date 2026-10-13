@@ -30,6 +30,7 @@ import {
   ShellPending,
   ShellFailure,
 } from "#renderer/features/shell/shell-layout";
+import { NewLookNotice } from "#renderer/features/tour/new-look";
 import { startTour, useTourState } from "#renderer/features/tour/store";
 import { UpgradeDialogHost } from "#renderer/features/upgrade-dialog";
 const TourHost = lazy(() =>
@@ -89,6 +90,7 @@ const ShellRoute = () => {
       <OpenTargetBridge />
       <PairingQueueBanner suppressed={tour != null} />
       {!provisional && tour == null && <WhatsAppIntro />}
+      {!provisional && tour == null && <NewLookNotice />}
       <SessionsGlobals preview={dispatchPreview} />
       <UpgradeDialogHost />
     </>

@@ -5,7 +5,9 @@
  * written by the sync.
  */
 
+import fs from "node:fs";
 import os from "node:os";
+import path from "node:path";
 
 import { describe, expect, it, vi } from "vitest";
 
@@ -16,7 +18,9 @@ vi.mock("electron", () => ({
 
 import {
   composeLegacyPrefs,
+  detectLegacyInstall,
   importLegacyPrefs,
+  importLegacyTourSeen,
   LEGACY_ONBOARDING_STEPS,
   LEGACY_PREFS_FIELDS,
   mapLegacyKey,
@@ -194,6 +198,7 @@ describe("composeLegacyPrefs", () => {
       routeLlmNudges: 0,
       routeLlmNudgeAt: null,
       routeLlmSwitched: false,
+      newLookSeenAt: null,
     });
     expect(legacy.patch.models).toEqual(PREFS_DEFAULTS.models);
     expect(legacy.absent).toContain("theme");
@@ -240,6 +245,7 @@ describe("composeLegacyPrefs", () => {
       routeLlmNudges: 0,
       routeLlmNudgeAt: null,
       routeLlmSwitched: false,
+      newLookSeenAt: null,
     });
     // A corrupt code store reads as its defaults there; the accordion holds.
     expect(legacy.patch.sidebar).toEqual({
@@ -318,6 +324,60 @@ describe("importLegacyPrefs", () => {
       onboardingStep: "default",
       onboardingFlow: "default",
     });
+  });
+});
+
+describe("detectLegacyInstall", () => {
+  const profile = () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "legacy-install-"));
+    const userData = path.join(home, "electron");
+    fs.mkdirSync(userData);
+    return { home, userData };
+  };
+
+  it("is the old renderer's state file, or an account onboarded before prefs.json", () => {
+    const { home, userData } = profile();
+    expect(detectLegacyInstall(userData, home)).toBe(false);
+    fs.writeFileSync(
+      path.join(home, "account.json"),
+      JSON.stringify({ onboarded: true })
+    );
+    expect(detectLegacyInstall(userData, home)).toBe(true);
+    fs.writeFileSync(path.join(home, "prefs.json"), "{}");
+    expect(detectLegacyInstall(userData, home)).toBe(false);
+    fs.writeFileSync(path.join(userData, "renderer-state.json"), "{}");
+    expect(detectLegacyInstall(userData, home)).toBe(true);
+    fs.rmSync(home, { recursive: true });
+  });
+
+  it("is false on an unreadable profile", () => {
+    const { home, userData } = profile();
+    fs.writeFileSync(path.join(home, "account.json"), "{not json");
+    expect(detectLegacyInstall(userData, home)).toBe(false);
+    expect(detectLegacyInstall("\0", "\0")).toBe(false);
+    fs.rmSync(home, { recursive: true });
+  });
+});
+
+describe("importLegacyTourSeen", () => {
+  it("marks an onboarded account's tour done, once and as legacy", () => {
+    const prefs = new PrefsStore({ file: null });
+    expect(importLegacyTourSeen(prefs, false)).toBe(false);
+    expect(prefs.get().tour).toEqual({ status: "unseen", at: null });
+    expect(importLegacyTourSeen(prefs, true)).toBe(true);
+    const row = prefs.get();
+    expect(importLegacyTourSeen(prefs, true)).toBe(true);
+    expect(prefs.get()).toEqual(row);
+    expect(row.tour).toEqual({ status: "done", at: null });
+    expect(prefs.provenance()["tour.status"]).toBe("legacy");
+  });
+
+  it("never overrides the user's own tour", () => {
+    const prefs = new PrefsStore({ file: null });
+    prefs.update({ tour: { status: "unseen", at: null } });
+    expect(importLegacyTourSeen(prefs, true)).toBe(false);
+    expect(prefs.get().tour?.status).toBe("unseen");
+    expect(prefs.provenance()["tour.status"]).toBe("user");
   });
 });
 

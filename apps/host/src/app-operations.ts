@@ -39,6 +39,7 @@ export const createNodeAppOperations = (lease: HostLease): AppOperations => ({
   appVersion: app.getVersion,
   homeDir: homedir,
   botHome: abacusBotHome,
+  legacyInstall: () => false,
   restartApp: () => shutdown(75),
   deleteAllData: refuse("system.deleteAllData"),
   reportFunnelStep: (step, detail, once) => {

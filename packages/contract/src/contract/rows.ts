@@ -167,6 +167,7 @@ export interface PrefsRow {
     routeLlmNudges: number;
     routeLlmNudgeAt: number | null;
     routeLlmSwitched: boolean;
+    newLookSeenAt: number | null;
   };
   /** Panel widths. */
   panes: Record<string, number>;

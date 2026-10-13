@@ -36,6 +36,7 @@ export const DEFAULT_PREFS: Required<PrefsRow> & {
     routeLlmNudges: 0,
     routeLlmNudgeAt: null,
     routeLlmSwitched: false,
+    newLookSeenAt: null,
   },
   panes: {},
   motion: { reduce: "system" },

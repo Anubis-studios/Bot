@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 
 import { PrefsPatchSchema } from "@abacus-ai/contract/contract/db";
@@ -472,6 +473,42 @@ export const importLegacySoundOptOut = (
   // legacy leaves resets exactly it.
   prefs.resetLegacy(["sounds"]);
   return "reset";
+};
+
+/**
+ * The old renderer's onboarding ended in a mandatory explainer, so an account
+ * it onboarded has seen the tour: imported as `"legacy"`, never over the
+ * user's own replay or skip.
+ */
+export const importLegacyTourSeen = (
+  prefs: Pick<PrefsStore, "importLegacy" | "provenance">,
+  onboarded: unknown
+): boolean => {
+  if (onboarded !== true || prefs.provenance()["tour.status"] === "user")
+    return false;
+  prefs.importLegacy({ tour: { status: "done", at: null } });
+  return true;
+};
+
+/**
+ * Whether this profile is the old renderer's: 1.0.85 always wrote
+ * `renderer-state.json`, and an older one onboarded the account before
+ * `prefs.json` existed. False on any error.
+ */
+export const detectLegacyInstall = (
+  userData: string,
+  home: string
+): boolean => {
+  try {
+    if (fs.existsSync(path.join(userData, "renderer-state.json"))) return true;
+    if (fs.existsSync(path.join(home, "prefs.json"))) return false;
+    const account: unknown = JSON.parse(
+      fs.readFileSync(path.join(home, "account.json"), "utf8")
+    );
+    return isRecord(account) && account.onboarded === true;
+  } catch {
+    return false;
+  }
 };
 
 /** Read-only startup import kept through release N, including after N+1. */

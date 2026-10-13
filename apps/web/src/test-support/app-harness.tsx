@@ -65,6 +65,7 @@ import { createAppRouter, type AppRouter } from "#renderer/router";
 
 export const SYSTEM_INFO: SystemInfo = {
   appVersion: "1.0.0",
+  legacyInstall: false,
   platform: "darwin",
   arch: "arm64",
   versions: {},

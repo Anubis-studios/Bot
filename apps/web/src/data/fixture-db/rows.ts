@@ -250,6 +250,7 @@ export const fixturePrefs = (overrides: Partial<PrefsRow> = {}): PrefsRow => ({
     routeLlmNudges: 0,
     routeLlmNudgeAt: null,
     routeLlmSwitched: false,
+    newLookSeenAt: null,
   },
   panes: {},
   motion: { reduce: "system" },
