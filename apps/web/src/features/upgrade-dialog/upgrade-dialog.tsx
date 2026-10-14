@@ -1,4 +1,5 @@
 import type { AbacusAccountInfo } from "@abacus-ai/contract/contracts";
+import { providerDisplayName } from "@abacus-ai/contract/settings";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Bot,
@@ -21,7 +22,6 @@ import {
 import {
   ownKeyHeadlineKey,
   ownKeyResumeModel,
-  providerDisplayName,
 } from "#renderer/lib/own-key-unavailable";
 import {
   checkPlanNow,

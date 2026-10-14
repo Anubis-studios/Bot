@@ -3,6 +3,7 @@
  * bubble, run outcome markers, the error card with its action table (and
  * the upgrade variant), and notices.
  */
+import { providerDisplayName } from "@abacus-ai/contract/settings";
 import type { UIMessage } from "@tanstack/ai-client";
 import { AlertTriangle, CheckCircle2, Info, X, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -16,7 +17,6 @@ import { AppLink } from "#renderer/lib/navigation/app-link";
 import {
   ownKeyFailure,
   ownKeyHeadlineKey,
-  providerDisplayName,
   type OwnKeyFailure,
 } from "#renderer/lib/own-key-unavailable";
 import { IS_ELECTRON } from "#renderer/lib/platform";

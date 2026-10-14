@@ -326,3 +326,21 @@ export const PROVIDER_KEY_FIELDS: ProviderKeyField[] = [
   // subscription already covers search. web-providers.ts still reads their env
   // vars directly.
 ];
+
+/** Where the key-field label names a product rather than the company. */
+const PROVIDER_COMPANY_NAMES: Record<string, string> = {
+  anthropic: "Anthropic",
+  openai: "OpenAI",
+  "openai-codex": "OpenAI",
+  gemini: "Google Gemini",
+};
+
+/** The provider as the person knows the company whose key it is. */
+export const providerDisplayName = (provider: string): string =>
+  PROVIDER_COMPANY_NAMES[provider] ??
+  PROVIDER_KEY_FIELDS.find((field) => field.provider === provider)?.label ??
+  provider
+    .split(/[-_]/u)
+    .filter(Boolean)
+    .map((part) => `${part[0]?.toUpperCase() ?? ""}${part.slice(1)}`)
+    .join(" ");

@@ -1,5 +1,4 @@
 import type { ModelAvailability } from "@abacus-ai/contract/models";
-import { PROVIDER_KEY_FIELDS } from "@abacus-ai/contract/settings";
 
 /**
  * The agent's action on a turn on the user's own provider key (never
@@ -40,24 +39,6 @@ export const ownKeyHeadlineKey = (cause: OwnKeyCause): string =>
     : cause === "rate_limit"
       ? "ownKey.rateLimited"
       : "ownKey.notResponding";
-
-/** Where the key-field label names a product rather than the company. */
-const COMPANY_NAMES: Record<string, string> = {
-  anthropic: "Anthropic",
-  openai: "OpenAI",
-  "openai-codex": "OpenAI",
-  gemini: "Google Gemini",
-};
-
-/** The provider as the person knows the company whose key it is. */
-export const providerDisplayName = (provider: string): string =>
-  COMPANY_NAMES[provider] ??
-  PROVIDER_KEY_FIELDS.find((field) => field.provider === provider)?.label ??
-  provider
-    .split(/[-_]/u)
-    .filter(Boolean)
-    .map((part) => `${part[0]?.toUpperCase() ?? ""}${part.slice(1)}`)
-    .join(" ");
 
 /** The low code router: what a paid plan runs when nothing else is chosen. */
 const ABACUS_DEFAULT_MODEL_ID = "abacus/route-llm-code-low";

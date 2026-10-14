@@ -70,11 +70,8 @@ export const WhatsAppIntro = () => {
  * a dialog, instead of the desktop's pairing. Null where the server offers none.
  */
 export const useBotNumberConnect = (
-  onAnyConnected: (() => void) | undefined,
-  connectorId?: string
+  onConnected: (() => void) | undefined
 ): { connect(): void; dialog: ReactNode } | null => {
-  // In a browser only WhatsApp has a chat-app link: AbacusAI Bot's own number.
-  const onConnected = connectorId === "whatsapp" ? onAnyConnected : undefined;
   const pending = useRef(false);
   const navigate = useAppNavigate();
   const chat = useQuery({

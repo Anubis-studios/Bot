@@ -23,8 +23,19 @@ import {
 
 import type { HostPlatform } from "../../platform/capabilities";
 import { readDefaultAgentMode } from "../config/settings";
+import { cachedAbacusAccount, onFreePlan } from "../providers/abacus";
+import { fetchUpgradeUrl } from "../providers/abacus-upgrade";
 import { environmentNoticeService } from "../providers/environment-notice-service";
 import { AbacusChannelsConnector } from "./abacus-channels-connector";
+import {
+  chatReplyForFailure,
+  contactFailureNotice,
+  FailureReplyThrottle,
+  failureKind,
+  wantsUpgradeUrl,
+  type AccountKind,
+  type TurnFailure,
+} from "./chat-failure-reply";
 import { forChat } from "./chat-markdown";
 import { backoffDelayMs, looksLikeBotOutput } from "./connector";
 import type { InboundMessage, MessagingConnector } from "./connector";
@@ -86,9 +97,6 @@ const DEFERRAL = "let me get back to you on that";
 
 /** Who the transcript's second bubble is from, matching the sender's label. */
 const RESPONSE_LABEL = "[Response from AbacusAI Bot]";
-/** What a phone hears when the desktop has no model to answer with. */
-const NO_MODEL_REPLY =
-  "The desktop app is not signed in to Abacus.AI right now. Open the app and sign in, then message me again.";
 
 /**
  * The words for the other person, out of everything the model wrote. Asking
@@ -193,6 +201,8 @@ type GatewayOptions = {
   ) => void;
   /** Broadcast so the Messaging pane re-reads its snapshot. */
   emitChanged: () => void;
+  /** The failure-reply throttle's clock; tests pass a fake one. */
+  now?: () => number;
   /**
    * A platform started or stopped, so the messaging tools just came or went.
    * For the running agent, not the pane: the send tools are withheld from
@@ -312,6 +322,8 @@ type Route = {
   workspaceId: string;
   /** Approved sender who owns this conversation, so revoking can find it. */
   userId: string;
+  /** The sender's display name, for telling the user who went unanswered. */
+  userName: string | null;
   replyContext?: Record<string, string>;
   /**
    * Text of the turn's latest assistant message only. Narration before a
@@ -345,6 +357,11 @@ type Route = {
   senderLabel: string;
   /** Rules preamble still owed to the first dispatched prompt, then cleared. */
   pendingIntro: string | null;
+  /**
+   * A failed turn's line still being worded (the upgrade link is fetched).
+   * The turn does not finish until it has gone, so nothing overtakes it.
+   */
+  failureReply: Promise<void> | null;
 };
 
 /** How long a login probe may take before the last known state is used. */
@@ -407,7 +424,12 @@ export class MessagingGatewayService {
     { attempts: number; notBefore: number }
   >();
 
-  constructor(private readonly options: GatewayOptions) {}
+  /** What each chat was already told about failed turns; see FailureReplyThrottle. */
+  private readonly failureThrottle: FailureReplyThrottle;
+
+  constructor(private readonly options: GatewayOptions) {
+    this.failureThrottle = new FailureReplyThrottle(options.now);
+  }
 
   /**
    * Bring every enabled+configured platform up. Called once at startup and
@@ -899,6 +921,7 @@ export class MessagingGatewayService {
     const named = senderLabel(platformId, message);
     if (named !== route.senderLabel && message.userName != null)
       route.senderLabel = named;
+    if (message.userName != null) route.userName = message.userName;
 
     // Busyness belongs to the session, not the route: bot routes for
     // different chats share one session, and two prompts at once would mix
@@ -998,6 +1021,7 @@ export class MessagingGatewayService {
         sessionId: handle.sessionId,
         workspaceId: handle.workspaceId,
         userId: message.userId,
+        userName: message.userName,
         buffer: "",
         bufferMessageId: null,
         taggedReply: null,
@@ -1011,6 +1035,7 @@ export class MessagingGatewayService {
           "intro" in handle && typeof handle.intro === "string"
             ? handle.intro
             : null,
+        failureReply: null,
       };
 
       if (existing != null) this.routesBySession.delete(existing.sessionId);
@@ -1092,6 +1117,7 @@ export class MessagingGatewayService {
       sessionId: session.id,
       workspaceId,
       userId: message.userId,
+      userName: message.userName,
       buffer: "",
       bufferMessageId: null,
       taggedReply: null,
@@ -1102,6 +1128,7 @@ export class MessagingGatewayService {
       viaBot: false,
       senderLabel: "",
       pendingIntro: null,
+      failureReply: null,
     };
 
     if (existing != null) {
@@ -1256,32 +1283,38 @@ export class MessagingGatewayService {
         event.error?.message ??
         event.error?.segmentData?.message ??
         "The agent hit an error.";
-      // "No model provider is configured" and pi's own /login hint, with
-      // filesystem paths, went out to a phone as the bot's reply. Nothing on
-      // that side can act on it; the pane and the log keep the real text.
-      const detail =
-        event.error?.code === "model_unavailable" ? NO_MODEL_REPLY : raw;
-      if (detail !== raw)
-        console.log(
-          `[messaging] ${route.platform}:${route.chatId} model unavailable, replied generically: ${raw}`
-        );
-
       // Some provider failures are reported after the turn's idle event.
       // Forwarding one would send the remote user raw provider text about a
       // turn that was already answered; the pane and the log still show it.
       if (!route.busy) {
         console.log(
-          `[messaging] ${route.platform}:${route.chatId} error after the turn ended: ${detail}`
+          `[messaging] ${route.platform}:${route.chatId} error after the turn ended: ${raw}`
         );
         return;
       }
 
-      // The remote user gets what the agent produced plus the error, now. The
-      // route stays busy until the trailing idle so a queued message cannot
-      // race a turn still winding down.
-      route.buffer =
-        route.buffer.length > 0 ? `${route.buffer}\n\n${detail}` : detail;
+      // What the agent produced goes as it is; what the chat hears about the
+      // failure is chatReplyForFailure's. The route stays busy until the
+      // trailing idle, and that idle waits on the line, so a queued message
+      // cannot race a turn winding down.
+      console.log(
+        `[messaging] ${route.platform}:${route.chatId} turn failed: ${raw}`
+      );
       this.flushReply(route);
+      const failure: TurnFailure = {
+        code: event.error?.code,
+        actions: event.error?.actions ?? event.error?.segmentData?.actions,
+      };
+      route.failureReply = this.replyToFailure(route, failure)
+        .catch((error: unknown) => {
+          console.error(
+            `[messaging] ${route.platform}:${route.chatId} failure reply failed:`,
+            error
+          );
+        })
+        .finally(() => {
+          route.failureReply = null;
+        });
       return;
     }
 
@@ -1356,9 +1389,99 @@ export class MessagingGatewayService {
     return route != null && route.viaBot && route.busy;
   }
 
+  /**
+   * Tell the chat its turn failed, in chatReplyForFailure's words: the user's
+   * own chat gets the line; someone else's chat gets nothing, and the user's
+   * own chat on that platform hears who went unanswered.
+   */
+  private async replyToFailure(
+    route: Route,
+    failure: TurnFailure
+  ): Promise<void> {
+    const own = this.selfChatOf(route.platform);
+    const isOwn =
+      own != null &&
+      own.platform === route.platform &&
+      own.chatId === route.userId;
+    if (!isOwn && own == null) {
+      console.log(
+        `[messaging] ${route.platform}:${route.chatId} failed turn not reported: the platform has no own chat`
+      );
+      return;
+    }
+    if (
+      !isOwn &&
+      !this.failureThrottle.mayNotice(`${route.platform}:${route.chatId}`)
+    ) {
+      console.log(
+        `[messaging] ${route.platform}:${route.chatId} failed turn already reported to the user inside the window`
+      );
+      return;
+    }
+
+    const account = accountKind();
+    const upgradeUrl = wantsUpgradeUrl(failure, account)
+      ? await upgradeUrlWithin(UPGRADE_URL_WAIT_MS)
+      : null;
+    // The offer is throttled per chat it lands in, always the user's own.
+    const ownChatKey = isOwn
+      ? `${route.platform}:${route.chatId}`
+      : `${own.platform}:${own.chatId}`;
+    const line = chatReplyForFailure(
+      failure,
+      "own",
+      account,
+      upgradeUrl,
+      this.failureThrottle.repeat(ownChatKey, failureKind(failure))
+    );
+    if (line == null) return;
+    if (isOwn) this.deliver(route, line);
+    // Someone else's chat hears nothing; the user's own chat hears who.
+    else this.deliverToSelf(own, contactFailureNotice(route.userName, line));
+  }
+
+  /**
+   * The user's own chat on a platform, as something a notice can reach: the
+   * platform's self chat, else the shared Abacus bot's DM for that app (you
+   * cannot DM yourself on Discord). Null when there is none to reach.
+   */
+  private selfChatOf(
+    platformId: MessagingPlatformId
+  ): { platform: MessagingPlatformId; chatId: string } | null {
+    const own = this.connectors.get(platformId)?.selfChatId?.() ?? null;
+    if (own != null && own.length > 0)
+      return { platform: platformId, chatId: own };
+    const sharedId = SHARED_BOT_PLATFORM_OF[platformId];
+    if (sharedId == null) return null;
+    const shared = this.connectors.get(sharedId)?.selfChatId?.() ?? null;
+    return shared != null && shared.length > 0
+      ? { platform: sharedId, chatId: shared }
+      : null;
+  }
+
+  /** Send a notice to the user's own chat, shown in its transcript if routed. */
+  private deliverToSelf(
+    own: { platform: MessagingPlatformId; chatId: string },
+    text: string
+  ): void {
+    const route = this.routes.get(`${own.platform}:${own.chatId}`);
+    if (route != null) {
+      // Not a reply to anything said there: no reply context.
+      this.deliver({ ...route, replyContext: undefined }, text);
+      return;
+    }
+    void this.safeSend(own.platform, own.chatId, forChat(text, own.platform));
+  }
+
   /** Flush the buffered reply, free the route, start the next queued turn. */
   private finishTurn(route: Route): void {
     if (!route.busy) return;
+
+    // A failed turn's line is still on its way; the turn ends once it has gone.
+    if (route.failureReply != null) {
+      void route.failureReply.then(() => this.finishTurn(route));
+      return;
+    }
 
     this.flushReply(route);
     route.busy = false;
@@ -2438,6 +2561,26 @@ const senderLabel = (
   `${platformLabel(platformId)} message from ${
     message.userName ?? message.userId
   }`;
+
+/**
+ * How long a failure line waits on the upgrade link: the turn cannot finish
+ * until the line has gone, and the plans page is a fine answer too.
+ */
+const UPGRADE_URL_WAIT_MS = 5_000;
+
+/** The account's upgrade link, or null when it fails or takes too long. */
+const upgradeUrlWithin = (ms: number): Promise<string | null> =>
+  Promise.race([
+    fetchUpgradeUrl().catch(() => null),
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), ms).unref()),
+  ]);
+
+/** The signed-in plan as last read; unknown words the offer like a paid one. */
+const accountKind = (): AccountKind => {
+  const account = cachedAbacusAccount();
+  if (account == null) return "unknown";
+  return onFreePlan(account) ? "free" : "paid";
+};
 
 const platformLabel = (platformId: MessagingPlatformId): string =>
   platformId === "abacus_discord"
