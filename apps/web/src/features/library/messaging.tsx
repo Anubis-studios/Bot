@@ -1,5 +1,6 @@
 import {
   isMessagingPlatformConnected,
+  selfLaneOf,
   SHARED_BOT_PLATFORM_OF,
   SHARED_LINK_REQUIRED,
   type MessagingPlatformId,
@@ -400,6 +401,7 @@ export const MessagingPlatformDialog = ({
               />
             )}
           </ol>
+          {connected && <HomeBotPicker platform={platform} />}
           {platform === "whatsapp" && p?.state === "syncing" && (
             <ConnectNote>{t("messaging.whatsappSyncing")}</ConnectNote>
           )}
@@ -511,6 +513,48 @@ export const MessagingPlatformDialog = ({
         </div>
       </ConnectDialogContent>
     </Dialog>
+  );
+};
+
+/**
+ * Which bot the user's own chat on this app goes to: set once by itself when
+ * the app links, changed only here or by asking a bot in its chat.
+ */
+const HomeBotPicker = ({ platform }: { platform: MessagingPlatformId }) => {
+  const { t } = useTranslation();
+  const { transport } = useAppContext();
+  const c = useCollections();
+  const bots = useLiveQuery(c.bots).data ?? [];
+  const query = useQuery(
+    transport.orpc.messaging.snapshot.queryOptions({ input: {} })
+  );
+  const setHomeBot = useMutation(
+    transport.orpc.messaging.setHomeBot.mutationOptions({
+      ...useWritesSnapshot(),
+      meta: { errorToast: "phase5.failed" },
+    })
+  );
+  const lane = selfLaneOf(platform);
+  const homeBotId =
+    query.data?.platforms.find((row) => row.id === lane)?.homeBotId ?? null;
+  if (lane == null) return null;
+  return (
+    <SettingRow id="messagingHomeBot" title={t("messaging.homeBot")}>
+      <Choice
+        id="messagingHomeBot"
+        value={homeBotId ?? ""}
+        disabled={setHomeBot.isPending}
+        options={[
+          ...(homeBotId == null
+            ? [{ value: "", label: t("messaging.homeBotUnset") }]
+            : []),
+          ...bots.map((bot) => ({ value: bot.id, label: bot.name })),
+        ]}
+        onChange={(botId) => {
+          if (botId) setHomeBot.mutate({ platformId: lane, botId });
+        }}
+      />
+    </SettingRow>
   );
 };
 

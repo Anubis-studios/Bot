@@ -445,3 +445,58 @@ it("a signed-in Discord without its bot linked is not finished", async () => {
     await app.cleanup();
   }
 });
+
+it("a linked chat app says which bot gets the user's own messages, and changes it on the spot", async () => {
+  const d = setup("telegram", false, true);
+  let snapshot: MessagingSnapshot = {
+    ...d.snapshot(),
+    platforms: d
+      .snapshot()
+      .platforms.map((p) =>
+        p.id === "abacus_telegram" ? { ...p, homeBotId: "chief-of-staff" } : p
+      ),
+  };
+  const setHomeBot = vi.fn();
+  const app = await renderApp("/library/messaging?platform=telegram", {
+    procedures: {
+      messaging: {
+        ...d.procedures.messaging,
+        snapshot: os.messaging.snapshot.handler(() => snapshot),
+        updatePlatform: os.messaging.updatePlatform.handler(() => snapshot),
+        setHomeBot: os.messaging.setHomeBot.handler(({ input }) => {
+          setHomeBot(input);
+          snapshot = {
+            ...snapshot,
+            platforms: snapshot.platforms.map((p) =>
+              p.id === input.platformId ? { ...p, homeBotId: input.botId } : p
+            ),
+          };
+          return snapshot;
+        }),
+      },
+    },
+  });
+  try {
+    const dialog = await screen.findByRole("dialog", { name: "Telegram" });
+    const picker = (await within(dialog).findByRole("combobox", {
+      name: enUS.messaging.homeBot,
+    })) as HTMLSelectElement;
+    await waitFor(() => expect(picker.value).toBe("chief-of-staff"));
+    expect(
+      within(picker).getByRole("option", { name: "Morning Brief" })
+    ).not.toBeNull();
+
+    fireEvent.change(picker, { target: { value: "morning-brief" } });
+
+    await waitFor(() =>
+      expect(setHomeBot).toHaveBeenCalledWith({
+        platformId: "abacus_telegram",
+        botId: "morning-brief",
+      })
+    );
+    await waitFor(() => expect(picker.value).toBe("morning-brief"));
+  } finally {
+    app.view.unmount();
+    await app.cleanup();
+  }
+});

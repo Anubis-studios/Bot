@@ -14,12 +14,6 @@ export const connectTarget = (name: string): ConnectTarget => {
     : { kind: "in-app" };
 };
 
-export const openSharedLink = async (
-  client: AppClient,
-  input: Parameters<AppClient["messaging"]["openSharedLink"]>[0]
-): Promise<void> => {
-  await client.messaging.openSharedLink(input);
-};
 /** A link the host has to look up first, opened once it answers. */
 export const openPendingLink = async (
   client: AppClient,

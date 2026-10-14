@@ -1,5 +1,8 @@
 import { connectorById } from "@abacus-ai/connectors/registry";
-import type { MessagingPlatformId } from "@abacus-ai/contract/messaging";
+import {
+  isMessagingPlatformConnected,
+  type MessagingPlatformId,
+} from "@abacus-ai/contract/messaging";
 import { isPayingAbacusTier } from "@abacus-ai/contract/models";
 import { canSignOutOfAbacus } from "@abacus-ai/contract/settings";
 import { isCancelledError } from "@tanstack/react-query";
@@ -21,7 +24,11 @@ import {
   releaseOnboardingConnect,
   connectOnboarding,
 } from "#renderer/features/onboarding/connect";
-import { previewFirstBot } from "#renderer/features/onboarding/first-bot";
+import {
+  firstBotTemplateId,
+  noteConnectedChatApp,
+  previewFirstBot,
+} from "#renderer/features/onboarding/first-bot";
 import {
   startFirstRunGmail,
   startWebsiteSignIn,
@@ -136,7 +143,7 @@ const OnboardingRoute = () => {
             return exit;
           try {
             const snapshot = await transport.client.db.bots.snapshot({});
-            const existing = snapshot.rows.find((bot) => bot.channel == null);
+            const existing = snapshot.rows[0];
             if (existing) {
               await transport.client.system.funnelStep({
                 step: "first_bot_skipped",
@@ -152,9 +159,17 @@ const OnboardingRoute = () => {
                   }
                 : { to: "bot", botId: existing.id };
             }
-            const { bot } = await createBotFromTemplate(db, "chief-of-staff", {
-              name: t("bots.templates.chief-of-staff.name"),
-              sponsoredFirstRun: true,
+            // The bot the connected chat app makes obvious; main makes it
+            // that app's home bot once onboarding completes.
+            const templateId = firstBotTemplateId(
+              onboardingStore.state.chatApp
+            );
+            const { bot } = await createBotFromTemplate(db, templateId, {
+              name: t(`bots.templates.${templateId}.name`),
+              // The house pays for the Chief of Staff's first inbox pass.
+              ...(templateId === "chief-of-staff"
+                ? { sponsoredFirstRun: true }
+                : {}),
             });
             await transport.client.system.funnelStep({
               step: "first_bot_shown",
@@ -182,8 +197,14 @@ const OnboardingRoute = () => {
       },
       exit
     );
-  const create = async (id: string) =>
-    previewFirstBot(id, t("bots.templates.chief-of-staff.name"));
+  const create = async (id: string) => {
+    const templateId = firstBotTemplateId(onboardingStore.state.chatApp);
+    return previewFirstBot(
+      id,
+      t(`bots.templates.${templateId}.name`),
+      templateId
+    );
+  };
   const automaticallySignIn = useEffectEvent(() => {
     if (onboardingStore.state.signIn?.status !== "pending") auth("signin");
   });
@@ -230,6 +251,15 @@ const OnboardingRoute = () => {
           platform={pairing.platform}
           onClose={async () => {
             setPairing(null);
+            const snapshot = await transport.client.messaging.snapshot({});
+            const platform = pairing.platform;
+            if (
+              (platform === "whatsapp" ||
+                platform === "telegram" ||
+                platform === "discord") &&
+              isMessagingPlatformConnected(snapshot, platform)
+            )
+              noteConnectedChatApp(platform);
             await queryClient.invalidateQueries({
               queryKey: transport.orpc.connectors.statuses.queryKey({
                 input: {},
@@ -263,9 +293,7 @@ const factsOf = async (
     signedIn: canSignOutOfAbacus(settings),
     payingTier: isPayingAbacusTier(account?.subscription_tier),
     googleSignIn: account?.google_sign_in === true,
-    ownsBot: context.db.collections.bots.toArray.some(
-      (bot) => bot.channel == null
-    ),
+    ownsBot: context.db.collections.bots.toArray.length > 0,
   };
 };
 /**

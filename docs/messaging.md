@@ -53,6 +53,18 @@ conversation under that bot. Messages written in that conversation go to the
 sender. The bot's private setup chat does not. Without a bot assignment, each
 sender gets a standalone remote session.
 
+### Your own chat on each app
+
+What you type in your own chat on an app (WhatsApp's "Message yourself", your
+DM with the shared Abacus AI bot on Telegram or Discord) goes to one bot, that
+app's home bot, and its answers come back there. A turn you start in the app
+is answered in the app. The home bot is set once, when the app first links:
+the bot that asked to connect it, the bot onboarding made for it, or else the
+first bot made from the app's agent template (one is made if there is none).
+It changes only when you pick another bot on the app's card in Connectors, or
+ask a bot in its chat to take that app's messages. Other bots can still send
+you updates there, signed with their name.
+
 The "Run remote turns unattended" setting is on by default. Once inbound
 responses are enabled, approved senders can use any tool on the machine. Turn
 the setting off to run remote conversations in Auto-Accept mode. File edits in

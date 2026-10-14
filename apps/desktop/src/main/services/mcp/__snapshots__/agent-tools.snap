@@ -425,6 +425,26 @@
           }
         }
       }
+    },
+    {
+      "name": "take_chat_app_messages",
+      "description": "Make this bot the one the user's own WhatsApp, Telegram or Discord chat\ngoes to: what they type there then comes to this chat, and your replies\ngo back there. Each app's own chat goes to one bot at a time.\n\nOnly when the user asks for it (\"send my Telegram messages to you\").\nOnly works in a bot's own chat. Once it succeeds, tell the user in one\nshort line, in their language, that their messages on that app now come\nto you.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "app": {
+            "type": "string",
+            "enum": [
+              "whatsapp",
+              "telegram",
+              "discord"
+            ]
+          }
+        },
+        "required": [
+          "app"
+        ]
+      }
     }
   ]
 }

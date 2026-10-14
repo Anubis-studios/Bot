@@ -164,8 +164,11 @@ import type {
   BackendStatus,
 } from "@abacus-ai/contract/exec-backends";
 import {
+  APP_OF_SELF_LANE,
+  SELF_LANE_FOR_APP,
   describePlatformForAgent,
   reportableLivePlatforms,
+  selfLaneOf,
   type MessagingPairingDecisionRequest,
   type MessagingPlatformId,
   type MessagingSnapshot,
@@ -305,7 +308,6 @@ import {
 } from "./services/bots/bot-memory-store";
 import { BotService } from "./services/bots/bot-service";
 import {
-  assertNotChannelBot,
   getBot,
   listSenderSessionEntries,
   onBotStoreWrite,
@@ -407,10 +409,7 @@ import {
   readGatewaySettings,
   saveGatewaySettings,
 } from "./services/messaging/messaging-config-service";
-import {
-  MessagingGatewayService,
-  type SelfLanePlatform,
-} from "./services/messaging/messaging-gateway-service";
+import { MessagingGatewayService } from "./services/messaging/messaging-gateway-service";
 import { fetchAbacusAccount, onFreePlan } from "./services/providers/abacus";
 import {
   connectButtonLink,
@@ -424,6 +423,7 @@ import {
   abacusUserAgent,
   hostPublicBase,
 } from "./services/providers/abacus-host";
+import { readAccountState } from "./services/providers/account-service";
 import {
   environmentNoticeService,
   messageWithEnvironmentNotice,
@@ -486,67 +486,6 @@ type BusDispatcher = <C extends BusChannel>(
   channel: C,
   payload: BusChannels[C]
 ) => void;
-
-/** The bot each self lane gets on first link, one per platform. */
-const SELF_LANE_BOTS: Record<
-  SelfLanePlatform,
-  {
-    name: string;
-    channel: "telegram" | "discord" | "whatsapp";
-    aliases: string[];
-    description: string;
-  }
-> = {
-  abacus_discord: {
-    name: "Discord AbacusAI Bot <-> You",
-    channel: "discord",
-    aliases: ["AbacusAI Bot on Discord <-> You"],
-    description:
-      "You are the user's personal assistant living in their Discord DM " +
-      "with the Abacus AI bot. Every message they send to that DM comes " +
-      "to you, and every reply you write is delivered straight back to " +
-      'them there. Replying IS messaging them, so when they say "send ' +
-      'me X" or "message me on Discord", just answer with X; never ' +
-      "say you cannot reach them and never ask which chat is theirs. " +
-      "They can ask you for anything you can do: questions, tasks with " +
-      "your tools, code, documents, schedules, messages to other " +
-      "people. Be a helpful, concise assistant and keep replies " +
-      "chat-sized (Discord caps a message at 2000 characters).",
-  },
-  // The "Message yourself" chat is the WhatsApp self lane.
-  whatsapp: {
-    name: "WhatsApp AbacusAI Bot <-> You",
-    channel: "whatsapp",
-    aliases: [],
-    description:
-      "You are the user's personal assistant living in their WhatsApp " +
-      '"Message yourself" chat. Every message they send to that chat comes ' +
-      "to you, and every reply you write is delivered straight back to " +
-      'them there. Replying IS messaging them, so when they say "send ' +
-      'me X" or "message me", just answer with X; never say you ' +
-      "cannot reach them and never ask which chat is theirs. They can " +
-      "ask you for anything you can do: questions, tasks with your " +
-      "tools, code, documents, schedules, messages to other people. Be " +
-      "a helpful, concise assistant and keep replies chat-sized.",
-  },
-  abacus_telegram: {
-    name: "Telegram AbacusAI Bot <-> You",
-    channel: "telegram",
-    // The retired own-account Telegram bootstrap's names, adopted in place:
-    // one Telegram, one conversation, and the user's history stays with it.
-    aliases: ["AbacusAI Bot <-> You", "AbacusAI Bot on Telegram <-> You"],
-    description:
-      "You are the user's personal assistant living in their Telegram chat " +
-      "with the Abacus AI bot. Every message they send to that chat comes " +
-      "to you, and every reply you write is delivered straight back to " +
-      'them there. Replying IS messaging them, so when they say "send ' +
-      'me X" or "message me", just answer with X; never say you ' +
-      "cannot reach them and never ask which chat is theirs. They can " +
-      "ask you for anything you can do: questions, tasks with your " +
-      "tools, code, documents, schedules, messages to other people. Be " +
-      "a helpful, concise assistant and keep replies chat-sized.",
-  },
-};
 
 /**
  * Early-compaction threshold for routine sessions: every fire replays the chat
@@ -680,6 +619,9 @@ export class ServiceHost {
         );
       },
       markSent: (threadId) => {
+        // The user's own words in the app: a relayed turn they join answers
+        // them here, not in the chat app.
+        this.messagingGatewayService.noteAppMessage(threadId);
         const runtime = this.agentManagerService.getRuntimeInfo(threadId);
         if (runtime != null)
           this.sessionTurnStateService.markSent(runtime.workspaceId, threadId);
@@ -1142,13 +1084,7 @@ export class ServiceHost {
     // A routine's run is its bot's work too: a routine made from inside one
     // belongs to the bot, and `list` shows the bot its own.
     isAppBotChat: (sessionId) => this.botService.isAppBotChat(sessionId),
-    botIdForSession: (sessionId) =>
-      this.botService.botIdForSession(sessionId) ??
-      (() => {
-        const routineId =
-          this.agentSessionManagerService.get(sessionId)?.routineId ?? null;
-        return routineId != null ? (getJob(routineId)?.botId ?? null) : null;
-      })(),
+    botIdForSession: (sessionId) => this.botOfSession(sessionId),
     conversationKeyForSession: (sessionId) =>
       this.conversationKeyForSession(sessionId),
     channelForSession: (sessionId) => this.laneChannels.get(sessionId) ?? null,
@@ -1246,8 +1182,20 @@ export class ServiceHost {
       startingPlatforms: () => this.messagingGatewayService.startingPlatforms(),
       awaitReady: (platform) =>
         this.messagingGatewayService.awaitReady(platform),
-      send: (platform, chatId, text) =>
-        this.messagingGatewayService.sendToChat(platform, chatId, text),
+      send: (platform, chatId, text, fromBotId) => {
+        const from = fromBotId != null ? getBot(fromBotId) : null;
+        return this.messagingGatewayService.sendToChat(
+          platform,
+          chatId,
+          text,
+          from != null ? { botId: from.id, name: from.name } : undefined
+        );
+      },
+      claimSelfLane: (platform, botId) =>
+        this.messagingGatewayService.claimSelfLane(platform, botId),
+      setHomeBot: (app, botId) => {
+        this.botService.setHomeBot(app, botId);
+      },
       sendFile: (platform, chatId, filePath, caption) =>
         this.messagingGatewayService.sendFileToChat(
           platform,
@@ -1947,30 +1895,24 @@ export class ServiceHost {
       return this.workspaceService.getActiveWorkspace()?.id ?? null;
     },
     createAgentSession: (workspaceId) => this.createAgentSession(workspaceId),
-    createAutoReplyBot: (platform) => {
-      try {
-        const { name, channel, aliases, description } =
-          SELF_LANE_BOTS[platform];
-        // Idempotent by current or earlier name, so a relink adopts the bot
-        // instead of minting a twin. The channel stamp hides the composer.
-        const existing = this.botService
-          .list()
-          .find((bot) => bot.name === name || aliases.includes(bot.name));
-        if (existing != null) {
-          if (existing.channel !== channel || existing.name !== name)
-            this.botService.update(existing.id, { name, channel });
-          return existing.id;
+    // Deferred through arrows: botService initializes after this field.
+    homeBots: {
+      get: (lane) => this.botService.homeBotId(APP_OF_SELF_LANE[lane]),
+      set: (lane, botId) => {
+        this.botService.setHomeBot(APP_OF_SELF_LANE[lane], botId);
+      },
+      ensure: (lane) => {
+        try {
+          return this.botService.ensureHomeBot(APP_OF_SELF_LANE[lane]);
+        } catch (err) {
+          console.error(`[bots] ${lane} has no home bot:`, err);
+          return null;
         }
-        const bot = this.botService.create({ name, description, channel });
-        void this.botService.openChat(bot.id).catch((err: unknown) => {
-          console.error("[bots] auto-reply bot failed to open its chat:", err);
-        });
-        return bot.id;
-      } catch (err) {
-        console.error("[bots] auto-reply bot creation failed:", err);
-        return null;
-      }
+      },
     },
+    deferSelfLaneDefaults: () => !readAccountState().onboarded,
+    isSessionBusy: (workspaceId, sessionId) =>
+      this.sessionTurnStateService.get(workspaceId, sessionId).isBusy,
     updateSessionLabel: (workspaceId, sessionId, label) => {
       this.updateAgentSessionLabel(workspaceId, sessionId, label);
     },
@@ -2081,6 +2023,22 @@ export class ServiceHost {
             owner: session.owner ?? null,
             model: session.model ?? null,
           };
+    },
+    homeBots: () => {
+      const stored = readGatewaySettings().selfBotIds;
+      return Object.fromEntries(
+        Object.entries(SELF_LANE_FOR_APP).flatMap(([app, lane]) => {
+          const id = stored[lane];
+          return id != null ? [[app, id]] : [];
+        })
+      );
+    },
+    saveHomeBot: (app, botId) => {
+      saveGatewaySettings({ selfBotIds: { [SELF_LANE_FOR_APP[app]]: botId } });
+      this.emitEvent({
+        type: "messaging-updated",
+        emittedAt: new Date().toISOString(),
+      });
     },
     onBotRemoved: (botId) => {
       // Its routines stay, paused: they were the bot's work, and without it
@@ -2530,6 +2488,7 @@ export class ServiceHost {
     const workspaceIds = this.workspaceService.getWorkspaces().map((w) => w.id);
     this.agentSessionManagerService.initialize(workspaceIds);
     this.adoptLegacyBotSessions();
+    this.botService.adoptChannelBots();
     this.reconcileBotChatWorkspaces();
     this.sessionArtifactsService.initialize(workspaceIds);
   }
@@ -3109,6 +3068,25 @@ export class ServiceHost {
     return this.messagingGatewayService.decidePairing(request);
   }
 
+  /** The card's picker: which bot the user's own chat on this app goes to. */
+  setMessagingHomeBot(
+    platformId: MessagingPlatformId,
+    botId: string
+  ): MessagingSnapshot {
+    const lane = selfLaneOf(platformId);
+    if (lane == null)
+      throw new InvalidInputError(
+        `${platformId} has no chat of the user's own.`
+      );
+    this.botService.setHomeBot(APP_OF_SELF_LANE[lane], botId);
+    return this.messagingGatewayService.getSnapshot();
+  }
+
+  /** Lanes linked during onboarding get their default now: its first bot exists. */
+  onboardingFinished(): void {
+    this.messagingGatewayService.settleSelfLaneDefaults();
+  }
+
   updateMessagingSettings(
     request: UpdateMessagingSettingsRequest
   ): Promise<MessagingSnapshot> {
@@ -3228,6 +3206,15 @@ export class ServiceHost {
     return previews;
   }
 
+  /** The bot a session works for: its chat, a sender's chat, or its routine's run. */
+  private botOfSession(sessionId: string): string | null {
+    const own = this.botService.botIdForSession(sessionId);
+    if (own != null) return own;
+    const routineId =
+      this.agentSessionManagerService.get(sessionId)?.routineId ?? null;
+    return routineId != null ? (getJob(routineId)?.botId ?? null) : null;
+  }
+
   /**
    * Backfill owner stamps from the legacy registries onto bot conversations
    * minted before owners existed. Idempotent: adoptOwner refuses a session
@@ -3308,7 +3295,6 @@ export class ServiceHost {
   }
 
   updateBot(id: string, changes: BotUpdateInput): Bot {
-    this.assertNotChannelBot(id, "edited");
     return this.botService.update(id, changes);
   }
 
@@ -3317,16 +3303,7 @@ export class ServiceHost {
   }
 
   deleteBot(id: string): void {
-    this.assertNotChannelBot(id, "deleted");
     this.botService.delete(id);
-  }
-
-  /**
-   * Channel bots are minted and retired by the link itself. Guarded on the IPC
-   * surface, not in BotService, which the link machinery edits through.
-   */
-  private assertNotChannelBot(id: string, verb: string): void {
-    assertNotChannelBot(id, verb);
   }
 
   openBotChat(botId: string): Promise<BotChatHandle> {

@@ -179,6 +179,7 @@ export const WEB_HOST_ALLOWED = [
   "messaging.releaseLogin",
   "messaging.decidePairing",
   "messaging.updateSettings",
+  "messaging.setHomeBot",
   "messaging.pairShared",
   "messaging.unlinkShared",
   "messaging.openSharedLink",

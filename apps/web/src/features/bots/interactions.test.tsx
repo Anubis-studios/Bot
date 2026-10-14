@@ -198,15 +198,18 @@ describe("bots interactions", () => {
     expect(chip.isConnected).toBe(true);
     expect(document.querySelector('[data-slot="bot-model-value"]')).toBeNull();
   });
-  it("a channel bot has no composer or editable model", async () => {
-    const bot = { ...fixtureBots()[0]!, channel: "telegram", sessionId: null };
+  it("a chat app's agent is an ordinary bot: a composer, and Edit", async () => {
+    // Its app's own chat reaches it too, but the app chat is the user's to
+    // type in as well (the old mirror bots were read-only).
+    const bot = { ...fixtureBots()[0]!, homeChannel: "telegram" as const };
     app = await renderApp("/bots/chief-of-staff?tab=details", {
       seed: { bots: [bot] },
     });
     await screen.findByTestId("bot-chat");
-    expect(screen.queryByRole("textbox", { name: /Message/ })).toBeNull();
-    expect(screen.queryByRole("combobox", { name: /RouteLLM/ })).toBeNull();
-    expect(screen.queryByText("Edit bot")).toBeNull();
+    expect(
+      await screen.findByRole("textbox", { name: /Message/ })
+    ).not.toBeNull();
+    expect(screen.getAllByText("Edit bot").length).toBeGreaterThan(0);
   });
   it("an externally deleted bot changes the mounted chat to BotGone", async () => {
     app = await renderApp("/bots/chief-of-staff");

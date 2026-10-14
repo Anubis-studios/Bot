@@ -51,28 +51,35 @@ const server = (
 ): {
   instance: McpAgentToolsServer;
   autoReply: ReturnType<typeof gateway>;
-} => ({
-  autoReply,
-  instance: new McpAgentToolsServer({
-    skillsService: {} as never,
-    enabledToolsets: () => new Set(["messaging"]),
-    workspacePath: () => null,
-    botIdForSession: (sessionId: string) =>
-      sessionId === "bot-session" ? "bot-1" : null,
-    messaging: {
-      runningPlatforms: () => platforms,
-      listChats: () => [],
-      send: async () => undefined,
-      readMessages: async () => [],
-      autoReply,
-    },
-  } as never),
-});
+  setHomeBot: ReturnType<typeof vi.fn>;
+} => {
+  const setHomeBot = vi.fn();
+  return {
+    autoReply,
+    setHomeBot,
+    instance: new McpAgentToolsServer({
+      skillsService: {} as never,
+      enabledToolsets: () => new Set(["messaging"]),
+      workspacePath: () => null,
+      botIdForSession: (sessionId: string) =>
+        sessionId === "bot-session" ? "bot-1" : null,
+      messaging: {
+        runningPlatforms: () => platforms,
+        listChats: () => [],
+        send: async () => undefined,
+        readMessages: async () => [],
+        autoReply,
+        setHomeBot,
+      },
+    } as never),
+  };
+};
 
 const call = async (
   instance: McpAgentToolsServer,
   args: Record<string, unknown>,
-  session?: string
+  session?: string,
+  name = "auto_reply"
 ): Promise<string> => {
   const result = await (
     instance as unknown as {
@@ -82,7 +89,7 @@ const call = async (
         session?: string
       ) => Promise<{ content: { text?: string }[] }>;
     }
-  ).executeTool("auto_reply", args, session);
+  ).executeTool(name, args, session);
 
   return result.content.map((part) => part.text ?? "").join("\n");
 };
@@ -238,5 +245,54 @@ describe("who may call it", () => {
     const text = await call(instance, { action: "on" }, "bot-session");
 
     expect(text).toContain("No messaging platform is connected");
+  });
+});
+
+/**
+ * `take_chat_app_messages`: "send my Telegram messages to you", said in a
+ * bot's chat, makes that bot the app's home bot through the one setter.
+ */
+describe("taking the user's own chat on an app", () => {
+  it("makes the calling bot the app's home bot", async () => {
+    const { instance, setHomeBot } = server();
+
+    const text = await call(
+      instance,
+      { app: "telegram" },
+      "bot-session",
+      "take_chat_app_messages"
+    );
+
+    expect(setHomeBot).toHaveBeenCalledWith("telegram", "bot-1");
+    expect(text).toContain("own Telegram chat now comes to you");
+    expect(text).toContain("in their language");
+  });
+
+  it("is refused outside a bot's chat", async () => {
+    const { instance, setHomeBot } = server();
+
+    const text = await call(
+      instance,
+      { app: "telegram" },
+      "session-1",
+      "take_chat_app_messages"
+    );
+
+    expect(text).toContain("only available in a bot's chat");
+    expect(setHomeBot).not.toHaveBeenCalled();
+  });
+
+  it("names the apps it knows when given another", async () => {
+    const { instance, setHomeBot } = server();
+
+    const text = await call(
+      instance,
+      { app: "signal" },
+      "bot-session",
+      "take_chat_app_messages"
+    );
+
+    expect(text).toContain('Unknown app "signal"');
+    expect(setHomeBot).not.toHaveBeenCalled();
   });
 });

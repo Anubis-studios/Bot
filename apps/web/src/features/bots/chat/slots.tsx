@@ -14,7 +14,7 @@ import { useCollections } from "#renderer/data/db";
 import { useAppNavigate } from "#renderer/lib/navigation/use-app-navigate";
 import { useVisibleThread } from "#renderer/lib/navigation/visible-thread";
 import { IS_ELECTRON } from "#renderer/lib/platform";
-import { platformSystem, openSharedLink } from "#renderer/lib/platform-system";
+import { platformSystem } from "#renderer/lib/platform-system";
 import { openPanelTab, panelScopeKey } from "#renderer/lib/side-panel/store";
 import { showError } from "#renderer/lib/toast";
 import { Button } from "#renderer/ui/button";
@@ -60,11 +60,7 @@ export const useBotChatSlots = (
   const queries = botsQueries(transport.orpc);
   const account = useQuery(queries.account());
   const mode = useQuery(queries.defaultMode());
-  const messaging = useQuery(queries.messaging());
   const senders = useQuery(queries.senderChats());
-  const channel = IS_ELECTRON
-    ? messaging.data?.platforms.find((row) => row.id === bot.channel)
-    : undefined;
   const senderInfo = senders.data?.find((row) => row.sessionId === sessionId);
   const isRun = !!session?.routineId;
   const key = session?.workspaceId
@@ -106,14 +102,6 @@ export const useBotChatSlots = (
     `model:${bot.id}`
   );
   const senderLabel = senderInfo?.senderName?.trim() || session?.label?.trim();
-  const platformName = (id: string): string =>
-    id === "discord"
-      ? t("messaging.platforms.discord")
-      : id === "telegram"
-        ? t("messaging.platforms.telegram")
-        : id === "whatsapp"
-          ? t("messaging.platforms.whatsapp")
-          : id;
   const readOnlyReason = senderLabel
     ? t("bots.chat.senderReadOnly", { bot: bot.name, sender: senderLabel })
     : t("bots.chat.senderReadOnlyFallback", { bot: bot.name });
@@ -156,36 +144,7 @@ export const useBotChatSlots = (
             reason: readOnlyReason,
             ...(pairing ? { action: pairing } : {}),
           }
-        : bot.channel
-          ? {
-              reason: t(
-                bot.channel === "whatsapp"
-                  ? "bots.chat.channelReadOnlyWhatsapp"
-                  : "bots.chat.channelReadOnly",
-                { app: platformName(bot.channel) }
-              ),
-              ...(channel?.sharedLink
-                ? {
-                    action: (
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() =>
-                          void openSharedLink(transport.client, {
-                            platformId: channel.id,
-                            target: "dm",
-                          })
-                        }
-                      >
-                        {t("bots.chat.openApp", {
-                          app: platformName(channel.id),
-                        })}
-                      </Button>
-                    ),
-                  }
-                : {}),
-            }
-          : undefined;
+        : undefined;
   const decorateMessage = botMessageDecorations({
     sessionId,
     model: session?.model,

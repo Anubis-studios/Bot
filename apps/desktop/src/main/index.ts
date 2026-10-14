@@ -1267,7 +1267,11 @@ const appOperations: AppOperations = {
   // The local account; see shared/account.ts for why it is optional.
   account: {
     get: () => readAccountState(),
-    skip: () => accountChanged(skipOnboarding()),
+    skip: () => {
+      const state = accountChanged(skipOnboarding());
+      workspaceServiceHost.onboardingFinished();
+      return state;
+    },
     signOut: () => accountChanged(signOut()),
     forget: () => accountChanged(forgetAccount()),
   },

@@ -101,10 +101,8 @@ export const useBotModelBinding = (
 };
 export const ModelPicker = ({
   binding,
-  readOnly = false,
 }: {
   binding: ReturnType<typeof useBotModelBinding>;
-  readOnly?: boolean;
 }) => {
   const { t } = useTranslation();
   const db = useDb();
@@ -113,12 +111,6 @@ export const ModelPicker = ({
   const pref = useMotionPreference();
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
-  if (readOnly)
-    return (
-      <span className="min-w-0 truncate" title={binding.label}>
-        {binding.value === null ? t("bots.form.modelDefault") : binding.label}
-      </span>
-    );
   if (binding.setup.status !== "ready")
     return (
       <ModelSetupPopover

@@ -15,6 +15,9 @@ export const messagingRouter = impl.messaging.router({
   updateSettings: impl.messaging.updateSettings.handler(({ input, context }) =>
     context.deps.serviceHost.updateMessagingSettings(input)
   ),
+  setHomeBot: impl.messaging.setHomeBot.handler(({ input, context }) =>
+    context.deps.serviceHost.setMessagingHomeBot(input.platformId, input.botId)
+  ),
   showLogin: impl.messaging.showLogin.handler(({ input, context }) => {
     context.deps.serviceHost.showMessagingLogin(input.platformId);
   }),

@@ -37,6 +37,7 @@ export type ToolHost = Pick<
   | "listChats"
   | "readChatMessages"
   | "autoReply"
+  | "takeChatAppMessages"
   | "homeAssistant"
   | "ok"
   | "err"

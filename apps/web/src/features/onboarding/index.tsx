@@ -172,7 +172,7 @@ export const OnboardingStepPage = (props: OnboardingPageProps) => {
     advance: () => go("next"),
     back: () => go("back"),
   };
-  const existingBot = bots?.find((item) => item.channel == null);
+  const existingBot = bots?.[0];
   // A ready bot waits for the person's pick (its chat, or building); only an
   // account that already has a bot moves on by itself.
   useFinalHandoff(

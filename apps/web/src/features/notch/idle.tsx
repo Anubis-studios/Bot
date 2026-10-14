@@ -38,7 +38,7 @@ export const IdleView = () => {
         </div>
       </motion.div>
     );
-  const bot = db.collections.bots.toArray.find((bot) => bot.channel == null);
+  const bot = db.collections.bots.toArray[0];
   const routine = bot
     ? db.collections.routines.toArray.find((routine) =>
         isCheckInRoutine(routine, bot.id)

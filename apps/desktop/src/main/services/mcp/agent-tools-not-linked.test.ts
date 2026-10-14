@@ -76,7 +76,7 @@ describe("sending to a platform that is not linked", () => {
       { platform: "telegram", to: "chat-1", message: "hello" }
     );
 
-    expect(send).toHaveBeenCalledWith("telegram", "chat-1", "hello");
+    expect(send).toHaveBeenCalledWith("telegram", "chat-1", "hello", undefined);
     expect(text).toMatch(/sent/i);
   });
 

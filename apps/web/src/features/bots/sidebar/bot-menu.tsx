@@ -38,7 +38,6 @@ export interface BotMenuItem {
 
 /** Pure: which items a bot's menu shows (R3-T14). */
 export const botMenuItems = (input: {
-  channel: boolean;
   pinned: boolean;
   unread: boolean;
   botCount: number;
@@ -49,7 +48,6 @@ export const botMenuItems = (input: {
     items.push({ id, separated, destructive });
   add(input.pinned ? "unpin" : "pin");
   if (!input.unread) add("mark-unread");
-  if (input.channel) return items;
   add("edit");
   if (input.botCount < MAX_BOTS) add("duplicate");
   if (input.checkIn != null)

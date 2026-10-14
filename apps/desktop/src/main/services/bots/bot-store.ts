@@ -23,7 +23,6 @@ import {
 import { ConflictError } from "@abacus-ai/contract/conflict";
 import { EntityNotFoundError } from "@abacus-ai/contract/not-found";
 import {
-  ForbiddenError,
   InvalidInputError,
   PreconditionError,
 } from "@abacus-ai/contract/service-errors";
@@ -245,27 +244,6 @@ export const removeBot = (id: string): Bot => {
   }
 
   return removed;
-};
-
-/**
- * Channel bots are minted and retired by the link itself: the user's edit
- * or delete is `FORBIDDEN { reason: "channel-bot" }` (spec 03 §24.4), with
- * the message legacy IPC has always shown. An unknown id passes (the write
- * itself answers NOT_FOUND).
- */
-export const assertNotChannelBot = (id: string, verb: string): void => {
-  const bot = getBot(id);
-  if (bot?.channel == null) return;
-  const app =
-    bot.channel === "discord"
-      ? "Discord"
-      : bot.channel === "whatsapp"
-        ? "WhatsApp"
-        : "Telegram";
-  throw new ForbiddenError(
-    "channel-bot",
-    `This bot mirrors your ${app} chat and can't be ${verb}.`
-  );
 };
 
 /** The bot whose forever chat is this session, if any. */

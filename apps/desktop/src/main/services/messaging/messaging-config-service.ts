@@ -29,16 +29,15 @@ type StoredConfig = {
   respondToInbound?: boolean;
   workspaceId?: string | null;
   botId?: string | null;
-  /** The retired own-account Telegram bootstrap's self bot; WhatsApp still
-   * falls back to it until relinked. */
+  /** The retired own-account Telegram bootstrap's self bot; kept as written. */
   selfBotId?: string | null;
-  /** Self-lane bots keyed by platform, for platforms that get their own. */
+  /** Each self lane's home bot (see BotService.setHomeBot), by lane. */
   selfBotIds?: Partial<Record<MessagingPlatformId, string | null>>;
   platforms?: Partial<Record<MessagingPlatformId, StoredPlatform>>;
   pairing?: MessagingPairedUser[];
   /** The retired own-account Telegram bootstrap ran; kept as written. */
   autoReplyBootstrapped?: boolean;
-  /** Platforms whose own self-lane bootstrap has run (see selfBotIds). */
+  /** Self lanes whose default home bot was set, once ever (see selfBotIds). */
   autoReplyBootstrappedFor?: MessagingPlatformId[];
   /** Epoch ms until which the loop breaker holds auto-reply. See the gateway. */
   autoReplyPausedUntil?: number;
@@ -197,7 +196,6 @@ export const readGatewaySettings = (): {
   respondToInbound: boolean;
   workspaceId: string | null;
   botId: string | null;
-  selfBotId: string | null;
   selfBotIds: Partial<Record<MessagingPlatformId, string>>;
   autoReplyBootstrapped: boolean;
   autoReplyBootstrappedFor: MessagingPlatformId[];
@@ -222,7 +220,6 @@ export const readGatewaySettings = (): {
       typeof config.workspaceId === "string" ? config.workspaceId : null,
     // Deliver inbound into this bot's forever chat, not per-sender sessions.
     botId: typeof config.botId === "string" ? config.botId : null,
-    selfBotId: typeof config.selfBotId === "string" ? config.selfBotId : null,
     selfBotIds,
     autoReplyBootstrapped: config.autoReplyBootstrapped === true,
     autoReplyBootstrappedFor: (config.autoReplyBootstrappedFor ?? []).filter(
@@ -242,7 +239,6 @@ export const saveGatewaySettings = (patch: {
   workspaceId?: string | null;
   botId?: string | null;
   autoReplyBootstrapped?: boolean;
-  selfBotId?: string | null;
   /** Merged per key; null clears that platform's slot. */
   selfBotIds?: Partial<Record<MessagingPlatformId, string | null>>;
   /** Added to the stored list, never removed. */
@@ -281,7 +277,6 @@ export const saveGatewaySettings = (patch: {
       ? { workspaceId: patch.workspaceId }
       : {}),
     ...(patch.botId !== undefined ? { botId: patch.botId } : {}),
-    ...(patch.selfBotId !== undefined ? { selfBotId: patch.selfBotId } : {}),
     ...(selfBotIds != null ? { selfBotIds } : {}),
     ...(bootstrappedFor != null
       ? { autoReplyBootstrappedFor: bootstrappedFor }

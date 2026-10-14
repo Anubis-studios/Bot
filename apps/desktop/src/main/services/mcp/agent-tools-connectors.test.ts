@@ -35,12 +35,15 @@ const link = vi.fn(async (connectorId: string) =>
 );
 const show = vi.fn();
 const watch = vi.fn();
+const claimSelfLane = vi.fn();
 
 const server = (): McpAgentToolsServer =>
   new McpAgentToolsServer({
     skillsService: {} as never,
     enabledToolsets: () => new Set(["connectors"]),
     workspacePath: () => null,
+    botIdForSession: (sessionId) =>
+      sessionId === "bot-session" ? "bot-prices" : null,
     conversationKeyForSession: (sessionId) =>
       sessionId === "nowhere"
         ? null
@@ -57,6 +60,7 @@ const server = (): McpAgentToolsServer =>
       listChats: () => [],
       send: async () => undefined as never,
       readMessages: async () => [] as never,
+      claimSelfLane,
     } as never,
   });
 
@@ -332,6 +336,20 @@ describe("the chat apps", () => {
 
     expect(show).not.toHaveBeenCalled();
     expect(text).toContain("send_<platform>_message");
+  });
+
+  it("make the bot that asks the app's home bot once it links", async () => {
+    await call({ service: "telegram" }, "bot-session");
+
+    expect(claimSelfLane).toHaveBeenCalledWith("telegram", "bot-prices");
+  });
+
+  it("claim nothing for a session that is no bot's, or an app already linked", async () => {
+    await call({ service: "telegram" });
+    statuses["messaging-whatsapp"] = { state: "connected" };
+    await call({ service: "whatsapp" }, "bot-session");
+
+    expect(claimSelfLane).not.toHaveBeenCalled();
   });
 
   it("still put the card up for a started platform that is not linked", async () => {

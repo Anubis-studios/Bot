@@ -316,6 +316,7 @@
     ],
     "sources": [
       "features/bots/start/bot-start-page.tsx",
+      "routes/_bare/onboarding.$step.tsx",
       "routes/_shell/(bots)/bots.new.tsx"
     ]
   },
@@ -398,6 +399,7 @@
       "spotify_playlists",
       "spotify_queue",
       "spotify_search",
+      "take_chat_app_messages",
       "telegram_auto_reply",
       "text_to_speech",
       "todo",

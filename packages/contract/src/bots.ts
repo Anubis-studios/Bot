@@ -33,8 +33,10 @@ export interface Bot {
    */
   kickstartedAt?: number | null;
   /**
-   * Set on the self-lane bots minted when a chat channel links: the app the
-   * conversation happens in. Such a bot's chat is a window, not a composer.
+   * Legacy: the hidden self-lane bots older installs minted per chat app.
+   * Main adopts them as that app's agent at startup and clears it
+   * (BotService.adoptChannelBots); the app's own chat now goes to its home
+   * bot, an ordinary bot.
    */
   channel?: string | null;
   /**
@@ -62,6 +64,13 @@ export const SPONSORED_RUN_MARKER = "cos-first-run";
 /** The chat apps a bot can call home. */
 export const HOME_CHANNELS = ["whatsapp", "telegram", "discord"] as const;
 export type HomeChannel = (typeof HOME_CHANNELS)[number];
+
+/** Each chat app's name as the agent and its prompts say it. */
+export const HOME_CHANNEL_NAMES: Record<HomeChannel, string> = {
+  whatsapp: "WhatsApp",
+  telegram: "Telegram",
+  discord: "Discord",
+};
 
 export interface BotCreateInput {
   name: string;
@@ -102,6 +111,8 @@ export type BotUpdateInput = Partial<
     | "wallpaper"
     | "model"
     | "channel"
+    // Main only (adopting a legacy channel bot); the renderer cannot send it.
+    | "homeChannel"
   >
 >;
 

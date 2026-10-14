@@ -279,7 +279,8 @@ export const TOOLSETS: Toolset[] = [
     delivery: "mcp-agent-tools",
     // One tool per platform, listed only while that platform is connected, so
     // one platform's contacts never appear beside another's. *_auto_reply is
-    // bots-only. send_to_whatsapp: the hosted computer's link to AbacusAI Bot's number.
+    // bots-only, and so is take_chat_app_messages. send_to_whatsapp: the
+    // hosted computer's link to AbacusAI Bot's number.
     tools: [
       tool("send_to_whatsapp"),
       tool("list_whatsapp_chats"),
@@ -294,6 +295,7 @@ export const TOOLSETS: Toolset[] = [
       tool("send_discord_message"),
       tool("read_discord_messages"),
       tool("discord_auto_reply"),
+      tool("take_chat_app_messages"),
     ],
     // On by default at no cost: the server withholds both tools until a
     // messaging platform is running, and sending is why one gets connected.

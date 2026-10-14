@@ -31,7 +31,7 @@ vi.mock("./messaging-config-service", async (importOriginal) => {
 const { MessagingGatewayService } = await import("./messaging-gateway-service");
 
 /** Flush one buffered reply and report what actually went out. */
-const flushed = (reply: string): string | null => {
+const flushed = (reply: string, owner = false): string | null => {
   const service = new MessagingGatewayService({
     resolveWorkspaceId: () => null,
     createAgentSession: () => ({}) as never,
@@ -61,6 +61,7 @@ const flushed = (reply: string): string | null => {
     chatId: "Girlies",
     buffer: reply,
     replyContext: null,
+    owner,
   });
 
   return sent;
@@ -126,5 +127,18 @@ describe("an ordinary reply", () => {
 
   it("still sends nothing for the bare sentinel", () => {
     expect(flushed("NO_REPLY")).toBeNull();
+  });
+});
+
+describe("a reply in the user's own chat", () => {
+  it("is never swapped for the deferral: the user is who it talks to", () => {
+    // A home bot answering its owner says "you" and "the user" freely.
+    expect(
+      flushed("Should I keep auto-reply on for serious topics?", true)
+    ).toBe("Should I keep auto-reply on for serious topics?");
+  });
+
+  it("still never sends the bare sentinel", () => {
+    expect(flushed("NO_REPLY", true)).toBeNull();
   });
 });

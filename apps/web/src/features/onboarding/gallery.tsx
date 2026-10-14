@@ -10,7 +10,7 @@ export const OnboardingGallery = ({ step }: { step: OnboardingStepId }) => {
   const router = useRouter();
   const { transport } = router.options.context;
   const db = useDb();
-  const bot = db.collections.bots.toArray.find((bot) => bot.channel == null);
+  const bot = db.collections.bots.toArray[0];
   const previewBot = bot
     ? { bot, checkInRoutineId: "fixture-weekday-check-in" }
     : undefined;

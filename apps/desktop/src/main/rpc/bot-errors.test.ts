@@ -1,8 +1,8 @@
 /**
- * Typed bot errors (spec 03 §24.4, §24.5): the 50-bot limit, channel-bot
- * edits, blank fields, `openChat` on an unknown bot and a delete of a gone
- * bot reach the client as defined codes the UI branches on, from the real
- * bot store and service, while legacy IPC keeps the same `Error` messages.
+ * Typed bot errors (spec 03 §24.4, §24.5): the 50-bot limit, blank fields,
+ * `openChat` on an unknown bot and a delete of a gone bot reach the client
+ * as defined codes the UI branches on, from the real bot store and service,
+ * while legacy IPC keeps the same `Error` messages.
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -12,12 +12,11 @@ import { MAX_BOTS } from "@abacus-ai/contract/bots";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BotService } from "../services/bots/bot-service";
+import { createBot, removeBot, updateBot } from "../services/bots/bot-store";
 import {
-  assertNotChannelBot,
-  createBot,
-  removeBot,
-  updateBot,
-} from "../services/bots/bot-store";
+  readGatewaySettings,
+  saveGatewaySettings,
+} from "../services/messaging/messaging-config-service";
 import { connectInProcess, fakeDeps } from "./testing";
 
 vi.mock("electron", () => {
@@ -84,10 +83,22 @@ const connect = () => {
     updateSessionModel: () => undefined,
     effectiveModel: () => null,
     emitChanged: () => undefined,
+    // Stored as main stores it: by self lane, in messaging.json.
+    homeBots: () => {
+      const stored = readGatewaySettings().selfBotIds;
+      return stored.abacus_telegram != null
+        ? { telegram: stored.abacus_telegram }
+        : {};
+    },
+    saveHomeBot: (app, botId) => {
+      if (app === "telegram")
+        saveGatewaySettings({ selfBotIds: { abacus_telegram: botId } });
+    },
   });
   // Exercise the shipping ServiceHost guard, without starting its services.
   const serviceHost = Object.assign(Object.create(ServiceHost.prototype), {
     botService: service,
+    messagingGatewayService: { getSnapshot: () => ({ platforms: [] }) },
   });
   return connectInProcess(
     fakeDeps({
@@ -97,6 +108,7 @@ const connect = () => {
         deleteBot: serviceHost.deleteBot.bind(serviceHost),
         openBotChat: serviceHost.openBotChat.bind(serviceHost),
         listBots: () => service.list(),
+        setMessagingHomeBot: serviceHost.setMessagingHomeBot.bind(serviceHost),
       },
     })
   ).client;
@@ -139,29 +151,22 @@ describe("typed bot errors (spec 03 §24.4)", () => {
     );
   });
 
-  it("a channel bot's edit or delete is FORBIDDEN channel-bot", async () => {
-    createBot(
-      { name: "Mirror", description: "Mirrors", channel: "telegram" },
-      "bot-mirror"
-    );
+  it("the card's home-bot pick persists through the one setter, and refuses a gone bot", async () => {
+    createBot({ name: "Price Watch", description: "Trade." }, "bot-prices");
     const client = connect();
-    await expect(
-      client.db.bots.update({ id: "bot-mirror", patch: { name: "New" } })
-    ).rejects.toMatchObject({
-      code: "FORBIDDEN",
-      defined: true,
-      data: { reason: "channel-bot" },
-      message: "This bot mirrors your Telegram chat and can't be edited.",
+
+    await client.messaging.setHomeBot({
+      platformId: "telegram",
+      botId: "bot-prices",
     });
+    expect(readGatewaySettings().selfBotIds.abacus_telegram).toBe("bot-prices");
+
     await expect(
-      client.db.bots.delete({ id: "bot-mirror" })
+      client.messaging.setHomeBot({ platformId: "telegram", botId: "bot-gone" })
     ).rejects.toMatchObject({
-      code: "FORBIDDEN",
-      data: { reason: "channel-bot" },
+      code: "NOT_FOUND",
+      data: { entity: "bot", id: "bot-gone" },
     });
-    expect(legacyText(() => assertNotChannelBot("bot-mirror", "deleted"))).toBe(
-      "Error: This bot mirrors your Telegram chat and can't be deleted."
-    );
   });
 
   it("openChat on an unknown bot is NOT_FOUND bot", async () => {

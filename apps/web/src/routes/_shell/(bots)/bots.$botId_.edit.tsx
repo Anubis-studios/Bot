@@ -1,5 +1,5 @@
 import { BotId } from "@abacus-ai/contract/contract/ids";
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import * as v from "valibot";
 
 import { BotGone } from "#renderer/features/bots/chat/identity";
@@ -34,11 +34,10 @@ export const Route = createFileRoute("/_shell/(bots)/bots/$botId_/edit")({
     void context.queryClient.prefetchQuery(
       botsQueries(context.transport.orpc).models()
     );
-    const [bot] = await Promise.all([
+    await Promise.all([
       loadBot(context.db, params.botId),
       context.db.collections.routines.preload(),
     ]);
-    if (bot.channel) throw redirect({ to: "/bots/$botId", params });
   },
   notFoundComponent: () => <BotGone />,
   component: EditRoute,

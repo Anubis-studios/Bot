@@ -569,3 +569,186 @@ describe("accessory persistence through the service", () => {
     expect(getBot(bot.id)?.avatarAccessory).toBe("none");
   });
 });
+
+/**
+ * Each chat app's own chat goes to one home bot. The pointer is the
+ * service's to keep (here, in memory); setHomeBot is the only writer.
+ */
+describe("a chat app's home bot", () => {
+  const homeService = (): {
+    service: BotService;
+    stored: Partial<Record<"whatsapp" | "telegram" | "discord", string>>;
+    saves: string[];
+  } => {
+    const stored: Partial<Record<"whatsapp" | "telegram" | "discord", string>> =
+      {};
+    const saves: string[] = [];
+    const service = new BotService(
+      makeCallbacks({
+        homeBots: () => ({ ...stored }),
+        saveHomeBot: (app, botId) => {
+          stored[app] = botId;
+          saves.push(`${app}:${botId}`);
+        },
+      })
+    );
+    return { service, stored, saves };
+  };
+
+  it("is the first bot made from the app's agent template, never a later one", () => {
+    const { service } = homeService();
+    const first = service.create({
+      name: "Telegram Agent",
+      description: "Live in my Telegram.",
+      homeChannel: "telegram",
+    });
+    service.create({
+      name: "Telegram Agent 2",
+      description: "Live in my Telegram too.",
+      homeChannel: "telegram",
+    });
+
+    expect(service.ensureHomeBot("telegram")).toBe(first.id);
+    // Creating more bots afterwards moves nothing.
+    service.create({
+      name: "Telegram Agent 3",
+      description: "And me.",
+      homeChannel: "telegram",
+    });
+    expect(service.ensureHomeBot("telegram")).toBe(first.id);
+  });
+
+  it("is made from the template when no bot was", () => {
+    const { service, stored } = homeService();
+
+    const id = service.ensureHomeBot("discord");
+
+    const bot = getBot(id)!;
+    expect(bot.name).toBe("Discord Agent");
+    expect(bot.homeChannel).toBe("discord");
+    expect(stored.discord).toBe(id);
+  });
+
+  it("falls back to the template rule once the home bot is deleted", () => {
+    const { service } = homeService();
+    const chosen = service.create({
+      name: "Price Watch",
+      description: "Trade.",
+    });
+    service.setHomeBot("telegram", chosen.id);
+    const agent = service.create({
+      name: "Telegram Agent",
+      description: "Live in my Telegram.",
+      homeChannel: "telegram",
+    });
+
+    service.delete(chosen.id);
+
+    expect(service.homeBotId("telegram")).toBeNull();
+    expect(service.ensureHomeBot("telegram")).toBe(agent.id);
+    service.delete(agent.id);
+    // Nothing left from the template: a new one is made.
+    const remade = service.ensureHomeBot("telegram");
+    expect(getBot(remade)?.name).toBe("Telegram Agent");
+  });
+
+  it("changes only through setHomeBot, which refuses a bot that does not exist", () => {
+    const { service, saves } = homeService();
+    const bot = service.create({ name: "Scout", description: "Watch." });
+
+    service.setHomeBot("whatsapp", bot.id);
+    service.setHomeBot("whatsapp", bot.id);
+
+    expect(saves).toEqual([`whatsapp:${bot.id}`]);
+    expect(() => service.setHomeBot("whatsapp", "bot-gone")).toThrow(/No bot/);
+  });
+
+  it("tells the home bot the chat is its own, and only the others where it goes", () => {
+    const { service } = homeService();
+    const home = service.create({
+      name: "Telegram Agent",
+      description: "Live.",
+    });
+    const other = service.create({ name: "Scout", description: "Watch." });
+
+    service.setHomeBot("telegram", home.id);
+
+    const homePersona = fs.readFileSync(personaPath(home.id), "utf8");
+    const otherPersona = fs.readFileSync(personaPath(other.id), "utf8");
+    expect(homePersona).toContain("The user's own Telegram chat comes to you");
+    expect(homePersona).not.toContain("currently go to");
+    expect(otherPersona).toContain(
+      "say their Telegram messages\ncurrently go to Telegram Agent"
+    );
+    expect(otherPersona).toContain("take_chat_app_messages");
+    // No line for an app with no home bot.
+    expect(otherPersona).not.toContain("WhatsApp messages");
+
+    // Switching rewrites both sides.
+    service.setHomeBot("telegram", other.id);
+    expect(fs.readFileSync(personaPath(home.id), "utf8")).toContain(
+      "currently go to Scout"
+    );
+  });
+});
+
+describe("an older install's self-lane bot", () => {
+  it("is adopted once as the app's agent and home bot, history kept", () => {
+    const stored: Partial<Record<"whatsapp" | "telegram" | "discord", string>> =
+      {};
+    const service = new BotService(
+      makeCallbacks({
+        homeBots: () => ({ ...stored }),
+        saveHomeBot: (app, botId) => {
+          stored[app] = botId;
+        },
+      })
+    );
+    const legacy = service.create({
+      name: "Telegram AbacusAI Bot <-> You",
+      description: "You are the user's personal assistant.",
+      channel: "telegram",
+    });
+    recordBotSession(legacy.id, "ws-default", "session-old");
+
+    service.adoptChannelBots();
+
+    const adopted = getBot(legacy.id)!;
+    expect(adopted.name).toBe("Telegram Agent");
+    expect(adopted.title).toBe("Your agent in Telegram - message it anytime");
+    expect(adopted.description).toContain("Live in my Telegram.");
+    expect(adopted.homeChannel).toBe("telegram");
+    expect(adopted.channel).toBeNull();
+    expect(adopted.sessionId).toBe("session-old");
+    expect(stored.telegram).toBe(legacy.id);
+
+    // A second launch finds nothing to adopt and changes nothing.
+    service.update(legacy.id, { name: "My Telegram" });
+    service.adoptChannelBots();
+    expect(getBot(legacy.id)?.name).toBe("My Telegram");
+  });
+
+  it("keeps a home bot the app already has", () => {
+    const stored: Partial<Record<"whatsapp" | "telegram" | "discord", string>> =
+      {};
+    const service = new BotService(
+      makeCallbacks({
+        homeBots: () => ({ ...stored }),
+        saveHomeBot: (app, botId) => {
+          stored[app] = botId;
+        },
+      })
+    );
+    const chosen = service.create({ name: "Scout", description: "Watch." });
+    stored.whatsapp = chosen.id;
+    service.create({
+      name: "WhatsApp AbacusAI Bot <-> You",
+      description: "Legacy.",
+      channel: "whatsapp",
+    });
+
+    service.adoptChannelBots();
+
+    expect(stored.whatsapp).toBe(chosen.id);
+  });
+});

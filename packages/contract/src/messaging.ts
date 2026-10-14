@@ -5,6 +5,8 @@
  * specific about. Connectors run in the main process (`services/messaging/`).
  */
 
+import type { HomeChannel } from "./bots";
+
 export const MESSAGING_PLATFORM_IDS = [
   "telegram",
   "discord",
@@ -24,6 +26,41 @@ export type MessagingPlatformId = (typeof MESSAGING_PLATFORM_IDS)[number];
 export const SHARED_BOT_PLATFORM_OF: Partial<
   Record<MessagingPlatformId, MessagingPlatformId>
 > = { discord: "abacus_discord", telegram: "abacus_telegram" };
+
+/**
+ * Each chat app's self lane: the user's own chat there (WhatsApp's "Message
+ * yourself", the shared Abacus AI bot's DM elsewhere), which one home bot
+ * answers.
+ */
+export const SELF_LANE_FOR_APP = {
+  whatsapp: "whatsapp",
+  telegram: "abacus_telegram",
+  discord: "abacus_discord",
+} as const satisfies Record<HomeChannel, MessagingPlatformId>;
+
+export type SelfLanePlatform = (typeof SELF_LANE_FOR_APP)[HomeChannel];
+
+export const APP_OF_SELF_LANE: Record<SelfLanePlatform, HomeChannel> = {
+  whatsapp: "whatsapp",
+  abacus_telegram: "telegram",
+  abacus_discord: "discord",
+};
+
+/** The chat app whose self lane this is, or null for a platform that is none. */
+export const appOfSelfLane = (
+  platformId: MessagingPlatformId
+): HomeChannel | null =>
+  (APP_OF_SELF_LANE as Partial<Record<MessagingPlatformId, HomeChannel>>)[
+    platformId
+  ] ?? null;
+
+/** The self lane a platform's messages to the user travel: its own, or its shared bot's. */
+export const selfLaneOf = (
+  platformId: MessagingPlatformId
+): SelfLanePlatform | null => {
+  const app = appOfSelfLane(SHARED_BOT_PLATFORM_OF[platformId] ?? platformId);
+  return app != null ? SELF_LANE_FOR_APP[app] : null;
+};
 
 // A platform id as a model should read it: the bare "abacus_telegram" reads to
 // a bot as "Telegram is connected" over an unlinked Telegram.
@@ -135,6 +172,8 @@ export type MessagingPlatformInfo = {
   pendingCount: number;
   /** Shared-bot platforms only. */
   sharedLink?: SharedChannelLink;
+  /** Self lanes only: the bot the user's own chat goes to, null while none is. */
+  homeBotId?: string | null;
 };
 
 // Pairing is the whole security model: an approved sender can drive an agent

@@ -27,6 +27,11 @@ import {
   resolveConnector,
   type Connector,
 } from "@abacus-ai/connectors/registry";
+import {
+  HOME_CHANNEL_NAMES,
+  HOME_CHANNELS,
+  type HomeChannel,
+} from "@abacus-ai/contract/bots";
 import type {
   ConnectorStatus,
   ConnectorStatuses,
@@ -301,6 +306,10 @@ export interface McpAgentToolsServerOptions {
     /** Bounded. */
     awaitReady?: (platform?: MessagingPlatformId) => Promise<void>;
     disablePlatform?: (id: MessagingPlatformId) => Promise<void>;
+    /** A bot asked to connect this platform: it is the default home bot if the app's own chat links. */
+    claimSelfLane?: (platform: MessagingPlatformId, botId: string) => void;
+    /** Make the bot the chat app's home bot (the one setter behind it). */
+    setHomeBot?: (app: HomeChannel, botId: string) => void;
     /** Capped. */
     listChats: (
       query?: string,
@@ -327,7 +336,9 @@ export interface McpAgentToolsServerOptions {
     send: (
       platform: MessagingPlatformId,
       chatId: string,
-      text: string
+      text: string,
+      /** The calling bot, named on what it sends to the user's own chat. */
+      fromBotId?: string
     ) => Promise<void>;
     /** Throws where unsupported. */
     sendFile?: (
@@ -1959,7 +1970,10 @@ export class McpAgentToolsServer extends McpHttpServer {
     );
   }
 
-  async sendChatMessage(args: Record<string, unknown>): Promise<ToolResult> {
+  async sendChatMessage(
+    args: Record<string, unknown>,
+    callerSession?: string
+  ): Promise<ToolResult> {
     const messaging = this.options.messaging;
     if (messaging == null || messaging.runningPlatforms().length === 0)
       return this.messagingSetupHint();
@@ -2001,7 +2015,11 @@ export class McpAgentToolsServer extends McpHttpServer {
       return this.ok(`Sent the file to ${to} on ${platform}.`);
     }
 
-    await messaging.send(platform, to, message);
+    const fromBotId =
+      callerSession != null
+        ? (this.options.botIdForSession?.(callerSession) ?? undefined)
+        : undefined;
+    await messaging.send(platform, to, message, fromBotId);
 
     return this.ok(`Sent to ${to} on ${platform}.`);
   }
@@ -2131,6 +2149,14 @@ export class McpAgentToolsServer extends McpHttpServer {
             : "unreachable",
       };
 
+    // A bot connecting a chat app is the default for the app's own chat.
+    const claimant =
+      match.kind === "messaging" && callerSession != null
+        ? (this.options.botIdForSession?.(callerSession) ?? null)
+        : null;
+    if (match.kind === "messaging" && claimant != null)
+      this.options.messaging?.claimSelfLane?.(match.platform, claimant);
+
     // Nothing here waits for the user: the call answers at once, a card (in
     // the app) and a link (anywhere) do the connecting, and the chat that
     // asked is told when it lands.
@@ -2238,6 +2264,35 @@ export class McpAgentToolsServer extends McpHttpServer {
     const error = await connectors.disconnect(match.id);
     if (error != null) return { code: "failed", error };
     return { code: "disconnected", name: match.name, kind: match.kind };
+  }
+
+  /** take_chat_app_messages: the calling bot gets the user's own chat on an app. */
+  takeChatAppMessages(
+    args: Record<string, unknown>,
+    callerSession?: string
+  ): ToolResult {
+    const app = String(args.app ?? "")
+      .trim()
+      .toLowerCase();
+    if (!(HOME_CHANNELS as readonly string[]).includes(app))
+      return this.err(
+        `Unknown app "${app}". Use "whatsapp", "telegram" or "discord".`
+      );
+    const botId =
+      callerSession != null
+        ? (this.options.botIdForSession?.(callerSession) ?? null)
+        : null;
+    if (botId == null)
+      return this.err(
+        "Not changed: only a bot's own chat can take the user's chat-app messages. Tell the user to ask the bot they want, in that bot's chat."
+      );
+    const setHomeBot = this.options.messaging?.setHomeBot;
+    if (setHomeBot == null)
+      return this.err("Chat apps are not available in this build.");
+    setHomeBot(app as HomeChannel, botId);
+    return this.ok(
+      `Done: what the user types in their own ${HOME_CHANNEL_NAMES[app as HomeChannel]} chat now comes to you, here. Tell them so in one short line, in their language.`
+    );
   }
 
   /**

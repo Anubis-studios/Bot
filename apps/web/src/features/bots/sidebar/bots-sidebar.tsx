@@ -93,7 +93,6 @@ const BotRowContainer = ({
   const checkIn = findCheckIn(sources.routines, bot.id);
   const preview = previews[bot.id];
   const items = botMenuItems({
-    channel: bot.channel != null,
     pinned,
     unread: sources.unread.has(bot.id),
     botCount: allBots.length,
