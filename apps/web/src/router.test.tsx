@@ -106,17 +106,18 @@ describe("redirects", () => {
     );
   });
 
-  it("/ lands on the bot last opened", async () => {
-    harness = await renderApp("/bots/chief-of-staff");
-    await act(async () => {
-      await harness!.router.navigate({ to: "/" });
-    });
-    await waitFor(() =>
-      expect(harness!.router.state.location.pathname).toBe(
-        "/bots/chief-of-staff"
-      )
-    );
-  });
+  it.each(["/bots/chief-of-staff", "/sessions/fix-sidebar-width"])(
+    "/ reopens the last page, %s",
+    async (page) => {
+      harness = await renderApp(page);
+      await act(async () => {
+        await harness!.router.navigate({ to: "/" });
+      });
+      await waitFor(() =>
+        expect(harness!.router.state.location.pathname).toBe(page)
+      );
+    }
+  );
 
   it("renders the start page and the bots sidebar on /bots/new", async () => {
     harness = await renderApp("/bots/new");

@@ -12,7 +12,6 @@ import {
   BotPending,
 } from "#renderer/features/bots/chat/identity";
 import { useBotChatSlots } from "#renderer/features/bots/chat/slots";
-import { rememberBot } from "#renderer/features/bots/data/last-bot";
 import { loadBotChat } from "#renderer/features/bots/data/loaders";
 import { forgetOpenChat } from "#renderer/features/bots/data/open-chat";
 import { useBot } from "#renderer/features/bots/data/queries";
@@ -223,7 +222,6 @@ export const Route = createFileRoute("/_shell/(bots)/bots/$botId")({
   params: { parse: v.parser(v.object({ botId: BotId })) },
   validateSearch: BotSearch,
   loader: async ({ context, params, preload }) => {
-    if (!preload) rememberBot(params.botId);
     if (fixtureReady != null) await fixtureReady;
     if (fixtureState.current) {
       // A bot with a real session renders the chat runtime, not the fixture.

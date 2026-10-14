@@ -1,20 +1,12 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 
-import { lastBot } from "#renderer/features/bots/data/last-bot";
-import { unlessConnecting } from "#renderer/features/onboarding/gate";
-import { ignoreLoadError } from "#renderer/lib/navigation/loaders";
+import { lastLocation } from "#renderer/lib/navigation/last-location";
 
-/** Launch: the last open bot, else the start page. */
+/** Launch: the last shell page, else the start page. */
 export const Route = createFileRoute("/_shell/")({
-  beforeLoad: async ({ context }) => {
-    const { bots } = context.db.collections;
-    await unlessConnecting(
-      context.transport,
-      bots.preload().catch(ignoreLoadError)
-    );
-    const botId = lastBot();
-    if (botId != null && bots.has(botId))
-      throw redirect({ to: "/bots/$botId", params: { botId }, replace: true });
+  beforeLoad: () => {
+    const href = lastLocation();
+    if (href != null) throw redirect({ href, replace: true });
     throw redirect({ to: "/bots/new", replace: true });
   },
 });
