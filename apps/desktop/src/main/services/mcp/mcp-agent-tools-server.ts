@@ -108,6 +108,7 @@ import { locateHostFile } from "../workspace/host-path";
 import type { SkillsService } from "../workspace/skills-service";
 import { McpHttpServer, type McpToolListing } from "./mcp-http-server";
 import { agentTool, AGENT_TOOL_NAMES, AGENT_TOOLS } from "./tools";
+import { withUpgradeNudge } from "./tools/billing";
 import type {
   ConnectOutcome,
   DisconnectOutcome,
@@ -635,7 +636,9 @@ export class McpAgentToolsServer extends McpHttpServer {
     try {
       return await definition.run(this, args, callerSession);
     } catch (error) {
-      return this.err(error instanceof Error ? error.message : String(error));
+      return this.err(
+        withUpgradeNudge(error instanceof Error ? error.message : String(error))
+      );
     }
   }
 

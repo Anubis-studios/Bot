@@ -232,7 +232,7 @@ describe("cronjob, hosted", () => {
     }
   });
 
-  it("without the server's offer, mentions upgrading and quotes no price", async () => {
+  it("without the server's offer, sends the model to billing_plan and quotes no price", async () => {
     const { call } = harness({
       defaultRunner: "hosted",
       create: async () => {
@@ -247,7 +247,7 @@ describe("cronjob, hosted", () => {
       prompt: "x",
       schedule: "0 8 * * *",
     });
-    expect(text).toContain("do not quote a price");
+    expect(text).toContain("Call billing_plan with upgrade: true");
     expect(text).not.toMatch(/\$|Basic/);
   });
 

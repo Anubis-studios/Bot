@@ -84,6 +84,25 @@ export function appBillingResult(
   return host.ok(lines.join("\n"));
 }
 
+/** Whether billing_plan is offered: free accounts, or before the first account read. */
+export const billingPlanReady = (): boolean => {
+  const account = cachedAbacusAccount();
+  return account == null || onFreePlan(account);
+};
+
+// The server's refusal for a feature its free plan leaves out ("… is available on paid plans",
+// "Routines require a paid plan"), whichever tool hit it.
+const PAID_PLAN_REFUSAL = /\bpaid plans?\b/i;
+
+/**
+ * A tool error, with the plan answer to fetch when it is a paid-plan refusal on a free account,
+ * so the user gets the plan, its price and their upgrade link instead of generic steps.
+ */
+export const withUpgradeNudge = (message: string): string =>
+  PAID_PLAN_REFUSAL.test(message) && billingPlanReady()
+    ? `${message}\n\n[needs a paid plan] Call billing_plan with upgrade: true, then tell the user once, in their language, that this needs a paid plan, with what the plan gives and their upgrade link. Do not retry this call.`
+    : message;
+
 /**
  * The account's plan, prices and upgrade links, for the app's chats and bots
  * (the phone has its own wording, ./phone/billing.ts, over the same call).
@@ -95,10 +114,7 @@ export const BILLING_TOOLS: ToolDefinition[] = [
     botAlways: true,
     // Free accounts only: a paid account the app has read is never offered it.
     // Before the first account read it is listed, and its answer still fits.
-    ready: () => {
-      const account = cachedAbacusAccount();
-      return account == null || onFreePlan(account);
-    },
+    ready: billingPlanReady,
     description: [
       "The user's Abacus AI plan and credits, every plan with its price, any first-month discount and what it gives,",
       "and the links to upgrade or buy credits. Call it whenever they ask about their plan, credits or balance, prices,",
