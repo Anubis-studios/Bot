@@ -30,6 +30,7 @@ type Internals = {
     ackOf: (id: string) => Promise<number>;
   } | null;
   bridgeReady: boolean;
+  chatListRead: boolean;
   bridgeChats: Array<{
     jid: string;
     name: string;
@@ -56,6 +57,7 @@ const connectorWith = (
   internals.bridgeChats = [
     { jid: "919876543210@c.us", name: "Meghna", isGroup: false, isMe: false },
   ];
+  internals.chatListRead = true;
   const domSends: string[] = [];
   internals.sendChunk = async (_chatId, text) => {
     domSends.push(text);
@@ -150,6 +152,87 @@ describe("sending through the bridge", () => {
     );
     // One refresh of the list before giving up on the name.
     expect(refreshed).toBe(1);
+  });
+});
+
+describe("a name asked for while WhatsApp is still syncing after a link", () => {
+  const meghna = {
+    jid: "919876543210@c.us",
+    name: "Meghna",
+    isGroup: false,
+    isMe: false,
+    unreadCount: 0,
+  };
+
+  it("waits for the chat list and then sends, never calling the name unknown", async () => {
+    const sent: Array<[string, string]> = [];
+    let answers = 0;
+    const { internals } = connectorWith({
+      ensure: async () => true,
+      listSavedContacts: async () => [],
+      // Twice "not yet" (the list timed out), then the chats.
+      listChats: async () => ((answers += 1) <= 2 ? null : [meghna]),
+      sendText: async (jid, text) => {
+        sent.push([jid, text]);
+        return { id: `m${sent.length}`, ack: 1 };
+      },
+      ackOf: async () => 1,
+    } as never);
+    internals.bridgeReady = true;
+    internals.chatListRead = false;
+    internals.bridgeChats = [];
+
+    await internals.sendTextNow("Meghna", "wtf");
+
+    expect(sent).toEqual([["919876543210@c.us", "wtf"]]);
+    expect(answers).toBe(3);
+  });
+
+  it("says WhatsApp is still syncing when the list never answers in time", async () => {
+    vi.useFakeTimers();
+    try {
+      const { internals } = connectorWith({
+        ensure: async () => true,
+        listSavedContacts: async () => [],
+        listChats: async () => null,
+        sendText: async () => {
+          throw new Error("must not be called");
+        },
+        ackOf: async () => -1,
+      } as never);
+      internals.bridgeReady = true;
+      internals.chatListRead = false;
+      internals.bridgeChats = [];
+
+      const sending = internals.sendTextNow("Meghna", "wtf");
+      const failed = expect(sending).rejects.toThrow(/still syncing/);
+      await vi.advanceTimersByTimeAsync(61_000);
+      await failed;
+      await expect(sending).rejects.not.toThrow(/No WhatsApp chat called/);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("sends to a number at once, with no list needed", async () => {
+    const sent: Array<[string, string]> = [];
+    const { internals } = connectorWith({
+      ensure: async () => true,
+      listSavedContacts: async () => [],
+      listChats: async () => null,
+      sendText: async (jid, text) => {
+        sent.push([jid, text]);
+        return { id: "m1", ack: 1 };
+      },
+      ackOf: async () => 1,
+    } as never);
+    internals.bridgeReady = true;
+    internals.chatListRead = false;
+    internals.bridgeChats = [];
+
+    await internals.sendTextNow("+1 555-000-1234", "hi");
+
+    expect(sent).toEqual([["15550001234@c.us", "hi"]]);
   });
 });
 

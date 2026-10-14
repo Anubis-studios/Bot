@@ -61,6 +61,8 @@ const LOGIN_POLL_MS = 1500;
 
 /** How often to sweep the chat list for new inbound messages. */
 const INBOUND_POLL_MS = 5000;
+/** How long a name waits for the chat list after a link before saying WhatsApp is still syncing. */
+const CHAT_SYNC_WAIT_MS = 60_000;
 
 type LoginState = { loggedIn: boolean; loginVisible?: boolean };
 
@@ -107,6 +109,8 @@ export class WhatsAppWebConnector implements MessagingConnector {
   private ownChatVerdicts = new Map<string, boolean>();
   /** The chat list as the bridge last saw it; names resolve against it. */
   private bridgeChats: BridgeChat[] = [];
+  /** WhatsApp has answered the chat list at least once since the bridge attached. */
+  private chatListRead = false;
   /** Message ids this session sent: the exact echo guard, when the bridge is on. */
   private sentIds = new Set<string>();
   /** chat+text -> the id of a send WhatsApp queued but never acked; a retry
@@ -295,9 +299,30 @@ export class WhatsAppWebConnector implements MessagingConnector {
     return ready;
   }
 
+  /** See MessagingConnector.contactsReady: the chat list has been read, by the bridge or the page. */
+  contactsReady(): boolean {
+    return this.chatListRead || this.contacts.length > 0;
+  }
+
+  /** Read the chat list until WhatsApp answers, boundedly; past the bound, say it is still syncing. */
+  private async waitForChatList(chatId: string): Promise<void> {
+    const deadline = Date.now() + CHAT_SYNC_WAIT_MS;
+    while (!this.contactsReady() && Date.now() < deadline) {
+      if (this.bridge != null) await this.refreshBridgeChats();
+      if (!this.contactsReady()) await delay(1000);
+    }
+    if (!this.contactsReady())
+      throw new Error(
+        `WhatsApp is still syncing your chats after linking, so "${chatId}" cannot be looked up yet. ` +
+          "Try again in a minute, or send to a phone number in international format."
+      );
+  }
+
   private async refreshBridgeChats(): Promise<void> {
     if (this.bridge == null) return;
     const chats = await this.bridge.listChats();
+    if (chats == null) return;
+    this.chatListRead = true;
     if (chats.length === 0) return;
     this.bridgeChats = chats;
     // The whole list, so it replaces the page scrape. The self chat is left
@@ -380,6 +405,10 @@ export class WhatsAppWebConnector implements MessagingConnector {
   private async toJid(chatId: string): Promise<string> {
     if (this.self != null && chatId === this.self && this.selfJid != null)
       return this.selfJid;
+    // A number or an id needs no list; a name does, and right after a link
+    // WhatsApp is still syncing it: wait for it rather than call the name unknown.
+    if ("error" in resolveJid(chatId, []) && !this.contactsReady())
+      await this.waitForChatList(chatId);
     let resolved = resolveJid(chatId, this.bridgeChats);
     if ("error" in resolved) {
       // The list is a snapshot; a chat that started since is worth one
@@ -798,6 +827,10 @@ export class WhatsAppWebConnector implements MessagingConnector {
           "WhatsApp's unread counts are out of reach: the store bridge is not attached to this session."
         );
       const chats = await this.bridge.listChats({ onlyUnread: true });
+      if (chats == null)
+        throw new Error(
+          "WhatsApp is still syncing your chats, so unread counts are not available yet. Try again in a minute."
+        );
       return chats
         .filter((chat) => !chat.isMe && chat.jid !== this.selfJid)
         .map((chat) => ({
