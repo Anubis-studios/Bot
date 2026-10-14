@@ -39,8 +39,7 @@ export interface Bot {
   channel?: string | null;
   /**
    * A chat-app agent's home (made from the WhatsApp, Telegram or Discord
-   * Agent template): where the user talks to it. Its standing prompt says so,
-   * so it asks for that app first.
+   * Agent template): where the user talks to it. Its standing prompt says so.
    */
   homeChannel?: HomeChannel | null;
   /** Per bot rather than per machine: the bot loop is tuned for cheap models. */

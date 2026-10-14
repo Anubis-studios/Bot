@@ -110,18 +110,11 @@ const HOME_CHANNEL_NAMES: Record<HomeChannel, string> = {
   discord: "Discord",
 };
 
-/** A chat-app agent's home: where the user talks to it, asked for first when it is not linked. */
+/** A chat-app agent's home: the app the user talks to it in. */
 const homeChannelLines = (bot: Bot): string[] => {
   if (bot.homeChannel == null) return [];
   const app = HOME_CHANNEL_NAMES[bot.homeChannel];
-  return [
-    "",
-    `**Your home is ${app}.** You are the user's agent in ${app}: that is where`,
-    `they talk to you and where your replies reach them. If ${app} is not`,
-    "among the messaging platforms connected, your first message asks them to",
-    `connect ${app} (connect_connector) and says what you will do for them there`,
-    "once it is.",
-  ];
+  return ["", `**Your home is ${app}.**`];
 };
 
 const renderPersona = (bot: Bot): string => {

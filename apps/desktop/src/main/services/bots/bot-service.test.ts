@@ -80,7 +80,7 @@ describe("creating a bot", () => {
     expect(persona).toContain("Do not greet again");
   });
 
-  it("tells a chat-app agent its home, so it asks for that app first", () => {
+  it("tells a chat-app agent its home", () => {
     // A Telegram Agent with only WhatsApp linked introduced itself by
     // offering to send WhatsApp messages and never asked for Telegram.
     const service = new BotService(makeCallbacks());
@@ -94,7 +94,6 @@ describe("creating a bot", () => {
     expect(bot.homeChannel).toBe("telegram");
     const persona = fs.readFileSync(personaPath(bot.id), "utf8");
     expect(persona).toContain("**Your home is Telegram.**");
-    expect(persona).toContain("connect Telegram (connect_connector)");
   });
 
   it("gives a bot with no home app no home line", () => {
