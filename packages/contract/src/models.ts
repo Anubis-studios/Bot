@@ -387,6 +387,33 @@ export const PAYING_ABACUS_TIERS = ["basic", "go", "pro", "max"] as const;
 export const isPayingAbacusTier = (tier: string | null | undefined): boolean =>
   tier != null && (PAYING_ABACUS_TIERS as readonly string[]).includes(tier);
 
+type AbacusPlanFields = {
+  plan?: string | null;
+  subscription_tier?: string | null;
+};
+
+/** The account's tier label, lowercased: its subscription tier, else its plan. */
+export const abacusAccountTier = (
+  account: AbacusPlanFields | null | undefined
+): string | undefined =>
+  (account?.subscription_tier?.trim() || account?.plan?.trim())?.toLowerCase();
+
+/** The plan an account is on, for what the app offers it. Unknown until it is read. */
+export type AbacusPlanTier = "free" | "basic" | "paid" | "unknown";
+
+export const abacusPlanTier = (
+  account: AbacusPlanFields | null | undefined
+): AbacusPlanTier => {
+  const tier = abacusAccountTier(account);
+  if (tier == null || tier.length === 0) return "unknown";
+  if (tier === "free") return "free";
+  if (tier === "basic") return "basic";
+  return isPayingAbacusTier(tier) ||
+    ["paid", "premium", "team", "enterprise", "business"].includes(tier)
+    ? "paid"
+    : "unknown";
+};
+
 export const isAbacusSubscriber = (
   models: ModelAvailability[] | undefined | null
 ): boolean =>

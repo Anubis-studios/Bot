@@ -188,6 +188,12 @@ export const PREFS_GROUP_ENTRIES = {
     routeLlmSwitched: v.boolean(),
     /** The upgrade's new-look notice, dismissed. */
     newLookSeenAt: NullableTimestamp,
+    /** The agent told the user, once, where routines run 24/7. */
+    routinesAlwaysOnToldAt: NullableTimestamp,
+    /** The Routines page's 24/7 card, dismissed. */
+    routinesAlwaysOnCardAt: NullableTimestamp,
+    /** The newest missed-runs notice shown (its `missed.at`). */
+    routinesMissedSeenAt: NullableTimestamp,
   },
   motion: { reduce: v.picklist(["system", "on", "off"]) },
   sounds: {

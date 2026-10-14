@@ -172,6 +172,7 @@ import {
   type UpdateMessagingPlatformRequest,
   type UpdateMessagingSettingsRequest,
 } from "@abacus-ai/contract/messaging";
+import { abacusPlanTier } from "@abacus-ai/contract/models";
 import {
   EntityNotFoundError,
   WORKSPACE_NOT_FOUND,
@@ -326,6 +327,7 @@ import {
   buildAgentAuthEnv,
   buildAgentConfigEnv,
 } from "./services/config/agent-env";
+import type { PrefsStore } from "./services/config/prefs-store";
 import {
   readExecBackend,
   readTerminalShell,
@@ -914,6 +916,28 @@ export class ServiceHost {
     this.browserRuntime = runtime;
   }
 
+  /** The app's prefs row, where once-only notes are stamped; the desktop attaches it. */
+  private prefs: (() => Pick<PrefsStore, "get" | "update">) | null = null;
+
+  attachPrefs(prefs: () => Pick<PrefsStore, "get" | "update">): void {
+    this.prefs = prefs;
+  }
+
+  /**
+   * The desktop's once-per-user word on 24/7 routines, claimed by the agent's
+   * first local routine: the plan to speak to, or null once told, on the
+   * hosted computer, or while the account cannot be read.
+   */
+  async claimAlwaysOnNote(): Promise<"free" | "paid" | null> {
+    const prefs = this.platform === "web-host" ? null : this.prefs?.();
+    if (prefs == null || prefs.get().dismissals.routinesAlwaysOnToldAt != null)
+      return null;
+    const tier = abacusPlanTier(await fetchAbacusAccount());
+    if (tier === "unknown") return null;
+    prefs.update({ dismissals: { routinesAlwaysOnToldAt: Date.now() } });
+    return tier === "free" ? "free" : "paid";
+  }
+
   /** The user's WhatsApp link to AbacusAI Bot's own number: the hosted computer attaches it, the desktop never. */
   private botNumber: BotNumber | null = null;
 
@@ -1194,6 +1218,7 @@ export class ServiceHost {
         return routine;
       },
       hosted: this.hostedRoutines,
+      alwaysOnNote: () => this.claimAlwaysOnNote(),
     },
     ownActivity: (botId) => {
       const owned = this.agentSessionManagerService.listOwnedBy(botId);

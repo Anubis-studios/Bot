@@ -520,6 +520,8 @@ export const recreateMainWindow = windowLifecycle.recreateMainWindow;
  * an unresolved commit, it is replaced by one over a session-only copy.
  */
 let prefsStore = new PrefsStore();
+// Read late: the store is replaced once the migrations settle.
+workspaceServiceHost.attachPrefs(() => prefsStore);
 
 async function createWindow(restored?: RecreatedWindowState) {
   const Store = (await import("electron-store")).default;

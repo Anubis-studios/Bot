@@ -113,6 +113,7 @@ import type {
   ConnectOutcome,
   DisconnectOutcome,
 } from "./tools/connect-outcome";
+import { alwaysOnNote } from "./tools/cronjob";
 import {
   describeHostedRoutine,
   hostedCreatedNote,
@@ -280,6 +281,11 @@ export interface McpAgentToolsServerOptions {
       options?: { byAgent?: boolean; runAtText?: string | null }
     ) => Promise<Routine>;
     hosted: HostedRoutines;
+    /**
+     * The once-per-user word on 24/7 routines, claimed by this create: the
+     * plan to speak to, or null (already told, or the plan is unknown).
+     */
+    alwaysOnNote?: () => Promise<"free" | "paid" | null>;
   };
   /** Every conversation a bot owns, with its agent log; for my_activity. */
   ownActivity?: (botId: string) => Array<{
@@ -930,8 +936,11 @@ export class McpAgentToolsServer extends McpHttpServer {
         // and that what it was asked to read waits for the user. A local one
         // runs with this conversation's reach.
         const held = job.runner === "hosted" || job.access === "unattended";
+        const where =
+          " It runs on this computer, only while the computer is on and AbacusAI Bot is open;" +
+          " routines here are unlimited on every plan.";
         const reach = !held
-          ? " Its runs have full access on this computer while the app is open."
+          ? " Its runs have full access, like this conversation."
           : " Its runs are unattended: they search the web and read its own folder, but " +
             "cannot write files, run commands or message anyone, unless the user gives it " +
             "full access on its page." +
@@ -940,8 +949,11 @@ export class McpAgentToolsServer extends McpHttpServer {
                 [...reads, ...sources].join(", ") +
                 ") until the user allows it on the routine's page: tell them."
               : "");
+        const note = alwaysOnNote(
+          (await this.options.routines?.alwaysOnNote?.()) ?? null
+        );
         return this.ok(
-          `Created. ${delivery}${reach}${first}${hook}\n\n${describeJob(job)}`
+          `Created. ${delivery}${where}${reach}${first}${hook}${note}\n\n${describeJob(job)}`
         );
       }
 

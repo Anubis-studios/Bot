@@ -1,26 +1,10 @@
 import type { AbacusAccountInfo } from "@abacus-ai/contract/contracts";
-import { isPayingAbacusTier } from "@abacus-ai/contract/models";
+import { abacusAccountTier, abacusPlanTier } from "@abacus-ai/contract/models";
+
+export const accountTier = abacusAccountTier;
 
 /** The plan a card should speak to. Unknown until the account is read. */
-export type CreditsTier = "free" | "basic" | "paid" | "unknown";
-
-export const accountTier = (account: AbacusAccountInfo | null | undefined) =>
-  (account?.subscription_tier?.trim() || account?.plan?.trim())?.toLowerCase();
-
-export const creditsTier = (
-  account: AbacusAccountInfo | null | undefined
-): CreditsTier => {
-  const tier = accountTier(account);
-
-  if (tier == null || tier.length === 0) return "unknown";
-  if (tier === "free") return "free";
-  if (tier === "basic") return "basic";
-
-  return isPayingAbacusTier(tier) ||
-    ["paid", "premium", "team", "enterprise", "business"].includes(tier)
-    ? "paid"
-    : "unknown";
-};
+export const creditsTier = abacusPlanTier;
 
 /**
  * Which side an upgrade prompt leads with: what Sessions gain (models, apps) or

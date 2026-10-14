@@ -11,11 +11,17 @@ import path from "path";
 import { ConflictError } from "@abacus-ai/contract/conflict";
 import { EntityNotFoundError } from "@abacus-ai/contract/not-found";
 import type {
+  RoutineMissed,
   RoutineReach,
   RoutineRun,
   RoutineRunKind,
 } from "@abacus-ai/contract/routines";
-import { matches, nextRun, parseCron } from "@abacus-ai/contract/routines/cron";
+import {
+  matches,
+  nextRun,
+  parseCron,
+  type ParsedCron,
+} from "@abacus-ai/contract/routines/cron";
 
 import {
   isMigrationWriteBlocked,
@@ -92,6 +98,10 @@ export interface CronJob {
    * back. On disk so a restart before then still runs it.
    */
   heldSince?: number | null;
+  /** When its schedule last changed: fires before then were never its to miss. */
+  scheduledAt?: number | null;
+  /** Fires it last missed while the computer was off, until its next on-time fire. */
+  missed?: RoutineMissed | null;
 }
 
 const FILE = (): string => path.join(abacusBotHome(), "cronjobs.json");
@@ -410,6 +420,9 @@ export const updateJob = (
     updated.schedule = null;
     if (changes.enabled == null) updated.enabled = true;
   }
+  // Fires the old schedule had, or none, are not this one's to miss.
+  if (updated.schedule !== jobs[index].schedule)
+    updated.scheduledAt = Date.now();
   if (rest.name != null)
     updated.name = rest.name.trim() || deriveName(updated.prompt);
 
@@ -465,6 +478,15 @@ export const setHeld = (id: string, at: number | null): void => {
   const index = jobs.findIndex((job) => job.id === id);
   if (index < 0 || (jobs[index].heldSince ?? null) === at) return;
   jobs[index] = { ...jobs[index], heldSince: at };
+  write(jobs);
+};
+
+/** Record the fires a job missed while the computer was off, or clear them (null). */
+export const setMissed = (id: string, missed: RoutineMissed | null): void => {
+  const jobs = readForWrite();
+  const index = jobs.findIndex((job) => job.id === id);
+  if (index < 0 || (jobs[index].missed == null && missed == null)) return;
+  jobs[index] = { ...jobs[index], missed };
   write(jobs);
 };
 
@@ -580,19 +602,59 @@ export const dueJobs = (at: Date = new Date()): CronJob[] =>
   });
 
 /**
- * Scheduled jobs that had a fire after `from` and before `to`'s minute: what
- * a machine asleep (or a stalled tick) missed. The current minute is dueJobs'.
+ * Since when a job's fires are accounted for, from what is on disk: its last
+ * run (fire-on-create included), hold, resume, schedule change or creation.
  */
-export const missedJobs = (from: Date, to: Date): CronJob[] => {
+const accountedSince = (job: CronJob): number =>
+  Math.max(
+    job.createdAt,
+    job.lastRunAt ?? 0,
+    job.heldSince ?? 0,
+    job.resumedAt ?? 0,
+    job.scheduledAt ?? 0
+  );
+
+/** A missed window longer than this counts only its last year, as nextRun looks ahead. */
+const MISSED_WINDOW_MS = 366 * 24 * 60 * 60_000;
+
+/** Fires of `cron` after `from`'s minute and before `to` (a minute start). */
+const firesBetween = (cron: ParsedCron, from: number, to: number): number => {
+  const at = new Date(Math.max(from, to - MISSED_WINDOW_MS));
+  at.setSeconds(0, 0);
+  at.setMinutes(at.getMinutes() + 1);
+  let count = 0;
+  for (; at.getTime() < to; at.setMinutes(at.getMinutes() + 1))
+    if (matches(cron, at)) count++;
+  return count;
+};
+
+export interface MissedJob {
+  job: CronJob;
+  /** How many fires it missed. */
+  count: number;
+}
+
+/**
+ * Scheduled jobs with fires before `to`'s minute that never ran: what a
+ * machine asleep, or an app closed, missed. Each job counts from its own
+ * record on disk, or from `from` (the last tick before a sleep) when later;
+ * the current minute is dueJobs'.
+ */
+export const missedJobs = (from: Date | null, to: Date): MissedJob[] => {
   const minute = new Date(to.getTime());
   minute.setSeconds(0, 0);
-  return read().filter((job) => {
-    if (!job.enabled || job.runAt != null || job.schedule == null) return false;
+  return read().flatMap((job) => {
+    if (!job.enabled || job.runAt != null || job.schedule == null) return [];
     try {
-      const next = nextRun(job.schedule, from);
-      return next != null && next.getTime() < minute.getTime();
+      const since = Math.max(accountedSince(job), from?.getTime() ?? 0);
+      const count = firesBetween(
+        parseCron(job.schedule),
+        since,
+        minute.getTime()
+      );
+      return count > 0 ? [{ job, count }] : [];
     } catch {
-      return false;
+      return [];
     }
   });
 };

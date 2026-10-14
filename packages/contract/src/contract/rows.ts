@@ -168,6 +168,9 @@ export interface PrefsRow {
     routeLlmNudgeAt: number | null;
     routeLlmSwitched: boolean;
     newLookSeenAt: number | null;
+    routinesAlwaysOnToldAt: number | null;
+    routinesAlwaysOnCardAt: number | null;
+    routinesMissedSeenAt: number | null;
   };
   /** Panel widths. */
   panes: Record<string, number>;

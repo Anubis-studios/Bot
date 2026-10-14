@@ -13,6 +13,7 @@ import { followSettingsNotices } from "#renderer/data/queries/settings";
 import { followWindowNotices } from "#renderer/data/queries/window";
 import { LibraryGlobals } from "#renderer/features/library/globals";
 import { followWriteAuthorization } from "#renderer/features/onboarding/gate";
+import { RoutinesMissedNotice } from "#renderer/features/routines/always-on";
 import { RoutinesGlobals } from "#renderer/features/routines/globals";
 import { AppRoot } from "#renderer/features/shell/app-root";
 import { NotFound, RootError } from "#renderer/features/shell/screens";
@@ -56,6 +57,7 @@ const RootComponent = () => {
       <ActionBindingsProvider>
         <Outlet />
         <RoutinesGlobals />
+        <RoutinesMissedNotice />
         <LibraryGlobals />
         <Suspense fallback={null}>
           <UpdateOwner />

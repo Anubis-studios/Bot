@@ -15,6 +15,7 @@ import { useNow } from "#renderer/lib/use-now";
 import { Button } from "#renderer/ui/button";
 import { Input } from "#renderer/ui/input";
 
+import { RoutinesWhereLine } from "./always-on";
 import { useConnectorThreads } from "./attention";
 import { RoutineCreateAction } from "./create-action";
 import { stats, routineState, scheduleLabel, useRoutinesData } from "./data";
@@ -86,11 +87,12 @@ export const RoutinesSidebar = () => {
           if (e.key === "Escape") setQ("");
         }}
       />
-      {routines.length > 0 && (
-        <p className="text-muted-foreground px-2 py-2 text-xs">
-          {t("phase5.routineStats", counts)}
-        </p>
-      )}
+      <p className="text-muted-foreground px-2 py-2 text-xs empty:hidden">
+        {routines.length > 0 && (
+          <span className="block">{t("phase5.routineStats", counts)}</span>
+        )}
+        <RoutinesWhereLine />
+      </p>
       {status === "error" ? (
         <NavList.Error
           message={t("shell.sidebar.loadError")}

@@ -33,6 +33,7 @@ import {
 } from "#renderer/ui/collapsible";
 import { Input } from "#renderer/ui/input";
 
+import { MissedRunsNote } from "./always-on";
 import {
   runsView,
   scheduleLabel,
@@ -272,6 +273,7 @@ export const RoutinePage = ({
           </div>
         ))}
       </dl>
+      {!hosted && row.missed != null && <MissedRunsNote missed={row.missed} />}
       {row.webhookUrl && (
         <div className="flex items-center gap-2 text-xs">
           <code className="min-w-0 truncate">{row.webhookUrl}</code>

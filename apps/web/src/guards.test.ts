@@ -120,6 +120,7 @@ const FOCUSED_ENTRYPOINTS: Record<string, readonly string[]> = {
     "whatsapp",
   ],
   routines: [
+    "always-on",
     "data",
     "form",
     "gallery",
