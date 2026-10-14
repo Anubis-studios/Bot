@@ -5,7 +5,7 @@ export const rememberBot = (botId: string): void => {
   try {
     localStorage.setItem(KEY, botId);
   } catch {
-    // Full or blocked: launch falls back to a pinned bot.
+    // Full or blocked: launch opens the start page.
   }
 };
 
