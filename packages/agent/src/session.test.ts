@@ -21,7 +21,11 @@ import { describe, expect, it } from "vitest";
 
 import { TurnReply } from "./forever/turn-reply.js";
 import { PendingSteers } from "./pending-steers.js";
-import { AgentStatus, type AgentEvent } from "./protocol.js";
+import {
+  AgentStatus,
+  type AgentEvent,
+  type NotificationAction,
+} from "./protocol.js";
 import { replacesBash } from "./roster.js";
 import {
   AbacusBotSession,
@@ -32,6 +36,7 @@ import {
   endedOnProviderError,
   isProviderFailure,
   providerDetail,
+  readableFailure,
   terminalProviderMessage,
   isSupersededWebTool,
 } from "./session.js";
@@ -598,6 +603,167 @@ describe("what the provider itself said", () => {
 
     expect(terminalProviderMessage(raw)).toContain("did not respond");
     expect(providerDetail("")).toEqual({});
+  });
+});
+
+describe("a provider envelope in words", () => {
+  it.each([
+    [
+      "a nested error envelope",
+      '429: {"error":{"code":429,"message":"Resource has been exhausted.","status":"RESOURCE_EXHAUSTED"}}',
+      "429: Resource has been exhausted.",
+    ],
+    [
+      "an error string",
+      '400: {"error":"model not found"}',
+      "400: model not found",
+    ],
+    [
+      "bare JSON with no status",
+      '{"error":{"message":"The model is not available."}}',
+      "The model is not available.",
+    ],
+    [
+      "JSON after a prefix",
+      'Provider returned error: {"error":{"message":"Upstream timed out"}}',
+      "Provider returned error: Upstream timed out",
+    ],
+    [
+      "an envelope cut short",
+      '{"error":{"message":"Context too long","details":[{"reason',
+      "Context too long",
+    ],
+  ])("reads %s as its sentence", (_label, raw, sentence) => {
+    expect(readableFailure(raw)).toBe(sentence);
+  });
+
+  it("keeps prose with no envelope as it was", () => {
+    expect(readableFailure("Tool bash failed: exit 1")).toBe(
+      "Tool bash failed: exit 1"
+    );
+  });
+
+  it("never hands JSON to the detail", () => {
+    expect(
+      providerDetail(
+        '400: {"error":{"message":"input too large: 41231 > 32768","code":400}}'
+      )
+    ).toEqual({ detail: "400: input too large: 41231 > 32768" });
+  });
+});
+
+describe("the credit wall in the chat", () => {
+  it("an expired free tier says it expired", () => {
+    const failure = classifyProviderFailure(
+      "429: Your free AbacusAI credits have expired, so you have no remaining credits to use the API."
+    );
+
+    expect(failure.summary).toBe("Your free credits have expired");
+    expect(failure.remedy).toBe(
+      "Upgrade your plan at https://apps.abacus.ai/chatllm/choose-plan/ to keep going."
+    );
+  });
+
+  it("a provider's metric quota is a rate limit, not the Abacus wall", () => {
+    expect(
+      classifyProviderFailure(
+        '429: {"error":{"message":"Quota exceeded for metric: generate_content_free_tier_requests"}}'
+      ).summary
+    ).toBe("The model provider is rate-limited");
+  });
+});
+
+describe("a quota on the user's own key", () => {
+  interface SessionInternals {
+    session: unknown;
+    openLlmActive: boolean;
+    errorActionsFor(raw: string): { actions?: NotificationAction[] };
+  }
+
+  const pinnedOn = (provider: string): SessionInternals => {
+    const session = new AbacusBotSession({ cwd: "/tmp", emit: () => {} });
+    const internals = session as unknown as SessionInternals;
+    internals.session = { model: { provider } };
+    return internals;
+  };
+
+  it.each([
+    [
+      "a Studio key's metric quota",
+      "gemini",
+      '429: {"error":{"code":429,"message":"Quota exceeded for metric: generate_content_free_tier_requests","status":"RESOURCE_EXHAUSTED"}}',
+      "rate_limit",
+    ],
+    [
+      "a bare JSON 429 with no status up front",
+      "gemini",
+      '{"error":{"code":429,"message":"Quota exceeded for metric: generate_content_free_tier_requests","status":"RESOURCE_EXHAUSTED"}}',
+      "rate_limit",
+    ],
+    [
+      "a metric quota with no status",
+      "gemini",
+      "Quota exceeded for metric: generate_content_free_tier_requests",
+      "rate_limit",
+    ],
+    [
+      "another provider's credit limit",
+      "xai",
+      "429: You hit the credit limit for this key.",
+      "credit",
+    ],
+  ])(
+    "offers Abacus for %s, not the out-of-credits card",
+    (_l, provider, raw, cause) => {
+      const actions = pinnedOn(provider).errorActionsFor(raw).actions ?? [];
+
+      expect(actions).toContainEqual({
+        type: "own-key-unavailable",
+        provider,
+        cause,
+      });
+      expect(actions.some((action) => action.type === "upgrade-abacus")).toBe(
+        false
+      );
+      expect(classifyProviderFailure(raw).summary).not.toBe(
+        "You're out of credits"
+      );
+    }
+  );
+
+  it("reads the status out of a bare JSON body", () => {
+    const raw =
+      '{"error":{"code":429,"message":"Resource has been exhausted."}}';
+
+    expect(isProviderFailure(raw)).toBe(true);
+    expect(terminalProviderMessage(raw)).toBe(
+      "The model provider is rate-limited (429). Try again in a moment, or switch to a different model."
+    );
+  });
+
+  it("the router's spent free allowance offers the free-pool card", () => {
+    const router = pinnedOn("openrouter");
+    router.openLlmActive = true;
+    const actions =
+      router.errorActionsFor("429: Rate limit exceeded: free-models-per-day.")
+        .actions ?? [];
+
+    expect(actions).toContainEqual({ type: "free-pool-out", cause: "busy" });
+    expect(actions.some((action) => action.type === "upgrade-abacus")).toBe(
+      false
+    );
+  });
+
+  it("an Abacus-served turn past the free window carries the cause", () => {
+    const actions =
+      pinnedOn("abacus").errorActionsFor(
+        "429: Your free AbacusAI credits have expired, so you have no remaining credits to use the API."
+      ).actions ?? [];
+
+    expect(actions[0]).toMatchObject({
+      type: "upgrade-abacus",
+      cause: "expired",
+    });
   });
 });
 

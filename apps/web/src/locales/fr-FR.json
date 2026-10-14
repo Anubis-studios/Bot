@@ -864,6 +864,7 @@
     "used": "Crédits utilisés",
     "lowTitle": "Vos crédits s'épuisent",
     "outTitle": "Vous avez utilisé vos crédits gratuits",
+    "expiredTitle": "Your free credits have expired",
     "sideSessions": "Sessions : les meilleurs modèles, des exécutions plus longues, des projets plus grands",
     "sideBots": "Bots : routines quotidiennes, toujours sur Telegram et WhatsApp",
     "paidWebTitle": "Do even more on AbacusAI Agent",

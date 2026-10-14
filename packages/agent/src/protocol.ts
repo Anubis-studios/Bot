@@ -81,7 +81,11 @@ export interface NotificationAction {
   label?: string;
   /** `own-key-unavailable`: the provider id whose key failed. */
   provider?: string;
-  /** `own-key-unavailable`: credit, rate_limit, down or network. */
+  /**
+   * `own-key-unavailable`: credit, rate_limit, down or network.
+   * `upgrade-abacus`: exhausted or expired (absent reads as exhausted).
+   * `free-pool-out`: busy when the free models are only rate-limited.
+   */
   cause?: string;
 }
 

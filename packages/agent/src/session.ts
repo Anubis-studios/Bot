@@ -109,6 +109,8 @@ import {
 } from "./openllm-router.js";
 import {
   OPENLLM_ID,
+  creditWall,
+  failureStatus,
   isOutOfCredits,
   isOpenLlmReference,
   isOwnKeyOutOfCredit,
@@ -1331,7 +1333,9 @@ export class AbacusBotSession {
         {
           type: "error",
           error: {
-            message: provider ? terminalProviderMessage(raw) : raw,
+            message: provider
+              ? terminalProviderMessage(raw)
+              : readableFailure(raw),
             ...(provider ? providerDetail(raw) : {}),
             ...this.errorActionsFor(raw),
           },
@@ -1413,11 +1417,12 @@ export class AbacusBotSession {
   ): { actions: NotificationAction[] } | Record<string, never> {
     const provider = this.session?.model?.provider;
     const abacusServed = provider === "abacus" || this.openLlmActive;
-    if (isOutOfCredits(raw) || isAuthFailure(raw)) this.providersStale = true;
-    if (!abacusServed || !isOutOfCredits(raw)) return {};
+    const wall = creditWall(raw);
+    if (wall != null || isAuthFailure(raw)) this.providersStale = true;
+    if (!abacusServed || wall == null) return {};
     return {
       actions: [
-        { type: "upgrade-abacus", link: ABACUS_PLAN_URL },
+        { type: "upgrade-abacus", link: ABACUS_PLAN_URL, cause: wall },
         ...this.freeModelSwitches(),
       ],
     };
@@ -1471,6 +1476,15 @@ export class AbacusBotSession {
       if (!actions.some((action) => action.type === "upgrade-abacus")) {
         actions.push({ type: "free-pool-out" }, ...this.freeModelSwitches());
       }
+      return { actions };
+    }
+    // The router's free models rate-limited: for a free account the way past
+    // a busy pool is a plan, so the same card; a paid one keeps the switch.
+    if (this.openLlmActive && isRateLimitFailure(raw) && !isOutOfCredits(raw)) {
+      actions.push(
+        { type: "free-pool-out", cause: "busy" },
+        { type: "switch-model" }
+      );
       return { actions };
     }
     // A pinned model that timed out or is overloaded; or the router with its
@@ -3785,7 +3799,7 @@ export function endedOnProviderError(
  * prose providers get their first clause.
  */
 function compactProviderError(raw: string): string {
-  const status = raw.match(/^\s*(\d{3})\b/)?.[1];
+  const status = failureStatus(raw);
 
   if (status != null) return status;
 
@@ -3821,7 +3835,7 @@ export const OPENLLM_POOL_EMPTY_MESSAGE =
 
 /** The provider rejected the credential, rather than the account's balance. */
 function isAuthFailure(raw: string): boolean {
-  const status = raw.match(/^\s*(\d{3})\b/)?.[1];
+  const status = failureStatus(raw);
 
   return (
     status === "401" ||
@@ -3850,7 +3864,7 @@ export function ownKeyFailureCause(
 
   if (isOwnKeyOutOfCredit(raw, provider)) return "credit";
 
-  const status = Number(raw.match(/^\s*(\d{3})\b/)?.[1] ?? Number.NaN);
+  const status = Number(failureStatus(raw) ?? Number.NaN);
   const text = raw.toLowerCase();
 
   if (
@@ -3867,7 +3881,7 @@ export function ownKeyFailureCause(
   // limits on the key, whatever else their sentence says about billing.
   if (
     status === 429 ||
-    /rate.?limit|too many requests|resource_exhausted|free-models-per-day/.test(
+    /rate.?limit|too many requests|resource_exhausted|free-models-per-day|quota exceeded/.test(
       text
     )
   ) {
@@ -3894,9 +3908,19 @@ export function ownKeyFailureCause(
   return null;
 }
 
-/** A provider error, by its shape: an HTTP status code up front. */
+/** A rate limit or a spent free quota, rather than a fault. */
+export function isRateLimitFailure(raw: string): boolean {
+  return (
+    failureStatus(raw) === "429" ||
+    /rate.?limit|too many requests|quota exceeded|free-models-per-day/i.test(
+      raw
+    )
+  );
+}
+
+/** A provider error, by its shape: an HTTP status code, up front or in its body. */
 export function isProviderFailure(raw: string): boolean {
-  return /^\s*\d{3}\b/.test(raw);
+  return failureStatus(raw) != null;
 }
 
 /**
@@ -3922,7 +3946,7 @@ export function providerDetail(raw: string): { detail?: string } {
 
 export function terminalProviderMessage(raw: string, context?: string): string {
   const { summary, remedy } = classifyProviderFailure(raw);
-  const status = raw.match(/^\s*(\d{3})\b/)?.[1];
+  const status = failureStatus(raw);
 
   return [`${summary}${status == null ? "" : ` (${status})`}.`, context, remedy]
     .filter((part) => part != null)
@@ -3933,12 +3957,19 @@ export function classifyProviderFailure(raw: string): {
   summary: string;
   remedy: string;
 } {
-  const status = Number(raw.match(/^\s*(\d{3})\b/)?.[1] ?? Number.NaN);
+  const status = Number(failureStatus(raw) ?? Number.NaN);
   const text = raw.toLowerCase();
 
   // Before the rate-limit branch: an out-of-credits account answers 429 too,
   // and "try again in a moment" is exactly the wrong advice for it.
-  if (isOutOfCredits(raw)) {
+  const wall = creditWall(raw);
+  if (wall === "expired") {
+    return {
+      summary: "Your free credits have expired",
+      remedy: `Upgrade your plan at ${ABACUS_PLAN_URL} to keep going.`,
+    };
+  }
+  if (wall === "exhausted") {
     return {
       summary: "You're out of credits",
       remedy: `Upgrade your plan at ${ABACUS_PLAN_URL}, or switch to a model with its own key.`,
@@ -4042,45 +4073,85 @@ export function classifyProviderFailure(raw: string): {
 
 /**
  * The sentence a provider error is actually trying to say, pulled out of the
- * JSON envelope of rate-limit headers that buries it. Anything that does not
- * parse is returned as-is (capped): a parser that threw away what it could
- * not read would hide the errors nobody has seen yet.
+ * JSON envelope that buries it: `429: {json}`, bare `{json}`, or JSON after
+ * any prefix, with the sentence at `message`, `error.message` or `error`.
+ * Prose with no envelope is returned as-is (capped), so errors nobody has
+ * seen yet still say something; the JSON itself never comes back.
  */
 function readableProviderError(raw: string): string {
   const cap = (text: string): string =>
     text.length > 300 ? `${text.slice(0, 300)}…` : text;
-  // "429: {json}": the status is worth keeping, the envelope is not.
-  const match = raw.match(/^\s*(\d{3})\s*:\s*(\{[\s\S]*\})\s*$/);
+  const start = raw.indexOf("{");
+  const end = raw.lastIndexOf("}") + 1;
+  // No closing brace: cut short in transit, the rest is all there is.
+  const json =
+    start === -1 ? "" : raw.slice(start, end > start ? end : undefined);
 
-  if (match?.[1] == null || match[2] == null) {
-    return cap(raw);
+  if (!/"\w+"\s*:/.test(json)) return cap(raw);
+
+  const head = raw.slice(0, start).replace(/[\s:]+$/, "");
+  const sentence = envelopeSentence(json);
+
+  return cap(
+    [head.length > 0 ? `${head}:` : "", sentence]
+      .filter((part) => part.length > 0)
+      .join(" ")
+      .replace(/:$/, "")
+  );
+}
+
+/** The human words in a JSON error envelope, or "" when it carries none. */
+function envelopeSentence(json: string, nested = false): string {
+  let body: unknown;
+  try {
+    body = JSON.parse(json);
+  } catch {
+    // Cut short in transit: the message is still there to read.
+    const message = json.match(/"message"\s*:\s*"((?:[^"\\]|\\.)*)"/)?.[1];
+    try {
+      return message == null ? "" : (JSON.parse(`"${message}"`) as string);
+    } catch {
+      return message ?? "";
+    }
   }
 
-  try {
-    const body = JSON.parse(match[2]) as {
+  const read = (value: unknown): string => {
+    if (typeof value === "string") return value;
+    if (Array.isArray(value)) return read(value[0]);
+    if (value == null || typeof value !== "object") return "";
+    const record = value as {
+      error?: unknown;
       message?: unknown;
       metadata?: { raw?: unknown; remedy_hint?: unknown };
     };
-    const message = typeof body.message === "string" ? body.message : "";
-    const detail =
-      typeof body.metadata?.raw === "string"
-        ? body.metadata.raw
-        : typeof body.metadata?.remedy_hint === "string"
-          ? body.metadata.remedy_hint
+    const inner = read(record.error);
+    if (inner.length > 0) return inner;
+    const message = typeof record.message === "string" ? record.message : "";
+    let detail =
+      typeof record.metadata?.raw === "string"
+        ? record.metadata.raw
+        : typeof record.metadata?.remedy_hint === "string"
+          ? record.metadata.remedy_hint
           : "";
-
-    if (message.length === 0 && detail.length === 0) {
-      return cap(raw);
-    }
-
-    return cap(
-      [`${match[1]}:`, message, detail]
-        .filter((part) => part.length > 0)
-        .join(" ")
+    // OpenRouter relays the upstream's own envelope as a string.
+    const relayed = detail.slice(
+      detail.indexOf("{"),
+      detail.lastIndexOf("}") + 1
     );
-  } catch {
-    return cap(raw);
-  }
+    if (!nested && /"\w+"\s*:/.test(relayed)) {
+      detail = envelopeSentence(relayed, true);
+    }
+    return [message, detail].filter((part) => part.length > 0).join(" ");
+  };
+
+  return read(body);
+}
+
+/** A thrown failure that is not a provider's, in words rather than JSON. */
+export function readableFailure(raw: string): string {
+  const readable = readableProviderError(raw).trim();
+
+  return readable.length > 0 ? readable : terminalProviderMessage(raw);
 }
 
 /**

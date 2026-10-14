@@ -864,6 +864,7 @@
     "used": "使用済みクレジット",
     "lowTitle": "クレジットが残りわずかです",
     "outTitle": "無料クレジットを使い切りました",
+    "expiredTitle": "Your free credits have expired",
     "sideSessions": "セッション: トップモデル、より長い実行、より大きなプロジェクト",
     "sideBots": "ボット: 毎日のルーティン、Telegram と WhatsApp で常時稼働",
     "paidWebTitle": "Do even more on AbacusAI Agent",

@@ -240,10 +240,18 @@ export const RunMarker = ({ outcome }: { outcome: RunOutcomeRecord }) => {
   );
 };
 
-const wantsUpgradeCard = (actions?: ErrorAction[]): boolean =>
+/** A busy free pool sells a plan to a free account only; a paying one switches. */
+const wantsUpgradeCard = (actions?: ErrorAction[], paying = false): boolean =>
   actions?.some(
     (action) =>
-      action.type === "upgrade-abacus" || action.type === "free-pool-out"
+      action.type === "upgrade-abacus" ||
+      (action.type === "free-pool-out" && !(paying && action.cause === "busy"))
+  ) === true;
+
+/** A free tier past its window, rather than an empty balance. */
+const creditsExpired = (actions?: ErrorAction[]): boolean =>
+  actions?.some(
+    (action) => action.type === "upgrade-abacus" && action.cause === "expired"
   ) === true;
 
 const exhaustedScope = (actions?: ErrorAction[]): "abacus" | "pool" =>
@@ -360,10 +368,16 @@ export const ErrorCard = ({
   const actions = ((error as { actions?: ErrorAction[] }).actions ??
     []) as ErrorAction[];
   const detail = (error as { detail?: string }).detail;
-  const upgrade = wantsUpgradeCard(actions);
+  const upgrade = wantsUpgradeCard(
+    actions,
+    tier === "paid" || tier === "basic"
+  );
+  // A busy pool spent no credits.
+  const exhausted =
+    upgrade && !actions.some((action) => action.cause === "busy");
   useEffect(() => {
-    if (upgrade) void runtime.host.markCreditsExhausted?.().catch(() => {});
-  }, [upgrade, runtime]);
+    if (exhausted) void runtime.host.markCreditsExhausted?.().catch(() => {});
+  }, [exhausted, runtime]);
   const crashed = error.code === "agent_exit" || error.code === "agent_crashed";
   const canReply = composer.readOnly == null;
   const retry = () =>
@@ -381,7 +395,7 @@ export const ErrorCard = ({
     !(ownKey.cause === "network" && globalThis.navigator?.onLine === false)
   )
     return <OwnKeyCard failure={ownKey} tier={tier} runId={outcome.runId} />;
-  if (wantsUpgradeCard(actions)) {
+  if (upgrade) {
     return (
       <div
         role="group"
@@ -394,6 +408,9 @@ export const ErrorCard = ({
           host={runtime.host}
           tier={tier}
           scope={exhaustedScope(actions)}
+          {...(creditsExpired(actions) && {
+            title: t("creditsCard.expiredTitle"),
+          })}
           alternatives={
             canReply ? (
               <>

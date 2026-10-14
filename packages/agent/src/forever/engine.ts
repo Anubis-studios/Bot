@@ -89,7 +89,12 @@ import {
   OPENLLM_CONTINUATION_TYPE,
   OpenLlmRouter,
 } from "../openllm-router.js";
-import { isOpenLlmReference, isOutOfCredits, OPENLLM_ID } from "../openllm.js";
+import {
+  creditWall,
+  isOpenLlmReference,
+  isOutOfCredits,
+  OPENLLM_ID,
+} from "../openllm.js";
 import { refreshOpenRouterLive } from "../openrouter-live.js";
 import { PendingSteers, type PendingSteer } from "../pending-steers.js";
 import {
@@ -135,10 +140,12 @@ import {
   classifyProviderFailure,
   endedOnProviderError,
   isProviderFailure,
+  isRateLimitFailure,
   mcpPrompt,
   mcpRosterFingerprint,
   ownKeyFailureCause,
   providerDetail,
+  readableFailure,
   reserveContextHeadroom,
   terminalProviderMessage,
 } from "../session.js";
@@ -1518,16 +1525,18 @@ export class ForeverEngine {
   private upgradeActionsFor(
     raw: string
   ):
-    | { actions: Array<{ type: string; link?: string }> }
+    | { actions: Array<{ type: string; link?: string; cause?: string }> }
     | Record<string, never> {
     const provider = this.session?.model?.provider;
     const abacusServed = provider === "abacus" || this.openLlmActive;
-    const actions: Array<{ type: string; link?: string }> = [];
+    const actions: Array<{ type: string; link?: string; cause?: string }> = [];
+    const wall = creditWall(raw);
 
-    if (abacusServed && isOutOfCredits(raw)) {
+    if (abacusServed && wall != null) {
       actions.push({
         type: "upgrade-abacus",
         link: "https://apps.abacus.ai/chatllm/choose-plan/",
+        cause: wall,
       });
     }
     // The router with every source used up: the card that connects another
@@ -1540,6 +1549,12 @@ export class ForeverEngine {
       !actions.some((action) => action.type === "upgrade-abacus")
     ) {
       actions.push({ type: "free-pool-out" });
+    } else if (this.openLlmActive && wall == null && isRateLimitFailure(raw)) {
+      // Free models rate-limited: a plan is a free account's way past it.
+      actions.push(
+        { type: "free-pool-out", cause: "busy" },
+        { type: "switch-model" }
+      );
     }
 
     return actions.length > 0 ? { actions } : {};
@@ -2502,7 +2517,7 @@ const NO_MODEL_CONFIGURED =
 
 /** First sentence of a provider failure: bots never dump provider prose. */
 function compactFailure(raw: string): string {
-  const first = raw.split(/[.\n]/)[0]?.trim() ?? "";
+  const first = readableFailure(raw).split(/[.\n]/)[0]?.trim() ?? "";
 
   if (first.length === 0) return "The model provider had a problem.";
 

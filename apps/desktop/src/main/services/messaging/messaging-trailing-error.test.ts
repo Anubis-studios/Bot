@@ -605,3 +605,50 @@ describe("chatReplyForFailure", () => {
         ).toBeNull();
   });
 });
+
+describe("the credit wall's cause", () => {
+  const wall = (cause: string) => ({
+    actions: [{ type: "upgrade-abacus", cause }],
+  });
+
+  it("an expired free tier is told it expired, with the Basic offer", () => {
+    expect(
+      chatReplyForFailure(wall("expired"), "own", "free", UPGRADE_URL)
+    ).toBe(
+      `I've paused because your free credits have expired. Upgrade to Basic for $7 your first month and I'll pick right back up: ${UPGRADE_URL}`
+    );
+    expect(
+      chatReplyForFailure(wall("expired"), "own", "free", UPGRADE_URL, true)
+    ).toBe(`Still paused: ${UPGRADE_URL}`);
+  });
+
+  it("an empty balance keeps its words", () => {
+    expect(
+      chatReplyForFailure(wall("exhausted"), "own", "free", UPGRADE_URL)
+    ).toBe(chatReplyForFailure(WALL, "own", "free", UPGRADE_URL));
+    expect(chatReplyForFailure(wall("exhausted"), "own", "paid", null)).toBe(
+      chatReplyForFailure(WALL, "own", "paid", null)
+    );
+  });
+});
+
+describe("a busy free pool", () => {
+  const BUSY = {
+    actions: [
+      { type: "free-pool-out", cause: "busy" },
+      { type: "switch-model" },
+    ],
+  };
+
+  it("offers a free account Basic rather than a retry", () => {
+    expect(chatReplyForFailure(BUSY, "own", "free", UPGRADE_URL)).toBe(
+      `The free models are busy right now. Upgrade to Basic for $7 your first month to use the top models: ${UPGRADE_URL}`
+    );
+  });
+
+  it("leaves a paid account the plain line", () => {
+    expect(chatReplyForFailure(BUSY, "own", "paid", null)).toBe(
+      chatReplyForFailure({}, "own", "paid", null)
+    );
+  });
+});

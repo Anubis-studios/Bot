@@ -91,7 +91,15 @@ export const chatReplyForFailure = (
   if (chatKind === "other") return null;
   const link = upgradeUrl ?? ABACUS_PLANS_URL;
   switch (failureKind(error)) {
-    case "upgrade-abacus":
+    case "upgrade-abacus": {
+      // Why the credit gate refused, when the agent could tell.
+      const cause = error.actions?.find(
+        (action) => action.type === "upgrade-abacus"
+      )?.cause;
+      if (cause === "expired")
+        return repeat
+          ? `Still paused: ${link}`
+          : `I've paused because your free credits have expired. Upgrade to Basic for $7 your first month and I'll pick right back up: ${link}`;
       if (account === "free")
         return repeat
           ? `Still paused: ${link}`
@@ -99,6 +107,7 @@ export const chatReplyForFailure = (
       return repeat
         ? `Still paused: ${ABACUS_PLANS_URL}`
         : `I've paused because this month's credits are used up. Add credits to keep going: ${ABACUS_PLANS_URL}`;
+    }
     case "own-key":
       if (account === "free")
         return repeat
