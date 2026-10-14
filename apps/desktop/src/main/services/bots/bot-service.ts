@@ -114,7 +114,7 @@ const HOME_CHANNEL_NAMES: Record<HomeChannel, string> = {
 const homeChannelLines = (bot: Bot): string[] => {
   if (bot.homeChannel == null) return [];
   const app = HOME_CHANNEL_NAMES[bot.homeChannel];
-  return ["", `**Your home is ${app}.**`];
+  return ["", `**Your main connector to use is ${app}.**`];
 };
 
 const renderPersona = (bot: Bot): string => {

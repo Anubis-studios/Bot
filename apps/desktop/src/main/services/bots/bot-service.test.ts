@@ -93,7 +93,7 @@ describe("creating a bot", () => {
 
     expect(bot.homeChannel).toBe("telegram");
     const persona = fs.readFileSync(personaPath(bot.id), "utf8");
-    expect(persona).toContain("**Your home is Telegram.**");
+    expect(persona).toContain("**Your main connector to use is Telegram.**");
   });
 
   it("gives a bot with no home app no home line", () => {
@@ -102,7 +102,7 @@ describe("creating a bot", () => {
     const bot = service.create({ name: "Scout", description: "Watch." });
 
     const persona = fs.readFileSync(personaPath(bot.id), "utf8");
-    expect(persona).not.toContain("Your home is");
+    expect(persona).not.toContain("Your main connector to use is");
   });
 });
 
