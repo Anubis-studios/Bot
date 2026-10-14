@@ -8,11 +8,13 @@
 import type { ToolProps } from "@tanstack/ai-react/ui";
 import { useEffect, type ComponentType } from "react";
 
+import { isSessionOfferTool } from "#renderer/lib/bot-turns/turns";
+
 import { descriptorFor, useThreadStore } from "../../store/selectors";
 import { toolKey } from "../../store/thread-store";
 import { useChatView, useSubagentScope } from "../context";
 import { PermissionCard } from "../permissions/permission-card";
-import { isSessionOfferTool, SessionOfferCard } from "./session-offer";
+import { SessionOfferCard } from "./session-offer";
 import { expanderFor, ToolLine } from "./tool-line";
 
 type Widget = ComponentType<ToolProps<unknown>>;

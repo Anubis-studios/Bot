@@ -15,10 +15,6 @@ import { Button } from "#renderer/ui/button";
 
 import { toolInput } from "./normalize";
 
-/** Prefixed with its MCP server's name (`agent-tools_offer_session`): matched by suffix. */
-export const isSessionOfferTool = (name: string): boolean =>
-  name === "offer_session" || name.endsWith("_offer_session");
-
 /** Calls already counted as shown, so a re-render or a scroll back counts nothing. */
 const shown = new Set<string>();
 
