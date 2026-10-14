@@ -153,6 +153,7 @@ export const createBot = (input: BotCreateInput, id?: string): Bot => {
     persona: (input.persona ?? "").trim().slice(0, MAX_BOT_PERSONA),
     avatarColor: input.avatarColor ?? defaultAvatarColor(name),
     channel: input.channel ?? null,
+    ...(input.homeChannel != null ? { homeChannel: input.homeChannel } : {}),
     avatarShape: input.avatarShape ?? defaultAvatarShape(name),
     ...(input.avatarAccessory !== undefined
       ? { avatarAccessory: input.avatarAccessory }

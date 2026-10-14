@@ -79,6 +79,33 @@ describe("creating a bot", () => {
     expect(persona).toContain("Introduce yourself once, in your first message");
     expect(persona).toContain("Do not greet again");
   });
+
+  it("tells a chat-app agent its home, so it asks for that app and offers no other", () => {
+    // A Telegram Agent with only WhatsApp linked introduced itself by
+    // offering to send WhatsApp messages and never asked for Telegram.
+    const service = new BotService(makeCallbacks());
+
+    const bot = service.create({
+      name: "Telegram Agent",
+      description: "Live in my Telegram.",
+      homeChannel: "telegram",
+    });
+
+    expect(bot.homeChannel).toBe("telegram");
+    const persona = fs.readFileSync(personaPath(bot.id), "utf8");
+    expect(persona).toContain("**Your home is Telegram.**");
+    expect(persona).toContain("connect Telegram (connect_connector)");
+    expect(persona).toContain("Never present another chat app as your home");
+  });
+
+  it("gives a bot with no home app no home line", () => {
+    const service = new BotService(makeCallbacks());
+
+    const bot = service.create({ name: "Scout", description: "Watch." });
+
+    const persona = fs.readFileSync(personaPath(bot.id), "utf8");
+    expect(persona).not.toContain("Your home is");
+  });
 });
 
 describe("opening the forever chat", () => {

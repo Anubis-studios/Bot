@@ -37,6 +37,12 @@ export interface Bot {
    * conversation happens in. Such a bot's chat is a window, not a composer.
    */
   channel?: string | null;
+  /**
+   * A chat-app agent's home (made from the WhatsApp, Telegram or Discord
+   * Agent template): where the user talks to it. Its standing prompt says so,
+   * so it asks for that app first and never offers another in its place.
+   */
+  homeChannel?: HomeChannel | null;
   /** Per bot rather than per machine: the bot loop is tuned for cheap models. */
   model: string | null;
   /**
@@ -54,6 +60,10 @@ export const SPONSORED_FIRST_RUN_WINDOW_MS = 30 * 60 * 1000;
 /** The marker the app sends with a sponsored run's requests, as the platform expects it. */
 export const SPONSORED_RUN_MARKER = "cos-first-run";
 
+/** The chat apps a bot can call home. */
+export const HOME_CHANNELS = ["whatsapp", "telegram", "discord"] as const;
+export type HomeChannel = (typeof HOME_CHANNELS)[number];
+
 export interface BotCreateInput {
   name: string;
   title?: string;
@@ -66,6 +76,7 @@ export interface BotCreateInput {
   workspaceId?: string | null;
   model?: string | null;
   channel?: string | null;
+  homeChannel?: HomeChannel | null;
   /** Make this bot's first runs free of charge for SPONSORED_FIRST_RUN_WINDOW_MS; onboarding's Chief of Staff only. */
   sponsoredFirstRun?: boolean;
 }

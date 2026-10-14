@@ -266,6 +266,9 @@ export const createBotFromTemplate = async (
     avatarColor: look.color,
     model: null,
     channel: null,
+    ...(template.homeChannel != null
+      ? { homeChannel: template.homeChannel }
+      : {}),
     sessionId: null,
     workspaceId: null,
     createdAt: now,
