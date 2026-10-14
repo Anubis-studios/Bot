@@ -197,6 +197,19 @@ export class WhatsAppBridge {
     return Array.isArray(rows) ? rows : [];
   }
 
+  /**
+   * The people saved in the phone's address book, as chats a send can reach:
+   * WhatsApp's chat list holds only conversations, so a contact never written
+   * to (or whose chat was cleared) is otherwise unreachable by name.
+   */
+  async listSavedContacts(): Promise<BridgeChat[]> {
+    const rows = await this.host.run<BridgeChat[] | null>(
+      LIST_SAVED_CONTACTS_SCRIPT,
+      { timeoutMs: CHAT_LIST_WAIT_MS }
+    );
+    return Array.isArray(rows) ? rows : [];
+  }
+
   /** Send and wait for the server ack. A message stuck at ack 0 IS in the
    * outbox and may still go out, so the error carries its id for a recheck. */
   async sendText(jid: string, text: string): Promise<BridgeSendResult> {
@@ -395,6 +408,25 @@ const LIST_CHATS_SCRIPT = `
   // The store's own filter is belt; this is braces, for a build whose
   // list option is ignored.
   return args.onlyUnread ? rows.filter((row) => row.unreadCount !== 0) : rows;
+`;
+
+/** The address book's saved contacts (not groups, not the user), by their saved name. */
+const LIST_SAVED_CONTACTS_SCRIPT = `
+  const contacts = await Promise.race([
+    WPP.contact.list({ onlyMyContacts: true }),
+    new Promise((resolve) => setTimeout(() => resolve(null), args.timeoutMs || 15000)),
+  ]);
+  if (contacts == null) return null;
+  const rows = [];
+  for (const contact of contacts) {
+    try {
+      if (!contact || !contact.id || contact.isMe || contact.isGroup) continue;
+      const name = contact.name || contact.formattedName || contact.shortName;
+      if (!name) continue;
+      rows.push({ jid: contact.id._serialized || String(contact.id), name, isGroup: false, isMe: false, unreadCount: 0 });
+    } catch (e) {}
+  }
+  return rows;
 `;
 
 /** Send, then wait for the server ack. The poll after \`waitForAck\` catches

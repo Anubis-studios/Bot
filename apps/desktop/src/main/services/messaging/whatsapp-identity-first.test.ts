@@ -41,6 +41,7 @@ const harness = () => {
       calls.push("myId");
       return { jid: "919800000314@c.us", digits: "919800000314" };
     },
+    listSavedContacts: async () => [],
     listChats: async () => {
       calls.push("listChats");
       // The sync-bound listing: answers only when the test lets it.

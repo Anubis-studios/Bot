@@ -23,6 +23,7 @@ type Internals = {
   bridge: {
     ensure: () => Promise<boolean>;
     listChats: () => Promise<unknown[]>;
+    listSavedContacts?: () => Promise<unknown[]>;
     sendText: (
       jid: string,
       text: string
@@ -69,6 +70,7 @@ describe("sending through the bridge", () => {
     const sent: Array<[string, string]> = [];
     const { internals, domSends } = connectorWith({
       ensure: async () => true,
+      listSavedContacts: async () => [],
       listChats: async () => [],
       sendText: async (jid, text) => {
         sent.push([jid, text]);
@@ -86,6 +88,7 @@ describe("sending through the bridge", () => {
   it("falls back to the page driver only when the bridge cannot attach", async () => {
     const { internals, domSends } = connectorWith({
       ensure: async () => false,
+      listSavedContacts: async () => [],
       listChats: async () => [],
       sendText: async () => {
         throw new Error("must not be called");
@@ -103,6 +106,7 @@ describe("sending through the bridge", () => {
     let ack = 0;
     const { internals, domSends, logs } = connectorWith({
       ensure: async () => true,
+      listSavedContacts: async () => [],
       listChats: async () => [],
       sendText: async () => {
         calls += 1;
@@ -131,6 +135,7 @@ describe("sending through the bridge", () => {
     let refreshed = 0;
     const { internals } = connectorWith({
       ensure: async () => true,
+      listSavedContacts: async () => [],
       listChats: async () => {
         refreshed += 1;
         return [];
@@ -153,10 +158,66 @@ describe("sending through the bridge", () => {
   });
 });
 
+describe("someone saved in the phone but never written to", () => {
+  const saved = (jid: string, name: string) => ({
+    jid,
+    name,
+    isGroup: false,
+    isMe: false,
+    unreadCount: 0,
+  });
+
+  it("is reached by name, listed for the agent, and not a duplicate of their chat", async () => {
+    const sent: Array<[string, string]> = [];
+    const { internals } = connectorWith({
+      ensure: async () => true,
+      listSavedContacts: async () => [
+        saved("919876543210@c.us", "Meghna"),
+        saved("919811122233@c.us", "Priya Sharma"),
+      ],
+      listChats: async () => [
+        {
+          jid: "919876543210@c.us",
+          name: "Meghna",
+          isGroup: false,
+          isMe: false,
+          unreadCount: 0,
+        },
+      ],
+      sendText: async (jid, text) => {
+        sent.push([jid, text]);
+        return { id: `m${sent.length}`, ack: 1 };
+      },
+      ackOf: async () => 1,
+    });
+    const me = internals as unknown as Internals & {
+      refreshBridgeChats: () => Promise<void>;
+      listContacts: () => Array<{ chatId: string; name: string }>;
+    };
+    internals.bridgeReady = true;
+    await me.refreshBridgeChats();
+
+    // The address book is searchable alongside the chats, each name once.
+    expect(me.listContacts().map((row) => row.name)).toEqual([
+      "Meghna",
+      "Priya Sharma",
+    ]);
+    // A saved contact with no chat yet is reached by name, prefix included.
+    await internals.sendTextNow("Priya", "hi");
+    // Saved and chatted with is one person, not "more than one Meghna".
+    await internals.sendTextNow("Meghna", "hello");
+    expect(sent).toEqual([
+      ["919811122233@c.us", "hi"],
+      ["919876543210@c.us", "hello"],
+    ]);
+  });
+});
+
 describe('who "me" is', () => {
   it("lists the user's own chat first as theirs, never as a contact with their name", async () => {
     const { internals } = connectorWith({
       ensure: async () => true,
+      listSavedContacts: async () => [],
       listChats: async () => [
         {
           jid: "919000000001@c.us",
@@ -244,6 +305,7 @@ describe("who an inbound message is from", () => {
     internals.bridgeReady = true;
     internals.bridgeChats = chats;
     internals.bridge = {
+      listSavedContacts: async () => [],
       listChats: async () => chats,
       drain: async () => ({ messages: [message], loggedOut: false }),
       isOwnChat: async (jid: string) => ownChat(jid),

@@ -40,6 +40,7 @@ describe("reading a chat the store has not loaded", () => {
         ok: false,
         reason: "Chat not found for 919111111111@c.us",
       }),
+      listSavedContacts: async () => [],
       listChats: async () => internals.bridgeChats,
     };
     internals.openChat = async () => {

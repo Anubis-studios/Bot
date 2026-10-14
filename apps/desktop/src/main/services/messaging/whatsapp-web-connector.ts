@@ -107,6 +107,8 @@ export class WhatsAppWebConnector implements MessagingConnector {
   private ownChatVerdicts = new Map<string, boolean>();
   /** The chat list as the bridge last saw it; names resolve against it. */
   private bridgeChats: BridgeChat[] = [];
+  /** Saved contacts with no chat of their own, so a name reaches them too. */
+  private savedContacts: BridgeChat[] = [];
   /** Message ids this session sent: the exact echo guard, when the bridge is on. */
   private sentIds = new Set<string>();
   /** chat+text -> the id of a send WhatsApp queued but never acked; a retry
@@ -295,9 +297,22 @@ export class WhatsAppWebConnector implements MessagingConnector {
     return ready;
   }
 
+  /** Chats, then saved contacts without one: what a name can resolve to. */
+  private reachable(): BridgeChat[] {
+    const chatJids = new Set(this.bridgeChats.map((chat) => chat.jid));
+    return [
+      ...this.bridgeChats,
+      ...this.savedContacts.filter((contact) => !chatJids.has(contact.jid)),
+    ];
+  }
+
   private async refreshBridgeChats(): Promise<void> {
     if (this.bridge == null) return;
-    const chats = await this.bridge.listChats();
+    const [chats, saved] = await Promise.all([
+      this.bridge.listChats(),
+      this.bridge.listSavedContacts(),
+    ]);
+    if (saved.length > 0) this.savedContacts = saved;
     if (chats.length === 0) return;
     this.bridgeChats = chats;
     // The whole list, so it replaces the page scrape. The self chat is left
@@ -328,6 +343,13 @@ export class WhatsAppWebConnector implements MessagingConnector {
         name: chat.name,
         isGroup: chat.isGroup === true,
       }));
+    // Then the address book: someone saved but never written to is still
+    // someone the user can name.
+    for (const contact of this.reachable().slice(chats.length)) {
+      if (contact.jid === ownJid || seen.has(contact.name)) continue;
+      seen.add(contact.name);
+      this.contacts.push({ chatId: contact.name, name: contact.name });
+    }
   }
 
   /**
@@ -380,12 +402,12 @@ export class WhatsAppWebConnector implements MessagingConnector {
   private async toJid(chatId: string): Promise<string> {
     if (this.self != null && chatId === this.self && this.selfJid != null)
       return this.selfJid;
-    let resolved = resolveJid(chatId, this.bridgeChats);
+    let resolved = resolveJid(chatId, this.reachable());
     if ("error" in resolved) {
       // The list is a snapshot; a chat that started since is worth one
       // refresh before the name is declared unknown.
       await this.refreshBridgeChats();
-      resolved = resolveJid(chatId, this.bridgeChats);
+      resolved = resolveJid(chatId, this.reachable());
     }
     if ("error" in resolved) throw new Error(resolved.error);
     return resolved.jid;
