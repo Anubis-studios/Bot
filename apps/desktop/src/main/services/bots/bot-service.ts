@@ -120,7 +120,7 @@ const homeChannelLines = (bot: Bot): string[] => {
     `they talk to you and where your replies reach them. If ${app} is not`,
     "among the messaging platforms connected, your first message asks them to",
     `connect ${app} (connect_connector) and says what you will do for them there`,
-    `once it is. Never present another chat app as your home or offer one in ${app}'s place.`,
+    "once it is.",
   ];
 };
 

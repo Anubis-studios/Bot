@@ -40,7 +40,7 @@ export interface Bot {
   /**
    * A chat-app agent's home (made from the WhatsApp, Telegram or Discord
    * Agent template): where the user talks to it. Its standing prompt says so,
-   * so it asks for that app first and never offers another in its place.
+   * so it asks for that app first.
    */
   homeChannel?: HomeChannel | null;
   /** Per bot rather than per machine: the bot loop is tuned for cheap models. */
