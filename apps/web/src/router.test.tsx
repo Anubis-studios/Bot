@@ -9,8 +9,10 @@ import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { PANE_BOUNDARIES } from "#renderer/lib/navigation/pane-key";
 import { routeMasks } from "#renderer/router";
 
+import { fixturePrefs } from "./data/fixture-db/rows";
 import {
   createHarness,
+  defaultSeed,
   renderApp,
   type AppHarness,
 } from "./test-support/app-harness";
@@ -19,6 +21,7 @@ let harness: (AppHarness & { view?: { unmount(): void } }) | null = null;
 afterEach(async () => {
   await harness?.cleanup();
   harness = null;
+  localStorage.clear();
 });
 
 type AnyRouteNode = {
@@ -102,6 +105,34 @@ describe("redirects", () => {
     });
     await waitFor(() =>
       expect(harness!.router.state.location.pathname).toBe(to)
+    );
+  });
+
+  it("/ lands on the bot last opened", async () => {
+    harness = await renderApp("/bots/chief-of-staff");
+    await act(async () => {
+      await harness!.router.navigate({ to: "/" });
+    });
+    await waitFor(() =>
+      expect(harness!.router.state.location.pathname).toBe(
+        "/bots/chief-of-staff"
+      )
+    );
+  });
+
+  it("/ lands on the first pinned bot when none was opened", async () => {
+    harness = await renderApp("/", {
+      seed: {
+        ...defaultSeed(),
+        prefs: fixturePrefs({
+          pinned: { sessionIds: [], botIds: ["gone", "chief-of-staff"] },
+        }),
+      },
+    });
+    await waitFor(() =>
+      expect(harness!.router.state.location.pathname).toBe(
+        "/bots/chief-of-staff"
+      )
     );
   });
 
