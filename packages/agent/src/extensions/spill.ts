@@ -183,13 +183,14 @@ export default function (pi: ExtensionAPI) {
       const tail = block.text.slice(-budget.tail);
       const dropped = block.text.length - budget.head - budget.tail;
       const id = spill(event.toolName, block.text);
+      const record = id === undefined ? undefined : records.get(id);
 
       // The path is given outright. "Saved as out-1" read as a file name, and
       // a model that had just been told its working directory went looking
       // for out-1 there, and sent a sub-agent to look for it there too.
-      const notice = id
-        ? `… [${dropped} chars omitted. Full output saved to ${modelPath(records.get(id)?.file ?? "")} ` +
-          `(${records.get(id)?.totalLines ?? 0} lines). Read the omitted middle with read_output ` +
+      const notice = record
+        ? `… [${dropped} chars omitted. Full output saved to ${modelPath(record.file)} ` +
+          `(${record.totalLines} lines). Read the omitted middle with read_output ` +
           `id "${id}" plus an offset/grep, or read that file by its path with the file tools. ` +
           `"${id}" is an id, not a file in your working directory; give a sub-agent the path, ` +
           `not the id. Do NOT re-run the command.] …`

@@ -14,6 +14,8 @@ import {
 } from "@abacus-ai/test-support/fake-pi";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { modelPath } from "../model-path.js";
+
 /** 5,000 numbered lines: comfortably past the inline cap. */
 const BIG = Array.from(
   { length: 5_000 },
@@ -94,7 +96,8 @@ describe("trimming", () => {
     const text = await spillBig();
     const file = text.match(/saved to (\S+out-\d+\.txt)/)?.[1];
     expect(file).toBeDefined();
-    expect(file!.startsWith(path.join(home, "spill"))).toBe(true);
+    // Written for the model, so with forward slashes on Windows too.
+    expect(file!.startsWith(modelPath(path.join(home, "spill")))).toBe(true);
     expect(fs.existsSync(file!)).toBe(true);
     expect(text).toMatch(/not a file in your working directory/);
     expect(text).toMatch(/give a sub-agent the path/);

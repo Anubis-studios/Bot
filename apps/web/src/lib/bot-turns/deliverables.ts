@@ -1,3 +1,4 @@
+import { modelPath } from "@abacus-ai/agent/model-path";
 import {
   declaredArtifactTargets,
   isDeliverableUrl,
@@ -106,8 +107,10 @@ export function turnDeliverables(
   const seen = new Set<string>();
   const out: TurnDeliverable[] = [];
   const add = (path: string, label?: string): void => {
-    if (seen.has(path)) return;
-    seen.add(path);
+    // A tool declares `C:\x` where the model, shown `C:/x`, names the same file.
+    const key = modelPath(path);
+    if (seen.has(key)) return;
+    seen.add(key);
     out.push({
       path,
       ...(label != null ? { label } : {}),

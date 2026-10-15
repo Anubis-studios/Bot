@@ -205,6 +205,22 @@ describe("deliverables: writes the agent never named", () => {
     ).toHaveLength(1);
   });
 
+  it("lists a Windows path once whichever separators named it", () => {
+    // A media tool declares the native path; the model writes the one it was shown.
+    expect(
+      turnDeliverables(
+        turn(
+          liveTool(
+            "agent-tools_image_generate",
+            { prompt: "a cat" },
+            { content: "Saved.\n[artifact] C:\\media\\cat.png" }
+          ),
+          liveTool("write", { file_path: "C:/media/cat.png" })
+        )
+      ).map((item) => item.path)
+    ).toEqual(["C:\\media\\cat.png"]);
+  });
+
   it("reads migrated parts the same way", () => {
     expect(
       turnDeliverables([
