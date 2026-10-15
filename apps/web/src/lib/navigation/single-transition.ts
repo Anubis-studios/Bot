@@ -101,7 +101,9 @@ export const settleSkippedViewTransitions = (doc: Document): boolean => {
  * transition started there holds the old page until the window is shown
  * again; `backgroundThrottling: false` does not help, the document stays
  * `visible`. A transition whose update has not run after `ms` is skipped,
- * which runs the update at once.
+ * which runs the update at once, unless a frame then arrives within another
+ * `ms`: a busy or slow window is late with its capture but still renders,
+ * and skipping there would drop the animation for nothing.
  */
 const UNCAPTURED = Symbol.for("abacus.uncapturedViewTransition");
 
@@ -126,7 +128,14 @@ export const skipUncapturedViewTransitions = (
       },
     });
     setTimeout(() => {
-      if (!called) transition.skipTransition();
+      if (called) return;
+      let framed = false;
+      requestAnimationFrame(() => {
+        framed = true;
+      });
+      setTimeout(() => {
+        if (!called && !framed) transition.skipTransition();
+      }, ms);
     }, ms);
     return transition;
   }) as StartViewTransition;
