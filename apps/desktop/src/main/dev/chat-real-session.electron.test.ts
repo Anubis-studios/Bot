@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { modelPath } from "@abacus-ai/agent/model-path";
 import {
   FakeProvider,
   fakeProviderConfig,
@@ -288,8 +289,9 @@ describe.skipIf(!ready.runnable)("R2-T32 real session in Electron", () => {
     expect(await app.evaluate("document.activeViewTransition == null")).toBe(
       true
     );
+    // The composer names the attachment as the model spells a path.
     expect(provider.calls[0]!.userText.join("\n")).toContain(
-      `@${join(workspace, "a.txt")}`
+      `@${modelPath(join(workspace, "a.txt"))}`
     );
     await app.evaluate(
       `document.querySelector('[data-slot="tool-group"] button').click()`
