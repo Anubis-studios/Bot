@@ -12,6 +12,7 @@
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import * as path from "node:path";
 
+import { childProcessEnv } from "../child-env.js";
 import { mergePath } from "../merge-path.js";
 import { posixShell } from "../posix-shell.js";
 
@@ -301,13 +302,13 @@ export function loginEnvironment(): NodeJS.ProcessEnv {
     // This process's environment wins: a keychain-resolved API key must not be
     // replaced by a stale one from a profile. PATH is merged rather than
     // replaced, since the desktop's own PATH repair must survive the dump.
-    resolved = {
-      ...shell,
-      ...process.env,
-      ...(shell.PATH != null
+    resolved = childProcessEnv(
+      shell,
+      process.env,
+      shell.PATH != null
         ? { PATH: mergePath(shell.PATH, process.env.PATH) ?? shell.PATH }
-        : {}),
-    };
+        : undefined
+    );
   } catch {
     resolved = process.env;
   }

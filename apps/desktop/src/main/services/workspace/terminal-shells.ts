@@ -59,7 +59,7 @@ const onPath = (
   env: NodeJS.ProcessEnv,
   platform: NodeJS.Platform
 ): string | undefined => {
-  const entries = (env.PATH ?? env.Path ?? "").split(path.delimiter);
+  const entries = (env.PATH ?? "").split(path.delimiter);
   const extensions =
     platform === "win32"
       ? [
@@ -196,11 +196,7 @@ const locate = (
       const shell = busybox(env, platform);
       if (shell == null) return null;
 
-      const shellEnv = Object.fromEntries(
-        Object.entries(posixShellEnv(env, shell)).filter(
-          (entry): entry is [string, string] => typeof entry[1] === "string"
-        )
-      );
+      const shellEnv = posixShellEnv(env, shell);
 
       return {
         id,

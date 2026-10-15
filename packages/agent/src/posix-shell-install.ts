@@ -39,6 +39,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 import { bundledToolsDir } from "./bundled-tools.js";
+import { childProcessEnv } from "./child-env.js";
 import { mergePath } from "./merge-path.js";
 
 /** Upstream release tag (frippery.org / rmyorston/busybox-w32); the digests are pinned in scripts/download-tools.js. */
@@ -472,19 +473,17 @@ export function resetPosixShellForTesting(): void {
 }
 
 /**
- * `env` for a child of the shell: the launchers first on PATH, under the key
- * the environment already spells it with (Windows says `Path`), and the
+ * `env` for a child of the shell: the launchers first on PATH, and the
  * override list. Nothing else changes.
  */
 export function posixShellEnv(
   env: NodeJS.ProcessEnv,
   shell: PosixShell
-): NodeJS.ProcessEnv {
-  const key = env.PATH == null && env.Path != null ? "Path" : "PATH";
+): Record<string, string> {
+  const base = childProcessEnv(env);
 
-  return {
-    ...env,
-    [key]: mergePath(shell.bin, env.PATH ?? env.Path) ?? shell.bin,
+  return childProcessEnv(base, {
+    PATH: mergePath(shell.bin, base.PATH) ?? shell.bin,
     BB_OVERRIDE_APPLETS: shell.overrideApplets,
-  };
+  });
 }

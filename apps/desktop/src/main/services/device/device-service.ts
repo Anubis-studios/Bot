@@ -4,6 +4,8 @@ import os from "os";
 import path from "path";
 import { Worker } from "worker_threads";
 
+import { childProcessEnv } from "@abacus-ai/agent/child-env";
+
 import { abacusBotHome } from "../../paths";
 import { shellCommandLine } from "../workspace/windows-shell";
 import { AndroidInputClient, typableText } from "./android-input-client";
@@ -294,7 +296,8 @@ const run = (
         timeout: opts.timeoutMs ?? 30_000,
         maxBuffer: 64 * 1024 * 1024,
         encoding: opts.binary ? ("buffer" as const) : ("utf-8" as const),
-        env: opts.env != null ? { ...process.env, ...opts.env } : undefined,
+        env:
+          opts.env != null ? childProcessEnv(process.env, opts.env) : undefined,
       },
       (err, stdout, stderr) => {
         const out = opts.binary ? "" : (stdout as unknown as string);
@@ -1169,10 +1172,12 @@ export class DeviceService {
       const onWindows = process.platform === "win32";
       const child = onWindows
         ? spawn(shellCommandLine(avdmanager, createArgs), {
-            env: { ...process.env, ...env },
+            env: childProcessEnv(process.env, env),
             shell: true,
           })
-        : spawn(avdmanager, createArgs, { env: { ...process.env, ...env } });
+        : spawn(avdmanager, createArgs, {
+            env: childProcessEnv(process.env, env),
+          });
       let out = "";
       child.stdout?.on("data", (d: Buffer) => {
         out += d.toString();

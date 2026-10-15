@@ -142,7 +142,7 @@ export const resolveSpawn = (
 
   const resolved = resolveWin32Command(
     command,
-    env.PATH ?? env.Path ?? "",
+    env.PATH ?? "",
     env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD"
   );
 

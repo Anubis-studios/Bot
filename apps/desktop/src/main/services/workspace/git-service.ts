@@ -4,6 +4,7 @@ import fs from "fs/promises";
 import path from "path";
 import { promisify } from "util";
 
+import { childProcessEnv } from "@abacus-ai/agent/child-env";
 import type {
   GitDiffResult,
   GitDiscardResult,
@@ -32,7 +33,7 @@ const execFileAsync = promisify(execFile);
 
 /** Paths are passed verbatim: a `*` or `:(glob)` in a name is not a pattern. */
 const LITERAL_PATHSPECS = {
-  env: { ...process.env, GIT_LITERAL_PATHSPECS: "1" },
+  env: childProcessEnv(process.env, { GIT_LITERAL_PATHSPECS: "1" }),
   maxBuffer: 64 * 1024 * 1024,
 };
 

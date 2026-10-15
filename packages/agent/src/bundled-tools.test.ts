@@ -24,6 +24,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { useBundledTools } from "./bundled-tools.js";
+import { childProcessEnv, childProcessEnvFor } from "./child-env.js";
 
 /** Pinned by scripts/download-tools.js; asserted here so a bump has to be deliberate. */
 const RIPGREP_VERSION = "15.2.0";
@@ -80,6 +81,107 @@ describe("useBundledTools", () => {
 
     expect(useBundledTools(env, dir)).toBe(true);
     expect(env.PATH).toBe(dir);
+  });
+});
+
+describe("childProcessEnv on Windows", () => {
+  const UTF8 = { PYTHONIOENCODING: "utf-8" };
+  const win = (base: NodeJS.ProcessEnv, ...overrides: NodeJS.ProcessEnv[]) =>
+    childProcessEnvFor("win32", base, ...overrides);
+
+  it("names the path variable PATH when Windows spells it Path", () => {
+    expect(win({ Path: "C:\\user" })).toEqual({ PATH: "C:\\user", ...UTF8 });
+  });
+
+  it("keeps a PATH that is already spelled PATH", () => {
+    expect(win({ PATH: "C:\\user" })).toEqual({ PATH: "C:\\user", ...UTF8 });
+  });
+
+  it("folds both spellings into one, keeping the one spawn would", () => {
+    const env = win({ Path: "C:\\user", PATH: "C:\\vendor" });
+
+    expect(Object.keys(env)).toEqual(["PATH", "PYTHONIOENCODING"]);
+    // Spawn keeps the first in sorted order, and `PATH` sorts before `Path`.
+    expect(env.PATH).toBe("C:\\vendor");
+  });
+
+  it("lets an override win over the base, whatever its case", () => {
+    expect(win({ Path: "C:\\user" }, { PATH: "C:\\mine" })).toEqual({
+      PATH: "C:\\mine",
+      ...UTF8,
+    });
+    expect(win({ PATH: "C:\\user" }, { path: "C:\\mine" })).toEqual({
+      PATH: "C:\\mine",
+      ...UTF8,
+    });
+    expect(win({ ComSpec: "cmd.exe" }, { COMSPEC: "other.exe" })).toEqual({
+      ComSpec: "other.exe",
+      ...UTF8,
+    });
+  });
+
+  it("drops non-string values, and an undefined override unsets any spelling", () => {
+    expect(
+      win(
+        { Path: "C:\\user", EMPTY: undefined, TEMP: "C:\\tmp" },
+        {
+          temp: undefined,
+        }
+      )
+    ).toEqual({ PATH: "C:\\user", ...UTF8 });
+  });
+
+  it("adds no PATH when there is none", () => {
+    expect(win({ HOME: "C:\\home" }, { EXTRA: "1" })).toEqual({
+      HOME: "C:\\home",
+      EXTRA: "1",
+      ...UTF8,
+    });
+  });
+
+  it("gives Python UTF-8 stdio unless a value is already set", () => {
+    expect(win({}).PYTHONIOENCODING).toBe("utf-8");
+    expect(win({ PythonIOEncoding: "latin-1" })).toEqual({
+      PythonIOEncoding: "latin-1",
+    });
+    expect(win({}, { PYTHONIOENCODING: "utf-16" }).PYTHONIOENCODING).toBe(
+      "utf-16"
+    );
+    expect(win({}).PYTHONUTF8).toBeUndefined();
+  });
+
+  it("leaves the base untouched", () => {
+    const base = { Path: "C:\\user" };
+
+    win(base, { PATH: "C:\\mine" });
+
+    expect(base).toEqual({ Path: "C:\\user" });
+  });
+});
+
+describe("childProcessEnv elsewhere", () => {
+  it("is a plain copy with the overrides on top", () => {
+    expect(
+      childProcessEnvFor(
+        "linux",
+        { PATH: "/usr/bin", Path: "kept", GONE: undefined, DROP: "x" },
+        { HOME: "/home/me", DROP: undefined }
+      )
+    ).toEqual({ PATH: "/usr/bin", Path: "kept", HOME: "/home/me" });
+  });
+
+  it("sets no Python encoding off Windows", () => {
+    expect(childProcessEnvFor("darwin", {}).PYTHONIOENCODING).toBeUndefined();
+    expect(childProcessEnvFor("linux", {}).PYTHONIOENCODING).toBeUndefined();
+  });
+
+  it("defaults to this process's environment", () => {
+    const env = childProcessEnv();
+
+    expect(env.PATH).toBe(process.env.PATH);
+    expect(
+      Object.keys(env).filter((key) => key.toUpperCase() === "PATH")
+    ).toEqual(process.env.PATH != null ? ["PATH"] : []);
   });
 });
 

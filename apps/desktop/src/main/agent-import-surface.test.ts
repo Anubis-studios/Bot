@@ -41,6 +41,8 @@ const ALLOWED = new Set([
   "@abacus-ai/agent/sandbox-support",
   // A 4 kB bundle importing only node's `fs`, `fs/promises` and `path`.
   "@abacus-ai/agent/atomic-file",
+  // A child process's environment: no imports at all.
+  "@abacus-ai/agent/child-env",
   // Media checks for the chat: no imports at all.
   "@abacus-ai/agent/send-media",
   // What a chat can do: no imports at all.
