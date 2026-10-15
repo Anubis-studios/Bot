@@ -19,6 +19,7 @@ import { subAgentBasePrompt } from "./base-prompt.js";
 import { excludedTools } from "./excluded-tools.js";
 import guardrails from "./extensions/guardrails.js";
 import type { HostServiceClient } from "./host-services.js";
+import { modelPath, MODEL_PATH_RESOURCES } from "./model-path.js";
 import type { AgentEvent } from "./protocol.js";
 import { forwardChildToolEvents } from "./subagent-events.js";
 import {
@@ -310,7 +311,7 @@ const buildDraftTools = (
         return failed("Write at least one section first.");
       if (draft.printed != null) {
         return failed(
-          `Already printed to ${draft.printed.pdfPath}. Do not render twice.`
+          `Already printed to ${modelPath(draft.printed.pdfPath ?? "")}. Do not render twice.`
         );
       }
 
@@ -355,8 +356,8 @@ const buildDraftTools = (
 
         return ok(
           [
-            `Printed ${result.pages ?? "?"} pages to ${result.pdfPath}.`,
-            `Editable source: ${result.htmlPath ?? "not reported"}.`,
+            `Printed ${result.pages ?? "?"} pages to ${modelPath(result.pdfPath)}.`,
+            `Editable source: ${result.htmlPath == null ? "not reported" : modelPath(result.htmlPath)}.`,
             ...(typeof result.images === "number" && result.images > 0
               ? [`Images printed: ${result.images}.`]
               : []),
@@ -409,6 +410,8 @@ export async function runDocumentTask(
 
   try {
     const resourceLoader = new DefaultResourceLoader({
+      // Skill and AGENTS.md paths as the model should copy them.
+      ...MODEL_PATH_RESOURCES,
       cwd: context.cwd,
       agentDir: context.agentDir,
       settingsManager: context.settingsManager,

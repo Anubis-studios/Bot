@@ -28,6 +28,7 @@ import {
 import { abacusBotDir } from "./config.js";
 import { excludedTools, vaultEnabled } from "./excluded-tools.js";
 import type { MidTaskInbox, MidTaskRun } from "./mid-task-inbox.js";
+import { MODEL_PATH_RESOURCES } from "./model-path.js";
 import type { AgentEvent } from "./protocol.js";
 import { DeliveredMedia, type MediaCheck } from "./send-media-tool.js";
 import { isMediaId } from "./send-media.js";
@@ -674,6 +675,8 @@ export async function runBrowserTask(
     } else {
       gate = { blocked: new Set(), pause: null };
       const resourceLoader = new DefaultResourceLoader({
+        // Skill and AGENTS.md paths as the model should copy them.
+        ...MODEL_PATH_RESOURCES,
         cwd: context.cwd,
         agentDir: context.agentDir,
         settingsManager: context.settingsManager,

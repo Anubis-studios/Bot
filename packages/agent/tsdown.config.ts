@@ -43,6 +43,8 @@ export default defineConfig({
     // no node or pi anywhere in its closure (tool-display.test.ts).
     "src/tool-display.ts",
     "src/user-text.ts",
+    // How a path is spelled for the model; main and the renderer show it paths.
+    "src/model-path.ts",
     // The phone reply's bubble split, for the hosted app's WhatsApp lane.
     "src/phone/phone-bubbles.ts",
     // The phone loop's zone, check-in language and due loops, for its agenda.

@@ -19,11 +19,14 @@ import * as path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { modelPath } from "./model-path.js";
 import {
   gateToolCall,
   isMutatingTool,
   parseMode,
   parseModeStrict,
+  repairEscapedPaths,
+  unescapedToolPath,
   type GateOptions,
 } from "./permissions.js";
 import { AgentMode, type ToolRequest } from "./protocol.js";
@@ -1268,3 +1271,89 @@ describe.skipIf(process.platform === "win32")(
     });
   }
 );
+
+describe("paths shown to the model", () => {
+  it("gives a Windows path forward slashes, so `\\notes` cannot read as an escape", () => {
+    expect(
+      modelPath(
+        "C:\\Users\\someone\\.abacusai-bot\\routines\\job-1\\notes.md",
+        "win32"
+      )
+    ).toBe("C:/Users/someone/.abacusai-bot/routines/job-1/notes.md");
+    expect(modelPath("reports\\q3.md", "win32")).toBe("reports/q3.md");
+  });
+
+  it("leaves a POSIX path exactly as it is", () => {
+    expect(modelPath("/home/someone/a\\b.md", "linux")).toBe(
+      "/home/someone/a\\b.md"
+    );
+    expect(modelPath("/Users/someone/notes.md", "darwin")).toBe(
+      "/Users/someone/notes.md"
+    );
+  });
+
+  it("spells UNC and long-prefix paths the way Windows still opens them", () => {
+    expect(modelPath("\\\\server\\share\\notes.md", "win32")).toBe(
+      "//server/share/notes.md"
+    );
+    expect(modelPath("\\\\?\\C:\\Users\\someone\\tmp", "win32")).toBe(
+      "C:/Users/someone/tmp"
+    );
+    expect(modelPath("\\\\?\\UNC\\server\\share\\tmp", "win32")).toBe(
+      "//server/share/tmp"
+    );
+  });
+
+  it("recognises a drive path without a platform, as the renderer has none", () => {
+    expect(modelPath("C:\\Users\\someone\\notes.md", undefined)).toBe(
+      "C:/Users/someone/notes.md"
+    );
+    expect(modelPath("/tmp/notes.md", undefined)).toBe("/tmp/notes.md");
+  });
+});
+
+describe("a path the model sent with an unescaped backslash", () => {
+  const cwd = "C:\\Users\\someone\\project";
+  const routine = "C:\\Users\\someone\\.abacusai-bot\\routines\\job-1";
+  const existing = new Set([routine, `${routine}\\notes.md`]);
+  const exists = (target: string): boolean => existing.has(target);
+
+  it("is read as the file the model meant", () => {
+    expect(unescapedToolPath(`${routine}\notes.md`, cwd, "win32", exists)).toBe(
+      `${routine}\\notes.md`
+    );
+  });
+
+  it("is restored for a file not written yet, when its folder exists", () => {
+    expect(
+      unescapedToolPath(`${routine}\notes-2.md`, cwd, "win32", exists)
+    ).toBe(`${routine}\\notes-2.md`);
+  });
+
+  it("is left alone when the repair names nothing on disk", () => {
+    expect(
+      unescapedToolPath("D:\\elsewhere\\x\temp.md", cwd, "win32", exists)
+    ).toBeNull();
+  });
+
+  it("is left alone off Windows, where a newline is a legal name", () => {
+    expect(
+      unescapedToolPath(`${routine}\notes.md`, cwd, "linux", exists)
+    ).toBeNull();
+  });
+
+  it("is repaired in place across the path arguments of a call", () => {
+    const input: Record<string, unknown> = {
+      path: `${routine}\notes.md`,
+      paths: [`${routine}\notes.md`, "plain.md"],
+      content: "line one\nline two",
+    };
+    repairEscapedPaths(input, cwd, "win32", exists);
+
+    expect(input).toEqual({
+      path: `${routine}\\notes.md`,
+      paths: [`${routine}\\notes.md`, "plain.md"],
+      content: "line one\nline two",
+    });
+  });
+});

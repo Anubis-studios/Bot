@@ -5,6 +5,7 @@ import { Type } from "typebox";
 
 import { runDeckTask, type DeckTaskContext } from "./deck-task.js";
 import { scopeEmit, tagEvent } from "./event-meta.js";
+import { modelPath } from "./model-path.js";
 import type { AgentEvent } from "./protocol.js";
 import { resolveInWorkspace } from "./workspace-path.js";
 
@@ -176,21 +177,21 @@ export function buildDeckTool(
           {
             type: "text" as const,
             text: [
-              `Built a ${result.slides ?? wanted}-slide deck on template "${result.template ?? "unknown"}": ${result.pdfPath}`,
+              `Built a ${result.slides ?? wanted}-slide deck on template "${result.template ?? "unknown"}": ${modelPath(result.pdfPath)}`,
               ...(result.pptxPath != null
                 ? [
-                    `Editable PowerPoint: ${result.pptxPath} (same words, plain layout)`,
+                    `Editable PowerPoint: ${modelPath(result.pptxPath)} (same words, plain layout)`,
                   ]
                 : ["No .pptx could be written; the PDF is the only output."]),
               ...(result.htmlPath != null && result.htmlPath.length > 0
-                ? [`HTML source: ${result.htmlPath}`]
+                ? [`HTML source: ${modelPath(result.htmlPath)}`]
                 : []),
               "",
               // .pptx first: the preview pane opens the first item and renders
               // pptx natively, so the editable deck is what the user sees.
               result.pptxPath != null
-                ? `Hand BOTH over with present_deliverable, in this order: ${result.pptxPath} (label "Editable deck"), then ${result.pdfPath} (label "Designed PDF").`
-                : `Hand it over: present_deliverable with ${result.pdfPath}`,
+                ? `Hand BOTH over with present_deliverable, in this order: ${modelPath(result.pptxPath)} (label "Editable deck"), then ${modelPath(result.pdfPath)} (label "Designed PDF").`
+                : `Hand it over: present_deliverable with ${modelPath(result.pdfPath)}`,
             ].join("\n"),
           },
         ],

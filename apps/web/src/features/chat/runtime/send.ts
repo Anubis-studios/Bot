@@ -5,6 +5,7 @@
  * first message, ported verbatim from the old transport
  * (`conversation/transport.ts:88-114`).
  */
+import { modelPath } from "@abacus-ai/agent/model-path";
 import type { AgentMode } from "@abacus-ai/contract/agent-types";
 
 interface SubmitAttachment {
@@ -52,11 +53,12 @@ const withAttachmentRefs = (
   text: string,
   attachments: readonly SubmitAttachment[]
 ): string => {
-  const refs = attachments
-    .filter(
-      (attachment) => attachment.state === "done" && attachment.path != null
-    )
-    .map((attachment) => `@${attachment.path}`);
+  // The model copies these paths into tool calls; see model-path.
+  const refs = attachments.flatMap((attachment) =>
+    attachment.state === "done" && attachment.path != null
+      ? [`@${modelPath(attachment.path)}`]
+      : []
+  );
   if (refs.length === 0) return text;
   const body = text.trim();
   return body === "" ? refs.join("\n") : `${text}\n\n${refs.join("\n")}`;

@@ -16,6 +16,7 @@ import {
   isToolCallEventType,
 } from "@earendil-works/pi-coding-agent";
 
+import { modelPath } from "../model-path.js";
 import { isInsideDirectory, realPathOf } from "../workspace-path.js";
 
 /**
@@ -451,8 +452,8 @@ export default function (pi: ExtensionAPI) {
           {
             type: "text" as const,
             text:
-              `The previous contents of ${input.path} were saved to ${backup}. ` +
-              `If this rewrite lost something, restore it with: cp ${backup} ${input.path}`,
+              `The previous contents of ${input.path} were saved to ${modelPath(backup)}. ` +
+              `If this rewrite lost something, restore it with: cp ${modelPath(backup)} ${input.path}`,
           },
         ],
       };

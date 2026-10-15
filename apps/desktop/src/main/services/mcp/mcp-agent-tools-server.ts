@@ -13,6 +13,7 @@ import {
   type ChannelCapabilities,
   WHATSAPP_CHANNEL,
 } from "@abacus-ai/agent/channel";
+import { modelPath } from "@abacus-ai/agent/model-path";
 import { isWithin, resolveSecretPaths } from "@abacus-ai/agent/secret-paths";
 import {
   DOCUMENT_MAX_BYTES,
@@ -719,12 +720,14 @@ export class McpAgentToolsServer extends McpHttpServer {
       const workspacePath = this.options.workspacePath();
       const suggestion =
         workspacePath != null
-          ? path.join(
-              workspacePath,
-              WORKSPACE_DIR_NAME,
-              "skills",
-              `${id}`,
-              "SKILL.md"
+          ? modelPath(
+              path.join(
+                workspacePath,
+                WORKSPACE_DIR_NAME,
+                "skills",
+                `${id}`,
+                "SKILL.md"
+              )
             )
           : `<workspace>/${WORKSPACE_DIR_NAME}/skills/${id}/SKILL.md`;
 
@@ -739,7 +742,7 @@ export class McpAgentToolsServer extends McpHttpServer {
       : skill.path;
 
     return this.ok(
-      `${skill.name} lives at:\n${target}\n\nEdit it with the file tools.`
+      `${skill.name} lives at:\n${modelPath(target)}\n\nEdit it with the file tools.`
     );
   }
 
@@ -1289,7 +1292,7 @@ export class McpAgentToolsServer extends McpHttpServer {
       .slice(0, 80);
 
     return this.ok(
-      `Saved to ${file}\n\nShow it to the user with: ![${alt}](${fileUrl(file)})\n${artifactPathLine(file)}`
+      `Saved to ${modelPath(file)}\n\nShow it to the user with: ![${alt}](${fileUrl(file)})\n${artifactPathLine(file)}`
     );
   }
 
@@ -1301,7 +1304,7 @@ export class McpAgentToolsServer extends McpHttpServer {
     const voice = typeof args.voice === "string" ? args.voice : undefined;
     const file = await generateSpeech(text, voice);
 
-    return this.ok(`Saved to ${file}\n${artifactPathLine(file)}`);
+    return this.ok(`Saved to ${modelPath(file)}\n${artifactPathLine(file)}`);
   }
 
   async pdf(args: Record<string, unknown>): Promise<ToolResult> {
@@ -1328,12 +1331,12 @@ export class McpAgentToolsServer extends McpHttpServer {
 
         return this.ok(
           [
-            `Printed ${printed.htmlPath} (${printed.pages} pages in ${printed.seconds}s): ${printed.pdfPath}`,
+            `Printed ${modelPath(printed.htmlPath)} (${printed.pages} pages in ${printed.seconds}s): ${modelPath(printed.pdfPath)}`,
             ...(printed.previewPath != null
-              ? [`Rendered page, as a PNG: ${printed.previewPath}`]
+              ? [`Rendered page, as a PNG: ${modelPath(printed.previewPath)}`]
               : []),
             "",
-            `Hand it over: present_deliverable with ${printed.pdfPath}`,
+            `Hand it over: present_deliverable with ${modelPath(printed.pdfPath)}`,
           ].join("\n")
         );
       }
@@ -1523,7 +1526,7 @@ export class McpAgentToolsServer extends McpHttpServer {
         const channel = this.channelFor(callerSession);
         return this.ok(
           [
-            `Serving ${served.directory} at ${served.url}`,
+            `Serving ${modelPath(served.directory)} at ${served.url}`,
             "",
             ...(channel.pane
               ? []
@@ -1840,7 +1843,7 @@ export class McpAgentToolsServer extends McpHttpServer {
 
       // A page count that disagrees with the slide count is a bad pagination.
       return this.ok(
-        `Wrote ${result.pdfPath}\n${result.slides} slides at ${result.widthPx}x${result.heightPx}, ` +
+        `Wrote ${modelPath(result.pdfPath)}\n${result.slides} slides at ${result.widthPx}x${result.heightPx}, ` +
           `${Math.round(result.bytes / 1024)} KB.\n\n` +
           "Read the PDF back and look at it before showing the user. Overflowing text is obvious in the render and invisible in the markup."
       );
@@ -1894,7 +1897,9 @@ export class McpAgentToolsServer extends McpHttpServer {
       this.fileExists(finished);
 
     return this.ok(
-      `Done. ${result.message}${isFile ? `\n${artifactPathLine(finished)}` : ""}`
+      isFile
+        ? `Done. ${modelPath(finished)}\n${artifactPathLine(finished)}`
+        : `Done. ${result.message}`
     );
   }
 

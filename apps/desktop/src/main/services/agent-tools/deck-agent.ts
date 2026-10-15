@@ -7,6 +7,8 @@
 import fs from "fs/promises";
 import path from "path";
 
+import { modelPath } from "@abacus-ai/agent/model-path";
+
 import { resourcePath } from "#main/resources";
 
 import { exportDeckPdf } from "./deck-pdf";
@@ -265,7 +267,7 @@ const refuseForeignOverwrite = async (
     .catch(() => false);
   if (ours) return;
   throw new Error(
-    `${pdfPath} already exists and was not written by this tool. Choose a new output_path.`
+    `${modelPath(pdfPath)} already exists and was not written by this tool. Choose a new output_path.`
   );
 };
 
@@ -467,7 +469,7 @@ export const renderDeck = async (
   const exported = await exportDeckPdf({ htmlPath, outputPath: pdfPath }).catch(
     (error: unknown) => {
       throw new Error(
-        `the slides were written to ${htmlPath} but the PDF export failed: ${(error as Error)?.message ?? "unknown error"}`
+        `the slides were written to ${modelPath(htmlPath)} but the PDF export failed: ${(error as Error)?.message ?? "unknown error"}`
       );
     }
   );

@@ -7,6 +7,7 @@ import { Type } from "typebox";
 
 import { runDocumentTask, type DocumentContext } from "./document-task.js";
 import { scopeEmit, tagEvent } from "./event-meta.js";
+import { modelPath } from "./model-path.js";
 import type { AgentEvent } from "./protocol.js";
 import { resolveInWorkspace } from "./workspace-path.js";
 
@@ -168,15 +169,15 @@ export function buildDocumentTool(
           {
             type: "text" as const,
             text: [
-              `Wrote ${result.pages ?? "?"} pages: ${result.pdfPath}`,
+              `Wrote ${result.pages ?? "?"} pages: ${modelPath(result.pdfPath)}`,
               ...(result.htmlPath != null
                 ? [
-                    `Editable source: ${result.htmlPath}`,
+                    `Editable source: ${modelPath(result.htmlPath)}`,
                     'To change what it says, edit that file and reprint it with pdf action "reprint".',
                   ]
                 : []),
               "",
-              `Hand it over: present_deliverable with ${result.pdfPath}`,
+              `Hand it over: present_deliverable with ${modelPath(result.pdfPath)}`,
             ].join("\n"),
           },
         ],

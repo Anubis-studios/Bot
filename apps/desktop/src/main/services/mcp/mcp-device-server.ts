@@ -1,6 +1,8 @@
 import fs from "fs";
 import path from "path";
 
+import { modelPath } from "@abacus-ai/agent/model-path";
+
 import { DeviceService, type DevicePlatform } from "../device/device-service";
 import {
   McpHttpServer,
@@ -455,9 +457,11 @@ export class McpDeviceServer extends McpHttpServer {
             const real = realPathOf(result.artifactPath);
             if (real != null) this.builtArtifacts.add(real);
           }
+          const artifact =
+            result.artifactPath == null ? null : modelPath(result.artifactPath);
           return this.ok(
-            `Build succeeded.\nartifact: ${result.artifactPath}\n${result.appId != null ? `appId: ${result.appId}\n` : ""}` +
-              `Next: device_app action:"install" path:"${result.artifactPath}", then action:"launch" appId:"${result.appId ?? "<app id>"}".`
+            `Build succeeded.\nartifact: ${artifact}\n${result.appId != null ? `appId: ${result.appId}\n` : ""}` +
+              `Next: device_app action:"install" path:"${artifact}", then action:"launch" appId:"${result.appId ?? "<app id>"}".`
           );
         }
         case "device_app": {
@@ -514,7 +518,7 @@ export class McpDeviceServer extends McpHttpServer {
             device
           );
           return this.ok(
-            `Screenshot saved: ${shot.file}\nRead this file to view the screen.${shot.note}`
+            `Screenshot saved: ${modelPath(shot.file)}\nRead this file to view the screen.${shot.note}`
           );
         }
         case "device_snapshot": {

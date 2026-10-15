@@ -8,6 +8,7 @@ import { access } from "node:fs/promises";
 
 import { createLocalBashOperations } from "@earendil-works/pi-coding-agent";
 
+import { modelPath } from "./model-path.js";
 import {
   posixShell,
   posixShellEnv,
@@ -66,7 +67,7 @@ export function posixShellOperations(
           await access(cwd);
         } catch {
           throw new Error(
-            `Working directory does not exist: ${cwd}\nCannot execute bash commands.`
+            `Working directory does not exist: ${modelPath(cwd)}\nCannot execute bash commands.`
           );
         }
         const timeout = options.timeout;

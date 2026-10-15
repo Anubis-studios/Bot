@@ -1,3 +1,4 @@
+import { modelPath } from "@abacus-ai/agent/model-path";
 import type { UserTextTags } from "@abacus-ai/contract/agent-types";
 import { AgentMode, AgentStatus } from "@abacus-ai/contract/agent-types";
 import type { DesktopEvent } from "@abacus-ai/contract/agent-types";
@@ -764,7 +765,7 @@ export class MessagingGatewayService {
     // the agent all see where the file is instead of "📷 Photo".
     if (message.attachments != null && message.attachments.length > 0) {
       const lines = message.attachments.map(
-        (file) => `[attachment: ${file.name} saved to ${file.path}]`
+        (file) => `[attachment: ${file.name} saved to ${modelPath(file.path)}]`
       );
       message = {
         ...message,
@@ -2258,7 +2259,7 @@ export class MessagingGatewayService {
       chatId: target,
       userId: "me",
       userName: null,
-      text: `[sent file: ${filePath}]${caption != null && caption.length > 0 ? ` ${caption}` : ""}`,
+      text: `[sent file: ${modelPath(filePath)}]${caption != null && caption.length > 0 ? ` ${caption}` : ""}`,
       direction: "out",
       at: new Date().toISOString(),
     });

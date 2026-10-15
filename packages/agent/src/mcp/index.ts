@@ -16,6 +16,7 @@ import {
 
 import { DEFAULT_ABACUS_V1, sponsoredRunHeaders } from "../abacus-endpoint.js";
 import { abacusBotDir, desktopMcpConfigPath } from "../config.js";
+import { modelPath } from "../model-path.js";
 import { MEDIA_CHECK_TOOL_NAME } from "../send-media.js";
 import {
   UNATTENDED_EXCLUDED_TOOLS,
@@ -330,7 +331,7 @@ export async function connectMcpServers(
   if (resolvedPath == null) {
     return noServers(
       "ABACUSAI_BOT_MCP_CONFIG is not set and the app has no server list at " +
-        `${abacusBotDir()}, so this agent has no MCP servers: no browser tools, ` +
+        `${modelPath(abacusBotDir())}, so this agent has no MCP servers: no browser tools, ` +
         "no device tools, and none of the agent-tools built-ins.",
       true
     );
@@ -340,7 +341,7 @@ export async function connectMcpServers(
 
   if (config.kind === "unreadable") {
     return noServers(
-      `Could not read the server list at ${resolvedPath} (${config.error}), so this agent has no ` +
+      `Could not read the server list at ${modelPath(resolvedPath)} (${config.error}), so this agent has no ` +
         "MCP servers: no browser tools, no device tools, and none of the agent-tools built-ins."
     );
   }

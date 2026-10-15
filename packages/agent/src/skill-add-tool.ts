@@ -7,6 +7,7 @@
  */
 import { Type } from "typebox";
 
+import { modelPath } from "./model-path.js";
 import {
   installSkill,
   searchSkillMarketplace,
@@ -208,7 +209,7 @@ export function buildSkillAddTool(
         // Already-installed is the one failure with a useful next step.
         const already = result.path != null;
         const message = already
-          ? `${result.error}\n${result.path}\n\nRead it with skill_view, or call again with replace true to overwrite it.`
+          ? `${result.error}\n${modelPath(result.path ?? "")}\n\nRead it with skill_view, or call again with replace true to overwrite it.`
           : result.error;
 
         return {

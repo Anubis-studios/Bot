@@ -5,6 +5,7 @@ import { Type } from "typebox";
 
 import { runDesignTask, type DesignTaskContext } from "./design-task.js";
 import { scopeEmit, tagEvent } from "./event-meta.js";
+import { modelPath } from "./model-path.js";
 import type { AgentEvent } from "./protocol.js";
 import { resolveInWorkspace } from "./workspace-path.js";
 
@@ -196,10 +197,10 @@ export function buildDesignTool(
           {
             type: "text" as const,
             text: [
-              `Designed ${result.screens ?? 0} screens: ${result.canvasPath}`,
-              `Screens and PNGs: ${result.directory ?? outputDir}`,
+              `Designed ${result.screens ?? 0} screens: ${modelPath(result.canvasPath)}`,
+              `Screens and PNGs: ${modelPath(result.directory ?? outputDir)}`,
               "",
-              `Hand it over: present_deliverable with ${result.canvasPath}`,
+              `Hand it over: present_deliverable with ${modelPath(result.canvasPath)}`,
             ].join("\n"),
           },
         ],

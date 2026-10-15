@@ -64,6 +64,7 @@ import {
 import { McpToolSync } from "../mcp/tool-sync.js";
 import { buildMcpToolDefinitions, mcpToolCaller } from "../mcp/tools.js";
 import { MidTaskInbox, type MidTaskMessage } from "../mid-task-inbox.js";
+import { MODEL_PATH_RESOURCES } from "../model-path.js";
 import {
   BUSY_RETRY_PROMPT,
   BusyWait,
@@ -102,6 +103,7 @@ import {
   MODE_NAMES,
   parseMode,
   parseModeStrict,
+  repairEscapedPaths,
 } from "../permissions.js";
 import { personaPrompt, readPersona } from "../persona.js";
 import { windowsShellPrompt } from "../posix-shell.js";
@@ -393,6 +395,8 @@ export class ForeverEngine {
     const sessionStartMemory = this.profile.memory.sessionStartPrompt();
 
     const resourceLoader = new DefaultResourceLoader({
+      // Skill and AGENTS.md paths as the model should copy them.
+      ...MODEL_PATH_RESOURCES,
       cwd: this.options.cwd,
       agentDir: dir,
       settingsManager,
@@ -2201,6 +2205,8 @@ export class ForeverEngine {
     this.loadedPi = pi;
 
     pi.on("tool_call", async (event, ctx) => {
+      // Before the gate, so it judges the file the model meant.
+      repairEscapedPaths(event.input as Record<string, unknown>, ctx.cwd);
       const tool = this.toToolRequest(
         event.toolCallId,
         event.toolName,

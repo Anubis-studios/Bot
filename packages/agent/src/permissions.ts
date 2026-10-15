@@ -91,6 +91,76 @@ function windowsNativePath(raw: string): string {
   return `${drive[1]!.toUpperCase()}:\\${(drive[2] ?? "").replaceAll("/", "\\")}`;
 }
 
+/** Path arguments, across the file, document and host tools. */
+const PATH_ARG_KEYS = [
+  "path",
+  "paths",
+  "notebookPath",
+  "file_path",
+  "html_path",
+  "output_path",
+  "output_dir",
+  "attachment_path",
+  "directory",
+];
+
+/** The JSON escape each control character is when the model meant a backslash. */
+const ESCAPE_LETTER: Record<string, string> = {
+  "\b": "b",
+  "\f": "f",
+  "\n": "n",
+  "\r": "r",
+  "\t": "t",
+};
+
+/** A control character between two path characters: `\notes` read as an escape. */
+const ESCAPED_SEPARATOR = /(?<=[^\s\\/])[\b\f\n\r\t](?=[^\s\\/])/g;
+
+/**
+ * A Windows path the model wrote with an unescaped backslash, restored:
+ * `job-1⏎otes.md` is `job-1\notes.md`. Windows names cannot hold control
+ * characters, so the repair is taken when its file, or the folder it would be
+ * written into, exists; otherwise null and the call fails as written.
+ */
+export function unescapedToolPath(
+  raw: string,
+  cwd: string,
+  platform: NodeJS.Platform = process.platform,
+  exists: (target: string) => boolean = fs.existsSync
+): string | null {
+  if (platform !== "win32") return null;
+  ESCAPED_SEPARATOR.lastIndex = 0;
+  if (!ESCAPED_SEPARATOR.test(raw)) return null;
+  const repaired = raw.replace(
+    ESCAPED_SEPARATOR,
+    (control) => `\\${ESCAPE_LETTER[control]}`
+  );
+  const landing = toolPath(repaired, cwd, platform);
+  if (landing == null) return null;
+  return exists(landing) || exists(path.win32.dirname(landing))
+    ? repaired
+    : null;
+}
+
+/** Every path argument of a call, repaired in place (see unescapedToolPath). */
+export function repairEscapedPaths(
+  input: Record<string, unknown>,
+  cwd: string,
+  platform: NodeJS.Platform = process.platform,
+  exists: (target: string) => boolean = fs.existsSync
+): void {
+  if (platform !== "win32") return;
+  const repair = (value: unknown): unknown =>
+    typeof value === "string"
+      ? (unescapedToolPath(value, cwd, platform, exists) ?? value)
+      : value;
+  for (const key of PATH_ARG_KEYS) {
+    const value = input[key];
+    if (Array.isArray(value)) input[key] = value.map(repair);
+    else if (typeof value === "string") input[key] = repair(value);
+  }
+}
+
 /** Tools that change something on disk or run code. */
 const MUTATING_TOOLS = new Set([
   "write",

@@ -16,6 +16,7 @@ import {
 import { registerForegroundProcess } from "./background-processes.js";
 import { childProcessEnv } from "./child-env.js";
 import { currentMode } from "./current-mode.js";
+import { modelPath } from "./model-path.js";
 import {
   posixShell,
   posixShellEnv,
@@ -416,7 +417,7 @@ export function describeDenials(
     .map((denial) =>
       denial.kind === "host"
         ? `${denial.kind} ${denial.host}:${denial.port}`
-        : `${denial.kind} ${denial.path}`
+        : `${denial.kind} ${modelPath(denial.path)}`
     )
     .filter((text) => !seen.has(text) && seen.add(text) !== undefined)
     .join(", ");

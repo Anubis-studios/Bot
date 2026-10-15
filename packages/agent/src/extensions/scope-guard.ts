@@ -18,6 +18,7 @@ import * as path from "node:path";
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
+import { modelPath } from "../model-path.js";
 import {
   isInsideDirectory,
   realPathOf,
@@ -217,7 +218,7 @@ export function targetsOf(
 
 export function refusal(target: string, scope: TaskScope): string {
   return (
-    `${target} is outside ${scope.root}, the folder this task is about. Work with what is ` +
+    `${modelPath(target)} is outside ${modelPath(scope.root)}, the folder this task is about. Work with what is ` +
     "there and with paths the task names. If something you need is missing, say so in your " +
     "report instead of looking for it elsewhere on this machine."
   );

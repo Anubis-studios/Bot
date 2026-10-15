@@ -77,6 +77,10 @@
     "./user-text": {
       "types": "./dist/user-text.d.ts",
       "default": "./dist/user-text.js"
+    },
+    "./model-path": {
+      "types": "./dist/model-path.d.ts",
+      "default": "./dist/model-path.js"
     }
   },
   "scripts": {

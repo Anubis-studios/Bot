@@ -3,6 +3,8 @@
  * scheduler, not the user) and how the fire started. A webhook payload rides
  * along fenced, with a guard that outside senders do not give instructions.
  */
+import { modelPath } from "@abacus-ai/agent/model-path";
+
 import type { CronJob, CronTrigger } from "./cron-store";
 import type { RoutineRunRecord } from "./routine-runs-store";
 
@@ -40,7 +42,8 @@ export const buildRoutineFirePrompt = (
   job: CronJob,
   trigger: CronTrigger,
   payload: string | null,
-  memory: RoutineMemory | null = null
+  memory: RoutineMemory | null = null,
+  platform: string = process.platform
 ): string => {
   const lines = [
     `[routine] "${job.name}" fired ${TRIGGER_LINE[trigger]} at ${new Date().toLocaleString()}.`,
@@ -81,22 +84,25 @@ export const buildRoutineFirePrompt = (
         );
     }
     const inOwnFolder = memory.workingDirectory === memory.dir;
+    // The model copies these into tool calls; see model-path.
+    const dir = modelPath(memory.dir, platform);
+    const workingDirectory = modelPath(memory.workingDirectory, platform);
     lines.push(
       ...(inOwnFolder
         ? [
-            `This folder is your working directory: ${memory.dir}. Your earlier`,
+            `This folder is your working directory: ${dir}. Your earlier`,
             `runs (${memory.runs} on file) are in runs/, one file each, newest`,
             "last by name, and notes.md is yours to keep notes in for your next",
             "run. Read them if you need what happened before; skip them if you",
             "do not.",
           ]
         : [
-            `Your working directory is ${memory.workingDirectory}, the project`,
+            `Your working directory is ${workingDirectory}, the project`,
             "this routine was set up for: anything you create goes there unless",
             `the instruction names another place. Your own records live inside`,
-            `it at ${memory.dir}: your earlier runs (${memory.runs} on file) are`,
-            `in ${memory.dir}/runs, one file each, newest last by name, and`,
-            `${memory.dir}/notes.md is yours to keep notes in for your next run.`,
+            `it at ${dir}: your earlier runs (${memory.runs} on file) are`,
+            `in ${dir}/runs, one file each, newest last by name, and`,
+            `${dir}/notes.md is yours to keep notes in for your next run.`,
             "Read them if you need what happened before; skip them if you do not.",
           ]),
       ...(memory.unattended === true
@@ -117,7 +123,9 @@ export const buildRoutineFirePrompt = (
             "and write with the ordinary file tools, and so is every workspace on",
             "this machine:",
             ...(memory.workspaces.length > 0
-              ? memory.workspaces.map((workspace) => `  ${workspace}`)
+              ? memory.workspaces.map(
+                  (workspace) => `  ${modelPath(workspace, platform)}`
+                )
               : ["  (none registered yet)"]),
             "Nothing here is out of bounds. Do not tell the user it is, and do not",
             "skip a write for that reason. If a write genuinely fails, say what the",
