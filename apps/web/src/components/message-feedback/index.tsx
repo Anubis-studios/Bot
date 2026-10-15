@@ -1,9 +1,12 @@
 import type { TurnFeedbackOutcome } from "@abacus-ai/contract/contracts";
 /**
- * Two feedback buttons in the action bar, with an optional comment.
- * A second click on the chosen rating sends `clear`,
- * sent as `agent.feedback`. Offered only with an Abacus account (the route
- * decides) and never on the live run (the decorations decide).
+ * Two feedback buttons in the action bar, with an optional comment, sent as
+ * `agent.feedback`. A second click on a rating the server holds sends
+ * `clear`; on one that failed to send, it sends it again. A failed `clear`
+ * puts the held rating back, so the pressed thumb, the open form and the
+ * status line always describe the same rating. Offered only with an Abacus
+ * account (the route decides) and never on the live run (the decorations
+ * decide).
  *
  * The same controls appear in a reply's hover menu and in its right-click
  * menu, so the rating, the comment and the send status live in a small
@@ -40,12 +43,20 @@ export interface MessageFeedbackProps {
 type Status = "idle" | "sending" | "sent" | "not-synced" | "failed";
 
 interface FeedbackState {
+  /** The rating shown pressed: the one sent, being sent or failed to send. */
   rating: Rating | null;
+  /** The rating the server holds, after the last send that landed. */
+  held: Rating | null;
   comment: string;
   status: Status;
 }
 
-const IDLE: FeedbackState = { rating: null, comment: "", status: "idle" };
+const IDLE: FeedbackState = {
+  rating: null,
+  held: null,
+  comment: "",
+  status: "idle",
+};
 const states = new Map<string, FeedbackState>();
 const listeners = new Map<string, Set<() => void>>();
 
@@ -73,35 +84,44 @@ export const MessageFeedback = ({ id, send }: MessageFeedbackProps) => {
   const { t } = useTranslation();
   const own = useId();
   const key = id ?? own;
-  const { rating, comment, status } = useSyncExternalStore(
+  const { rating, held, comment, status } = useSyncExternalStore(
     (listener) => subscribeState(key, listener),
     () => readState(key),
     () => readState(key)
   );
 
   const submit = (next: Rating | "clear", text?: string): void => {
-    writeState(key, { status: "sending" });
+    writeState(key, {
+      rating: next === "clear" ? null : next,
+      status: "sending",
+    });
+    const fail = (failure: "not-synced" | "failed"): void =>
+      writeState(key, {
+        status: failure,
+        // The server still holds what a failed clear meant to withdraw.
+        ...(next === "clear" && { rating: readState(key).held }),
+      });
     send(next, text)
-      .then((outcome) =>
-        writeState(key, {
-          status: outcome.ok
-            ? "sent"
-            : outcome.reason === "not-synced"
-              ? "not-synced"
-              : "failed",
-        })
-      )
-      .catch(() => writeState(key, { status: "failed" }));
+      .then((outcome) => {
+        if (outcome.ok)
+          writeState(key, {
+            status: "sent",
+            held: next === "clear" ? null : next,
+          });
+        else fail(outcome.reason === "not-synced" ? "not-synced" : "failed");
+      })
+      .catch(() => fail("failed"));
   };
 
+  const unsent = status === "failed" || status === "not-synced";
+  const typed = comment.trim() || undefined;
+
   const rate = (next: Rating): void => {
-    if (rating === next) {
-      writeState(key, { rating: null });
-      submit("clear");
-      return;
-    }
-    writeState(key, { rating: next });
-    submit(next);
+    if (status === "sending") return;
+    if (rating === next && held === next) submit("clear");
+    else if (rating === next)
+      submit(next, typed); // retry the failed send
+    else submit(next);
   };
 
   return (
@@ -146,12 +166,16 @@ export const MessageFeedback = ({ id, send }: MessageFeedbackProps) => {
               className="flex flex-col gap-2"
               onSubmit={(event) => {
                 event.preventDefault();
-                submit(rating, comment.trim() || undefined);
+                submit(rating, typed);
               }}
             >
               <Textarea
                 aria-label={t("bots.chat.feedback.tellUsMore")}
-                placeholder={t("bots.chat.feedback.placeholder")}
+                placeholder={t(
+                  rating === "up"
+                    ? "bots.chat.feedback.placeholderUp"
+                    : "bots.chat.feedback.placeholderDown"
+                )}
                 value={comment}
                 onChange={(event) =>
                   writeState(key, { comment: event.target.value })
@@ -162,7 +186,8 @@ export const MessageFeedback = ({ id, send }: MessageFeedbackProps) => {
                 type="submit"
                 size="sm"
                 className="self-end"
-                disabled={status === "sending" || comment.trim() === ""}
+                // After a failed send, an empty comment still retries the rating.
+                disabled={status === "sending" || (typed == null && !unsent)}
               >
                 {t("bots.chat.feedback.send")}
               </Button>

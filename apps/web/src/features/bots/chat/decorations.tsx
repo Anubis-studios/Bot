@@ -13,6 +13,7 @@ import type {
  * Features do not import each other, so the slot's types are declared here
  * structurally (identical to the kit's).
  */
+import { feedbackSegmentId } from "@abacus-ai/contract/transcript/feedback-target";
 import type { UIMessage } from "@tanstack/ai-client";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -97,14 +98,6 @@ const ReactionBadge = ({ emoji }: { emoji: string }) => {
   );
 };
 
-/** The rated segment: a migrated message's v1 segment id, else its id. */
-export const feedbackSegmentId = (message: UIMessage): string => {
-  const segmentId = (
-    message.metadata as { abacus?: { segmentId?: unknown } } | undefined
-  )?.abacus?.segmentId;
-  return typeof segmentId === "string" ? segmentId : message.id;
-};
-
 export const botMessageDecorations = (
   options: BotDecorationOptions
 ): DecorateMessage & {
@@ -169,14 +162,22 @@ export const botMessageDecorations = (
         break;
       }
     }
+    // Keyed on the stored message: the skin drops thinking and blank parts
+    // from the one it shows, and the key counts the stored parts. A bubble
+    // with no spoken text has nothing the server can rate.
+    const segmentId = feedbackSegmentId(context.messages[index]!);
     const feedback =
-      options.feedbackEnabled && view.spoke && !view.live && closesTurn ? (
+      options.feedbackEnabled &&
+      view.spoke &&
+      !view.live &&
+      closesTurn &&
+      segmentId != null ? (
         <MessageFeedback
-          id={`${options.sessionId}:${feedbackSegmentId(message)}`}
+          id={`${options.sessionId}:${segmentId}`}
           send={(rating, comment) =>
             options.sendFeedback({
               sessionId: options.sessionId,
-              segmentId: feedbackSegmentId(message),
+              segmentId,
               rating,
               ...(comment != null ? { comment } : {}),
               ...(options.model !== undefined ? { model: options.model } : {}),

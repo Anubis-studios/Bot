@@ -3,8 +3,9 @@
  * message: silent turns hidden, the reaction badge and the dropped emoji
  * reply, one deliverables card whose rows open through the route's
  * callbacks, and feedback only with an Abacus account, never on the live
- * run, `clear` on a re-click, keyed by the migrated segment id.
+ * run, `clear` on a re-click, keyed by the reply's text part.
  */
+import { feedbackSegmentId } from "@abacus-ai/contract/transcript/feedback-target";
 import type { UIMessage } from "@tanstack/ai-client";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
@@ -15,7 +16,6 @@ import { i18n, initI18n } from "#renderer/lib/i18n";
 
 import {
   botMessageDecorations,
-  feedbackSegmentId,
   type BotDecorationOptions,
 } from "./decorations";
 
@@ -172,9 +172,20 @@ describe("botMessageDecorations", () => {
     const opts = options();
     const messages = [
       msg("u", "user", [text("hi")]),
-      msg("a", "assistant", [text("Hello")], {
-        abacus: { segmentId: "seg-7" },
-      }),
+      // Migrated from v1: the reply is rated by its text part's segment.
+      msg(
+        "seg-1",
+        "assistant",
+        [
+          { type: "thinking", content: "hm" } as Part,
+          {
+            type: "text",
+            content: "Hello",
+            metadata: { abacus: { segmentId: "seg-7" } },
+          } as Part,
+        ],
+        { abacus: { segments: [{ id: "seg-1" }, { id: "seg-7" }] } }
+      ),
     ];
     const d = decorateAll(botMessageDecorations(opts), messages);
     show(d[1]!.after);
@@ -213,7 +224,78 @@ describe("botMessageDecorations", () => {
     await screen.findByText("Couldn't send feedback yet");
   });
 
-  it("a live message is rated by its id", () => {
-    expect(feedbackSegmentId(msg("live-1", "assistant", []))).toBe("live-1");
+  it("rates a live bubble by its last spoken text part, past thinking and tools", () => {
+    expect(feedbackSegmentId(msg("live-1", "assistant", [text("Hi")]))).toBe(
+      "live-1"
+    );
+    expect(
+      feedbackSegmentId(
+        msg("live-2", "assistant", [
+          { type: "thinking", content: "plan" } as Part,
+          ...tool("c9", "bash", { command: "ls" }),
+          text("Done."),
+          text("  "),
+        ])
+      )
+    ).toBe("live-2#3");
+    // A notice is not the reply.
+    expect(
+      feedbackSegmentId(
+        msg("live-3", "assistant", [
+          text("Answer"),
+          {
+            type: "text",
+            content: "Limit reached",
+            metadata: { abacus: { kind: "notification" } },
+          } as Part,
+        ])
+      )
+    ).toBe("live-3");
+  });
+
+  it("sends the text part's key for a bubble that opens with a tool call", async () => {
+    const opts = options();
+    const messages = [
+      msg("u", "user", [text("hi")]),
+      msg("a", "assistant", [
+        ...tool("c4", "read", { file_path: "a.txt" }),
+        text("It says hi."),
+      ]),
+    ];
+    // The kit hands over the shown bubble, its tool parts dropped; the key
+    // still counts the stored message's parts.
+    const shown = msg("a", "assistant", [text("It says hi.")]);
+    show(
+      botMessageDecorations(opts)(shown, {
+        messages,
+        index: 1,
+        runActive: false,
+      })!.after
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Good response" })
+    );
+    await waitFor(() =>
+      expect(opts.sendFeedback).toHaveBeenCalledWith(
+        expect.objectContaining({ segmentId: "a#2", rating: "up" })
+      )
+    );
+  });
+
+  it("offers no rating on a bubble with nothing rateable", () => {
+    expect(feedbackSegmentId(msg("a", "assistant", tool("c", "ls", {})))).toBe(
+      null
+    );
+    expect(feedbackSegmentId(msg("u", "user", [text("hi")]))).toBe(null);
+    // Migrated text with no segment id cannot be found on the server.
+    const orphan = msg("m", "assistant", [text("Old reply")], {
+      abacus: { segments: [] },
+    });
+    expect(feedbackSegmentId(orphan)).toBe(null);
+    const d = decorateAll(botMessageDecorations(options()), [
+      msg("u", "user", [text("hi")]),
+      orphan,
+    ]);
+    expect(d[1]?.after).toBeUndefined();
   });
 });

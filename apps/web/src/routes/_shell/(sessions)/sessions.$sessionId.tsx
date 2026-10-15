@@ -43,6 +43,7 @@ import type {
 } from "@abacus-ai/contract/agent-types";
 import { SessionId } from "@abacus-ai/contract/contract/ids";
 import { sessionConversationKey } from "@abacus-ai/contract/conversation-scope";
+import { feedbackSegmentId } from "@abacus-ai/contract/transcript/feedback-target";
 
 import { EmptyState } from "#renderer/components/empty-state";
 import { hasInAppViewer, isUrl } from "#renderer/components/file-preview";
@@ -511,9 +512,15 @@ const SessionRoute = () => {
                       });
                 if (context.runActive && at === context.messages.length - 1)
                   return after != null ? { after } : null;
-                const source = message.metadata?.abacus?.segmentId;
+                // Keyed on the stored host message, not the shown row: the
+                // key counts stored parts, and the tool-only messages folded
+                // in after it hold no text. Nothing spoken, nothing to rate.
+                const stored = context.messages.find(
+                  (row) => row.id === message.id
+                );
                 const segmentId =
-                  typeof source === "string" ? source : message.id;
+                  stored == null ? null : feedbackSegmentId(stored);
+                if (segmentId == null) return after != null ? { after } : null;
                 return {
                   ...(after != null ? { after } : {}),
                   actions: (

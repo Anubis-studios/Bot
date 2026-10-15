@@ -4,15 +4,18 @@
  * (`source.kind: "agui"`, which has no v1 transcript), its UIMessages. Each
  * message part is one log entry keyed by the stable message id (part 0) or
  * `<id>#<part index>`, so the same append-only per-session sync state holds
- * both and `sequenceOf(sessionId, messageId)` answers for a live message.
+ * both and `sequenceOf` answers for the part a rating names
+ * (`feedbackSegmentId`).
  *
  * Messages migrated from v1 (they carry `metadata.abacus.segments`) are not
  * uploaded again: their segments are the v1 transcript's, already keyed by
- * segment id, which is what feedback names for them
- * (`metadata.abacus.segmentId`).
+ * segment id, which is what feedback names for them (a text part's
+ * `metadata.abacus.segmentId`).
  *
  * Pure: no Electron or fs, like `debug-sync.core`.
  */
+import { aguiEntryKey } from "@abacus-ai/contract/transcript/feedback-target";
+
 import type { StoredTranscript } from "../session/transcript-service";
 
 /** The entry type of an AG-UI message part in the upload log. */
@@ -58,10 +61,6 @@ export const messageCreatedAt = (message: unknown): number | null => {
   }
   return null;
 };
-
-/** The key an AG-UI part is uploaded under. */
-export const aguiEntryKey = (messageId: string, partIndex: number): string =>
-  partIndex === 0 ? messageId : `${messageId}#${partIndex}`;
 
 /** One entry per part of every live (non-migrated) message, in order. */
 export const aguiSyncEntries = (

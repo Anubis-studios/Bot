@@ -9,6 +9,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import { feedbackSegmentId } from "@abacus-ai/contract/transcript/feedback-target";
+import type { UIMessage } from "@tanstack/ai-client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("electron", () => ({
@@ -221,12 +223,55 @@ describe("debug sync, feedback and previews on v2 AG-UI threads", () => {
               { type: "tool-call", id: "t1" },
             ],
           },
+          {
+            id: "run-4:a",
+            role: "assistant",
+            parts: [
+              { type: "thinking", content: "plan" },
+              { type: "text", content: "Done." },
+            ],
+          },
         ],
       }),
     });
+    const keys = log?.segments.map((segment) => (segment as { id: string }).id);
+    expect(keys).toEqual([
+      "text:0:1",
+      "run-3:a",
+      "run-3:a#1",
+      "run-4:a",
+      "run-4:a#1",
+    ]);
+    // What a rating names is an entry the log uploads, and it is the text.
+    const rated = feedbackSegmentId({
+      id: "run-4:a",
+      role: "assistant",
+      parts: [
+        { type: "thinking", content: "plan" },
+        { type: "text", content: "Done." },
+      ],
+    } as UIMessage);
+    expect(rated).toBe("run-4:a#1");
     expect(
-      log?.segments.map((segment) => (segment as { id: string }).id)
-    ).toEqual(["text:0:1", "run-3:a", "run-3:a#1"]);
+      log?.segments.find((segment) => (segment as { id: string }).id === rated)
+    ).toMatchObject({
+      role: "assistant",
+      part: { type: "text", content: "Done." },
+    });
+    expect(
+      feedbackSegmentId({
+        id: "m-old",
+        role: "assistant",
+        parts: [
+          {
+            type: "text",
+            content: "old",
+            metadata: { abacus: { segmentId: "text:0:1" } },
+          },
+        ],
+        metadata: { abacus: { segments: [{ id: "text:0:1" }] } },
+      } as unknown as UIMessage)
+    ).toBe("text:0:1");
   });
 });
 

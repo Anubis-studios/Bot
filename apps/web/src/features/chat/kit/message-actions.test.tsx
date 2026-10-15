@@ -1,4 +1,6 @@
 import type { UserTextTags } from "@abacus-ai/contract/agent-types";
+import type { TurnFeedbackOutcome } from "@abacus-ai/contract/contracts";
+import { feedbackSegmentId } from "@abacus-ai/contract/transcript/feedback-target";
 import {
   act,
   fireEvent,
@@ -945,3 +947,123 @@ it("allows selection through the context-menu trigger and preserves it on action
   expect(fireEvent.mouseDown(smiley())).toBe(false);
   expect(selection.toString()).toBe(before);
 });
+
+it.each(["bot", "session"] as const)(
+  "%s: a reply that opens with thinking is rated by its text, through success, failure, retry, switch and clear",
+  async (skin) => {
+    clearFeedbackStates();
+    const reply = {
+      id: "r",
+      role: "assistant" as const,
+      parts: [
+        { type: "thinking" as const, content: "Weighing it" },
+        { type: "text" as const, content: "Use the second option." },
+      ],
+    };
+    const relay = new FakeRelay({
+      history: [
+        { id: "u", role: "user", parts: [{ type: "text", content: "Which?" }] },
+        reply,
+      ],
+    });
+    relay.emitAll(b.sessionReady());
+    const outcomes: TurnFeedbackOutcome[] = [];
+    const send = vi.fn(
+      async (_segmentId: string, _rating: string, _comment?: string) =>
+        outcomes.shift() ?? { ok: true }
+    );
+    current = await renderRelay(
+      relay,
+      skin,
+      {},
+      {
+        slots: {
+          decorateMessage: (message, context) => {
+            // As the routes do: the stored message, not the shown one.
+            const stored = context.messages.find(
+              (row) => row.id === message.id
+            );
+            const segmentId = stored == null ? null : feedbackSegmentId(stored);
+            if (segmentId == null) return null;
+            const control = (
+              <MessageFeedback
+                id={`t-1:${segmentId}`}
+                send={(rating, comment) => send(segmentId, rating, comment)}
+              />
+            );
+            // As the routes place it: under a bot reply, in a session's row.
+            return skin === "bot" ? { after: control } : { actions: control };
+          },
+        },
+      }
+    );
+    await screen.findByText("Use the second option.");
+    const thumb = (name: string) => screen.getByRole("button", { name });
+    const status = async (text: string) =>
+      waitFor(() =>
+        expect(
+          screen
+            .getAllByRole("status")
+            .some((node) => node.textContent === text)
+        ).toBe(true)
+      );
+    // The popover's Send, not the composer's.
+    const sendButton = () =>
+      within(field().form!).getByRole("button", { name: "Send" });
+    const field = () =>
+      screen.getByRole("textbox", {
+        name: "Tell us more",
+      }) as HTMLTextAreaElement;
+
+    fireEvent.click(thumb("Good response"));
+    await status("Thanks for the feedback");
+    expect(send).toHaveBeenLastCalledWith("r#1", "up", undefined);
+    expect(field().placeholder).toBe("What did you like?");
+
+    fireEvent.click(thumb("Bad response"));
+    await waitFor(() =>
+      expect(thumb("Bad response").getAttribute("aria-pressed")).toBe("true")
+    );
+    expect(thumb("Good response").getAttribute("aria-pressed")).toBe("false");
+    await status("Thanks for the feedback");
+    expect(field().placeholder).toBe("What went wrong?");
+    fireEvent.change(field(), { target: { value: "Too vague" } });
+    fireEvent.click(sendButton());
+    await waitFor(() =>
+      expect(send).toHaveBeenLastCalledWith("r#1", "down", "Too vague")
+    );
+    await status("Thanks for the feedback");
+
+    // The server refuses: the error shows, the comment and thumb stay.
+    outcomes.push({ ok: false, reason: "failed" });
+    fireEvent.change(field(), { target: { value: "Too vague, and wrong" } });
+    fireEvent.click(sendButton());
+    await status("Couldn't send your feedback. Please try again.");
+    expect(field().value).toBe("Too vague, and wrong");
+    expect(thumb("Bad response").getAttribute("aria-pressed")).toBe("true");
+    expect(field().placeholder).toBe("What went wrong?");
+    fireEvent.click(sendButton());
+    await status("Thanks for the feedback");
+    expect(send).toHaveBeenLastCalledWith(
+      "r#1",
+      "down",
+      "Too vague, and wrong"
+    );
+
+    // Switch back to up, then withdraw it.
+    fireEvent.click(thumb("Good response"));
+    await waitFor(() =>
+      expect(send).toHaveBeenLastCalledWith("r#1", "up", undefined)
+    );
+    await status("Thanks for the feedback");
+    fireEvent.click(thumb("Good response"));
+    await waitFor(() =>
+      expect(send).toHaveBeenLastCalledWith("r#1", "clear", undefined)
+    );
+    await waitFor(() =>
+      expect(thumb("Good response").getAttribute("aria-pressed")).toBe("false")
+    );
+    expect(thumb("Bad response").getAttribute("aria-pressed")).toBe("false");
+    expect(send).toHaveBeenCalledTimes(7);
+  }
+);
