@@ -632,14 +632,15 @@ export class AgentManagerService {
     // win). A PATH nicety must never break a spawn, hence the guard.
     try {
       const vendor = agentVendorDir();
-      if (
-        existsSync(vendor) &&
-        !(sanitized.PATH ?? "").split(delimiter).includes(vendor)
-      ) {
-        sanitized.PATH =
-          sanitized.PATH == null || sanitized.PATH === ""
-            ? vendor
-            : `${sanitized.PATH}${delimiter}${vendor}`;
+      // Windows spells it `Path`. A second `PATH` beside it wins the spawn's
+      // case-insensitive dedupe, and the user's own entries are dropped.
+      const pathKey =
+        Object.keys(sanitized).find((key) => key.toUpperCase() === "PATH") ??
+        "PATH";
+      const current = sanitized[pathKey] ?? "";
+      if (existsSync(vendor) && !current.split(delimiter).includes(vendor)) {
+        sanitized[pathKey] =
+          current === "" ? vendor : `${current}${delimiter}${vendor}`;
       }
     } catch {
       // Vendor resolution unavailable; the agent falls back to PATH.
