@@ -55,6 +55,8 @@ const ALLOWED = new Set([
   "@abacus-ai/agent/traveler-store",
   // The user's own words in a tagged message: a type import only.
   "@abacus-ai/agent/user-text",
+  // How a path is spelled for the model: no imports at all.
+  "@abacus-ai/agent/model-path",
 ]);
 
 const MAIN_DIR = resolve(import.meta.dirname);
