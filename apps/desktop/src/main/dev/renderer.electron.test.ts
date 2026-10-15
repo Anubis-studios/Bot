@@ -139,6 +139,46 @@ const RECORDER = `(() => {
   if (window.__vtRecorder) return;
   window.__vtRecorder = true;
   window.__vt = [];
+  // Every frame and every long main-thread task, so a transition that never
+  // captured says whether the window got no frames or the page was busy.
+  const frames = [];
+  // When the callback runs, not its frame timestamp: a late frame carries
+  // the time its BeginFrame was issued.
+  const tick = () => {
+    frames.push(performance.now());
+    if (frames.length > 4000) frames.splice(0, 2000);
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+  const longTasks = [];
+  try {
+    new PerformanceObserver((list) => {
+      for (const task of list.getEntries())
+        longTasks.push([task.startTime, task.startTime + task.duration]);
+    }).observe({ type: "longtask", buffered: true });
+  } catch {}
+  const timing = (from, to, updateAt) => {
+    const inside = frames.filter((at) => at >= from && at <= to);
+    const marks = [from, ...inside, to];
+    let maxGap = 0;
+    for (let i = 1; i < marks.length; i += 1)
+      maxGap = Math.max(maxGap, marks[i] - marks[i - 1]);
+    let busy = 0;
+    for (const [a, b] of longTasks) busy += Math.max(0, Math.min(b, to) - Math.max(a, from));
+    const before = frames.filter((at) => at < from);
+    const recent = frames.filter((at) => at >= from - 1000 && at < from);
+    return {
+      sinceFrame: before.length === 0 ? null : Math.round(from - before[before.length - 1]),
+      framesInSecondBefore: recent.length,
+      ms: Math.round(to - from),
+      update: updateAt == null ? null : Math.round(updateAt - from),
+      frames: inside.length,
+      maxFrameGap: Math.round(maxGap),
+      longTaskMs: Math.round(busy),
+      visibility: document.visibilityState,
+      focus: document.hasFocus(),
+    };
+  };
   const start = document.startViewTransition.bind(document);
   document.startViewTransition = (arg) => {
     const entry = {
@@ -150,7 +190,17 @@ const RECORDER = `(() => {
     };
     window.__vt.push(entry);
     const started = performance.now();
-    const transition = start(arg);
+    let updateAt = null;
+    const update = typeof arg === "function" ? arg : arg && arg.update;
+    const transition = start({
+      ...(typeof arg === "object" ? arg : {}),
+      update: () => {
+        updateAt = performance.now();
+        return update && update();
+      },
+    });
+    const settle = () => { entry.timing = timing(started, performance.now(), updateAt); };
+    transition.ready.then(settle, settle);
     const observe = () => {
       for (const animation of document.getAnimations()) {
         if (!String(animation.animationName || "").startsWith("vt-")) continue;
@@ -182,6 +232,8 @@ type Recorded = {
   animated: string[];
   done: boolean;
   error?: string;
+  /** From the start until `ready` settled: frames, long tasks, visibility. */
+  timing?: Record<string, unknown>;
 };
 
 const booted = () => until("typeof window.__abacusDev === 'object'", 30_000);
