@@ -380,8 +380,8 @@ describe.skipIf(!runnable)("renderer acceptance (Electron)", () => {
         "sessions"
       );
       const started = await transitions();
-      // Whole entries, so a failure shows what animated and any skip reason.
-      expect(started).toMatchObject([
+      // The message is the whole entry: what animated, and any skip reason.
+      expect(started, JSON.stringify(started)).toMatchObject([
         { types: ["nav-lateral"], pane: true, sidebar: true },
       ]);
     });
@@ -410,10 +410,10 @@ describe.skipIf(!runnable)("renderer acceptance (Electron)", () => {
       const into = await transitions();
       await go("/bots/new");
       const out = await transitions();
-      expect(into).toMatchObject([
+      expect(into, JSON.stringify(into)).toMatchObject([
         { types: ["settings-in"], pane: true, sidebar: true },
       ]);
-      expect(out).toMatchObject([
+      expect(out, JSON.stringify(out)).toMatchObject([
         { types: ["settings-out"], pane: true, sidebar: true },
       ]);
     });
@@ -447,12 +447,16 @@ describe.skipIf(!runnable)("renderer acceptance (Electron)", () => {
       // runtime's 5 s readiness cap. Leave time for IPC and the transition
       // after that cap; this case checks transition types, not load latency.
       const forward = await transitions(10_000);
-      expect(forward).toMatchObject([{ types: ["nav-forward"], pane: true }]);
+      expect(forward, JSON.stringify(forward)).toMatchObject([
+        { types: ["nav-forward"], pane: true },
+      ]);
 
       await evaluate("history.back()");
       await until("window.location.hash === '#/bots/new'", 5_000);
       const back = await transitions();
-      expect(back).toMatchObject([{ types: ["nav-back"], pane: true }]);
+      expect(back, JSON.stringify(back)).toMatchObject([
+        { types: ["nav-back"], pane: true },
+      ]);
     });
 
     it("a loader slower than the pending threshold commits its pending screen without one, then starts exactly one", async () => {
@@ -479,7 +483,9 @@ describe.skipIf(!runnable)("renderer acceptance (Electron)", () => {
         await evaluate("window.__abacusDev.setLoaderDelay(0)");
       }
       const started = await transitions();
-      expect(started).toMatchObject([{ types: ["nav-lateral"], pane: true }]);
+      expect(started, JSON.stringify(started)).toMatchObject([
+        { types: ["nav-lateral"], pane: true },
+      ]);
     });
 
     it("never starts two transitions at once, a route with a React <ViewTransition> included", async () => {
