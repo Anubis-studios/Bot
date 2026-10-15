@@ -100,10 +100,12 @@ export const settleSkippedViewTransitions = (doc: Document): boolean => {
  * showing (another workspace on Wayland) gets no frames, so a route
  * transition started there holds the old page until the window is shown
  * again; `backgroundThrottling: false` does not help, the document stays
- * `visible`. A transition whose update has not run after `ms` is skipped,
- * which runs the update at once, unless a frame then arrives within another
- * `ms`: a busy or slow window is late with its capture but still renders,
- * and skipping there would drop the animation for nothing.
+ * `visible`, and no API says the window is off screen. What does say it is
+ * on screen is focus: the user is in this window. So a focused window waits
+ * for its capture however late it is (a loaded or virtualised GPU can go
+ * half a second or more without a frame), and a transition in an unfocused
+ * window whose update has not run after `ms` is skipped, which runs the
+ * update at once.
  */
 const UNCAPTURED = Symbol.for("abacus.uncapturedViewTransition");
 
@@ -127,16 +129,17 @@ export const skipUncapturedViewTransitions = (
         return update?.();
       },
     });
-    setTimeout(() => {
-      if (called) return;
-      let framed = false;
-      requestAnimationFrame(() => {
-        framed = true;
-      });
-      setTimeout(() => {
-        if (!called && !framed) transition.skipTransition();
-      }, ms);
-    }, ms);
+    let settled = false;
+    const stop = (): void => {
+      settled = true;
+    };
+    transition.finished.then(stop, stop);
+    const check = (): void => {
+      if (called || settled) return;
+      if (doc.hasFocus()) setTimeout(check, ms);
+      else transition.skipTransition();
+    };
+    setTimeout(check, ms);
     return transition;
   }) as StartViewTransition;
   target[UNCAPTURED] = true;

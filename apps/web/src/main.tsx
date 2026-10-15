@@ -99,8 +99,8 @@ if (!IS_ELECTRON) {
 // TanStack/router#7906: a route transition the browser skips (hidden window)
 // must not surface as an unhandled rejection.
 settleSkippedViewTransitions(document);
-// A window the compositor is not showing renders no frames: navigate without
-// the transition rather than hold the old page until it is shown.
+// A window the compositor is not showing renders no frames: an unfocused one
+// navigates without the transition rather than hold the old page until shown.
 skipUncapturedViewTransitions(document);
 // Dev and the acceptance build: a second view transition in one commit is
 // reported (and counted for R1-T11b).

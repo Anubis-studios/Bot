@@ -144,10 +144,17 @@ describe("settleSkippedViewTransitions (TanStack/router#7906)", () => {
 });
 
 describe("skipUncapturedViewTransitions", () => {
-  const capturingDocument = () => {
+  const capturingDocument = (focus = { has: false }) => {
     const calls: { update: () => unknown; types?: string[] }[] = [];
-    const transition = { skipTransition: vi.fn() };
+    let finish!: () => void;
+    const transition = {
+      skipTransition: vi.fn(),
+      finished: new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+    };
     const doc = {
+      hasFocus: () => focus.has,
       startViewTransition: (arg: {
         update: () => unknown;
         types?: string[];
@@ -156,41 +163,46 @@ describe("skipUncapturedViewTransitions", () => {
         return transition;
       },
     } as unknown as Document;
-    return { doc, calls, transition };
+    return { doc, calls, transition, finish: () => finish() };
   };
 
-  it("skips a transition whose window gets no frame to capture it in", () => {
+  it("skips an unfocused window's transition whose update has not run in time", () => {
+    // Another workspace: the window gets no frame, and is not the user's.
     vi.useFakeTimers();
-    // The compositor is not showing the window: no frame ever comes.
-    vi.stubGlobal("requestAnimationFrame", () => 0);
     const { doc, transition } = capturingDocument();
     skipUncapturedViewTransitions(doc, 250);
     doc.startViewTransition(() => undefined);
-    vi.advanceTimersByTime(499);
+    vi.advanceTimersByTime(249);
     expect(transition.skipTransition).not.toHaveBeenCalled();
     vi.advanceTimersByTime(1);
     expect(transition.skipTransition).toHaveBeenCalledOnce();
-    vi.unstubAllGlobals();
     vi.useRealTimers();
   });
 
-  it("keeps a transition whose window still renders, only late", () => {
-    // A busy main thread or a slow capture: the update is late, frames are not.
+  it("waits for a focused window's capture however late, and skips once it loses focus", () => {
+    // A loaded or virtualised GPU: the window is on screen, the frame is late.
     vi.useFakeTimers();
-    let frame: FrameRequestCallback | undefined;
-    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
-      frame = callback;
-      return 1;
-    });
-    const { doc, calls, transition } = capturingDocument();
+    const focus = { has: true };
+    const { doc, transition } = capturingDocument(focus);
     skipUncapturedViewTransitions(doc, 250);
     doc.startViewTransition(() => undefined);
+    vi.advanceTimersByTime(5_000);
+    expect(transition.skipTransition).not.toHaveBeenCalled();
+    focus.has = false;
     vi.advanceTimersByTime(250);
-    frame!(0);
+    expect(transition.skipTransition).toHaveBeenCalledOnce();
+    vi.useRealTimers();
+  });
+
+  it("stops watching a transition that finished without its update", async () => {
+    vi.useFakeTimers();
+    const { doc, transition, finish } = capturingDocument();
+    skipUncapturedViewTransitions(doc, 250);
+    doc.startViewTransition(() => undefined);
+    finish();
+    await Promise.resolve();
     vi.advanceTimersByTime(1_000);
     expect(transition.skipTransition).not.toHaveBeenCalled();
-    calls[0]!.update();
-    vi.unstubAllGlobals();
     vi.useRealTimers();
   });
 
