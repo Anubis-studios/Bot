@@ -136,17 +136,22 @@ export function posixShellOperations(
 
 const WINDOWS_SHELL_PROMPT = [
   "# Windows shell",
-  "`bash` runs in a POSIX shell (busybox ash) on Windows: pipes, `&&`, redirects, `$(...)`,",
-  "heredocs and grep/sed/awk/find/head/tail/wc/sort all work. Ignore any advice to use cmd.exe",
-  "or PowerShell syntax in it.",
-  "- Paths are native Windows paths, not WSL: there is no /mnt/c. Write them quoted, with",
-  "  forward slashes and the drive letter: 'C:/Users/Name With Spaces/project'. An unquoted",
-  "  backslash is a shell escape.",
-  "- ash is not GNU bash: no arrays, no `**` globstar, and busybox's coreutils lack some GNU",
-  "  flags. Installed Windows programs (node, python, git, npm.cmd) are on PATH and take",
-  "  Windows arguments.",
-  "- Variables are `$NAME` and `export NAME=value`, never `%NAME%`. To run PowerShell, call",
-  "  `powershell.exe -NoProfile -Command '...'` with the program single-quoted.",
+  "`bash` runs busybox ash on Windows, not bash, WSL or MSYS. Pipes, `&&`, redirects, `$(...)`,",
+  "heredocs and grep/sed/awk/find/head/tail/wc/sort/xargs work; arrays, `**` and some GNU flags",
+  "do not. Write POSIX shell in it, never cmd.exe or PowerShell syntax.",
+  "- Paths are native, with forward slashes: 'C:/Users/Name/project'. /c/..., /mnt/c and",
+  "  /cygdrive/c do not exist. Quote any path with a space ('C:/Program Files/...'). Avoid",
+  '  backslashes: unquoted they vanish, and a trailing one inside "..." escapes the quote.',
+  '- There is no /tmp. Scratch files go in "$TMPDIR" (the Windows temp dir; mktemp uses it).',
+  "- Installed programs (node, python, git, npm.cmd) are on PATH and take Windows arguments.",
+  "  Look one up with `command -v name`, not `where`.",
+  "- There is no nohup, setsid, mount, file, lsof or top. For a long job, use the `background`",
+  "  parameter of `bash` where it has one.",
+  "- Variables are `$NAME` and `export NAME=value`, never `%NAME%`.",
+  "- PowerShell: single-quote the whole program and write PowerShell inside it, double quotes",
+  "  for its strings: powershell -NoProfile -Command 'Get-Item \"C:/x y\" | Select-Object Name'.",
+  '  For more than a line, write a .ps1 into "$TMPDIR" and run powershell -NoProfile',
+  "  -ExecutionPolicy Bypass -File on it. Prefer ash when it can do the job.",
 ].join("\n");
 
 /** What the model needs to know about the shell it has, or null where it has a real bash. */

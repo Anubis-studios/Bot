@@ -473,8 +473,27 @@ export function resetPosixShellForTesting(): void {
 }
 
 /**
- * `env` for a child of the shell: the launchers first on PATH, and the
- * override list. Nothing else changes.
+ * TMPDIR, TMP and TEMP for any of them missing (in any case), all naming one
+ * temp dir: Windows sets only TMP and TEMP, and there is no /tmp.
+ */
+function tempDirEnv(env: NodeJS.ProcessEnv): Record<string, string> {
+  const value = (name: string): string | undefined =>
+    Object.entries(env).find(([key]) => key.toUpperCase() === name)?.[1];
+  const dir =
+    [value("TEMP"), value("TMP"), value("TMPDIR")].find(
+      (candidate) => candidate != null && candidate.length > 0
+    ) ?? os.tmpdir();
+
+  return Object.fromEntries(
+    ["TMPDIR", "TMP", "TEMP"]
+      .filter((name) => value(name) == null)
+      .map((name) => [name, dir])
+  );
+}
+
+/**
+ * `env` for a child of the shell: the launchers first on PATH, the override
+ * list, and a temp dir where one is missing. Nothing else changes.
  */
 export function posixShellEnv(
   env: NodeJS.ProcessEnv,
@@ -482,7 +501,7 @@ export function posixShellEnv(
 ): Record<string, string> {
   const base = childProcessEnv(env);
 
-  return childProcessEnv(base, {
+  return childProcessEnv(base, tempDirEnv(base), {
     PATH: mergePath(shell.bin, base.PATH) ?? shell.bin,
     BB_OVERRIDE_APPLETS: shell.overrideApplets,
   });

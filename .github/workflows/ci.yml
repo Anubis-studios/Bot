@@ -269,8 +269,8 @@ jobs:
       # The `bash` tool on Windows is the bundled busybox shell, installed and
       # launched by the agent itself (src/posix-shell.ts). Only a Windows
       # machine can run it, so the built bundle installs the payload and runs a
-      # pipeline, a heredoc, a quoted path and a failing command through the
-      # same operations the tool uses.
+      # pipeline, a heredoc, a quoted path, a failing command, $TMPDIR and the
+      # PowerShell call form through the same operations the tool uses.
       - name: The bundled Windows shell installs and runs
         if: runner.os == 'Windows' && needs.plan.outputs.agent == 'true'
         env:
@@ -284,15 +284,16 @@ jobs:
           if (shell == null) throw new Error("the bundled shell did not install");
           const ops = posixShellOperations(shell);
 
-          const run = async (command) => {
+          const run = async (command, env) => {
             let output = "";
             const { exitCode } = await ops.exec(command, process.cwd(), {
               onData: (data) => { output += data; },
+              env,
             });
             return { exitCode, output: output.trim() };
           };
-          const expect = async (command, output, exitCode = 0) => {
-            const got = await run(command);
+          const expect = async (command, output, exitCode = 0, env) => {
+            const got = await run(command, env);
             if (got.output !== output || got.exitCode !== exitCode)
               throw new Error(`${command}\n  expected ${JSON.stringify({ output, exitCode })}\n  got      ${JSON.stringify(got)}`);
             console.log(`ok: ${command.split("\n")[0]}`);
@@ -305,6 +306,12 @@ jobs:
           await expect("exit 7", "", 7);
           await expect("node -e \"console.log(process.argv[1])\" 'C:/Users/Some One'", "C:/Users/Some One");
           await expect("printf '%s' \"$BB_OVERRIDE_APPLETS\" | cut -c1-1", ";");
+          // A desktop launch has no TMPDIR; the shell env supplies the Windows temp dir.
+          const noTmpdir = Object.fromEntries(Object.entries(process.env).filter(([k]) => k.toUpperCase() !== "TMPDIR"));
+          await expect('cd "$TMPDIR" && echo ok', "ok", 0, noTmpdir);
+          await expect('f=$(mktemp) && printf ok > "$f" && cat "$f" && rm "$f"', "ok", 0, noTmpdir);
+          // The PowerShell form the system prompt teaches, with a quoted path inside.
+          await expect("powershell -NoProfile -Command '$p = \"C:/x y\"; Write-Output $p.Length'", "6");
           JS
 
   # The renderer's screenshot gate (spec 01 §10.2) in the real Electron
