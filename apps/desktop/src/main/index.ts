@@ -4,6 +4,8 @@ import { existsSync } from "fs";
 // The account-profile home MUST resolve before any import below reads a path
 // under abacusBotHome(). Stores open files at module load. Keep this first.
 import "./profile-home-init";
+// Main's requests use the system proxy and certificate store. Keep it second.
+import "./system-network-init";
 import fs from "fs/promises";
 import os from "os";
 import { join } from "path";

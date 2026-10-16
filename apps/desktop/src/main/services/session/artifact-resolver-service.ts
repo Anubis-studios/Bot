@@ -39,7 +39,9 @@ export class ArtifactResolverService {
 
     return {
       execPath: process.execPath,
-      execArgs: [entry],
+      // Trust the OS certificate store too, so an HTTPS-scanning antivirus or
+      // corporate root does not fail every TLS handshake to our servers.
+      execArgs: ["--use-system-ca", entry],
       agentRoot: path.dirname(entry),
     };
   }

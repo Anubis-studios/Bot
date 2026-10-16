@@ -421,6 +421,7 @@ import {
   listAbacusConnectors,
 } from "./services/providers/abacus-connector-service";
 import {
+  abacusAppHost,
   abacusRoutellmV1,
   abacusUserAgent,
   hostPublicBase,
@@ -480,6 +481,7 @@ import {
 import { WorkspaceRuntimeService } from "./services/workspace/workspace-runtime-service";
 import { WorkspaceService } from "./services/workspace/workspace-service";
 import { WorktreeMaterializer } from "./services/workspace/worktree-materialize";
+import { agentProxyEnv } from "./system-network";
 
 type EventDispatcher = (event: IpcEvent) => void;
 
@@ -2137,8 +2139,10 @@ export class ServiceHost {
     },
     resolveArtifact: () => this.artifactResolverService.resolveBundledCliPath(),
     resolveAuthEnv: () => buildAgentAuthEnv(),
-    resolveAdditionalConfigEnv: async (sessionId: string) =>
-      this.buildAdditionalConfigEnv("code", sessionId),
+    resolveAdditionalConfigEnv: async (sessionId: string) => ({
+      ...(await agentProxyEnv(abacusAppHost())),
+      ...(await this.buildAdditionalConfigEnv("code", sessionId)),
+    }),
     resolveUnattended: (sessionId: string) => this.heldPolicy(sessionId),
     emitStateUpdated: (workspaceId, sessionId, state) => {
       if (state.status === "starting" || state.pid == null)
