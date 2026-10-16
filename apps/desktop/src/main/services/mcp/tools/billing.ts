@@ -39,7 +39,8 @@ const day = (iso: string): string =>
  * Where the user's credits stand, and how to bring them up: as an offer of
  * what the next plan gives, never as a warning. A free account read the old
  * "a one-time grant that does not renew" as the end of the product and left
- * with every credit unused.
+ * with every credit unused. The offer lists the server's features for the
+ * plan (models, apps, connectors, routines), so it says what the plan does.
  */
 export function creditStanding(billing: BillingPlan): string[] {
   const { current } = billing;
@@ -50,19 +51,21 @@ export function creditStanding(billing: BillingPlan): string[] {
     current.freeTierExpiresAt != null
       ? `Their free credits: ${left} of ${granted} left, usable until ${day(current.freeTierExpiresAt)}.`
       : `Credits left: ${left} of ${granted} this month.`;
-  // An upgrade carries its price and link; its monthly credits are on the plan list.
+  // An upgrade carries its price, features and link; its monthly credits are on the plan list.
   const nextCredits = billing.plans.find(
     (plan) => plan.plan === next?.plan
   )?.creditsPerMonth;
   if (next == null || nextCredits == null) return [standing];
-  const gives = `${next.planName} gives you ${credits(nextCredits)} credits every month`;
-  const example =
+  const where =
     current.freeTierExpiresAt != null
-      ? `"You have ${left} of your ${granted} free credits, until ${day(current.freeTierExpiresAt)}. ${gives}, ${priceLine(next)}: <link>"`
-      : `"You have ${left} of your ${granted} credits this month. ${gives}, ${priceLine(next)}: <link>"`;
+      ? `You have ${left} of your ${granted} free credits, until ${day(current.freeTierExpiresAt)}.`
+      : `You have ${left} of your ${granted} credits this month.`;
   return [
     standing,
-    `When credits come up, say where they stand and what ${next.planName} gives, as an offer, in their language. For example: ${example}`,
+    `When credits come up, say where they stand, then offer ${next.planName} in their language: its price, everything it gives as a short list, then the link. For example:`,
+    `  "${where} ${next.planName} is ${priceLine(next)}, and gives you:`,
+    ...next.features.map((feature) => `    - ${feature}`),
+    `  <link>"`,
     `Asked whether the free credits refill: ${next.planName} gives a fresh ${credits(nextCredits)} every month. Never call the free credits a one-time grant or say they do not renew, and never say the app or the agent will stop working.`,
   ];
 }
