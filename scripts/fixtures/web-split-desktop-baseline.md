@@ -8,7 +8,23 @@ renderer, a chunk split by a stray import), not against features. A feature
 that needs more is measured, reviewed and recorded here as a new baseline,
 in a commit of its own that says by how much it grew.
 
-## Current: `cb77304c` (the routine page's runs, #455)
+## Current: `1096c705` (the app in Turkish)
+
+**404 / 7633950 / 2565237.** Records the renderer with the Turkish locale
+(`tr-TR`). Against `cb77304c`: +3 chunks (+0.75%), +198146 bytes (+2.66%),
++65418 gzip bytes (+2.62%). The Turkish strings are one lazily loaded chunk
+of 164411 bytes (54240 gzip), the same shape as every other locale; the rest
+is what merged to main after `cb77304c` (main stood under the 1% allowance).
+The 1% allowance is unchanged.
+
+Measured with `regenerate-web-split-desktop-baseline.sh 1096c705 1096c705
+bc25648568bcc79597a09c974e0a8e56e2481596411e5ae84cc9e48fdff2e3a8` (isolated
+archives, frozen-lockfile install, Linux x64); the totals equal what CI
+reported on this branch. This baseline-only change touches no renderer code.
+
+## History
+
+### `cb77304c` (the routine page's runs, #455)
 
 **401 / 7435804 / 2499819.** Records the renderer with the routine page's
 run report, runs rail and title-bar actions (#455). Against `27f265ae`: +6
@@ -20,8 +36,6 @@ in. The 1% allowance is unchanged.
 
 Measured from a clean local build of `cb77304c` (frozen-lockfile install,
 Linux x64); this baseline-only change touches no renderer code.
-
-## History
 
 ### `27f265ae` (the tool UI redesign, #436)
 
