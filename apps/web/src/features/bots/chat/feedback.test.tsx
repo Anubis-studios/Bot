@@ -119,11 +119,18 @@ it("puts the held rating back when clearing it fails", async () => {
   current = await renderWithDb(<MessageFeedback send={send} />);
   fireEvent.click(screen.getByRole("button", { name: "Bad response" }));
   await screen.findByText("Thanks for the feedback");
+  // The same thumb again also closes its popover, so this reads the thumb,
+  // not the form and status line inside a popover that is going away.
   fireEvent.click(screen.getByRole("button", { name: "Bad response" }));
-  await screen.findByText("Couldn't send your feedback. Please try again.");
+  await waitFor(() =>
+    expect(
+      screen
+        .getByRole("button", { name: "Bad response" })
+        .getAttribute("data-status")
+    ).toBe("failed")
+  );
   expect(send).toHaveBeenLastCalledWith("clear", undefined);
   expect(pressed("Bad response")).toBe("true");
-  expect(placeholder()).toBe("What went wrong?");
   // Still held, so the next click clears again.
   fireEvent.click(screen.getByRole("button", { name: "Bad response" }));
   await waitFor(() => expect(pressed("Bad response")).toBe("false"));
