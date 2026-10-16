@@ -2,14 +2,9 @@ import {
   type BillingPlan,
   fetchBillingPlan,
 } from "../../../providers/abacus-upgrade";
+import { bullets, credits, creditStanding, priceLine } from "../billing";
 import type { ToolHost, ToolResult } from "../definition";
 import type { PhoneToolDefinition } from "./definition";
-
-const credits = (value: number | null): string =>
-  value == null ? "unknown" : Math.round(value).toLocaleString("en-US");
-
-const bullets = (features: readonly string[]): string[] =>
-  features.map((feature) => `  - ${feature}`);
 
 /** What the phone's model is told about the user's plan, and how to answer. */
 export function phoneBillingResult(
@@ -20,24 +15,21 @@ export function phoneBillingResult(
     return host.ok(
       "The plan details cannot be read right now. Say so plainly in one short line and offer to try again in a moment."
     );
-  const { current } = billing;
   const lines = [
-    `The user's plan: ${current.planName}.`,
-    `Credits left: ${credits(current.creditsRemaining)} of ${credits(current.creditsGranted)} this period.`,
+    `The user's plan: ${billing.current.planName}.`,
+    ...creditStanding(billing),
   ];
-  if (current.freeTierExpiresAt != null)
-    lines.push(`Free credits end: ${current.freeTierExpiresAt}.`);
   lines.push("", "The plans:");
   for (const plan of billing.plans)
     lines.push(
-      `${plan.planName}: ${plan.priceText}, ${credits(plan.creditsPerMonth)} credits a month${plan.current ? " (their plan)" : ""}`,
+      `${plan.planName}: ${priceLine(plan)}, ${credits(plan.creditsPerMonth)} credits a month${plan.current ? " (their plan)" : ""}`,
       ...bullets(plan.features)
     );
   if (billing.upgrades.length > 0) {
     lines.push("", "What they can upgrade to:");
     for (const upgrade of billing.upgrades)
       lines.push(
-        `${upgrade.planName}: ${upgrade.priceText}${upgrade.url != null ? `, link: ${upgrade.url}` : billing.upgradeInMobileApp ? "" : " (call again with upgrade: true for the link)"}`,
+        `${upgrade.planName}: ${priceLine(upgrade)}${upgrade.url != null ? `, link: ${upgrade.url}` : billing.upgradeInMobileApp ? "" : " (call again with upgrade: true for the link)"}`,
         ...bullets(upgrade.features)
       );
   } else {
