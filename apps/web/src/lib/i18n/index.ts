@@ -2,7 +2,7 @@
  * i18n boot for renderer (spec 01 §9.2). The same locale files as the
  * old renderer, reached through `#locales/*`; its own i18next instance, so
  * nothing is shared with the old tree at runtime. `en-US` is bundled; the
- * other ten load on demand as their own chunks.
+ * others load on demand as their own chunks.
  */
 import { createInstance, type i18n as I18n, type TFunction } from "i18next";
 import { initReactI18next } from "react-i18next";
@@ -25,6 +25,7 @@ const LOADERS: Record<
   "ja-JP": () => import("#locales/ja-JP.json"),
   "ko-KR": () => import("#locales/ko-KR.json"),
   "pt-BR": () => import("#locales/pt-BR.json"),
+  "tr-TR": () => import("#locales/tr-TR.json"),
 };
 
 export const i18n: I18n = createInstance();

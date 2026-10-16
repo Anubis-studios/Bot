@@ -104,9 +104,10 @@ if (
   const retained = JSON.parse(
     fs.readFileSync(path.join(import.meta.dirname, "i18n-retained-keys.json"))
   ).keys;
-  for (const file of fs
+  const localeFiles = fs
     .readdirSync(path.join(root, "locales"))
-    .filter((file) => file.endsWith(".json"))) {
+    .filter((file) => file.endsWith(".json"));
+  for (const file of localeFiles) {
     const resource = JSON.parse(
       fs.readFileSync(path.join(root, "locales", file))
     );
@@ -121,6 +122,6 @@ if (
     process.exitCode = 1;
   } else
     console.log(
-      `UI copy: ${keys.size} keys resolve to strings in all 11 locales; no placeholder copy.`
+      `UI copy: ${keys.size} keys resolve to strings in all ${localeFiles.length} locales; no placeholder copy.`
     );
 }

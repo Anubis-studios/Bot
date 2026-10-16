@@ -128,6 +128,7 @@ export const SUPPORTED_LANGUAGES = [
   "ja-JP",
   "ko-KR",
   "pt-BR",
+  "tr-TR",
 ] as const;
 
 export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
