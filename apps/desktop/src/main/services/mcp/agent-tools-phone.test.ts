@@ -428,8 +428,12 @@ describe("present_deliverable on the phone", () => {
     });
     expect(mixed.isError).toBe(false);
     expect(declaredMedia(mixed.text)).toHaveLength(1);
-    expect(mixed.text).toMatch(/Not sent:\n- clip\.mp4: The chat takes only/);
-    expect(mixed.text).toContain("Convert it to one of them (a PDF, say)");
+    expect(mixed.text).toMatch(
+      /Not sent:\n- clip\.mp4: The chat does not carry \.mp4 files\./
+    );
+    // No copy of it can go: the note says what can, never to convert it.
+    expect(mixed.text).toContain("WhatsApp cannot carry clip.mp4");
+    expect(mixed.text).toContain("saved on their computer");
 
     const none = await call("present_deliverable", {
       items: [{ path: "clip.mp4" }],

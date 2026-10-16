@@ -21,6 +21,7 @@ import {
   mediaLine,
   parseSendMedia,
   type ResolvedMedia,
+  takesDocument,
 } from "@abacus-ai/agent/send-media";
 import { UNATTENDED_TOOLS } from "@abacus-ai/agent/tool-policy";
 import {
@@ -186,6 +187,26 @@ const loopbackOrigin = (url: string): string | null => {
 
 /** Files that go to a chat as pictures. */
 const IMAGE_FILE = /\.(png|jpe?g|webp)$/i;
+
+/** A file the chat cannot carry at all (its type, or past the size limit), not one that needs fixing first. */
+type KeptFile = { id: string } | { reason: string; unfit?: true };
+
+/**
+ * What the session hears once for files the chat cannot carry. Repackaging
+ * cannot get them through, so it says what can: the content in a form the
+ * chat takes, and the file itself where it lives.
+ */
+function unfitNote(labels: string[]): string {
+  const where =
+    import.meta.env.ABACUS_WEB_HOST === true
+      ? "The file itself reaches them in the AbacusAI Bot desktop app (bot.abacus.ai on a computer), where you can make it again for them."
+      : "The file itself is saved on their computer: tell them where it is.";
+  return (
+    `WhatsApp cannot carry ${labels.join(", ")}, and a zip or renamed copy is refused too, so do not try. ` +
+    "Tell the user once, in their language, and give them what fits this chat instead: the readable " +
+    `content as a txt, md or PDF document, a short summary, or a \`page\`. ${where}`
+  );
+}
 
 /** A tool as some caller sees it: the app's definition, or the phone's own. */
 type ListedTool = ToolDefinition | PhoneToolDefinition;
@@ -1668,13 +1689,15 @@ export class McpAgentToolsServer extends McpHttpServer {
   ): Promise<ToolResult> {
     const going: Array<{ line: string; id: string; target: string }> = [];
     const refused: string[] = [];
+    const unfit: string[] = [];
     for (const item of valid) {
       const label = oneLine(item.label);
-      const kept = item.isUrl
+      const kept: KeptFile = item.isUrl
         ? await this.screenshotServed(item.target, sessionId, chatMedia)
         : await this.keepFile(item.target, sessionId, chatMedia);
       if ("reason" in kept) {
         refused.push(`${label}: ${oneLine(kept.reason)}`);
+        if (kept.unfit === true) unfit.push(label);
         continue;
       }
       going.push({
@@ -1694,9 +1717,15 @@ export class McpAgentToolsServer extends McpHttpServer {
             ),
           ]
         : [];
+    const unfitLines = unfit.length > 0 ? ["", unfitNote(unfit)] : [];
     if (going.length === 0)
       return this.err(
-        ["Nothing was sent to the chat.", ...refused, ...notFound].join("\n")
+        [
+          "Nothing was sent to the chat.",
+          ...refused,
+          ...notFound,
+          ...unfitLines,
+        ].join("\n")
       );
 
     // One line each: a newline could pose as a media line.
@@ -1711,6 +1740,7 @@ export class McpAgentToolsServer extends McpHttpServer {
         ? ["", "Not sent:", ...refused.map((line) => `- ${line}`)]
         : []),
       ...(notFound.length > 0 ? ["", ...notFound] : []),
+      ...unfitLines,
       "",
       ...going.map((item) => mediaLine(item.id)),
       ...going.map((item) => artifactPathLine(oneLine(item.target))),
@@ -1749,7 +1779,7 @@ export class McpAgentToolsServer extends McpHttpServer {
     filePath: string,
     sessionId: string,
     chatMedia: ChatMedia
-  ): Promise<{ id: string } | { reason: string }> {
+  ): Promise<KeptFile> {
     let handle: fs.promises.FileHandle | null = null;
     try {
       const real = await fs.promises.realpath(filePath);
@@ -1802,12 +1832,20 @@ export class McpAgentToolsServer extends McpHttpServer {
         length += bytesRead;
       }
       if (length > DOCUMENT_MAX_BYTES)
-        return { reason: "it is larger than 16 MB, the most the chat takes." };
-      return chatMedia.keep(
+        return {
+          reason: "it is larger than 16 MB, the most the chat takes.",
+          unfit: true,
+        };
+      const name = path.basename(real);
+      const kept = chatMedia.keep(
         sessionId,
         Buffer.from(buffer.subarray(0, length)),
-        path.basename(real)
+        name
       );
+      // Refused for its type: no copy of it can go either.
+      return "reason" in kept && !IMAGE_FILE.test(name) && !takesDocument(name)
+        ? { ...kept, unfit: true }
+        : kept;
     } catch (error) {
       console.error(
         `[agent-tools] could not read a deliverable: ${error instanceof Error ? error.message : String(error)}`

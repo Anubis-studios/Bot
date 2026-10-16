@@ -38,7 +38,10 @@ export type SendMediaWhen = "now" | "with_answer";
 /** WhatsApp's limit for a document. */
 export const DOCUMENT_MAX_BYTES = 16 * 1024 * 1024;
 
-/** The file types the chat takes as documents, by extension. */
+/**
+ * The file types the chat takes as documents, by extension: what WhatsApp
+ * accepts (PDF, Office, plain text). Archives, apps and videos never go.
+ */
 export const DOCUMENT_EXTENSIONS: readonly string[] = [
   "pdf",
   "docx",
@@ -48,7 +51,6 @@ export const DOCUMENT_EXTENSIONS: readonly string[] = [
   "txt",
   "md",
   "json",
-  "zip",
   "html",
 ];
 
@@ -165,21 +167,33 @@ const extensionOf = (filename: string): string => {
 /** Spellings the chat takes under another name. */
 const EXTENSION_ALIASES: Record<string, string> = { htm: "html" };
 
-/** The bytes, checked: a document of a type and size the chat takes. */
-export function checkedDocument(data: Buffer, filename: string): ResolvedMedia {
+/** The name the chat shows a document under, or null for a type it does not take. */
+function documentName(filename: string): string | null {
   const extension = extensionOf(filename);
   const alias = EXTENSION_ALIASES[extension];
-  const name =
-    alias == null
-      ? filename
-      : `${filename.slice(0, -extension.length)}${alias}`;
-  if (!DOCUMENT_EXTENSIONS.includes(alias ?? extension))
+  if (!DOCUMENT_EXTENSIONS.includes(alias ?? extension)) return null;
+  return alias == null
+    ? filename
+    : `${filename.slice(0, -extension.length)}${alias}`;
+}
+
+/** Whether the chat takes a file of this name as a document at all. */
+export const takesDocument = (filename: string): boolean =>
+  documentName(filename) != null;
+
+/** The bytes, checked: a document of a type and size the chat takes. */
+export function checkedDocument(data: Buffer, filename: string): ResolvedMedia {
+  const name = documentName(filename);
+  if (name == null) {
+    const extension = extensionOf(filename);
     return {
       ok: false,
       reason:
-        `The chat takes only these files as documents: ${DOCUMENT_EXTENSIONS.join(", ")}. ` +
-        "Convert it to one of them (a PDF, say) and send that.",
+        extension.length > 0
+          ? `The chat does not carry .${extension} files.`
+          : "The chat does not carry files without a type.",
     };
+  }
   if (data.length === 0) return { ok: false, reason: "The file is empty." };
   if (data.length > DOCUMENT_MAX_BYTES)
     return { ok: false, reason: "The file is larger than 16 MB." };
