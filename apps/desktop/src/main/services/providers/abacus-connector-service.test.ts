@@ -5,7 +5,10 @@ vi.mock("../config/settings", () => ({
   credentialFor: (name: string) => (name === "ABACUS_API_KEY" ? apiKey() : ""),
 }));
 
-const cachedAccount = vi.fn((): { subscription_tier: string } | null => null);
+const cachedAccount = vi.fn(
+  (): { subscription_tier: string; upgrade_owner?: string | null } | null =>
+    null
+);
 vi.mock("./abacus", () => ({ cachedAbacusAccount: () => cachedAccount() }));
 
 const { appUpgradeUrl, fetchBillingPlan, upgradeLink } =
@@ -400,6 +403,20 @@ describe("the upgrade page", () => {
     expect(url.pathname).toBe("/bot/link/upgrade");
     expect(url.searchParams.get("plan")).toBe("pro");
     expect(url.searchParams.get("src")).toBe("channel");
+  });
+
+  it("names the account's owner when the platform gave one", () => {
+    cachedAccount.mockReturnValue({
+      subscription_tier: "free",
+      upgrade_owner: "25f886b0.af7ad50ee3cb21be",
+    });
+    expect(new URL(upgradeLink("basic", "app")).searchParams.get("u")).toBe(
+      "25f886b0.af7ad50ee3cb21be"
+    );
+    cachedAccount.mockReturnValue({ subscription_tier: "free" });
+    expect(new URL(upgradeLink("basic", "app")).searchParams.has("u")).toBe(
+      false
+    );
   });
 
   it.each([

@@ -18,6 +18,9 @@ export const upgradeLink = (plan: UpgradePlan, src: UpgradeSource): string => {
   const url = new URL("/bot/link/upgrade", abacusAppHost());
   url.searchParams.set("plan", plan);
   url.searchParams.set("src", src);
+  // The account's owner, so a browser signed in to another account is asked to switch rather than paying for it.
+  const owner = cachedAbacusAccount()?.upgrade_owner;
+  if (owner != null) url.searchParams.set("u", owner);
   return url.toString();
 };
 
