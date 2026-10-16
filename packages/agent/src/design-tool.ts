@@ -44,6 +44,8 @@ export function buildDesignTool(
     label: "design",
     description: [
       "Design the screens of a product: a canvas of mockups, plus a PNG of each screen.",
+      "These are static pictures; not for anything the user wants to use. An app or a",
+      "prototype to click through is code: write it and serve it.",
       "",
       "Hand over the brief and an output directory; a sub-agent picks the palette, composes",
       "each screen from a block catalog, writes every word on them, and renders the canvas.",

@@ -30,6 +30,7 @@ import { replacesBash } from "./roster.js";
 import {
   AbacusBotSession,
   capRetriesWhileRouting,
+  componentsPrompt,
   reserveContextHeadroom,
   classifyProviderFailure,
   endedOnMalformedToolCall,
@@ -68,6 +69,28 @@ describe("replacing bash with our own", () => {
 
     expect(replacesBash(excluded)).toBe(true);
     expect(excluded).not.toContain("bash");
+  });
+});
+
+describe("where a request to make something goes", () => {
+  const tools = (...names: string[]): ReadonlySet<string> => new Set(names);
+
+  it("keeps apps off the components and sends them to code that is served", () => {
+    const text = componentsPrompt(tools("design", "ppt", "serve")) ?? "";
+
+    expect(text).not.toMatch(/memo, app|apps and designs/);
+    expect(text).toMatch(
+      /is code: write it, run it with `serve` and hand over the URL/
+    );
+    expect(text).toMatch(
+      /`design` is only for when the user asks to see screens/
+    );
+  });
+
+  it("names only the tools the model can call", () => {
+    expect(componentsPrompt(tools("serve"))).not.toMatch(/`design`/);
+    expect(componentsPrompt(tools("design"))).not.toMatch(/Making apps/);
+    expect(componentsPrompt(tools())).toBeNull();
   });
 });
 

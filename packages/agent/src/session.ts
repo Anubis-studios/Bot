@@ -476,8 +476,14 @@ function componentToolNames(hostServices: boolean): string[] {
  * this the agent treats them as one option among many and hand-assembles a
  * deck from a skill, which is the slow path the components replace. `pdf` is
  * deliberately absent: it reprints, and cannot author.
+ *
+ * Something the user will use is not one of them: `design` draws pictures of
+ * screens, so an app, a prototype or a dashboard is code the agent writes and
+ * serves.
  */
-function componentsPrompt(availableTools: ReadonlySet<string>): string | null {
+export function componentsPrompt(
+  availableTools: ReadonlySet<string>
+): string | null {
   const components: Array<[string, string]> = [
     ["document", "documents, printed as PDFs"],
     ["ppt", "slide decks"],
@@ -496,14 +502,14 @@ function componentsPrompt(availableTools: ReadonlySet<string>): string | null {
   if (present.length > 0) {
     sections.push(
       [
-        "Making documents, decks, apps and designs:",
+        "Making documents, decks and designs:",
         "",
         `These tools each hand the whole job to a specialised component: ${present
           .map(([name, what]) => `\`${name}\` (${what})`)
           .join(", ")}. Each returns a finished, verified artifact.`,
         "",
-        "When the user asks for a presentation, deck, PPT, PDF, report, memo, app, dashboard,",
-        "mockup, wireframe or design, call the matching tool. Do NOT build these by hand: no",
+        "When the user asks for a presentation, deck, PPT, PDF, report, memo, mockup,",
+        "wireframe or screen design, call the matching tool. Do NOT build these by hand: no",
         "python-pptx, no reportlab, no hand-written HTML decks, and do not use a skill for",
         "them even if one is listed. Your job is the context argument: put everything the",
         "artifact should contain into it, then hand the result over (see below).",
@@ -512,6 +518,23 @@ function componentsPrompt(availableTools: ReadonlySet<string>): string | null {
         "and say so when you do it.",
       ].join("\n")
     );
+  }
+
+  const serve = qualifiedName(availableTools, "serve");
+  const design = qualifiedName(availableTools, "design");
+
+  if (serve != null) {
+    const rule = [
+      "An app, prototype, dashboard, game, tool or website, anything the user will click,",
+      `type into or use, is code: write it, run it with \`${serve}\` and hand over the URL.`,
+    ];
+    if (design != null) {
+      rule.push(
+        `\`${design}\` is only for when the user asks to see screens, a mockup or a`,
+        "wireframe: it draws static pictures that cannot be used."
+      );
+    }
+    sections.push(["Making apps:", "", ...rule].join("\n"));
   }
 
   return sections.length > 0 ? sections.join("\n\n") : null;
