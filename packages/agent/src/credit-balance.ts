@@ -1,0 +1,77 @@
+/**
+ * The Abacus credit balance as the agent process last heard it. The desktop
+ * says so at spawn (ABACUSAI_BOT_CREDITS) and after every account read (the
+ * `credit_balance` command); a run on billed credits can ask for a fresher read.
+ */
+
+export interface CreditBalance {
+  remaining: number;
+  granted: number;
+  /** When the host read the account, in epoch milliseconds. */
+  at: number;
+}
+
+const finite = (value: unknown): value is number =>
+  typeof value === "number" && Number.isFinite(value);
+
+const parse = (raw: unknown): CreditBalance | null => {
+  const value = raw as Partial<CreditBalance> | null | undefined;
+  return value != null &&
+    finite(value.remaining) &&
+    finite(value.granted) &&
+    finite(value.at) &&
+    value.granted > 0
+    ? { remaining: value.remaining, granted: value.granted, at: value.at }
+    : null;
+};
+
+const fromEnv = (raw: string | undefined): CreditBalance | null => {
+  if (raw == null || raw === "") return null;
+  try {
+    return parse(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+};
+
+let balance = fromEnv(process.env.ABACUSAI_BOT_CREDITS);
+
+export const hostCreditBalance = (): CreditBalance | null => balance;
+
+/** The host's latest read; an older or unrecognised one leaves the last. */
+export function setHostCreditBalance(next: unknown): void {
+  const parsed = parse(next);
+  if (parsed != null && (balance == null || parsed.at >= balance.at))
+    balance = parsed;
+}
+
+/** Below a quarter left the balance moves fast enough to re-read every minute. */
+const STALE_MS = 3 * 60_000;
+const STALE_LOW_MS = 60_000;
+const LOW_SHARE = 0.25;
+
+let refresher: (() => Promise<unknown>) | null = null;
+let askedAt = Number.NEGATIVE_INFINITY;
+
+/** The session's way to ask the host for a fresh read; null when no host answers. */
+export function setCreditRefresher(
+  next: (() => Promise<unknown>) | null
+): void {
+  refresher = next;
+  askedAt = Number.NEGATIVE_INFINITY;
+}
+
+/** Asks the host to re-read the account when the balance is old for how low it is. */
+export function refreshCreditBalanceIfStale(now = Date.now()): void {
+  if (refresher == null) return;
+  const ttl =
+    balance != null && balance.remaining < balance.granted * LOW_SHARE
+      ? STALE_LOW_MS
+      : STALE_MS;
+  // Spaced by our own asks too: an account that reports no balance never freshens.
+  if (now - Math.max(balance?.at ?? Number.NEGATIVE_INFINITY, askedAt) < ttl)
+    return;
+  askedAt = now;
+  // The answer is the snapshot; the broadcast that follows carries it too.
+  void refresher().then(setHostCreditBalance, () => {});
+}

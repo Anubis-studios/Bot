@@ -412,7 +412,12 @@ import {
   saveGatewaySettings,
 } from "./services/messaging/messaging-config-service";
 import { MessagingGatewayService } from "./services/messaging/messaging-gateway-service";
-import { fetchAbacusAccount, onFreePlan } from "./services/providers/abacus";
+import {
+  creditSnapshot,
+  fetchAbacusAccount,
+  onAbacusAccountRead,
+  onFreePlan,
+} from "./services/providers/abacus";
 import {
   connectButtonLink,
   connectLinkStatus,
@@ -1278,6 +1283,13 @@ export class ServiceHost {
   });
   /** Whether this machine can reach Abacus; see connectivity-service.ts. */
   readonly connectivity = new ConnectivityService();
+  /** Every account read reaches the agents, so a run can wrap up before the credits end. */
+  private readonly stopCreditForwarding = onAbacusAccountRead((snapshot) => {
+    this.agentManagerService.broadcastCommand({
+      type: "credit_balance",
+      ...snapshot,
+    });
+  });
   private readonly cronScheduler = new CronScheduler(
     async (jobId, trigger) => {
       await this.runRoutine(jobId, trigger);
@@ -2501,6 +2513,10 @@ export class ServiceHost {
         return await deckSlots(payload as DeckSlotsRequest);
       case "render_deck":
         return await renderDeck(payload as RenderDeckRequest);
+      case "credit_balance":
+        // The read itself broadcasts the snapshot to every agent.
+        await fetchAbacusAccount(true);
+        return creditSnapshot();
       default:
         throw new Error(`Unknown host service: ${String(service)}`);
     }
@@ -2588,6 +2604,7 @@ export class ServiceHost {
   /** Resolves once every agent child has exited; the quit path awaits it. */
   dispose(): Promise<void> {
     this.stop();
+    this.stopCreditForwarding();
     this.connectWatcher.stop();
     this.vault?.stop();
     this.builtinMcpLifecycle.stopBrowserServer();
@@ -5505,6 +5522,7 @@ export class ServiceHost {
     } catch (err) {
       console.error("[mcp] failed to write runtime mcp config:", err);
     }
+    const credits = creditSnapshot();
     return {
       ...buildAgentConfigEnv(
         runtimeMcpPath,
@@ -5526,6 +5544,10 @@ export class ServiceHost {
       ABACUSAI_BOT_CHECKOUT_TOKEN: this.checkoutToken,
       // Kept current afterwards by the `connectivity` command.
       ABACUSAI_BOT_CONNECTIVITY: this.connectivity.state,
+      // Kept current afterwards by the `credit_balance` command.
+      ...(credits != null
+        ? { ABACUSAI_BOT_CREDITS: JSON.stringify(credits) }
+        : {}),
       // A routine's run (a bot's routine, a hosted one) may wait out a long
       // outage; a turn a person sent waits ten minutes.
       ...(sessionId != null &&

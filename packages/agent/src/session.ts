@@ -39,6 +39,7 @@ import {
   type AbacusBotConfig,
 } from "./config.js";
 import { hostConnectivity, hostIsGone } from "./connectivity.js";
+import { setCreditRefresher } from "./credit-balance.js";
 import { setCurrentMode, setUnattendedPolicy } from "./current-mode.js";
 import {
   customInstructionsPrompt,
@@ -864,6 +865,12 @@ export class AbacusBotSession {
     this.mcp.onToolsAdded = () => this.mcpTools.changed();
 
     const hostServices = this.options.hostServices !== false;
+    // The budgets extension asks for a fresh balance while billed credits run.
+    setCreditRefresher(
+      hostServices
+        ? () => this.hostServices.request("credit_balance", {})
+        : null
+    );
     const toolNames = new Set([
       ...componentToolNames(hostServices),
       ...this.mcp.tools.map((tool) => tool.name),

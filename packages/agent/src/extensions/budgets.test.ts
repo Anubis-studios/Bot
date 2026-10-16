@@ -10,6 +10,8 @@ import { fakePi } from "@abacus-ai/test-support/fake-pi";
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { HostCore } from "../agui/queue.js";
+import { hostCreditBalance, setCreditRefresher } from "../credit-balance.js";
 import budgets, { budgetStopReason } from "./budgets.js";
 
 const withBudgets = () => {
@@ -375,5 +377,135 @@ describe("show your work", () => {
     await work(pi, 2);
     await step(pi, 1000);
     expect(showWork(pi)).toHaveLength(1);
+  });
+});
+
+describe("credits running out", () => {
+  const core = new HostCore({} as never, () => {});
+  // Each read is newer than the last, as the host's are.
+  let stamp = Date.now();
+  const balance = (remaining: number, granted = 2000) =>
+    core.handle({
+      type: "credit_balance",
+      remaining,
+      granted,
+      at: ++stamp,
+    });
+  const on = (model: Record<string, unknown>) => ({
+    hasUI: false,
+    abort() {},
+    model,
+  });
+  const billed = on({ provider: "abacus", id: "premium-model" });
+  const nudges = (pi: ReturnType<typeof fakePi>) =>
+    pi.messages.filter((m) => m.customType === "abacusai-bot-credits-low");
+  const started = async () => {
+    const pi = withBudgets();
+    await pi.fire("agent_start", {});
+    return pi;
+  };
+
+  it("takes the snapshot from the host's command", async () => {
+    await balance(150);
+    expect(hostCreditBalance()).toMatchObject({
+      remaining: 150,
+      granted: 2000,
+    });
+  });
+
+  it("tells a billed Abacus run to wrap up below a tenth, once per session, hidden", async () => {
+    await balance(150);
+    const pi = await started();
+    for (let i = 0; i < 3; i++) await pi.fire("turn_start", {}, billed);
+    await pi.fire("agent_start", {});
+    await pi.fire("turn_start", {}, billed);
+
+    expect(nudges(pi)).toHaveLength(1);
+    const [nudge] = nudges(pi);
+    expect(String(nudge!.content)).toContain("150 of 2000 credits");
+    expect(String(nudge!.content)).toContain("present_deliverable");
+    expect(String(nudge!.content)).toMatch(/their own language/);
+    expect(String(nudge!.content)).toMatch(/Do not start new work/);
+    expect((nudge as { display?: boolean }).display).toBe(false);
+    expect(nudge!.options?.deliverAs).toBe("steer");
+  });
+
+  it("stays quiet above the threshold, and speaks once a lower balance arrives", async () => {
+    await balance(250);
+    const pi = await started();
+    await pi.fire("turn_start", {}, billed);
+    expect(nudges(pi)).toHaveLength(0);
+
+    await balance(199);
+    await pi.fire("turn_start", {}, billed);
+    expect(nudges(pi)).toHaveLength(1);
+  });
+
+  it("never nudges a free Abacus model or the user's own key", async () => {
+    await balance(10);
+    const pi = await started();
+    await pi.fire("turn_start", {}, on({ provider: "abacus", free: true }));
+    await pi.fire("turn_start", {}, on({ provider: "anthropic", id: "x" }));
+    await pi.fire("turn_start", {}, { hasUI: false, abort() {} });
+    expect(nudges(pi)).toHaveLength(0);
+  });
+
+  describe("refreshing the balance", () => {
+    const MINUTE = 60_000;
+    const settle = async () => {
+      for (let i = 0; i < 3; i++) await Promise.resolve();
+    };
+    const toolEnd = (pi: ReturnType<typeof fakePi>, ctx: unknown) =>
+      pi.fire(
+        "tool_execution_end",
+        { toolName: "bash", toolCallId: "t", isError: false },
+        ctx
+      );
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime((stamp += MINUTE));
+    });
+    afterEach(() => {
+      setCreditRefresher(null);
+      vi.useRealTimers();
+    });
+
+    it("asks the host after three minutes, then every minute once under a quarter", async () => {
+      await balance(1500);
+      const refresh = vi.fn(async () => ({
+        remaining: 400,
+        granted: 2000,
+        at: Date.now(),
+      }));
+      setCreditRefresher(refresh);
+      const pi = await started();
+
+      vi.advanceTimersByTime(2 * MINUTE);
+      await toolEnd(pi, billed);
+      expect(refresh).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(MINUTE + 1);
+      await toolEnd(pi, billed);
+      await settle();
+      expect(refresh).toHaveBeenCalledOnce();
+      expect(hostCreditBalance()?.remaining).toBe(400);
+
+      vi.advanceTimersByTime(MINUTE);
+      await pi.fire("turn_end", {}, billed);
+      expect(refresh).toHaveBeenCalledTimes(2);
+    });
+
+    it("never asks for a run that does not spend Abacus credits", async () => {
+      await balance(1500);
+      const refresh = vi.fn(async () => null);
+      setCreditRefresher(refresh);
+      const pi = await started();
+
+      vi.advanceTimersByTime(10 * MINUTE);
+      await toolEnd(pi, on({ provider: "abacus", free: true }));
+      await toolEnd(pi, on({ provider: "openrouter", id: "x" }));
+      expect(refresh).not.toHaveBeenCalled();
+    });
   });
 });
