@@ -59,6 +59,7 @@ export const CreditsCard = ({
   alternatives,
   title,
   note,
+  ready,
 }: {
   host: CreditActions;
   tier: "free" | "basic" | "paid" | "unknown";
@@ -67,6 +68,8 @@ export const CreditsCard = ({
   alternatives?: ReactNode;
   title?: string;
   note?: string;
+  /** The cut-off turn's handover, drawn by the route's deliverables card. */
+  ready?: ReactNode;
 }) => {
   const { t } = useTranslation();
   const promotionRef = useVisibleContextualUpsell(tier === "free");
@@ -142,6 +145,14 @@ export const CreditsCard = ({
                     : "workspace.premiumUpgrade.switchNote"
               )}
           </p>
+          {ready != null && (
+            <div className="flex flex-col gap-2 px-3" data-slot="credits-ready">
+              <p className="text-sm font-medium">
+                {t("creditsCard.readyTitle")}
+              </p>
+              {ready}
+            </div>
+          )}
           <div className="flex flex-col gap-3 p-3">
             {tier === "free" && (
               <Button size="sm" onClick={() => void host.openUpgrade()}>

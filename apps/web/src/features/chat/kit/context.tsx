@@ -8,6 +8,8 @@ import type { AgentMode } from "@abacus-ai/contract/agent-types";
 import type { UIMessage } from "@tanstack/ai-client";
 import { createContext, use, type ReactNode } from "react";
 
+import type { TurnDeliverable } from "#renderer/lib/bot-turns/deliverables";
+
 import type { SubmissionEnvelope } from "../runtime/admission";
 import type { ChatRuntime } from "../runtime/runtime";
 import type { ThreadSession } from "../runtime/session";
@@ -158,6 +160,8 @@ export interface ChatViewSlots {
   composerTasks?: ReactNode;
   /** The route's pieces after the last run's outcome (the Changes card, phase 4). */
   runTail?: ReactNode;
+  /** A turn's files as the route's deliverables card, opening the way it does. */
+  renderDeliverables?: (items: readonly TurnDeliverable[]) => ReactNode;
   /** Route-owned actions beside the permission card (sessions §17.1). */
   permissionActions?: (descriptor: PermissionDescriptor) => ReactNode;
   typingCaption?: (activity: Activity) => ReactNode;

@@ -105,6 +105,8 @@ export const botMessageDecorations = (
     message: UIMessage,
     context: MessageDecorationContext
   ): boolean;
+  /** The same card, for the credits card's list of what is ready. */
+  renderDeliverables(items: readonly DeliverableItem[]): ReactNode;
 } => {
   const cache = new WeakMap<
     readonly UIMessage[],
@@ -123,7 +125,7 @@ export const botMessageDecorations = (
 
   const resolve = (path: string): string =>
     resolveWorkspacePath(path, options.workspaceRoot);
-  const card = (items: DeliverableItem[]) => (
+  const card = (items: readonly DeliverableItem[]) => (
     <DeliverablesCard
       items={items}
       onOpen={(item) =>
@@ -196,6 +198,7 @@ export const botMessageDecorations = (
     return decoration;
   };
   return Object.assign(decorate, {
+    renderDeliverables: card,
     isMessageHidden: (
       message: UIMessage,
       context: MessageDecorationContext

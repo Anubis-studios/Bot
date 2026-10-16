@@ -131,3 +131,23 @@ export function turnDeliverables(
       if (isUserFacingFile(path)) add(path);
   return out;
 }
+
+/**
+ * What the latest turn that ran a tool handed over: the turn a wall cut off,
+ * or the one before it when a retry died before doing anything.
+ */
+export function latestPresented(
+  messages: readonly UIMessage[]
+): TurnDeliverable[] {
+  let end = messages.length;
+  for (let start = messages.length - 1; start >= -1; start--) {
+    if (start >= 0 && messages[start]!.role !== "user") continue;
+    const assistants = messages
+      .slice(start + 1, end)
+      .filter((message) => message.role === "assistant");
+    if (assistants.some((message) => messageTools(message).length > 0))
+      return turnDeliverables(assistants);
+    end = start;
+  }
+  return [];
+}

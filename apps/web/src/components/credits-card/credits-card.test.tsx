@@ -2,6 +2,7 @@ import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { renderWithDb } from "../../features/chat/testing";
+import { DeliverablesCard } from "../file-preview";
 import { CreditsCard, missingFreeSources } from "./index";
 
 let cleanup: (() => Promise<void>) | undefined;
@@ -128,4 +129,44 @@ it("does not infer an upgrade offer for an unknown account", async () => {
   );
   cleanup = rendered.cleanup;
   expect(screen.queryByRole("button", { name: "Upgrade" })).toBeNull();
+});
+
+it("lists what the cut-off turn already handed over, each one openable", async () => {
+  const onOpen = vi.fn();
+  const rendered = await renderWithDb(
+    <CreditsCard
+      tier="free"
+      host={{ openExternal: async () => {}, openUpgrade: async () => {} }}
+      ready={
+        <DeliverablesCard
+          items={[
+            { path: "/w/site/index.html", label: "Landing page", isUrl: false },
+            { path: "http://localhost:5173", isUrl: true },
+          ]}
+          onOpen={onOpen}
+          onOpenUrl={() => {}}
+        />
+      }
+    />
+  );
+  cleanup = rendered.cleanup;
+  const ready = document.querySelector('[data-slot="credits-ready"]')!;
+  expect(ready.textContent).toContain("What's ready");
+  fireEvent.click(screen.getByText("Landing page"));
+  expect(onOpen).toHaveBeenCalledWith(
+    expect.objectContaining({ path: "/w/site/index.html" })
+  );
+  expect(screen.getByText("http://localhost:5173")).toBeTruthy();
+});
+
+it("has no ready section when nothing was handed over", async () => {
+  const rendered = await renderWithDb(
+    <CreditsCard
+      tier="free"
+      host={{ openExternal: async () => {}, openUpgrade: async () => {} }}
+    />
+  );
+  cleanup = rendered.cleanup;
+  expect(document.querySelector('[data-slot="credits-ready"]')).toBeNull();
+  expect(screen.queryByText("What's ready")).toBeNull();
 });

@@ -2,6 +2,7 @@ import type { UIMessage } from "@tanstack/ai-client";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
+import { latestPresented } from "#renderer/lib/bot-turns/deliverables";
 import { i18n, initI18n } from "#renderer/lib/i18n";
 
 import {
@@ -91,5 +92,71 @@ describe("rowEndIndex", () => {
     expect(at).toBe(2);
     expect(deliverablesAfter(messages, at, false)?.length).toBe(1);
     expect(rowEndIndex(messages[1]!, { messages, index: 1 })).toBe(1);
+  });
+});
+
+describe("latestPresented", () => {
+  const presenter = (id: string, path: string): UIMessage =>
+    ({
+      id,
+      role: "assistant",
+      parts: [
+        {
+          type: "tool-call",
+          id: `c-${id}`,
+          name: "present_deliverable",
+          arguments: JSON.stringify({ items: [{ path }] }),
+          input: { items: [{ path }] },
+          state: "complete",
+          output: { text: "ok" },
+        },
+        {
+          type: "tool-result",
+          toolCallId: `c-${id}`,
+          content: JSON.stringify({ text: "ok" }),
+          state: "complete",
+        },
+      ],
+    }) as unknown as UIMessage;
+  const spoke = (id: string): UIMessage =>
+    ({
+      id,
+      role: "assistant",
+      parts: [{ type: "text", content: "" }],
+    }) as UIMessage;
+
+  it("takes the latest turn's handover, not an earlier turn's", () => {
+    const paths = latestPresented([
+      user("u1"),
+      presenter("a1", "/w/old.pdf"),
+      user("u2"),
+      writer("a2", "/w/draft.md"),
+      presenter("a3", "http://localhost:5173"),
+    ]).map((item) => item.path);
+    expect(paths).toEqual(["http://localhost:5173"]);
+  });
+
+  it("looks past a retry that died before running any tool", () => {
+    expect(
+      latestPresented([
+        user("u1"),
+        presenter("a1", "/w/site/index.html"),
+        user("u2"),
+        spoke("a2"),
+        user("u3"),
+      ]).map((item) => item.path)
+    ).toEqual(["/w/site/index.html"]);
+  });
+
+  it("is empty when the turn that worked handed nothing over", () => {
+    expect(
+      latestPresented([
+        user("u1"),
+        presenter("a1", "/w/old.pdf"),
+        user("u2"),
+        writer("a2", "/w/x.ts"),
+      ])
+    ).toEqual([]);
+    expect(latestPresented([user("u1")])).toEqual([]);
   });
 });

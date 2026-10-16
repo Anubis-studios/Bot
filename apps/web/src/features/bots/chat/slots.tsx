@@ -168,6 +168,7 @@ export const useBotChatSlots = (
     chat: {
       decorateMessage,
       isMessageHidden: decorateMessage.isMessageHidden,
+      renderDeliverables: decorateMessage.renderDeliverables,
       typingCaption: (activity: {
         status: string | null;
         runningToolTitle: string | null;

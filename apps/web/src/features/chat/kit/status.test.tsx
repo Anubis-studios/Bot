@@ -342,3 +342,74 @@ it("re-runs a bot's hidden first turn when there is no visible user message", as
     parts: [{ type: "text", content: "Continue from where you left off" }],
   });
 });
+
+describe("the credit wall", () => {
+  const wall = (...turn: StreamChunk[]) => {
+    const relay = new FakeRelay();
+    relay.emitAll([
+      ...b.sessionReady(),
+      b.runStarted("r1"),
+      ...b.text("u1", "user", "build the site"),
+      ...turn,
+      b.runError("r1", {
+        message: "Credits exhausted",
+        actions: [{ type: "upgrade-abacus" }],
+      }),
+    ]);
+    return relay;
+  };
+  const renderDeliverables = vi.fn((items: readonly { path: string }[]) => (
+    <ul data-testid="ready">
+      {items.map((item) => (
+        <li key={item.path}>{item.path}</li>
+      ))}
+    </ul>
+  ));
+
+  it("lists what the cut-off turn presented, through the route's card", async () => {
+    const relay = wall(
+      b.textStart("a1"),
+      ...b.toolCall("c1", "present_deliverable", "a1", {
+        items: [{ path: "/repo/site/index.html" }],
+      }),
+      b.toolResult("c1", { text: "Presented." }),
+      b.textEnd("a1")
+    );
+    current = await renderRelay(
+      relay,
+      "session",
+      {},
+      {
+        slots: { renderDeliverables },
+      }
+    );
+    const ready = await screen.findByTestId("ready");
+    expect(ready.textContent).toBe("/repo/site/index.html");
+    expect(
+      ready.closest('[data-slot="error-card"]')?.getAttribute("data-variant")
+    ).toBe("upgrade");
+    expect(screen.getByText("What's ready")).toBeTruthy();
+  });
+
+  it("shows no ready section when the turn handed nothing over", async () => {
+    const relay = wall(
+      b.textStart("a1"),
+      ...b.toolCall("c1", "bash", "a1", { command: "ls" }),
+      b.toolResult("c1", { text: "ok" }),
+      b.textEnd("a1")
+    );
+    current = await renderRelay(
+      relay,
+      "session",
+      {},
+      {
+        slots: { renderDeliverables },
+      }
+    );
+    await waitFor(() =>
+      expect(document.querySelector('[data-slot="credits-card"]')).toBeTruthy()
+    );
+    expect(screen.queryByTestId("ready")).toBeNull();
+    expect(screen.queryByText("What's ready")).toBeNull();
+  });
+});

@@ -26,6 +26,7 @@ import {
   deliverablesAfter,
   rowEndIndex,
   sessionDeliverablesCard,
+  type SessionDeliverablesOptions,
 } from "#renderer/features/sessions/chat/deliverables";
 import {
   openTab,
@@ -153,6 +154,17 @@ const RoutineRoute = () => {
               db.collections.sessions.get(runId)?.workspaceId ?? ""
             )?.path ?? null;
           const open = handoff(runId, root);
+          const deliverables: SessionDeliverablesOptions = {
+            workspaceRoot: root,
+            onOpenFile: open.openFile,
+            onOpenUrl: open.openUrl,
+            onOpenExternal: (url) =>
+              void platformSystem(transport.client).openExternal({ url }),
+            onReveal: IS_ELECTRON
+              ? (path) =>
+                  void transport.client.system.showItemInFolder({ path })
+              : undefined,
+          };
           return (
             <ChatView
               threadId={runId}
@@ -184,23 +196,11 @@ const RoutineRoute = () => {
                   return files == null
                     ? null
                     : {
-                        after: sessionDeliverablesCard(files, {
-                          workspaceRoot: root,
-                          onOpenFile: open.openFile,
-                          onOpenUrl: open.openUrl,
-                          onOpenExternal: (url) =>
-                            void platformSystem(transport.client).openExternal({
-                              url,
-                            }),
-                          onReveal: IS_ELECTRON
-                            ? (path) =>
-                                void transport.client.system.showItemInFolder({
-                                  path,
-                                })
-                            : undefined,
-                        }),
+                        after: sessionDeliverablesCard(files, deliverables),
                       };
                 },
+                renderDeliverables: (items) =>
+                  sessionDeliverablesCard(items, deliverables),
                 banner: requests(new Set([runId])),
               }}
               workspaceRoot={root}

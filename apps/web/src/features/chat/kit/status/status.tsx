@@ -12,6 +12,7 @@ import { useTranslation } from "react-i18next";
 import { CreditsCard } from "#renderer/components/credits-card";
 import { GroupCard } from "#renderer/components/form-kit/page";
 import { ABACUS_AGENT_URL } from "#renderer/lib/abacus-links";
+import { latestPresented } from "#renderer/lib/bot-turns/deliverables";
 import { cn } from "#renderer/lib/cn";
 import { AppLink } from "#renderer/lib/navigation/app-link";
 import {
@@ -334,6 +335,16 @@ const OwnKeyCard = ({
   );
 };
 
+/** What the turn a wall cut off handed over, up to the outcome's anchor. */
+const readyBefore = (
+  messages: readonly UIMessage[],
+  afterMessageId: string | null
+) => {
+  if (afterMessageId == null) return [];
+  const at = messages.findIndex((message) => message.id === afterMessageId);
+  return latestPresented(at < 0 ? messages : messages.slice(0, at + 1));
+};
+
 export interface ErrorCardProps {
   outcome: RunOutcomeRecord;
   /** The latest terminal while the thread is idle (Retry is offered then). */
@@ -347,7 +358,7 @@ export const ErrorCard = ({
   tier: providedTier,
 }: ErrorCardProps) => {
   const { t } = useTranslation();
-  const { session, composer, runtime, skin } = useChatView();
+  const { session, composer, runtime, skin, slots } = useChatView();
   const [accountTier, setAccountTier] =
     useState<NonNullable<ErrorCardProps["tier"]>>("unknown");
   useEffect(() => {
@@ -396,6 +407,10 @@ export const ErrorCard = ({
   )
     return <OwnKeyCard failure={ownKey} tier={tier} runId={outcome.runId} />;
   if (upgrade) {
+    const ready =
+      slots.renderDeliverables == null
+        ? []
+        : readyBefore(session.hostStore.state.messages, outcome.afterMessageId);
     return (
       <div
         role="group"
@@ -410,6 +425,9 @@ export const ErrorCard = ({
           scope={exhaustedScope(actions)}
           {...(creditsExpired(actions) && {
             title: t("creditsCard.expiredTitle"),
+          })}
+          {...(ready.length > 0 && {
+            ready: slots.renderDeliverables?.(ready),
           })}
           alternatives={
             canReply ? (
