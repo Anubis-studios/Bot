@@ -305,6 +305,9 @@ export function checkpoints(
           `[checkpoints] could not record the turn: ${error instanceof Error ? error.message : String(error)}`
         );
       }
+      // A session left open for days still keeps the store to its caps;
+      // throttled inside, so most turns only read the stamp.
+      void tracker.store.collectGarbage(tracker.sessionId).catch(() => {});
     });
 
     pi.registerTool({

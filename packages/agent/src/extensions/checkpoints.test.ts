@@ -8,7 +8,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 import { fakePi, type FakePi } from "@abacus-ai/test-support/fake-pi";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   CheckpointBusyError,
@@ -408,6 +408,17 @@ describe("caps and retention", () => {
     expect((await store.listTurns("session-1")).map((t) => t.seq)).toEqual([
       2, 3,
     ]);
+  });
+
+  it("is collected after a settled turn too, not only at launch", async () => {
+    setup({ maxTurnsPerSession: 1 });
+    const collect = vi.spyOn(store, "collectGarbage");
+    tracker.beginTurn();
+    await call("write", { path: "a.txt", content: "1" }, () =>
+      fs.writeFileSync(at("a.txt"), "1")
+    );
+    await settle();
+    expect(collect).toHaveBeenCalledWith("session-1");
   });
 });
 
