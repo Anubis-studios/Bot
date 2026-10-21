@@ -209,7 +209,9 @@ describe("billing_plan's answer", () => {
     const text = result.content[0]!.text;
     expect(text).toContain("The user's plan: Free.");
     expect(text).toContain("Credits left: 0 of 2,000 this month.");
-    expect(text).toContain("Their plan's credits renew every month.");
+    expect(text).toContain(
+      "Their plan's credits renew every month: 2,000 a month. Never call them a one-time grant."
+    );
     expect(text).toContain(
       "Basic: $7 for the first month (30% off the usual $10/mo), then $10/mo, link: https://example.test/upgrade"
     );
@@ -302,5 +304,68 @@ describe("billing_plan for what only a plan does", () => {
     );
     expect(text).toContain("Do not offer an upgrade for it.");
     expect(text).not.toContain("never answer no. Offer");
+  });
+});
+
+describe("billing_plan on what Basic gives this app", () => {
+  it("a free user asking what Basic gives hears the credits, the models and image and video, with no task cap on the bot", async () => {
+    const { appBillingResult } = await import("./billing");
+    const features = [
+      "20,000 credits a month (10x the free tier)",
+      "Top models: GPT, Claude and Gemini",
+      "Image and video generation",
+      "Build and publish apps on the web (3 projects a month)",
+      "Routines that run 24/7 in Abacus AI Agent on the web, even with your computer off",
+    ];
+    const result = appBillingResult(
+      {
+        ok: (text: string) => ({ content: [{ type: "text", text }] }),
+      } as never,
+      {
+        current: {
+          planName: "Free",
+          creditsRemaining: 300,
+          creditsGranted: 2000,
+          freeTierExpiresAt: null,
+        },
+        plans: [
+          {
+            plan: "free",
+            planName: "Free",
+            priceText: "Free",
+            features: [],
+            creditsPerMonth: 2000,
+            current: true,
+          },
+        ],
+        upgrades: [
+          {
+            plan: "basic",
+            planName: "Basic",
+            priceText: "$10/mo",
+            firstMonthPriceCents: 700,
+            priceCents: 1000,
+            features,
+            url: "https://example.test/upgrade",
+          },
+        ],
+        topUpUrl: null,
+        upgradeInMobileApp: false,
+      }
+    ) as unknown as { content: Array<{ text: string }> };
+    const text = result.content[0]!.text;
+    expect(text).toContain("  - 20,000 credits a month (10x the free tier)\n");
+    expect(text).toContain("  - Top models: GPT, Claude and Gemini\n");
+    expect(text).toContain("  - Image and video generation\n");
+    expect(text).toContain(
+      "  - Build and publish apps on the web (3 projects a month) [in Abacus AI Agent on the web; not a limit on this app]"
+    );
+    expect(text).toContain(
+      "In this app, bots, chats and routines have no task or project cap"
+    );
+    expect(text).toContain(
+      "Their plan's credits renew every month: 2,000 a month. Never call them a one-time grant."
+    );
+    expect(text).not.toMatch(/tasks? per month/i);
   });
 });

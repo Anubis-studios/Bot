@@ -28,8 +28,20 @@ export const priceLine = (tier: BillingPlanTier): string => {
   return `${dollars(first)} for the first month (${off}% off the usual ${dollars(monthly)}/mo), then ${dollars(monthly)}/mo`;
 };
 
+/**
+ * A feature that lives in Abacus AI Agent on the web (apps and their monthly
+ * project count, 24/7 routines there), as the server words it. Read as a cap
+ * on this app's bots, "3 projects a month" lost a sale: the label says where.
+ */
+const WEB_FEATURE =
+  /\bon the web\b|\bAbacus ?AI Agent\b|\bprojects? a month\b/i;
+
 export const bullets = (features: readonly string[]): string[] =>
-  features.map((feature) => `  - ${feature}`);
+  features.map((feature) =>
+    WEB_FEATURE.test(feature)
+      ? `  - ${feature} [in Abacus AI Agent on the web; not a limit on this app]`
+      : `  - ${feature}`
+  );
 
 const day = (iso: string): string =>
   new Date(iso).toLocaleDateString("en-US", {
@@ -86,8 +98,11 @@ export function appBillingResult(
     `The user's plan: ${billing.current.planName}.`,
     ...creditStanding(billing),
     ...(creditsRenewMonthly(billing)
-      ? ["Their plan's credits renew every month."]
+      ? [
+          `Their plan's credits renew every month: ${credits(billing.plans.find((plan) => plan.current)?.creditsPerMonth ?? null)} a month. Never call them a one-time grant.`,
+        ]
       : []),
+    "In this app, bots, chats and routines have no task or project cap: a plan gives them its monthly credits, its models and, where listed, image and video generation. Items marked as on the web are Abacus AI Agent's, not limits here.",
   ];
   lines.push("", "The plans:");
   for (const plan of billing.plans)
