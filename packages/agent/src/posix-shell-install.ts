@@ -29,6 +29,7 @@ import {
   copyFileSync,
   linkSync,
   mkdirSync,
+  mkdtempSync,
   readdirSync,
   readFileSync,
   renameSync,
@@ -78,12 +79,6 @@ export interface PosixShell {
   readonly overrideApplets: string;
   /** The ANSI build: arguments outside the system code page arrive mangled. */
   readonly ansi?: boolean;
-  /**
-   * PATH entries from the registry this process's own PATH lacks, appended for
-   * the child: a program installed after the app started is found, as in a new
-   * terminal.
-   */
-  readonly registryPath?: string;
 }
 
 /**
@@ -476,7 +471,7 @@ export type ShellSelfTest = (
   env: NodeJS.ProcessEnv
 ) => string | undefined;
 
-/** Generous: the first start of a freshly written executable waits on the virus scanner. */
+/** Generous: the first start of a freshly written executable can wait on the virus scanner. */
 const SELF_TEST_TIMEOUT_MS = 20_000;
 
 /** Run the shell exactly as a command would, with the environment commands get. */
@@ -494,6 +489,11 @@ export const selfTestPosixShell: ShellSelfTest = (shell, env) => {
   );
   if (probe.error == null && probe.status === 0 && probe.stdout === "ok")
     return undefined;
+  // Slow is not broken: a scanner holding a fresh executable can outlast the
+  // probe, and falling back would pin the ANSI build for the whole process.
+  // A build that cannot run fails at once.
+  if ((probe.error as NodeJS.ErrnoException | undefined)?.code === "ETIMEDOUT")
+    return undefined;
 
   return (
     probe.error?.message ??
@@ -504,37 +504,62 @@ export const selfTestPosixShell: ShellSelfTest = (shell, env) => {
 export interface ResolveOptions extends Omit<InstallOptions, "ansi"> {
   /** Overrides the probe; the tests use it. */
   selfTest?: ShellSelfTest;
-  /** Overrides the registry read; the tests use it. */
-  readRegistry?: RegistryRead;
 }
 
-/** One registry value as `reg query` prints it, or undefined. */
-export type RegistryRead = (
-  key: string,
-  value: string,
-  env: NodeJS.ProcessEnv
-) => string | undefined;
+/** A key's `Path` value, unexpanded, or undefined. */
+export type RegistryRead = (key: string) => string | undefined;
 
 const ENVIRONMENT_KEYS = [
   "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment",
   "HKCU\\Environment",
 ];
 
-const readRegistryValue: RegistryRead = (key, value, env) => {
-  const root = env.SystemRoot ?? env.windir ?? "C:\\Windows";
-  const probe = spawnSync(
-    path.join(root, "System32", "reg.exe"),
-    ["query", key, "/v", value],
-    { encoding: "utf8", timeout: 5_000, windowsHide: true }
+/**
+ * The `Path` value in a `reg export` file: `"Path"="..."` for REG_SZ, or
+ * `"Path"=hex(2):..` (UTF-16LE bytes, wrapped with `\`) for REG_EXPAND_SZ.
+ */
+export function parseRegExportPath(text: string): string | undefined {
+  const joined = text.replace(/^\uFEFF/, "").replace(/\\\r?\n\s*/g, "");
+  const line = /^"Path"=(.*)$/im.exec(joined)?.[1]?.trim();
+  if (line == null) return undefined;
+  const quoted = /^"((?:[^"\\]|\\.)*)"$/.exec(line);
+  if (quoted != null) return quoted[1]!.replace(/\\(.)/g, "$1");
+  const hex = /^hex\((?:2|1)\):([0-9a-f,]*)$/i.exec(line);
+  if (hex == null) return undefined;
+  const bytes = Buffer.from(
+    hex[1]!
+      .split(",")
+      .filter((byte) => byte.length > 0)
+      .map((byte) => Number.parseInt(byte, 16))
   );
-  if (probe.error != null || probe.status !== 0) return undefined;
-  const line = new RegExp(
-    `^\\s+${value}\\s+REG_(?:EXPAND_)?SZ\\s+(.*?)\\s*$`,
-    "im"
-  ).exec(probe.stdout);
 
-  return line?.[1];
-};
+  return bytes.toString("utf16le").replace(/\0+$/, "");
+}
+
+/**
+ * Through `reg export`, which writes UTF-16: `reg query` prints in the console
+ * code page, which mangles a non-ASCII user folder.
+ */
+function readRegistryPath(key: string): string | undefined {
+  const root = process.env.SystemRoot ?? process.env.windir ?? "C:\\Windows";
+  const dir = mkdtempSync(path.join(os.tmpdir(), "abacusai-bot-env-"));
+  try {
+    const file = path.join(dir, "env.reg");
+    const exported = spawnSync(
+      path.join(root, "System32", "reg.exe"),
+      ["export", key, file, "/y"],
+      { stdio: "ignore", timeout: 5_000, windowsHide: true }
+    );
+    if (exported.error != null || exported.status !== 0) return undefined;
+
+    return parseRegExportPath(readFileSync(file).toString("utf16le"));
+  } catch {
+    // An unreadable key or temp dir: this process's own PATH stands.
+    return undefined;
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
 
 /** `%NAME%` from `env`, any case; an unknown name stays as written. */
 function expandVariables(text: string, env: NodeJS.ProcessEnv): string {
@@ -548,6 +573,22 @@ function expandVariables(text: string, env: NodeJS.ProcessEnv): string {
   );
 }
 
+const REGISTRY_TTL_MS = 30_000;
+const registryCache = new Map<
+  string,
+  { at: number; value: string | undefined }
+>();
+
+/** Read at most every 30 s: commands spawn often, installers run rarely. */
+function cachedRegistryPath(key: string): string | undefined {
+  const hit = registryCache.get(key);
+  if (hit != null && Date.now() - hit.at < REGISTRY_TTL_MS) return hit.value;
+  const value = readRegistryPath(key);
+  registryCache.set(key, { at: Date.now(), value });
+
+  return value;
+}
+
 /**
  * The machine then the user PATH as the registry holds them now, less what
  * this process's PATH already has. A desktop app started before an installer
@@ -555,7 +596,7 @@ function expandVariables(text: string, env: NodeJS.ProcessEnv): string {
  */
 export function registryPathEntries(
   env: NodeJS.ProcessEnv,
-  read: RegistryRead = readRegistryValue
+  read: RegistryRead = cachedRegistryPath
 ): string | undefined {
   const current = new Set(
     (childProcessEnv(env).PATH ?? "")
@@ -563,7 +604,7 @@ export function registryPathEntries(
       .map((entry) => entry.replace(/[\\/]+$/, "").toLowerCase())
   );
   const fresh = ENVIRONMENT_KEYS.flatMap((key) =>
-    expandVariables(read(key, "Path", env) ?? "", env).split(";")
+    expandVariables(read(key) ?? "", env).split(";")
   ).filter(
     (entry) =>
       entry.length > 0 &&
@@ -617,10 +658,7 @@ export function resolvePosixShell(
     const shell = installPosixShell({ ...options, ...candidate });
     if (shell == null) continue;
     const failure = selfTest(shell, env);
-    if (failure == null) {
-      const registryPath = registryPathEntries(env, options.readRegistry);
-      return registryPath == null ? shell : { ...shell, registryPath };
-    }
+    if (failure == null) return shell;
     reportOnce(
       `${path.basename(candidate.payload)} failed its self-test: ${failure}`
     );
@@ -653,6 +691,7 @@ export function resetPosixShellForTesting(): void {
   retryAt = 0;
   warned = false;
   reported.clear();
+  registryCache.clear();
 }
 
 /**
@@ -675,19 +714,22 @@ function tempDirEnv(env: NodeJS.ProcessEnv): Record<string, string> {
 }
 
 /**
- * `env` for a child of the shell: the launchers first on PATH, the override
- * list, and a temp dir where one is missing. Nothing else changes.
+ * `env` for a child of the shell: the launchers first on PATH, the registry's
+ * PATH entries this process lacks last, the override list, and a temp dir
+ * where one is missing. Nothing else changes.
  */
 export function posixShellEnv(
   env: NodeJS.ProcessEnv,
-  shell: PosixShell
+  shell: PosixShell,
+  /** PATH entries installed since the app started; read on Windows only. */
+  registryPath: string | undefined = process.platform === "win32"
+    ? registryPathEntries(env)
+    : undefined
 ): Record<string, string> {
   const base = childProcessEnv(env);
 
   return childProcessEnv(base, tempDirEnv(base), {
-    PATH:
-      mergePath(shell.bin, mergePath(base.PATH, shell.registryPath)) ??
-      shell.bin,
+    PATH: mergePath(shell.bin, mergePath(base.PATH, registryPath)) ?? shell.bin,
     BB_OVERRIDE_APPLETS: shell.overrideApplets,
   });
 }

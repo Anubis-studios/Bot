@@ -11,6 +11,7 @@ import {
   BUSYBOX_PAYLOAD,
   installPosixShell,
   posixShellEnv,
+  parseRegExportPath,
   registryPathEntries,
   resolvePosixShell,
   selfTestPosixShell,
@@ -110,26 +111,6 @@ describe("resolvePosixShell", () => {
       } finally {
         v.done();
       }
-    }
-  });
-
-  it("adds what the registry's PATH has gained since the app started", () => {
-    const v = vendor(both);
-    try {
-      const shell = resolvePosixShell({
-        platform: "win32",
-        payload: v.payload,
-        cacheRoot: v.cacheRoot,
-        env: { PATH: "C:\\Windows\\System32", SystemRoot: "C:\\Windows" },
-        selfTest: () => undefined,
-        readRegistry: (key) =>
-          key.startsWith("HKLM")
-            ? "%SystemRoot%\\System32;C:\\Program Files\\nodejs\\"
-            : undefined,
-      });
-      expect(shell?.registryPath).toBe("C:\\Program Files\\nodejs\\");
-    } finally {
-      v.done();
     }
   });
 
@@ -271,17 +252,39 @@ describe("registryPathEntries", () => {
   it("goes after the process's own PATH for the child, never before it", () => {
     const env = posixShellEnv(
       { PATH: "system" },
-      { ...fakeShell, bin: "applets", registryPath: "nodejs" }
+      { ...fakeShell, bin: "applets" },
+      "nodejs"
     );
     expect(env.PATH?.split(delimiter)).toEqual(["applets", "system", "nodejs"]);
   });
 
+  it("reads both shapes reg export writes", () => {
+    const utf16 = (text: string) =>
+      Buffer.from(`${text}\0`, "utf16le")
+        .toJSON()
+        .data.map((byte) => byte.toString(16).padStart(2, "0"))
+        .join(",");
+    const expand =
+      "%USERPROFILE%\\AppData\\Local\\Programs\\Python;C:\\Users\\José\\bin";
+    const hex = utf16(expand);
+    // Wrapped the way reg export wraps a long value.
+    const wrapped = `${hex.slice(0, 60)}\\\r\n  ${hex.slice(60)}`;
+    expect(
+      parseRegExportPath(
+        `\uFEFFWindows Registry Editor Version 5.00\r\n\r\n[HKEY_CURRENT_USER\\Environment]\r\n"TEMP"="x"\r\n"Path"=hex(2):${wrapped}\r\n`
+      )
+    ).toBe(expand);
+    expect(
+      parseRegExportPath(
+        '"Path"="C:\\\\Program Files\\\\Git\\\\cmd;C:\\\\Şükrü"\r\n'
+      )
+    ).toBe("C:\\Program Files\\Git\\cmd;C:\\Şükrü");
+    expect(parseRegExportPath('"TEMP"="x"\r\n')).toBeUndefined();
+  });
+
   it.skipIf(process.platform !== "win32")(
-    "reads this machine's registry PATH without error",
+    "reads this machine's registry PATH",
     () => {
-      // The runner's own PATH already carries the registry's entries.
-      const fresh = registryPathEntries(process.env);
-      expect(fresh == null || typeof fresh === "string").toBe(true);
       expect(
         registryPathEntries({
           PATH: "",
