@@ -195,6 +195,13 @@ export const checkpointSessionId = (
     : `cli-${process.pid}-${Date.now().toString(36)}`;
 };
 
+/** A loop, not a regex: a path is model input and `/+$` backtracks on long runs of `/`. */
+const withoutTrailingSlashes = (value: string): string => {
+  let end = value.length;
+  while (end > 0 && value[end - 1] === "/") end -= 1;
+  return value.slice(0, end);
+};
+
 /** How two spellings of one path compare: case-folded with `/` on Windows. */
 export const pathKey = (
   abs: string,
@@ -214,7 +221,7 @@ export function isWalkRefused(
 ): boolean {
   const api = platform === "win32" ? path.win32 : path.posix;
   const key = (p: string): string =>
-    pathKey(api.resolve(p), platform).replace(/\/+$/, "");
+    withoutTrailingSlashes(pathKey(api.resolve(p), platform));
   const target = key(dir);
   const parsed = api.parse(api.resolve(dir));
   if (parsed.root === api.resolve(dir) || target === "") return true;
@@ -847,7 +854,7 @@ export class CheckpointTracker {
   private coveredByRoot(abs: string): boolean {
     const target = this.key(abs);
     for (const root of this.window!.roots.values()) {
-      const dir = this.key(root.dir).replace(/\/+$/, "");
+      const dir = withoutTrailingSlashes(this.key(root.dir));
       if (target === dir || target.startsWith(`${dir}/`)) return true;
     }
     return false;
@@ -1052,7 +1059,7 @@ export class CheckpointTracker {
         seen.add(this.key(file.path));
         await look(file.path, file.stat);
       }
-      const prefix = `${this.key(abs).replace(/\/+$/, "")}/`;
+      const prefix = `${withoutTrailingSlashes(this.key(abs))}/`;
       for (const [key, entry] of this.known) {
         if (seen.has(key) || entry.state == null) continue;
         if (!key.startsWith(prefix)) continue;
