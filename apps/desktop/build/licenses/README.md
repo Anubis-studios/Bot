@@ -41,6 +41,8 @@ URL. BusyBox is an existing Windows separate executable under GPL-2.0-only.
 Its pinned corresponding-source URL and license are disclosed; legal review
 must confirm the installer source-offer obligations before release. This entry
 does not authorize a new copyleft dependency or a version bump.
+`duck` (through mammoth) declares the non-SPDX "BSD"; the LICENSE it ships is
+the BSD 2-Clause text, so its entry only records that reading.
 
 Vendored tool entries name their downloader pin. Generation fails when the
 version changes without an updated attribution. Concurrent web/desktop builds
