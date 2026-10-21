@@ -871,7 +871,9 @@
     "paidWebApps": "Build and deploy full apps and websites",
     "paidWebResearch": "Deep research, slides and docs",
     "paidWebMedia": "Images and videos with top models",
-    "paidWebCta": "Go to AbacusAI Agent on the web"
+    "paidWebCta": "Go to AbacusAI Agent on the web",
+    "planTitle": "{{model}} ist in deinem Tarif nicht enthalten",
+    "planNote": "Führe ein Upgrade durch, um es zu nutzen, oder mach mit einem Modell weiter, das dein Tarif enthält."
   },
   "execBackends": {
     "daytona": {
@@ -2701,7 +2703,9 @@
       "providerConnectHint": "Verbinde ihn, um seine Modelle zu nutzen, auch die kostenlosen.",
       "retryAttachment": "Retry attachment",
       "folderItems_one": "{{count}} item",
-      "folderItems_other": "{{count}} items"
+      "folderItems_other": "{{count}} items",
+      "includedIn": "In {{plan}} enthalten",
+      "includedInPaid": "In bezahlten Tarifen enthalten"
     },
     "day": {
       "today": "Today",
@@ -4266,6 +4270,8 @@
       "renews": "Kostenlose Credits erneuern sich jeden Monat.",
       "offer": "{{plan}} kostet {{price}} und bietet dir:",
       "link": "Hier upgraden: {{link}}",
+      "planModel": "Dieses Modell ist in deinem Tarif nicht enthalten. Wähle in der App ein anderes Modell oder führe ein Upgrade durch, um es zu nutzen.",
+      "planModelPaid": "Dieses Modell ist in deinem Tarif nicht enthalten. Wähle in der App ein anderes Modell oder führe ein Upgrade durch: {{link}}",
       "repeat": "Weiterhin pausiert: {{link}}",
       "paidOut": "Ich habe pausiert, weil die Credits dieses Monats aufgebraucht sind. Füge Credits hinzu, um weiterzumachen: {{link}}",
       "ownKeyCredit": "Dein {{provider}}-Schlüssel hat kein Guthaben mehr.",

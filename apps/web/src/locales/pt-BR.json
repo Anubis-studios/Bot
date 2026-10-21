@@ -871,7 +871,9 @@
     "paidWebApps": "Build and deploy full apps and websites",
     "paidWebResearch": "Deep research, slides and docs",
     "paidWebMedia": "Images and videos with top models",
-    "paidWebCta": "Go to AbacusAI Agent on the web"
+    "paidWebCta": "Go to AbacusAI Agent on the web",
+    "planTitle": "{{model}} não está incluído no seu plano",
+    "planNote": "Faça upgrade para usá-lo ou continue com um modelo incluído no seu plano."
   },
   "execBackends": {
     "daytona": {
@@ -2701,7 +2703,9 @@
       "providerConnectHint": "Conecte-o para usar seus modelos, incluindo os gratuitos.",
       "retryAttachment": "Retry attachment",
       "folderItems_one": "{{count}} item",
-      "folderItems_other": "{{count}} items"
+      "folderItems_other": "{{count}} items",
+      "includedIn": "Incluído no {{plan}}",
+      "includedInPaid": "Incluído nos planos pagos"
     },
     "day": {
       "today": "Today",
@@ -4266,6 +4270,8 @@
       "renews": "Os créditos grátis renovam todo mês.",
       "offer": "O {{plan}} custa {{price}} e oferece:",
       "link": "Faça upgrade aqui: {{link}}",
+      "planModel": "Esse modelo não está incluído no seu plano. Escolha outro modelo no app ou faça upgrade para usá-lo.",
+      "planModelPaid": "Esse modelo não está incluído no seu plano. Escolha outro modelo no app ou faça upgrade: {{link}}",
       "repeat": "Ainda pausado: {{link}}",
       "paidOut": "Pausei porque os créditos deste mês acabaram. Adicione créditos para continuar: {{link}}",
       "ownKeyCredit": "Sua chave do {{provider}} ficou sem saldo.",

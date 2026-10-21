@@ -742,6 +742,20 @@ describe("the credit wall's cause", () => {
     );
   });
 
+  it("a model the plan does not include is told so, never that credits ran out", () => {
+    const free = reply(wall("plan"), "free");
+    expect(free).toBe(
+      `That model isn't included in your plan. Pick another model in the app, or upgrade to use it.\n${offerLines(UPGRADE_URL)}`
+    );
+    expect(free).not.toContain("paused");
+    expect(reply(wall("plan"), "paid")).toBe(
+      `That model isn't included in your plan. Pick another model in the app, or upgrade: ${UPGRADE_URL}`
+    );
+    expect(reply(wall("plan"), "free", true)).toBe(
+      `Still paused: ${UPGRADE_URL}`
+    );
+  });
+
   it("an empty balance keeps its words", () => {
     expect(reply(wall("exhausted"), "free")).toBe(reply(WALL, "free"));
     expect(reply(wall("exhausted"), "paid")).toBe(reply(WALL, "paid"));

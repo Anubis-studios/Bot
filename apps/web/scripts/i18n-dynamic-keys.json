@@ -1586,6 +1586,8 @@
       "offer",
       "link",
       "repeat",
+      "planModel",
+      "planModelPaid",
       "paidOut",
       "ownKeyCredit",
       "ownKeyRateLimit",

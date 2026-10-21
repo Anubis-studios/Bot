@@ -85,7 +85,8 @@ export interface NotificationAction {
   providers?: string[];
   /**
    * `own-key-unavailable`: credit, rate_limit, down or network.
-   * `upgrade-abacus`: exhausted or expired (absent reads as exhausted).
+   * `upgrade-abacus`: exhausted or expired (absent reads as exhausted), or
+   * plan when the plan does not include `model` (named by `label`).
    * `free-pool-out`: busy when the free models are only rate-limited.
    * `continue-free` (keep going on the free models at the credit wall),
    * `new-chat`, `fix-key` and `retry` carry nothing else.

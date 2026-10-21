@@ -871,7 +871,9 @@
     "paidWebApps": "Eksiksiz uygulamalar ve web siteleri oluştur ve yayınla",
     "paidWebResearch": "Derin araştırma, sunumlar ve belgeler",
     "paidWebMedia": "En iyi modellerle görseller ve videolar",
-    "paidWebCta": "Web'de AbacusAI Agent'a git"
+    "paidWebCta": "Web'de AbacusAI Agent'a git",
+    "planTitle": "{{model}} planınıza dahil değil",
+    "planNote": "Kullanmak için yükseltin veya planınıza dahil bir modelle devam edin."
   },
   "execBackends": {
     "daytona": {
@@ -2701,7 +2703,9 @@
       "providerConnectHint": "Ücretsiz olanlar dahil modellerini kullanmak için bağla.",
       "retryAttachment": "Eki yeniden dene",
       "folderItems_one": "{{count}} öğe",
-      "folderItems_other": "{{count}} öğe"
+      "folderItems_other": "{{count}} öğe",
+      "includedIn": "{{plan}} planına dahil",
+      "includedInPaid": "Ücretli planlara dahil"
     },
     "day": {
       "today": "Bugün",
@@ -4266,6 +4270,8 @@
       "renews": "Ücretsiz krediler her ay yenilenir.",
       "offer": "{{plan}} planı {{price}} ve sana şunları sunar:",
       "link": "Buradan yükselt: {{link}}",
+      "planModel": "Bu model planına dahil değil. Uygulamada başka bir model seç ya da kullanmak için planını yükselt.",
+      "planModelPaid": "Bu model planına dahil değil. Uygulamada başka bir model seç ya da planını yükselt: {{link}}",
       "repeat": "Hâlâ duraklatıldı: {{link}}",
       "paidOut": "Bu ayın kredileri bittiği için durakladım. Devam etmek için kredi ekle: {{link}}",
       "ownKeyCredit": "{{provider}} anahtarının bakiyesi bitti.",

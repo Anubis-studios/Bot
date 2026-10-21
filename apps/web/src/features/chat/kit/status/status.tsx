@@ -327,6 +327,12 @@ const creditsExpired = (actions?: ErrorAction[]): boolean =>
     (action) => action.type === "upgrade-abacus" && action.cause === "expired"
   ) === true;
 
+/** The model the plan does not include, when that is why the turn ended. */
+const planRefused = (actions?: ErrorAction[]): ErrorAction | undefined =>
+  actions?.find(
+    (action) => action.type === "upgrade-abacus" && action.cause === "plan"
+  );
+
 const exhaustedScope = (actions?: ErrorAction[]): "abacus" | "pool" =>
   actions?.some((action) => action.type === "upgrade-abacus") === true
     ? "abacus"
@@ -457,6 +463,14 @@ export const ErrorCard = ({
     tier === "paid" || tier === "basic"
   );
   const cause = (error as { cause?: string }).cause;
+  // A model the plan does not include: the upgrade card names it, and main
+  // has locked it, so the picker re-reads without it.
+  const refused = planRefused(actions);
+  const refusedModel = refused?.model;
+  useEffect(() => {
+    if (refusedModel != null)
+      void runtime.host.refreshModels?.().catch(() => {});
+  }, [refusedModel, runtime]);
   const crashed = error.code === "agent_exit" || error.code === "agent_crashed";
   const canReply = composer.readOnly == null;
   const retry = () =>
@@ -491,7 +505,10 @@ export const ErrorCard = ({
         t("workspace.retryMessage")
       );
     };
-    const atWall = actions.some((action) => action.type === "upgrade-abacus");
+    // A model outside the plan is not the credit wall: no balance, no free lane.
+    const atWall = actions.some(
+      (action) => action.type === "upgrade-abacus" && action.cause !== "plan"
+    );
     const continueFree = actions.find(
       (action) => action.type === "continue-free"
     );
@@ -509,6 +526,12 @@ export const ErrorCard = ({
           scope={exhaustedScope(actions)}
           {...(creditsExpired(actions) && {
             title: t("creditsCard.expiredTitle"),
+          })}
+          {...(refused != null && {
+            title: t("creditsCard.planTitle", {
+              model: refused.label ?? refused.model,
+            }),
+            note: t("creditsCard.planNote"),
           })}
           {...(ready.length > 0 && {
             ready: slots.renderDeliverables?.(ready),

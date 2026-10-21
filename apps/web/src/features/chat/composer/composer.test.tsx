@@ -90,6 +90,42 @@ describe("R2-T25 composer", () => {
     expect(onChange).toHaveBeenCalledWith("model-id");
   });
 
+  it("shows a model the plan does not include greyed with its plan, and choosing it upgrades instead", async () => {
+    const onChange = vi.fn();
+    const upgrade = vi.fn();
+    current = await renderWithDb(
+      <ModelChip
+        binding={{
+          value: "abacus/flash",
+          label: "Flash",
+          onChange,
+          groups: [
+            {
+              id: "abacus",
+              label: "Abacus.AI",
+              items: [
+                { id: "abacus/flash", label: "Flash" },
+                {
+                  id: "abacus/sonnet",
+                  label: "Sonnet",
+                  locked: { label: "Included in Basic", onSelect: upgrade },
+                },
+              ],
+            },
+          ],
+        }}
+      />
+    );
+    fireEvent.click(screen.getByRole("combobox", { name: /Flash/ }));
+    const row = await screen.findByRole("option", { name: /Sonnet/ });
+    expect(row.dataset.locked).toBe("true");
+    expect(row.textContent).toContain("Included in Basic");
+    expect(row.textContent).toContain("Upgrade");
+    fireEvent.click(row);
+    expect(upgrade).toHaveBeenCalledTimes(1);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it("exports focus-or-draft expansion and clears focus on unmount", async () => {
     const relay = new FakeRelay();
     relay.emitAll(b.sessionReady());

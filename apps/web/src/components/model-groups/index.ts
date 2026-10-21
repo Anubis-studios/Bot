@@ -14,6 +14,7 @@ import {
   type FreePoolProvider,
 } from "@abacus-ai/contract/free-pool";
 import {
+  modelAccess,
   resolveConfiguredModel,
   type ModelAvailability,
 } from "@abacus-ai/contract/models";
@@ -23,7 +24,13 @@ import { PROVIDER_KEY_FIELDS } from "@abacus-ai/contract/settings";
 export interface BotModelGroup {
   id: string;
   label: string;
-  items: Array<{ id: string; label: string; description?: string }>;
+  items: Array<{
+    id: string;
+    label: string;
+    description?: string;
+    /** Not in the account's plan: shown greyed, and choosing it upgrades. */
+    locked?: { label: string; onSelect(): void };
+  }>;
   connect?: { label: string; onSelect(): void };
 }
 
@@ -45,6 +52,8 @@ export interface BotModelLabels {
   /** Tier badges shown as the item's description ("Free", "Local"). */
   tierFree: string;
   tierLocal: string;
+  /** A locked model's note: "Included in Basic", or the plan-less wording for null. */
+  includedIn?: (plan: string | null) => string;
 }
 
 const PROVIDER_LABELS = new Map(
@@ -153,13 +162,33 @@ export interface BotModelGroupsInput {
   onConnect(provider: FreeProvider): void;
   /** Search as typed; empty = no filter. */
   query?: string;
+  /**
+   * The upgrade flow, for a model the plan does not include. Without it
+   * locked models are left out, since nothing could be done with them.
+   */
+  onUpgrade?(): void;
 }
 
 export const botModelGroups = (input: BotModelGroupsInput): BotModelGroup[] => {
   const { labels, favorites } = input;
   const query = (input.query ?? "").trim().toLowerCase();
-  // Only models that can run now (the old picker's rule).
+  // Only models that can run now (the old picker's rule), plus the models
+  // the plan does not include, greyed behind the upgrade.
   const runnable = input.models.filter((model) => model.configured);
+  const onUpgrade = input.onUpgrade;
+  const includedIn = labels.includedIn;
+  const locked =
+    onUpgrade == null || includedIn == null
+      ? []
+      : input.models.filter((model) => modelAccess(model) === "locked");
+  const lockedItem = (model: ModelAvailability) => ({
+    id: model.id,
+    label: model.label,
+    locked: {
+      label: includedIn?.(model.unlockPlan ?? null) ?? "",
+      onSelect: () => onUpgrade?.(),
+    },
+  });
   const catalogIndex = new Map(runnable.map((model, i) => [model.id, i]));
   const matches = (model: ModelAvailability): boolean =>
     query === "" || modelSearchText(model).includes(query);
@@ -211,6 +240,7 @@ export const botModelGroups = (input: BotModelGroupsInput): BotModelGroup[] => {
   const providerIds = [
     ...new Set([
       ...runnable.map((model) => modelProviderGroup(model.provider)),
+      ...locked.map((model) => modelProviderGroup(model.provider)),
       ...(query === "" ? connectable : []),
     ]),
   ].toSorted(byProvider);
@@ -248,11 +278,17 @@ export const botModelGroups = (input: BotModelGroupsInput): BotModelGroup[] => {
             onSelect: () => input.onConnect(provider as FreeProvider),
           }
         : undefined;
-    if (members.length === 0 && connect == null) continue;
+    // After the runnable ones, in catalog order.
+    const lockedMembers = locked.filter(
+      (model) =>
+        modelProviderGroup(model.provider) === provider && matches(model)
+    );
+    if (members.length === 0 && lockedMembers.length === 0 && connect == null)
+      continue;
     groups.push({
       id: provider,
       label: modelProviderLabel(provider),
-      items: members.map(item),
+      items: [...members.map(item), ...lockedMembers.map(lockedItem)],
       ...(connect != null ? { connect } : {}),
     });
   }

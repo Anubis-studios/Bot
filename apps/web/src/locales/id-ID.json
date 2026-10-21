@@ -871,7 +871,9 @@
     "paidWebApps": "Build and deploy full apps and websites",
     "paidWebResearch": "Deep research, slides and docs",
     "paidWebMedia": "Images and videos with top models",
-    "paidWebCta": "Go to AbacusAI Agent on the web"
+    "paidWebCta": "Go to AbacusAI Agent on the web",
+    "planTitle": "{{model}} tidak termasuk dalam paket Anda",
+    "planNote": "Upgrade untuk menggunakannya, atau lanjutkan dengan model yang termasuk dalam paket Anda."
   },
   "execBackends": {
     "daytona": {
@@ -2701,7 +2703,9 @@
       "providerConnectHint": "Hubungkan untuk memakai modelnya, termasuk yang gratis.",
       "retryAttachment": "Retry attachment",
       "folderItems_one": "{{count}} item",
-      "folderItems_other": "{{count}} items"
+      "folderItems_other": "{{count}} items",
+      "includedIn": "Termasuk dalam {{plan}}",
+      "includedInPaid": "Termasuk dalam paket berbayar"
     },
     "day": {
       "today": "Today",
@@ -4266,6 +4270,8 @@
       "renews": "Kredit gratis diperbarui setiap bulan.",
       "offer": "{{plan}} seharga {{price}} dan memberimu:",
       "link": "Upgrade di sini: {{link}}",
+      "planModel": "Model itu tidak termasuk dalam paketmu. Pilih model lain di aplikasi, atau upgrade untuk memakainya.",
+      "planModelPaid": "Model itu tidak termasuk dalam paketmu. Pilih model lain di aplikasi, atau upgrade: {{link}}",
       "repeat": "Masih berhenti: {{link}}",
       "paidOut": "Aku berhenti sementara karena kredit bulan ini sudah habis. Tambahkan kredit untuk lanjut: {{link}}",
       "ownKeyCredit": "Kunci {{provider}} kamu sudah kehabisan saldo.",

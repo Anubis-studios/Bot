@@ -141,9 +141,20 @@ export const chatReplyForFailure = (
   switch (failureKind(error)) {
     case "upgrade-abacus": {
       // Why the credit gate refused, when the agent could tell.
-      const expired =
-        error.actions?.find((action) => action.type === "upgrade-abacus")
-          ?.cause === "expired";
+      const cause = error.actions?.find(
+        (action) => action.type === "upgrade-abacus"
+      )?.cause;
+      // A model the plan does not include: not the credit wall, so no pause.
+      if (cause === "plan") {
+        if (repeat) return reminder;
+        return account === "free"
+          ? [
+              t("outcome.channel.planModel"),
+              ...offerLines(words, offer, false),
+            ].join("\n")
+          : t("outcome.channel.planModelPaid", { link: offer.upgradeUrl });
+      }
+      const expired = cause === "expired";
       // An account never read is worded like a paid one: no plan to sell.
       if (account !== "free")
         return repeat

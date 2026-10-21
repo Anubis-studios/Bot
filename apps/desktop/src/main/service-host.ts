@@ -419,8 +419,10 @@ import {
   cachedAbacusAccount,
   creditSnapshot,
   fetchAbacusAccount,
+  lockAbacusModelForPlan,
   onAbacusAccountRead,
   onFreePlan,
+  planRefusedModel,
 } from "./services/providers/abacus";
 import {
   connectButtonLink,
@@ -566,6 +568,9 @@ export class ServiceHost {
     // next launch and every agent stops at it.
     this.onAgentEvent((_sessionId, payload) => {
       if (payload.type !== "event" || payload.event.type !== "error") return;
+      // A model the plan refused at run time is not offered again.
+      const model = planRefusedModel(payload.event.error);
+      if (model != null) lockAbacusModelForPlan(model);
       const prefs = this.prefs?.();
       if (prefs == null) return;
       const patch = wallAfterError(

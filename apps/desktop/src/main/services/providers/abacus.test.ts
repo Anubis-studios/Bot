@@ -334,3 +334,54 @@ describe("connectivity", () => {
     });
   });
 });
+
+describe("a model the plan refused", () => {
+  const freeAccount = (tier: string) =>
+    new Response(JSON.stringify({ subscription_tier: tier }), { status: 200 });
+
+  it("stays locked across a catalog refresh and a restart, and lifts on a new plan", async () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "desktop-abacus-"));
+    vi.stubEnv("ABACUSAI_BOT_HOME", home);
+    try {
+      fetchMock.mockResolvedValueOnce(freeAccount("free"));
+      await fetchAbacusAccount(true);
+      const { lockAbacusModelForPlan, planLockedAbacusIds, planRefusedModel } =
+        await import("./abacus");
+      const model = planRefusedModel({
+        actions: [
+          { type: "switch-model" },
+          { type: "upgrade-abacus", cause: "plan", model: "abacus/paid" },
+        ],
+      });
+      expect(model).toBe("abacus/paid");
+      expect(
+        planRefusedModel({ actions: [{ type: "upgrade-abacus" }] })
+      ).toBeNull();
+      lockAbacusModelForPlan(model!);
+      // Only Abacus ids: another provider's model is its key's business.
+      lockAbacusModelForPlan("openai/gpt");
+      expect([...planLockedAbacusIds()]).toEqual(["abacus/paid"]);
+
+      // A refresh drops the caches, not what the platform refused.
+      clearAbacusCache();
+      fetchMock.mockResolvedValueOnce(freeAccount("free"));
+      await fetchAbacusAccount(true);
+      expect([...planLockedAbacusIds()]).toEqual(["abacus/paid"]);
+
+      // A new process reads it back from disk.
+      vi.resetModules();
+      const restarted = await import("./abacus");
+      fetchMock.mockResolvedValueOnce(freeAccount("free"));
+      await restarted.fetchAbacusAccount(true);
+      expect([...restarted.planLockedAbacusIds()]).toEqual(["abacus/paid"]);
+
+      // The upgrade: the plan changed, so the lock is lifted.
+      fetchMock.mockResolvedValueOnce(freeAccount("basic"));
+      await restarted.fetchAbacusAccount(true);
+      expect(restarted.planLockedAbacusIds().size).toBe(0);
+    } finally {
+      vi.unstubAllEnvs();
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+});

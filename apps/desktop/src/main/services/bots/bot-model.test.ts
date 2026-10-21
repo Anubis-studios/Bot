@@ -495,6 +495,47 @@ describe("the effective bot model in main (spec 03 §24.10)", () => {
     expect(main.sessions.get(handle.sessionId)!.model).toBe("abacus/route-llm");
   });
 
+  it("a model the plan does not include moves a pinned session off it, as a gone credential does", async () => {
+    const sources = (
+      catalog: ModelAvailability[],
+      recommended: string | null = null
+    ) => ({
+      readDefault: () => null,
+      listCatalog: async () => catalog,
+      cachedRecommended: () => recommended,
+    });
+    const locked = model("abacus/claude-sonnet-5", false, {
+      access: "locked",
+      unlockPlan: "Basic",
+    });
+    const free = model("abacus/deepseek-v4.1-flash", true, {
+      recommended: true,
+    });
+
+    // Pinned (a routine, a bot, a chat) to a model the free plan refused.
+    expect(
+      await resolveSessionModel(
+        null,
+        sources([locked, free]),
+        "abacus/claude-sonnet-5"
+      )
+    ).toBe("abacus/deepseek-v4.1-flash");
+    // Asked for by a bot: the same.
+    expect(
+      await resolveSessionModel(
+        "abacus/claude-sonnet-5",
+        sources([locked, free])
+      )
+    ).toBe("abacus/deepseek-v4.1-flash");
+    // Nothing runnable: a new session never starts on the locked model.
+    expect(
+      await resolveSessionModel(
+        "abacus/claude-sonnet-5",
+        sources([locked], "openllm/auto")
+      )
+    ).toBe("openllm/auto");
+  });
+
   it("a new bot chat with an empty catalog is still pinned, to the synchronous default", async () => {
     const main = makeMain();
     main.setCatalog([]);

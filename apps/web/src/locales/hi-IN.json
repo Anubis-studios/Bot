@@ -871,7 +871,9 @@
     "paidWebApps": "Build and deploy full apps and websites",
     "paidWebResearch": "Deep research, slides and docs",
     "paidWebMedia": "Images and videos with top models",
-    "paidWebCta": "Go to AbacusAI Agent on the web"
+    "paidWebCta": "Go to AbacusAI Agent on the web",
+    "planTitle": "{{model}} isn't included in your plan",
+    "planNote": "Upgrade to use it, or continue on a model your plan includes."
   },
   "execBackends": {
     "daytona": {
@@ -2701,7 +2703,9 @@
       "providerConnectHint": "इसके मॉडल, मुफ़्त वाले भी, इस्तेमाल करने के लिए इसे कनेक्ट करें।",
       "retryAttachment": "Retry attachment",
       "folderItems_one": "{{count}} item",
-      "folderItems_other": "{{count}} items"
+      "folderItems_other": "{{count}} items",
+      "includedIn": "Included in {{plan}}",
+      "includedInPaid": "Included in paid plans"
     },
     "day": {
       "today": "Today",
@@ -4266,6 +4270,8 @@
       "renews": "Free credits renew every month.",
       "offer": "{{plan}} is {{price}} and gives you:",
       "link": "Upgrade here: {{link}}",
+      "planModel": "That model isn't included in your plan. Pick another model in the app, or upgrade to use it.",
+      "planModelPaid": "That model isn't included in your plan. Pick another model in the app, or upgrade: {{link}}",
       "repeat": "Still paused: {{link}}",
       "paidOut": "I've paused because this month's credits are used up. Add credits to keep going: {{link}}",
       "ownKeyCredit": "Your {{provider}} key is out of credit.",

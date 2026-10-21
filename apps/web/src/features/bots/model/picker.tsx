@@ -1,6 +1,6 @@
 import { OPENLLM_ID } from "@abacus-ai/contract/models";
 import { useQuery } from "@tanstack/react-query";
-import { Settings2 } from "lucide-react";
+import { Lock, Settings2 } from "lucide-react";
 import { motion } from "motion/react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -59,7 +59,12 @@ export const useBotModelBinding = (
       connectGoogleAi: t("bots.model.connectGoogleAi"),
       tierFree: t("bots.model.free"),
       tierLocal: t("bots.model.local"),
+      includedIn: (plan) =>
+        plan == null
+          ? t("chat.composer.includedInPaid")
+          : t("chat.composer.includedIn", { plan }),
     },
+    onUpgrade: () => void openUpgrade(transport.client),
     onConnect: (provider) =>
       void navigate({
         to: "/settings/models",
@@ -172,48 +177,68 @@ export const ModelPicker = ({
                   .toLowerCase()
                   .includes(search.toLowerCase())
               )
-              .map((item) => (
-                <div key={item.id} className="flex items-center">
+              .map((item) =>
+                item.locked != null ? (
                   <Button
+                    key={item.id}
                     variant="ghost"
-                    className="min-w-0 flex-1 justify-start"
-                    aria-pressed={(binding.value ?? "") === item.id}
+                    data-locked
+                    className="text-muted-foreground w-full min-w-0 justify-start"
                     onClick={() => {
-                      binding.onChange(item.id || null);
                       setOpen(false);
+                      item.locked!.onSelect();
                     }}
                   >
-                    {item.label}
-                    <span className="text-muted-foreground text-xs">
-                      {item.description}
+                    <Lock aria-hidden className="size-3" />
+                    <span className="min-w-0 truncate">{item.label}</span>
+                    <span className="text-xs">{item.locked.label}</span>
+                    <span className="text-primary text-xs font-medium">
+                      {t("creditsCard.cta")}
                     </span>
                   </Button>
-                  {item.id && (
+                ) : (
+                  <div key={item.id} className="flex items-center">
                     <Button
-                      size="icon-sm"
                       variant="ghost"
-                      aria-label={t("bots.model.favorite", {
-                        name: item.label,
-                      })}
-                      aria-pressed={prefs.models.favoriteModelIds.includes(
-                        item.id
-                      )}
-                      onClick={() =>
-                        void db.updatePrefs({
-                          models: {
-                            favoriteModelIds: toggleFavorite(
-                              prefs.models.favoriteModelIds,
-                              item.id
-                            ),
-                          },
-                        })
-                      }
+                      className="min-w-0 flex-1 justify-start"
+                      aria-pressed={(binding.value ?? "") === item.id}
+                      onClick={() => {
+                        binding.onChange(item.id || null);
+                        setOpen(false);
+                      }}
                     >
-                      ☆
+                      {item.label}
+                      <span className="text-muted-foreground text-xs">
+                        {item.description}
+                      </span>
                     </Button>
-                  )}
-                </div>
-              ))}
+                    {item.id && (
+                      <Button
+                        size="icon-sm"
+                        variant="ghost"
+                        aria-label={t("bots.model.favorite", {
+                          name: item.label,
+                        })}
+                        aria-pressed={prefs.models.favoriteModelIds.includes(
+                          item.id
+                        )}
+                        onClick={() =>
+                          void db.updatePrefs({
+                            models: {
+                              favoriteModelIds: toggleFavorite(
+                                prefs.models.favoriteModelIds,
+                                item.id
+                              ),
+                            },
+                          })
+                        }
+                      >
+                        ☆
+                      </Button>
+                    )}
+                  </div>
+                )
+              )}
             {group.connect && (
               <Button variant="ghost" onClick={group.connect.onSelect}>
                 {group.connect.label}

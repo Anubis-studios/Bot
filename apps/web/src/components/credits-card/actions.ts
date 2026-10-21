@@ -47,6 +47,9 @@ export const creditActionsFor = (
       await connected?.();
       return true;
     },
+    refreshModels: async () => {
+      await connected?.();
+    },
     billingPlan: () => client.account.billingPlan({}),
     chooseFreeLane: async () => {
       await client.db.prefs.update({

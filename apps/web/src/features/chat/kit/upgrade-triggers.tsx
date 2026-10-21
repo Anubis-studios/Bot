@@ -30,8 +30,11 @@ const errorActions = (outcome: RunOutcomeRecord) =>
       | undefined
   )?.actions ?? [];
 
+/** A model the plan does not include is not a credit wall: its card says so. */
 const outOfAbacusCredits = (outcome: RunOutcomeRecord): boolean =>
-  errorActions(outcome).some((action) => action.type === "upgrade-abacus");
+  errorActions(outcome).some(
+    (action) => action.type === "upgrade-abacus" && action.cause !== "plan"
+  );
 
 /**
  * Sends the waiting message again once the plan is active. With a model the

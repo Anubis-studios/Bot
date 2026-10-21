@@ -810,6 +810,35 @@ describe("the user's own key, refused or spent", () => {
     ]);
   });
 
+  it("an Abacus model the plan does not include names it on the upgrade card", () => {
+    const raw =
+      "403: Model 'claude-sonnet-5' is not available on the free tier. Call /v1/models for the models available to you, or upgrade your plan.";
+    const shown = presentFailure(
+      { cause: classifyAttempt(raw, "abacus"), provider: "abacus", raw },
+      {
+        routed: false,
+        freeLaneProviders: [],
+        onFreeLane: false,
+        abacusFreeModels: [{ model: "abacus/free-1", label: "Free 1" }],
+        abacus: "credits",
+        model: { model: "abacus/claude-sonnet-5", label: "Sonnet 5" },
+      }
+    );
+
+    expect(shown.cause).toBe("not_in_plan");
+    expect(shown.actions).toEqual([
+      {
+        type: "upgrade-abacus",
+        cause: "plan",
+        model: "abacus/claude-sonnet-5",
+        label: "Sonnet 5",
+      },
+      { type: "switch-model", model: "abacus/free-1", label: "Free 1" },
+    ]);
+    // The plan, not the key.
+    expect(shown.message).not.toMatch(/key/i);
+  });
+
   it("an Abacus-served turn past the free window carries the cause", () => {
     const actions =
       pinned(
@@ -848,6 +877,17 @@ it("does not diagnose a provider authorization denial as an invalid key", () => 
   expect(classifyProviderFailure("401 Unauthorized").summary).toBe(
     "The model provider rejected the key"
   );
+});
+
+it("reads a model the plan does not include as the plan, not the key", () => {
+  // The platform's free-tier refusal of a paid model: the key is fine, and
+  // "check the key" sent the user to a page with nothing wrong on it.
+  const failure = classifyProviderFailure(
+    `403 {"error":{"message":"Model 'claude-sonnet-5' is not available on the free tier. Call /v1/models for the models available to you, or upgrade your plan."}}`
+  );
+  expect(failure.summary).toBe("This model isn't included in your plan");
+  expect(failure.remedy).toContain("Upgrade your plan");
+  expect(failure.summary).not.toContain("key");
 });
 
 it("names a key of the wrong kind and sends the user back through sign-in", () => {
