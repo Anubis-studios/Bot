@@ -1657,7 +1657,8 @@
         "right": "Split right",
         "top": "Split above",
         "bottom": "Split below"
-      }
+      },
+      "pr": "पुल रिक्वेस्ट"
     },
     "browser": {
       "activate": "Click to use this browser",
@@ -1778,7 +1779,106 @@
       "merged": "मर्ज किया गया",
       "closed": "बंद",
       "success": "Passed",
-      "failure": "Failed"
+      "failure": "Failed",
+      "open": "खुला",
+      "chip": "पुल रिक्वेस्ट #{{number}}",
+      "openOnGithub": "GitHub पर खोलें",
+      "openReview": "रिव्यू खोलें",
+      "refs": "{{head}} से {{base}} में",
+      "loading": "पुल रिक्वेस्ट लोड हो रहा है…",
+      "description": "विवरण",
+      "noDescription": "कोई विवरण नहीं दिया गया।",
+      "labels": "लेबल",
+      "ci": {
+        "success": "चेक पास हुए",
+        "failure": "चेक फ़ेल हो रहे हैं",
+        "pending": "चेक चल रहे हैं"
+      },
+      "checks": {
+        "title": "चेक",
+        "passed": "सभी चेक पास हुए",
+        "failing": "{{total}} में से {{failing}} फ़ेल",
+        "running": "{{total}} में से {{pending}} चल रहे हैं",
+        "none": "कोई चेक नहीं",
+        "details": "विवरण",
+        "showAll": "सभी {{total}} दिखाएँ",
+        "showLess": "कम दिखाएँ",
+        "more": "+{{extra}} और"
+      },
+      "review": {
+        "approved": "स्वीकृत · {{approvals}}",
+        "required": "रिव्यू ज़रूरी · {{requested}} अनुरोधित"
+      },
+      "reviewers": {
+        "title": "रिव्यूअर",
+        "awaiting": "रिव्यू बाकी"
+      },
+      "verdict": {
+        "APPROVED": "स्वीकृत",
+        "CHANGES_REQUESTED": "बदलाव माँगे गए",
+        "COMMENTED": "टिप्पणी की",
+        "DISMISSED": "खारिज",
+        "PENDING": "बाकी"
+      },
+      "conversation": {
+        "title": "बातचीत",
+        "empty": "अभी कोई टिप्पणी नहीं।",
+        "commented": "ने टिप्पणी की",
+        "APPROVED": "ने स्वीकृत किया",
+        "CHANGES_REQUESTED": "ने बदलाव माँगे",
+        "COMMENTED": "ने रिव्यू किया",
+        "DISMISSED": "रिव्यू खारिज",
+        "PENDING": "रिव्यू बाकी"
+      },
+      "files": {
+        "title": "बदली गई फ़ाइलें",
+        "back": "सभी फ़ाइलें",
+        "loading": "डिफ़ लोड हो रहा है…",
+        "failed": "डिफ़ लोड नहीं हो सका।",
+        "truncated": "यह डिफ़ यहाँ दिखाने के लिए बहुत बड़ा है। इसे GitHub पर खोलें।",
+        "empty": "इस फ़ाइल में दिखाने के लिए कोई बदलाव नहीं।"
+      },
+      "composer": {
+        "label": "रिव्यू",
+        "placeholder": "रिव्यू टिप्पणी लिखें…",
+        "verdict": "रिव्यू का प्रकार",
+        "comment": "टिप्पणी",
+        "approve": "स्वीकृत करें",
+        "request_changes": "बदलाव माँगें",
+        "submit": "रिव्यू भेजें",
+        "sent": "रिव्यू भेजा गया"
+      },
+      "state": {
+        "retry": "फिर से कोशिश करें",
+        "settings": "सेटिंग्स खोलें",
+        "install": "GitHub CLI पाएँ",
+        "disabled": {
+          "title": "GitHub इंटीग्रेशन बंद है",
+          "detail": "इस ब्रांच का पुल रिक्वेस्ट, चेक और रिव्यू देखने के लिए इसे सेटिंग्स में चालू करें।"
+        },
+        "none": {
+          "title": "{{branch}} के लिए अभी कोई पुल रिक्वेस्ट नहीं",
+          "detail": "GitHub पर एक खोलें, या टर्मिनल से बनाएँ:",
+          "detached": "इस चेकआउट के लिए कोई पुल रिक्वेस्ट नहीं",
+          "detachedDetail": "किसी ब्रांच का पुल रिक्वेस्ट देखने के लिए उसे चेकआउट करें।"
+        },
+        "unsupported": {
+          "title": "यह GitHub रिपॉज़िटरी नहीं है",
+          "detail": "इस चेकआउट में कोई GitHub रिमोट नहीं है, इसलिए इसके पुल रिक्वेस्ट नहीं हैं।"
+        },
+        "missing": {
+          "title": "GitHub CLI इंस्टॉल नहीं है",
+          "detail": "पुल रिक्वेस्ट GitHub CLI (gh) से आते हैं। इसे cli.github.com से इंस्टॉल करें (macOS: brew install gh), फिर साइन इन करें:"
+        },
+        "unauthenticated": {
+          "title": "GitHub में साइन इन नहीं है",
+          "detail": "टर्मिनल में GitHub CLI में साइन इन करें, फिर दोबारा कोशिश करें:"
+        },
+        "error": {
+          "title": "GitHub तक नहीं पहुँच सके",
+          "detail": "GitHub CLI ने जवाब नहीं दिया। फिर से कोशिश करें।"
+        }
+      }
     },
     "gallery": {
       "researchAgent": "Research · completed",
@@ -2409,7 +2509,8 @@
         "details": "Details",
         "agent": "Agent",
         "device": "Device",
-        "thread": "Thread"
+        "thread": "Thread",
+        "pr": "पुल रिक्वेस्ट"
       },
       "addTab": "Add a tab",
       "closeTab": "Close {{name}}",
@@ -2613,6 +2714,25 @@
       "detail": "Remove all local app data and restart with a fresh setup.",
       "confirmation": "This permanently deletes every local profile, API key, chat, routine, memory, installed skill, browser session, downloaded model, and files in the app’s default bot and session folders. This cannot be undone. Files outside the app data folder and your online Abacus.AI account are unchanged.",
       "confirm": "Delete all data and restart"
+    },
+    "github": {
+      "title": "GitHub",
+      "integration": "GitHub इंटीग्रेशन",
+      "integrationDetail": "सेशन में पुल रिक्वेस्ट की स्थिति, CI चेक और रिव्यू दिखाएँ, उसी जगह के GitHub CLI (gh) से जहाँ सेशन चलते हैं।",
+      "cli": "GitHub CLI",
+      "connectedAs": "{{host}} पर @{{account}} के रूप में साइन इन",
+      "missingDetail": "cli.github.com से gh इंस्टॉल करें (macOS: brew install gh), फिर gh auth login चलाएँ।",
+      "unauthenticatedDetail": "टर्मिनल में gh auth login चलाएँ, फिर दोबारा जाँचें।",
+      "checking": "जाँच हो रही है…",
+      "checkAgain": "फिर से जाँचें",
+      "install": "gh पाएँ",
+      "state": {
+        "ok": "कनेक्टेड",
+        "missing": "इंस्टॉल नहीं",
+        "unauthenticated": "साइन इन नहीं",
+        "disabled": "बंद",
+        "error": "उपलब्ध नहीं"
+      }
     }
   },
   "onboardingFlow": {

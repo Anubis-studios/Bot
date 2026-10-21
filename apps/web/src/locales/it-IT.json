@@ -1657,7 +1657,8 @@
         "right": "Split right",
         "top": "Split above",
         "bottom": "Split below"
-      }
+      },
+      "pr": "Pull request"
     },
     "browser": {
       "activate": "Click to use this browser",
@@ -1778,7 +1779,106 @@
       "merged": "Unita",
       "closed": "Chiusa",
       "success": "Passed",
-      "failure": "Failed"
+      "failure": "Failed",
+      "open": "Aperta",
+      "chip": "Pull request #{{number}}",
+      "openOnGithub": "Apri su GitHub",
+      "openReview": "Apri revisione",
+      "refs": "{{head}} in {{base}}",
+      "loading": "Caricamento pull request…",
+      "description": "Descrizione",
+      "noDescription": "Nessuna descrizione.",
+      "labels": "Etichette",
+      "ci": {
+        "success": "Controlli superati",
+        "failure": "Controlli non riusciti",
+        "pending": "Controlli in corso"
+      },
+      "checks": {
+        "title": "Controlli",
+        "passed": "Tutti i controlli superati",
+        "failing": "{{failing}} di {{total}} non riusciti",
+        "running": "{{pending}} di {{total}} in corso",
+        "none": "Nessun controllo",
+        "details": "Dettagli",
+        "showAll": "Mostra tutti i {{total}}",
+        "showLess": "Mostra meno",
+        "more": "+{{extra}} altri"
+      },
+      "review": {
+        "approved": "Approvata · {{approvals}}",
+        "required": "Revisione necessaria · {{requested}} richieste"
+      },
+      "reviewers": {
+        "title": "Revisori",
+        "awaiting": "In attesa di revisione"
+      },
+      "verdict": {
+        "APPROVED": "Approvata",
+        "CHANGES_REQUESTED": "Modifiche richieste",
+        "COMMENTED": "Commentata",
+        "DISMISSED": "Archiviata",
+        "PENDING": "In attesa"
+      },
+      "conversation": {
+        "title": "Conversazione",
+        "empty": "Ancora nessun commento.",
+        "commented": "ha commentato",
+        "APPROVED": "ha approvato",
+        "CHANGES_REQUESTED": "ha richiesto modifiche",
+        "COMMENTED": "ha revisionato",
+        "DISMISSED": "revisione archiviata",
+        "PENDING": "revisione in attesa"
+      },
+      "files": {
+        "title": "File modificati",
+        "back": "Tutti i file",
+        "loading": "Caricamento diff…",
+        "failed": "Impossibile caricare il diff.",
+        "truncated": "Questo diff è troppo grande per essere mostrato qui. Aprilo su GitHub.",
+        "empty": "Nessuna modifica da mostrare per questo file."
+      },
+      "composer": {
+        "label": "Revisione",
+        "placeholder": "Lascia un commento di revisione…",
+        "verdict": "Tipo di revisione",
+        "comment": "Commenta",
+        "approve": "Approva",
+        "request_changes": "Richiedi modifiche",
+        "submit": "Invia revisione",
+        "sent": "Revisione inviata"
+      },
+      "state": {
+        "retry": "Riprova",
+        "settings": "Apri Impostazioni",
+        "install": "Scarica GitHub CLI",
+        "disabled": {
+          "title": "L'integrazione con GitHub è disattivata",
+          "detail": "Attivala nelle Impostazioni per vedere la pull request, i controlli e le revisioni di questo branch."
+        },
+        "none": {
+          "title": "Ancora nessuna pull request per {{branch}}",
+          "detail": "Aprine una su GitHub o creala da un terminale:",
+          "detached": "Nessuna pull request per questo checkout",
+          "detachedDetail": "Passa a un branch per vederne la pull request."
+        },
+        "unsupported": {
+          "title": "Non è un repository GitHub",
+          "detail": "Questo checkout non ha un remote GitHub, quindi non ha pull request."
+        },
+        "missing": {
+          "title": "GitHub CLI non installato",
+          "detail": "Le pull request arrivano da GitHub CLI (gh). Installalo da cli.github.com (macOS: brew install gh), poi accedi:"
+        },
+        "unauthenticated": {
+          "title": "Accesso a GitHub non effettuato",
+          "detail": "Accedi a GitHub CLI da un terminale, poi riprova:"
+        },
+        "error": {
+          "title": "Impossibile raggiungere GitHub",
+          "detail": "GitHub CLI non ha risposto. Riprova."
+        }
+      }
     },
     "gallery": {
       "researchAgent": "Research · completed",
@@ -2409,7 +2509,8 @@
         "details": "Details",
         "agent": "Agent",
         "device": "Device",
-        "thread": "Thread"
+        "thread": "Thread",
+        "pr": "Pull request"
       },
       "addTab": "Add a tab",
       "closeTab": "Close {{name}}",
@@ -2613,6 +2714,25 @@
       "detail": "Remove all local app data and restart with a fresh setup.",
       "confirmation": "This permanently deletes every local profile, API key, chat, routine, memory, installed skill, browser session, downloaded model, and files in the app’s default bot and session folders. This cannot be undone. Files outside the app data folder and your online Abacus.AI account are unchanged.",
       "confirm": "Delete all data and restart"
+    },
+    "github": {
+      "title": "GitHub",
+      "integration": "Integrazione con GitHub",
+      "integrationDetail": "Mostra lo stato delle pull request, i controlli CI e le revisioni nelle sessioni, tramite GitHub CLI (gh) dove vengono eseguite.",
+      "cli": "GitHub CLI",
+      "connectedAs": "Accesso effettuato come @{{account}} su {{host}}",
+      "missingDetail": "Installa gh da cli.github.com (macOS: brew install gh), poi esegui gh auth login.",
+      "unauthenticatedDetail": "Esegui gh auth login in un terminale, poi controlla di nuovo.",
+      "checking": "Verifica in corso…",
+      "checkAgain": "Controlla di nuovo",
+      "install": "Scarica gh",
+      "state": {
+        "ok": "Connesso",
+        "missing": "Non installato",
+        "unauthenticated": "Accesso non effettuato",
+        "disabled": "Disattivato",
+        "error": "Non disponibile"
+      }
     }
   },
   "onboardingFlow": {

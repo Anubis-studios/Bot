@@ -87,6 +87,7 @@ const FOCUSED_ENTRYPOINTS: Record<string, readonly string[]> = {
     "kit/subagents/agents-list",
     "kit/subagents/detail",
     "kit/subagents/use-subagents",
+    "markdown/markdown",
     "runtime/host",
     "runtime/lazy-runtime",
     "runtime/runtime",

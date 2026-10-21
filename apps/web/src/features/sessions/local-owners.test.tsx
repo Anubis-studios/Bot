@@ -90,6 +90,7 @@ it("mounted workspace gives each preview and Files viewer a stable distinct loca
     incarnation: null,
     renderAgent: () => null,
     renderSession: () => null,
+    renderMarkdown: () => null,
     registerHotkeys: () => null,
     dispatch: () => {},
     presenter: {} as never,

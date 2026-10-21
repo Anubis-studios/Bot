@@ -301,6 +301,25 @@ const shellRouter = (
       },
       diff: os.git.diff.handler(() => ({ kind: "none" })),
     },
+    // Signed in, no PR on the branch; tests swap in their own answers.
+    github: {
+      status: os.github.status.handler(() => ({
+        state: "ok" as const,
+        version: "2.83.0",
+        account: "ada",
+        host: "github.com",
+        message: null,
+      })),
+      pr: os.github.pr.handler(() => ({
+        kind: "none" as const,
+        branch: "main",
+      })),
+      prDiff: os.github.prDiff.handler(() => ({ diff: "", truncated: false })),
+      review: os.github.review.handler(({ input, context }) => {
+        context.calls.push(["github.review", input]);
+        return { ok: true as const };
+      }),
+    },
     devices: {
       status: os.devices.status.handler(
         () => ({ available: false, enabled: false }) as never

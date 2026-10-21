@@ -8,6 +8,7 @@ import {
   Clock,
   Folder,
   GitCompare,
+  GitPullRequest,
   Globe,
   Home,
   LayoutPanelLeft,
@@ -232,7 +233,9 @@ const CommandMenuBody = () => {
                 ? Globe
                 : tab.ref === "changes"
                   ? GitCompare
-                  : Folder,
+                  : tab.ref === "pr"
+                    ? GitPullRequest
+                    : Folder,
             run: () =>
               navigateSession({
                 to: "/sessions/$sessionId",
@@ -242,13 +245,22 @@ const CommandMenuBody = () => {
                 transition: "none",
               }),
           })),
-          ...(["files", "changes"] as const)
+          ...[
+            "files" as const,
+            "changes" as const,
+            ...(prefs.githubIntegration !== false ? ["pr" as const] : []),
+          ]
             .filter((kind) => !tabs.some((tab) => tab.ref === kind))
             .map((kind): Entry => ({
               id: `panel:${kind}`,
               title: t(`sessions.dock.${kind}`),
               group: "panels",
-              icon: kind === "files" ? Folder : GitCompare,
+              icon:
+                kind === "files"
+                  ? Folder
+                  : kind === "pr"
+                    ? GitPullRequest
+                    : GitCompare,
               run: () =>
                 navigateSession({
                   to: "/sessions/$sessionId",

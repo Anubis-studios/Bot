@@ -472,6 +472,7 @@ import {
 } from "./services/workspace/file-search-service";
 import { FileTreeService } from "./services/workspace/file-tree-service";
 import { GitService } from "./services/workspace/git-service";
+import { GithubService } from "./services/workspace/github-service";
 import { resolveSessionWorkspacePath } from "./services/workspace/session-workspace-context";
 import { SkillsService } from "./services/workspace/skills-service";
 import { TerminalSessionService } from "./services/workspace/terminal-session-service";
@@ -1784,6 +1785,8 @@ export class ServiceHost {
   private readonly fileTreeService = new FileTreeService();
   private readonly fileSearchService = new FileSearchService();
   private readonly gitService = new GitService();
+  /** The user's `gh`, for the `github.*` procedures (spec 04 §14.3). */
+  readonly github = new GithubService();
 
   /**
    * Checkout-aware file and git operations (spec 04 §26.4): the procedures
@@ -4087,6 +4090,11 @@ export class ServiceHost {
     }
 
     return this.gitService.getCurrentBranch(workspacePath);
+  }
+
+  /** The checkout a git context names on this machine; null when none. */
+  gitContextPath(context?: WorkspaceGitContext): string | null {
+    return this.resolveWorkspaceContextPath(context);
   }
 
   async getPrInfo(context?: WorkspaceGitContext): Promise<PrInfo | null> {

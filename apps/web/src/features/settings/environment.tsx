@@ -22,6 +22,8 @@ import { showError, showInfo } from "#renderer/lib/toast";
 import { useAppContext, errorText } from "#renderer/lib/use-app-context";
 import { Button } from "#renderer/ui/button";
 import { Input } from "#renderer/ui/input";
+
+import { GithubSettings } from "./github";
 export const EnvironmentPage = () => {
   const { t } = useTranslation();
   const { transport } = useAppContext();
@@ -159,6 +161,7 @@ export const EnvironmentPage = () => {
           </StatePill>
         </SettingRow>
       </GroupCard>
+      <GithubSettings />
     </AreaPage>
   );
 };

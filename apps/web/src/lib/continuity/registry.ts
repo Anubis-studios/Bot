@@ -135,6 +135,7 @@ const panel = v.record(
           "device",
           "agent",
           "thread",
+          "pr",
         ]),
         title: v.optional(v.string()),
         url: v.optional(v.string()),

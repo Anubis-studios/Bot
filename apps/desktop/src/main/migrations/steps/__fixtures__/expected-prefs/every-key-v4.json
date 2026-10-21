@@ -27,6 +27,7 @@
       "dismissals.routinesMissedSeenAt": "legacy",
       "dismissals.upsell": "legacy",
       "dismissals.whatsappIntroAt": "legacy",
+      "githubIntegration": "default",
       "keymap": "default",
       "language": "legacy",
       "lastPickedWorkspaceId": "legacy",
@@ -90,6 +91,7 @@
         "upsell": true,
         "whatsappIntroAt": null
       },
+      "githubIntegration": true,
       "id": "app",
       "keymap": {},
       "language": "de-DE",

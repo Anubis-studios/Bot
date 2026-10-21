@@ -54,6 +54,11 @@ const StreamingContext = createContext(false);
 const ReplyContext = createContext(false);
 /** Inside a link: an image is the link's content, not something to enlarge. */
 const InLinkContext = createContext(false);
+/**
+ * Text from outside (a PR's body, reviews, comments): no visualizers, no
+ * math, no file links; only http(s) and mailto links open, on a click.
+ */
+const UntrustedContext = createContext(false);
 
 const COLLAPSE_LINES = 30;
 
@@ -65,13 +70,19 @@ const COLLAPSE_LINES = 30;
 export const ChatLink = ({ href, children, ...rest }: ComponentProps<"a">) => {
   const links = use(LinksContext);
   const reply = use(ReplyContext);
+  const untrusted = use(UntrustedContext);
   const { message } = useMessageScope();
-  const file = pathFromHref(href);
   const external = href != null && /^(https?:|mailto:)/i.test(href);
+  // Untrusted text links outside or within itself; anything else is inert.
+  const inert =
+    untrusted &&
+    !external &&
+    (href?.startsWith("#") !== true || pathFromHref(href) != null);
+  const file = untrusted ? null : pathFromHref(href);
   const anchor = (
     <a
       {...rest}
-      href={href}
+      href={inert ? undefined : href}
       title={external ? href : rest.title}
       target={external ? "_blank" : undefined}
       rel={external ? "noopener noreferrer" : undefined}
@@ -194,8 +205,9 @@ const CodeBlock = (props: ComponentProps<"pre"> & { "data-lang"?: string }) => {
     },
     []
   );
+  const untrusted = use(UntrustedContext);
   const html = innerHtmlOf(props.children);
-  if (lang === "math")
+  if (lang === "math" && !untrusted)
     return (
       <div
         className="chat-math"
@@ -204,7 +216,7 @@ const CodeBlock = (props: ComponentProps<"pre"> & { "data-lang"?: string }) => {
         dangerouslySetInnerHTML={{ __html: html ?? "" }}
       />
     );
-  if (lang === "visualizer")
+  if (lang === "visualizer" && !untrusted)
     return <VisualizerBlock html={html ?? ""} streaming={streaming} />;
   const lines = (html ?? "").split("\n").length;
   const collapsible = lines > COLLAPSE_LINES + 1;
@@ -256,13 +268,14 @@ const CodeBlock = (props: ComponentProps<"pre"> & { "data-lang"?: string }) => {
 
 const InlineCode = (props: ComponentProps<"code">) => {
   const { children, ...rest } = props;
+  const untrusted = use(UntrustedContext);
   if (
     props.dangerouslySetInnerHTML != null ||
     /\blanguage-/.test(props.className ?? "")
   )
     return <code {...props} />;
   const text = typeof children === "string" ? children : null;
-  if (text?.startsWith(MATH_SENTINEL) === true)
+  if (!untrusted && text?.startsWith(MATH_SENTINEL) === true)
     return (
       <span
         className="chat-math-inline"
@@ -309,6 +322,8 @@ export interface MarkdownProps {
   className?: string;
   reply?: boolean;
   selectable?: boolean;
+  /** Text from outside the app; see `UntrustedContext`. */
+  untrusted?: boolean;
 }
 
 export const Markdown = ({
@@ -319,6 +334,7 @@ export const Markdown = ({
   className,
   reply = false,
   selectable = false,
+  untrusted = false,
 }: MarkdownProps) => {
   // Re-render once temml has loaded (math renders as TeX until then). The
   // React Compiler memoises the element on its props, so the version is
@@ -326,38 +342,45 @@ export const Markdown = ({
   const mathVersion = useMathVersion();
   const codeHighlighter = useCodeHighlighter();
   const highlight = (...args: Parameters<typeof codeHighlighter>) =>
-    args[1] === "math"
-      ? renderMath(args[0], true)
-      : args[1] === "visualizer"
-        ? escapeHtml(args[0])
-        : codeHighlighter(...args);
+    untrusted
+      ? codeHighlighter(...args)
+      : args[1] === "math"
+        ? renderMath(args[0], true)
+        : args[1] === "visualizer"
+          ? escapeHtml(args[0])
+          : codeHighlighter(...args);
   const [selecting, setSelecting] = useState(false);
   const [retained, setRetained] = useState(content);
   if (!selecting && retained !== content) setRetained(content);
   const knownFiles = useKnownFiles(useOptionalChatView()?.threadId);
   const text = selecting ? retained : content;
-  const source = prepass(
-    role === "assistant" ? linkifyKnownFiles(text, knownFiles) : text,
-    { workspaceRoot }
-  );
+  // Untrusted text skips the pre-pass: no math, no file links.
+  const source = untrusted
+    ? text
+    : prepass(
+        role === "assistant" ? linkifyKnownFiles(text, knownFiles) : text,
+        { workspaceRoot }
+      );
   const rendered = (
-    <ReplyContext value={reply && role === "assistant"}>
-      <StreamingContext value={streaming}>
-        <TextPart
-          key={mathVersion}
-          content={source}
-          role={role}
-          extensions={reply && role === "assistant" ? replyLinks : undefined}
-          highlighter={highlight}
-          components={COMPONENTS}
-          className={cn(
-            "chat-prose",
-            streaming && "chat-prose-streaming",
-            className
-          )}
-        />
-      </StreamingContext>
-    </ReplyContext>
+    <UntrustedContext value={untrusted}>
+      <ReplyContext value={reply && role === "assistant"}>
+        <StreamingContext value={streaming}>
+          <TextPart
+            key={mathVersion}
+            content={source}
+            role={role}
+            extensions={reply && role === "assistant" ? replyLinks : undefined}
+            highlighter={highlight}
+            components={COMPONENTS}
+            className={cn(
+              "chat-prose",
+              streaming && "chat-prose-streaming",
+              className
+            )}
+          />
+        </StreamingContext>
+      </ReplyContext>
+    </UntrustedContext>
   );
   return selectable ? (
     <SelectableText onSelectionChange={setSelecting}>{rendered}</SelectableText>

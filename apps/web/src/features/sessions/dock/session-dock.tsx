@@ -15,6 +15,7 @@ import {
   Globe,
   Folder,
   GitCompare,
+  GitPullRequest,
   Bot,
   Monitor,
 } from "lucide-react";
@@ -58,7 +59,7 @@ import {
 } from "#renderer/ui/dropdown-menu";
 import { Skeleton } from "#renderer/ui/skeleton";
 
-import { useSessionsTransport } from "../data/queries";
+import { useGithubIntegration, useSessionsTransport } from "../data/queries";
 import {
   getTerminalView,
   disposeTerminalView,
@@ -119,6 +120,7 @@ const KIND_ICONS: Record<string, typeof Terminal> = {
   changes: GitCompare,
   agents: Bot,
   device: Monitor,
+  pr: GitPullRequest,
 };
 const TabLauncher = ({
   kinds,
@@ -179,6 +181,7 @@ export const SessionDock = ({
   const active =
     search.tab ?? (entries.open ? (entries.last ?? undefined) : undefined);
   const prefs = usePrefs();
+  const github = useGithubIntegration();
   const narrow = useShellWidthSelect((width) => width < 600);
   const expanded =
     entries.open === true &&
@@ -296,7 +299,9 @@ export const SessionDock = ({
       (!active.startsWith("terminal:") || terminalSnapshot === key)
     ) {
       if (
-        ["files", "changes", "agents", "device", LAUNCHER].includes(active) ||
+        ["files", "changes", "agents", "device", "pr", LAUNCHER].includes(
+          active
+        ) ||
         active.startsWith("browser:")
       )
         openTab(key, {
@@ -338,6 +343,8 @@ export const SessionDock = ({
     "changes",
     "agents",
     ...(IS_ELECTRON && device.data?.enabled ? ["device"] : []),
+    // Off, the tab is not offered; one already open says why it is empty.
+    ...(github ? ["pr"] : []),
   ];
   // The launcher hands its place to the kind picked on it.
   const launch = (kind: string) => {

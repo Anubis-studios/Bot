@@ -17,10 +17,7 @@ import type {
   GitChangeStatsScope,
   GitDiffScope,
   InitGitResult,
-  PrCheck,
-  PrCiStatus,
   PrInfo,
-  PrReviewState,
   SwitchGitBranchResult,
   CreateWorktreeResult,
   ListWorktreesResult,
@@ -28,6 +25,8 @@ import type {
 } from "@abacus-ai/contract/contracts";
 
 import { parseNumstatZ, parseStatusZ } from "./git-porcelain";
+import { runGh } from "./github-cli";
+import { PR_VIEW_FIELDS, parsePrViewJson } from "./github-pr-json";
 
 const execFileAsync = promisify(execFile);
 
@@ -129,126 +128,6 @@ export function parseWorktreePorcelain(
 // --no-index too, but NUL is what that platform actually has.
 const NULL_DEVICE = process.platform === "win32" ? "NUL" : "/dev/null";
 
-// Fields read from `gh pr view --json`; one place so fetch and parser agree.
-const PR_VIEW_FIELDS =
-  "number,url,title,state,isDraft,reviewDecision,additions,deletions,statusCheckRollup,reviewRequests,latestReviews";
-
-// Everything is optional: GitHub's shape varies (CheckRun vs StatusContext,
-// missing rollup) and a malformed field must never throw.
-export function parsePrViewJson(raw: string): PrInfo | null {
-  let data: Record<string, unknown>;
-  try {
-    data = JSON.parse(raw.trim()) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
-  const number = data?.number;
-  const url = data?.url;
-  if (typeof number !== "number" || number <= 0 || typeof url !== "string") {
-    return null;
-  }
-
-  const state = data?.state;
-  const reviewDecision = data?.reviewDecision;
-  let reviewState: PrReviewState = "pending";
-  if (state === "MERGED") {
-    reviewState = "merged";
-  } else if (state === "CLOSED") {
-    reviewState = "closed";
-  } else if (data?.isDraft === true) {
-    reviewState = "draft";
-  } else if (reviewDecision === "APPROVED") {
-    reviewState = "approved";
-  } else if (reviewDecision === "CHANGES_REQUESTED") {
-    reviewState = "changes_requested";
-  }
-
-  // A single failure wins; otherwise any incomplete check keeps it pending.
-  const rollup = Array.isArray(data?.statusCheckRollup)
-    ? (data.statusCheckRollup as Array<Record<string, unknown>>)
-    : [];
-  const checks: PrCheck[] = rollup.map((check) => ({
-    name: String(check?.name ?? check?.context ?? "check"),
-    status: classifyCheck(check),
-    url:
-      typeof check?.detailsUrl === "string"
-        ? check.detailsUrl
-        : typeof check?.targetUrl === "string"
-          ? check.targetUrl
-          : null,
-  }));
-  let ciStatus: PrCiStatus | null = null;
-  if (checks.length > 0) {
-    ciStatus = checks.some((c) => c.status === "failure")
-      ? "failure"
-      : checks.some((c) => c.status === "pending")
-        ? "pending"
-        : "success";
-  }
-
-  const latestReviews = Array.isArray(data?.latestReviews)
-    ? (data.latestReviews as Array<Record<string, unknown>>)
-    : [];
-  const approvedCount = latestReviews.filter(
-    (r) => r?.state === "APPROVED"
-  ).length;
-  const changesRequestedCount = latestReviews.filter(
-    (r) => r?.state === "CHANGES_REQUESTED"
-  ).length;
-  const reviewRequestedCount = Array.isArray(data?.reviewRequests)
-    ? data.reviewRequests.length
-    : 0;
-
-  return {
-    number,
-    url,
-    title: typeof data?.title === "string" ? data.title : "",
-    reviewState,
-    additions: typeof data?.additions === "number" ? data.additions : 0,
-    deletions: typeof data?.deletions === "number" ? data.deletions : 0,
-    ciStatus,
-    checks,
-    approvedCount,
-    changesRequestedCount,
-    reviewRequestedCount,
-  };
-}
-
-// Map one rollup entry (CheckRun or StatusContext) to a coarse verdict.
-function classifyCheck(check: Record<string, unknown>): PrCiStatus {
-  const status = String(check?.status ?? "").toUpperCase(); // CheckRun
-  const conclusion = String(check?.conclusion ?? "").toUpperCase(); // CheckRun
-  const contextState = String(check?.state ?? "").toUpperCase(); // StatusContext
-  if (
-    [
-      "FAILURE",
-      "ERROR",
-      "TIMED_OUT",
-      "CANCELLED",
-      "ACTION_REQUIRED",
-      "STARTUP_FAILURE",
-    ].includes(conclusion) ||
-    ["FAILURE", "ERROR"].includes(contextState)
-  ) {
-    return "failure";
-  }
-  if (
-    contextState === "SUCCESS" ||
-    conclusion === "SUCCESS" ||
-    (status === "COMPLETED" && conclusion === "")
-  ) {
-    return "success";
-  }
-  if (status !== "" && status !== "COMPLETED") {
-    return "pending";
-  }
-  if (contextState === "PENDING") {
-    return "pending";
-  }
-  // Completed with a neutral/skipped conclusion → treat as success (non-blocking).
-  return "success";
-}
-
 type GitStatusResult = {
   available: boolean;
   changes: GitChangeItem[];
@@ -348,14 +227,10 @@ export class GitService {
       return null;
     }
     try {
-      const { stdout } = await execFileAsync(
-        "gh",
-        ["pr", "view", "--json", PR_VIEW_FIELDS],
-        {
-          cwd: workspacePath,
-          timeout: 10_000,
-        }
-      );
+      const { stdout } = await runGh(["pr", "view", "--json", PR_VIEW_FIELDS], {
+        cwd: workspacePath,
+        timeoutMs: 10_000,
+      });
       return parsePrViewJson(stdout);
     } catch {
       return null;

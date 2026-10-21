@@ -28,6 +28,7 @@ export const DEFAULT_PREFS: Required<PrefsRow> & {
   creditsExhaustedAt: null,
   browserHomepage: null,
   showLinkPreviews: true,
+  githubIntegration: true,
   onboardingStep: null,
   dismissals: {
     referralCardUntil: null,

@@ -9,6 +9,7 @@ import { dbRouter } from "./procedures/db";
 import { devicesRouter } from "./procedures/devices";
 import { filesRouter } from "./procedures/files";
 import { gitRouter } from "./procedures/git";
+import { githubRouter } from "./procedures/github";
 import { impl } from "./procedures/impl";
 import { linksRouter } from "./procedures/links";
 import { mcpRouter } from "./procedures/mcp";
@@ -36,6 +37,7 @@ import { workspacesRouter } from "./procedures/workspaces";
 const routes: {
   workspaces: typeof workspacesRouter;
   git: typeof gitRouter;
+  github: typeof githubRouter;
   files: typeof filesRouter;
   sessions: typeof sessionsRouter;
   agent: typeof agentRouter;
@@ -65,6 +67,7 @@ const routes: {
 } = {
   workspaces: workspacesRouter,
   git: gitRouter,
+  github: githubRouter,
   files: filesRouter,
   sessions: sessionsRouter,
   agent: agentRouter,

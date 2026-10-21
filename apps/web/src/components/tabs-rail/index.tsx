@@ -9,6 +9,7 @@ import {
   Globe,
   Folder,
   GitCompare,
+  GitPullRequest,
   Bot,
   FileText,
   Brain,
@@ -79,7 +80,9 @@ const tabIcon = (kind: PanelTabKind) =>
             ? Brain
             : kind === "agent"
               ? Bot
-              : FileText;
+              : kind === "pr"
+                ? GitPullRequest
+                : FileText;
 /** The order with `id` dropped beside `target`, after it past its middle; Chat stays first. */
 export const dropOrder = (
   ids: readonly string[],
@@ -274,28 +277,17 @@ const RailControls = ({
             <Plus />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="titlebar-nodrag">
-            {kinds.map((kind) => (
-              <DropdownMenuItem key={kind} onClick={() => onAdd(kind)}>
-                {kind === "browser" ? (
-                  <Globe />
-                ) : kind === "terminal" ? (
-                  <Terminal />
-                ) : kind === "files" ? (
-                  <Folder />
-                ) : kind === "changes" ? (
-                  <GitCompare />
-                ) : kind === "memory" ? (
-                  <Brain />
-                ) : kind === "agent" ? (
-                  <Bot />
-                ) : (
-                  <FileText />
-                )}
-                <span className="min-w-0 truncate">
-                  {t(`shell.panel.tabs.${kind}`)}
-                </span>
-              </DropdownMenuItem>
-            ))}
+            {kinds.map((kind) => {
+              const Icon = tabIcon(kind);
+              return (
+                <DropdownMenuItem key={kind} onClick={() => onAdd(kind)}>
+                  <Icon />
+                  <span className="min-w-0 truncate">
+                    {t(`shell.panel.tabs.${kind}`)}
+                  </span>
+                </DropdownMenuItem>
+              );
+            })}
           </DropdownMenuContent>
         </DropdownMenu>
       )}

@@ -12,6 +12,7 @@ import { useRouter } from "@tanstack/react-router";
 import { useEffect } from "react";
 
 import { useCollections } from "#renderer/data/db";
+import { usePrefs } from "#renderer/data/db/prefs";
 import { followNotices } from "#renderer/data/queries/notices";
 import type { Transport } from "#renderer/data/transport";
 import type { AppQueryUtils } from "#renderer/data/transport/types";
@@ -105,11 +106,25 @@ export const useCheckoutWatch = (
     return () => abort.abort();
   }, [transport, workspaceId, sessionId, identity]);
 };
+/** GitHub through `gh`: on unless the user turned it off (absent reads as on). */
+export const useGithubIntegration = (): boolean =>
+  usePrefs().githubIntegration !== false;
 export const useCheckoutQueries = (checkout: CheckoutRef) => {
   const transport = useSessionsTransport();
-  return sessionsQueries(transport.orpc, useCheckoutIdentity(checkout));
+  return sessionsQueries(
+    transport.orpc,
+    useCheckoutIdentity(checkout),
+    useGithubIntegration()
+  );
 };
-export const sessionsQueries = (orpc: AppQueryUtils, identity?: string) => {
+/** A pull request that can no longer change stops polling. */
+const PR_POLL_MS = 60_000;
+export const sessionsQueries = (
+  orpc: AppQueryUtils,
+  identity?: string,
+  /** `prefs.githubIntegration`: off, no `gh` query runs. */
+  github = true
+) => {
   const scoped = <T extends { queryKey: readonly unknown[] }>(options: T): T =>
     identity === undefined
       ? options
@@ -152,8 +167,34 @@ export const sessionsQueries = (orpc: AppQueryUtils, identity?: string) => {
       scoped(
         orpc.git.prInfo.queryOptions({
           input: checkout,
-          refetchInterval: 60000,
+          enabled: github,
+          refetchInterval: PR_POLL_MS,
           refetchOnWindowFocus: true,
+        })
+      ),
+    /** The review tab's pull request, in full. */
+    pullRequest: (checkout: CheckoutRef) =>
+      scoped(
+        orpc.github.pr.queryOptions({
+          input: checkout,
+          enabled: github,
+          refetchInterval: (query) => {
+            const result = query.state.data;
+            if (result?.kind === "ok")
+              return result.pr.state === "OPEN" ? PR_POLL_MS : false;
+            // Retried by hand (Retry), not by the clock.
+            return result?.kind === "none" ? PR_POLL_MS : false;
+          },
+          refetchOnWindowFocus: true,
+        })
+      ),
+    /** Fetched once a file is opened; `number` pins the PR it belongs to. */
+    pullRequestDiff: (checkout: CheckoutRef, number: number) =>
+      scoped(
+        orpc.github.prDiff.queryOptions({
+          input: { context: checkout, number },
+          enabled: github,
+          staleTime: PR_POLL_MS,
         })
       ),
     worktrees: (workspaceId: string) =>

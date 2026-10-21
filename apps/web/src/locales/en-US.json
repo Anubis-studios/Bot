@@ -1657,7 +1657,8 @@
         "right": "Split right",
         "top": "Split above",
         "bottom": "Split below"
-      }
+      },
+      "pr": "Pull request"
     },
     "browser": {
       "activate": "Click to use this browser",
@@ -1778,7 +1779,106 @@
       "merged": "Merged",
       "closed": "Closed",
       "success": "Passed",
-      "failure": "Failed"
+      "failure": "Failed",
+      "open": "Open",
+      "chip": "Pull request #{{number}}",
+      "openOnGithub": "Open on GitHub",
+      "openReview": "Open review",
+      "refs": "{{head}} into {{base}}",
+      "loading": "Loading pull request…",
+      "description": "Description",
+      "noDescription": "No description provided.",
+      "labels": "Labels",
+      "ci": {
+        "success": "Checks passed",
+        "failure": "Checks failing",
+        "pending": "Checks running"
+      },
+      "checks": {
+        "title": "Checks",
+        "passed": "All checks passed",
+        "failing": "{{failing}} of {{total}} failing",
+        "running": "{{pending}} of {{total}} running",
+        "none": "No checks",
+        "details": "Details",
+        "showAll": "Show all {{total}}",
+        "showLess": "Show less",
+        "more": "+{{extra}} more"
+      },
+      "review": {
+        "approved": "Approved · {{approvals}}",
+        "required": "Review required · {{requested}} requested"
+      },
+      "reviewers": {
+        "title": "Reviewers",
+        "awaiting": "Awaiting review"
+      },
+      "verdict": {
+        "APPROVED": "Approved",
+        "CHANGES_REQUESTED": "Changes requested",
+        "COMMENTED": "Commented",
+        "DISMISSED": "Dismissed",
+        "PENDING": "Pending"
+      },
+      "conversation": {
+        "title": "Conversation",
+        "empty": "No comments yet.",
+        "commented": "commented",
+        "APPROVED": "approved",
+        "CHANGES_REQUESTED": "requested changes",
+        "COMMENTED": "reviewed",
+        "DISMISSED": "review dismissed",
+        "PENDING": "review pending"
+      },
+      "files": {
+        "title": "Files changed",
+        "back": "All files",
+        "loading": "Loading diff…",
+        "failed": "Couldn't load the diff.",
+        "truncated": "This diff is too large to show here. Open it on GitHub.",
+        "empty": "No changes to show for this file."
+      },
+      "composer": {
+        "label": "Review",
+        "placeholder": "Leave a review comment…",
+        "verdict": "Review type",
+        "comment": "Comment",
+        "approve": "Approve",
+        "request_changes": "Request changes",
+        "submit": "Submit review",
+        "sent": "Review submitted"
+      },
+      "state": {
+        "retry": "Retry",
+        "settings": "Open Settings",
+        "install": "Get the GitHub CLI",
+        "disabled": {
+          "title": "GitHub integration is off",
+          "detail": "Turn it on in Settings to see this branch's pull request, checks and reviews."
+        },
+        "none": {
+          "title": "No pull request for {{branch}} yet",
+          "detail": "Open one on GitHub, or create it from a terminal:",
+          "detached": "No pull request for this checkout",
+          "detachedDetail": "Check out a branch to see its pull request."
+        },
+        "unsupported": {
+          "title": "Not a GitHub repository",
+          "detail": "This checkout has no GitHub remote, so it has no pull requests."
+        },
+        "missing": {
+          "title": "GitHub CLI not installed",
+          "detail": "Pull requests come from the GitHub CLI (gh). Install it from cli.github.com (macOS: brew install gh), then sign in:"
+        },
+        "unauthenticated": {
+          "title": "Not signed in to GitHub",
+          "detail": "Sign in to the GitHub CLI in a terminal, then retry:"
+        },
+        "error": {
+          "title": "Couldn't reach GitHub",
+          "detail": "The GitHub CLI didn't answer. Try again."
+        }
+      }
     },
     "gallery": {
       "researchAgent": "Research · completed",
@@ -2409,7 +2509,8 @@
         "details": "Details",
         "agent": "Agent",
         "device": "Device",
-        "thread": "Thread"
+        "thread": "Thread",
+        "pr": "Pull request"
       },
       "addTab": "Add a tab",
       "closeTab": "Close {{name}}",
@@ -2613,6 +2714,25 @@
       "detail": "Remove all local app data and restart with a fresh setup.",
       "confirmation": "This permanently deletes every local profile, API key, chat, routine, memory, installed skill, browser session, downloaded model, and files in the app’s default bot and session folders. This cannot be undone. Files outside the app data folder and your online Abacus.AI account are unchanged.",
       "confirm": "Delete all data and restart"
+    },
+    "github": {
+      "title": "GitHub",
+      "integration": "GitHub integration",
+      "integrationDetail": "Show pull request status, CI checks and reviews in sessions, using the GitHub CLI (gh) where they run.",
+      "cli": "GitHub CLI",
+      "connectedAs": "Signed in as @{{account}} on {{host}}",
+      "missingDetail": "Install gh from cli.github.com (macOS: brew install gh), then run gh auth login.",
+      "unauthenticatedDetail": "Run gh auth login in a terminal, then check again.",
+      "checking": "Checking…",
+      "checkAgain": "Check again",
+      "install": "Get gh",
+      "state": {
+        "ok": "Connected",
+        "missing": "Not installed",
+        "unauthenticated": "Not signed in",
+        "disabled": "Off",
+        "error": "Unavailable"
+      }
     }
   },
   "onboardingFlow": {

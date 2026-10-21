@@ -1657,7 +1657,8 @@
         "right": "Split right",
         "top": "Split above",
         "bottom": "Split below"
-      }
+      },
+      "pr": "Pull request"
     },
     "browser": {
       "activate": "Click to use this browser",
@@ -1778,7 +1779,106 @@
       "merged": "Fusionnée",
       "closed": "Fermée",
       "success": "Passed",
-      "failure": "Failed"
+      "failure": "Failed",
+      "open": "Ouverte",
+      "chip": "Pull request #{{number}}",
+      "openOnGithub": "Ouvrir sur GitHub",
+      "openReview": "Ouvrir la revue",
+      "refs": "{{head}} vers {{base}}",
+      "loading": "Chargement de la pull request…",
+      "description": "Description",
+      "noDescription": "Aucune description.",
+      "labels": "Libellés",
+      "ci": {
+        "success": "Checks réussis",
+        "failure": "Checks en échec",
+        "pending": "Checks en cours"
+      },
+      "checks": {
+        "title": "Checks",
+        "passed": "Tous les checks ont réussi",
+        "failing": "{{failing}} sur {{total}} en échec",
+        "running": "{{pending}} sur {{total}} en cours",
+        "none": "Aucun check",
+        "details": "Détails",
+        "showAll": "Afficher les {{total}}",
+        "showLess": "Afficher moins",
+        "more": "+{{extra}} de plus"
+      },
+      "review": {
+        "approved": "Approuvée · {{approvals}}",
+        "required": "Revue requise · {{requested}} demandées"
+      },
+      "reviewers": {
+        "title": "Relecteurs",
+        "awaiting": "Revue en attente"
+      },
+      "verdict": {
+        "APPROVED": "Approuvée",
+        "CHANGES_REQUESTED": "Modifications demandées",
+        "COMMENTED": "Commentée",
+        "DISMISSED": "Rejetée",
+        "PENDING": "En attente"
+      },
+      "conversation": {
+        "title": "Conversation",
+        "empty": "Aucun commentaire pour l'instant.",
+        "commented": "a commenté",
+        "APPROVED": "a approuvé",
+        "CHANGES_REQUESTED": "a demandé des modifications",
+        "COMMENTED": "a relu",
+        "DISMISSED": "revue rejetée",
+        "PENDING": "revue en attente"
+      },
+      "files": {
+        "title": "Fichiers modifiés",
+        "back": "Tous les fichiers",
+        "loading": "Chargement du diff…",
+        "failed": "Impossible de charger le diff.",
+        "truncated": "Ce diff est trop volumineux pour être affiché ici. Ouvrez-le sur GitHub.",
+        "empty": "Aucune modification à afficher pour ce fichier."
+      },
+      "composer": {
+        "label": "Revue",
+        "placeholder": "Laisser un commentaire de revue…",
+        "verdict": "Type de revue",
+        "comment": "Commenter",
+        "approve": "Approuver",
+        "request_changes": "Demander des modifications",
+        "submit": "Envoyer la revue",
+        "sent": "Revue envoyée"
+      },
+      "state": {
+        "retry": "Réessayer",
+        "settings": "Ouvrir les réglages",
+        "install": "Obtenir GitHub CLI",
+        "disabled": {
+          "title": "L'intégration GitHub est désactivée",
+          "detail": "Activez-la dans les réglages pour voir la pull request, les checks et les revues de cette branche."
+        },
+        "none": {
+          "title": "Pas encore de pull request pour {{branch}}",
+          "detail": "Ouvrez-en une sur GitHub ou créez-la depuis un terminal :",
+          "detached": "Aucune pull request pour ce checkout",
+          "detachedDetail": "Basculez sur une branche pour voir sa pull request."
+        },
+        "unsupported": {
+          "title": "Ce n'est pas un dépôt GitHub",
+          "detail": "Ce checkout n'a pas de remote GitHub, donc pas de pull requests."
+        },
+        "missing": {
+          "title": "GitHub CLI n'est pas installé",
+          "detail": "Les pull requests viennent de GitHub CLI (gh). Installez-le depuis cli.github.com (macOS : brew install gh), puis connectez-vous :"
+        },
+        "unauthenticated": {
+          "title": "Non connecté à GitHub",
+          "detail": "Connectez-vous à GitHub CLI dans un terminal, puis réessayez :"
+        },
+        "error": {
+          "title": "Impossible de joindre GitHub",
+          "detail": "GitHub CLI n'a pas répondu. Réessayez."
+        }
+      }
     },
     "gallery": {
       "researchAgent": "Research · completed",
@@ -2409,7 +2509,8 @@
         "details": "Details",
         "agent": "Agent",
         "device": "Device",
-        "thread": "Thread"
+        "thread": "Thread",
+        "pr": "Pull request"
       },
       "addTab": "Add a tab",
       "closeTab": "Close {{name}}",
@@ -2613,6 +2714,25 @@
       "detail": "Remove all local app data and restart with a fresh setup.",
       "confirmation": "This permanently deletes every local profile, API key, chat, routine, memory, installed skill, browser session, downloaded model, and files in the app’s default bot and session folders. This cannot be undone. Files outside the app data folder and your online Abacus.AI account are unchanged.",
       "confirm": "Delete all data and restart"
+    },
+    "github": {
+      "title": "GitHub",
+      "integration": "Intégration GitHub",
+      "integrationDetail": "Affiche l'état des pull requests, les checks CI et les revues dans les sessions, via GitHub CLI (gh) là où elles s'exécutent.",
+      "cli": "GitHub CLI",
+      "connectedAs": "Connecté en tant que @{{account}} sur {{host}}",
+      "missingDetail": "Installez gh depuis cli.github.com (macOS : brew install gh), puis lancez gh auth login.",
+      "unauthenticatedDetail": "Lancez gh auth login dans un terminal, puis vérifiez à nouveau.",
+      "checking": "Vérification…",
+      "checkAgain": "Vérifier à nouveau",
+      "install": "Obtenir gh",
+      "state": {
+        "ok": "Connecté",
+        "missing": "Non installé",
+        "unauthenticated": "Non connecté",
+        "disabled": "Désactivé",
+        "error": "Indisponible"
+      }
     }
   },
   "onboardingFlow": {

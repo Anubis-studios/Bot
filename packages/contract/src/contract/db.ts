@@ -262,6 +262,8 @@ export const PREFS_SCALAR_ENTRIES = {
   creditsExhaustedAt: NullableTimestamp,
   browserHomepage: v.nullable(v.string()),
   showLinkPreviews: v.boolean(),
+  /** Off: no `gh` call, no PR chip, tab or review anywhere. */
+  githubIntegration: v.boolean(),
   onboardingStep: v.nullable(v.string()),
   panes: v.record(v.string(), v.number()),
   keymap: v.record(v.string(), v.nullable(v.string())),
@@ -299,6 +301,7 @@ export const PrefsPatchSchema = v.strictObject({
   creditsExhaustedAt: v.optional(S.creditsExhaustedAt),
   browserHomepage: v.optional(S.browserHomepage),
   showLinkPreviews: v.optional(S.showLinkPreviews),
+  githubIntegration: v.optional(S.githubIntegration),
   onboardingStep: v.optional(S.onboardingStep),
   dismissals: prefsGroup(G.dismissals),
   panes: v.optional(S.panes),

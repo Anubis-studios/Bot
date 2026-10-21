@@ -1657,7 +1657,8 @@
         "right": "Sağa böl",
         "top": "Yukarı böl",
         "bottom": "Aşağı böl"
-      }
+      },
+      "pr": "Pull request"
     },
     "browser": {
       "activate": "Bu tarayıcıyı kullanmak için tıkla",
@@ -1778,7 +1779,106 @@
       "merged": "Birleştirildi",
       "closed": "Kapatıldı",
       "success": "Geçti",
-      "failure": "Başarısız"
+      "failure": "Başarısız",
+      "open": "Açık",
+      "chip": "Pull request #{{number}}",
+      "openOnGithub": "GitHub'da aç",
+      "openReview": "İncelemeyi aç",
+      "refs": "{{head}} → {{base}}",
+      "loading": "Pull request yükleniyor…",
+      "description": "Açıklama",
+      "noDescription": "Açıklama yok.",
+      "labels": "Etiketler",
+      "ci": {
+        "success": "Kontroller geçti",
+        "failure": "Kontroller başarısız",
+        "pending": "Kontroller çalışıyor"
+      },
+      "checks": {
+        "title": "Kontroller",
+        "passed": "Tüm kontroller geçti",
+        "failing": "{{total}} kontrolden {{failing}} başarısız",
+        "running": "{{total}} kontrolden {{pending}} çalışıyor",
+        "none": "Kontrol yok",
+        "details": "Ayrıntılar",
+        "showAll": "{{total}} kontrolün tümünü göster",
+        "showLess": "Daha az göster",
+        "more": "+{{extra}} daha"
+      },
+      "review": {
+        "approved": "Onaylandı · {{approvals}}",
+        "required": "İnceleme gerekli · {{requested}} istendi"
+      },
+      "reviewers": {
+        "title": "İnceleyenler",
+        "awaiting": "İnceleme bekleniyor"
+      },
+      "verdict": {
+        "APPROVED": "Onaylandı",
+        "CHANGES_REQUESTED": "Değişiklik istendi",
+        "COMMENTED": "Yorum yaptı",
+        "DISMISSED": "Reddedildi",
+        "PENDING": "Beklemede"
+      },
+      "conversation": {
+        "title": "Konuşma",
+        "empty": "Henüz yorum yok.",
+        "commented": "yorum yaptı",
+        "APPROVED": "onayladı",
+        "CHANGES_REQUESTED": "değişiklik istedi",
+        "COMMENTED": "inceledi",
+        "DISMISSED": "inceleme reddedildi",
+        "PENDING": "inceleme beklemede"
+      },
+      "files": {
+        "title": "Değişen dosyalar",
+        "back": "Tüm dosyalar",
+        "loading": "Diff yükleniyor…",
+        "failed": "Diff yüklenemedi.",
+        "truncated": "Bu diff burada gösterilemeyecek kadar büyük. GitHub'da açın.",
+        "empty": "Bu dosya için gösterilecek değişiklik yok."
+      },
+      "composer": {
+        "label": "İnceleme",
+        "placeholder": "İnceleme yorumu bırakın…",
+        "verdict": "İnceleme türü",
+        "comment": "Yorum yap",
+        "approve": "Onayla",
+        "request_changes": "Değişiklik iste",
+        "submit": "İncelemeyi gönder",
+        "sent": "İnceleme gönderildi"
+      },
+      "state": {
+        "retry": "Yeniden dene",
+        "settings": "Ayarları aç",
+        "install": "GitHub CLI'yi edinin",
+        "disabled": {
+          "title": "GitHub entegrasyonu kapalı",
+          "detail": "Bu dalın pull request'ini, kontrollerini ve incelemelerini görmek için Ayarlar'dan açın."
+        },
+        "none": {
+          "title": "{{branch}} için henüz pull request yok",
+          "detail": "GitHub'da bir tane açın veya terminalden oluşturun:",
+          "detached": "Bu checkout için pull request yok",
+          "detachedDetail": "Pull request'ini görmek için bir dala geçin."
+        },
+        "unsupported": {
+          "title": "GitHub deposu değil",
+          "detail": "Bu checkout'un GitHub uzak deposu yok, bu yüzden pull request'i de yok."
+        },
+        "missing": {
+          "title": "GitHub CLI yüklü değil",
+          "detail": "Pull request'ler GitHub CLI'den (gh) gelir. cli.github.com adresinden yükleyin (macOS: brew install gh), ardından oturum açın:"
+        },
+        "unauthenticated": {
+          "title": "GitHub'da oturum açılmadı",
+          "detail": "Bir terminalde GitHub CLI'de oturum açın, ardından yeniden deneyin:"
+        },
+        "error": {
+          "title": "GitHub'a ulaşılamadı",
+          "detail": "GitHub CLI yanıt vermedi. Yeniden deneyin."
+        }
+      }
     },
     "gallery": {
       "researchAgent": "Araştırma · tamamlandı",
@@ -2409,7 +2509,8 @@
         "details": "Ayrıntılar",
         "agent": "Ajan",
         "device": "Cihaz",
-        "thread": "Konu"
+        "thread": "Konu",
+        "pr": "Pull request"
       },
       "addTab": "Sekme ekle",
       "closeTab": "Kapat: {{name}}",
@@ -2613,6 +2714,25 @@
       "detail": "Uygulamanın tüm yerel verilerini kaldır ve sıfırdan kurulumla yeniden başlat.",
       "confirmation": "Bu işlem tüm yerel profilleri, API anahtarlarını, sohbetleri, rutinleri, belleği, yüklü becerileri, tarayıcı oturumlarını, indirilen modelleri ve uygulamanın varsayılan bot ve oturum klasörlerindeki dosyaları kalıcı olarak siler. Bu geri alınamaz. Uygulama veri klasörü dışındaki dosyalar ve çevrimiçi Abacus.AI hesabın değişmez.",
       "confirm": "Tüm verileri sil ve yeniden başlat"
+    },
+    "github": {
+      "title": "GitHub",
+      "integration": "GitHub entegrasyonu",
+      "integrationDetail": "Oturumlarda pull request durumunu, CI kontrollerini ve incelemeleri, oturumların çalıştığı yerdeki GitHub CLI (gh) ile gösterir.",
+      "cli": "GitHub CLI",
+      "connectedAs": "{{host}} üzerinde @{{account}} olarak oturum açıldı",
+      "missingDetail": "gh'yi cli.github.com adresinden yükleyin (macOS: brew install gh), ardından gh auth login komutunu çalıştırın.",
+      "unauthenticatedDetail": "Bir terminalde gh auth login komutunu çalıştırın, ardından yeniden kontrol edin.",
+      "checking": "Kontrol ediliyor…",
+      "checkAgain": "Yeniden kontrol et",
+      "install": "gh'yi edinin",
+      "state": {
+        "ok": "Bağlı",
+        "missing": "Yüklü değil",
+        "unauthenticated": "Oturum açılmadı",
+        "disabled": "Kapalı",
+        "error": "Kullanılamıyor"
+      }
     }
   },
   "onboardingFlow": {

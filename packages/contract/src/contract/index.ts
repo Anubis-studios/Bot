@@ -15,6 +15,7 @@ import { db } from "./db";
 import { devices } from "./devices";
 import { files } from "./files";
 import { git } from "./git";
+import { github } from "./github";
 import { links } from "./links";
 import { mcp } from "./mcp";
 import { memory } from "./memory";
@@ -36,6 +37,7 @@ import { workspaces } from "./workspaces";
 export const contract = {
   workspaces,
   git,
+  github,
   files,
   sessions,
   agent,
@@ -84,6 +86,7 @@ export type { BrowserEvent } from "./browser";
 export type { ConnectorsEvent } from "./connectors";
 export type { DevicesEvent } from "./devices";
 export type { FilesEvent } from "./files";
+export type * from "./github";
 
 export type { McpRuntimeEvent } from "./mcp";
 export type { MemoryEvent } from "./memory";

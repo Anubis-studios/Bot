@@ -1657,7 +1657,8 @@
         "right": "Split right",
         "top": "Split above",
         "bottom": "Split below"
-      }
+      },
+      "pr": "プルリクエスト"
     },
     "browser": {
       "activate": "Click to use this browser",
@@ -1778,7 +1779,106 @@
       "merged": "マージ済み",
       "closed": "クローズ",
       "success": "Passed",
-      "failure": "Failed"
+      "failure": "Failed",
+      "open": "オープン",
+      "chip": "プルリクエスト #{{number}}",
+      "openOnGithub": "GitHub で開く",
+      "openReview": "レビューを開く",
+      "refs": "{{head}} を {{base}} へ",
+      "loading": "プルリクエストを読み込み中…",
+      "description": "説明",
+      "noDescription": "説明はありません。",
+      "labels": "ラベル",
+      "ci": {
+        "success": "チェック成功",
+        "failure": "チェック失敗",
+        "pending": "チェック実行中"
+      },
+      "checks": {
+        "title": "チェック",
+        "passed": "すべてのチェックに成功",
+        "failing": "{{total}} 件中 {{failing}} 件が失敗",
+        "running": "{{total}} 件中 {{pending}} 件が実行中",
+        "none": "チェックなし",
+        "details": "詳細",
+        "showAll": "{{total}} 件すべて表示",
+        "showLess": "表示を減らす",
+        "more": "ほか {{extra}} 件"
+      },
+      "review": {
+        "approved": "承認済み · {{approvals}}",
+        "required": "レビューが必要 · {{requested}} 件リクエスト中"
+      },
+      "reviewers": {
+        "title": "レビュアー",
+        "awaiting": "レビュー待ち"
+      },
+      "verdict": {
+        "APPROVED": "承認",
+        "CHANGES_REQUESTED": "変更をリクエスト",
+        "COMMENTED": "コメント",
+        "DISMISSED": "却下",
+        "PENDING": "保留中"
+      },
+      "conversation": {
+        "title": "会話",
+        "empty": "まだコメントはありません。",
+        "commented": "がコメント",
+        "APPROVED": "が承認",
+        "CHANGES_REQUESTED": "が変更をリクエスト",
+        "COMMENTED": "がレビュー",
+        "DISMISSED": "レビューは却下済み",
+        "PENDING": "レビュー保留中"
+      },
+      "files": {
+        "title": "変更されたファイル",
+        "back": "すべてのファイル",
+        "loading": "差分を読み込み中…",
+        "failed": "差分を読み込めませんでした。",
+        "truncated": "この差分は大きすぎてここに表示できません。GitHub で開いてください。",
+        "empty": "このファイルに表示する変更はありません。"
+      },
+      "composer": {
+        "label": "レビュー",
+        "placeholder": "レビューコメントを入力…",
+        "verdict": "レビューの種類",
+        "comment": "コメント",
+        "approve": "承認",
+        "request_changes": "変更をリクエスト",
+        "submit": "レビューを送信",
+        "sent": "レビューを送信しました"
+      },
+      "state": {
+        "retry": "再試行",
+        "settings": "設定を開く",
+        "install": "GitHub CLI を入手",
+        "disabled": {
+          "title": "GitHub 連携はオフです",
+          "detail": "このブランチのプルリクエスト、チェック、レビューを見るには、設定でオンにしてください。"
+        },
+        "none": {
+          "title": "{{branch}} のプルリクエストはまだありません",
+          "detail": "GitHub で作成するか、ターミナルから作成してください:",
+          "detached": "このチェックアウトにはプルリクエストがありません",
+          "detachedDetail": "ブランチをチェックアウトすると、そのプルリクエストが表示されます。"
+        },
+        "unsupported": {
+          "title": "GitHub リポジトリではありません",
+          "detail": "このチェックアウトには GitHub のリモートがないため、プルリクエストはありません。"
+        },
+        "missing": {
+          "title": "GitHub CLI がインストールされていません",
+          "detail": "プルリクエストは GitHub CLI (gh) から取得します。cli.github.com からインストールし (macOS: brew install gh)、サインインしてください:"
+        },
+        "unauthenticated": {
+          "title": "GitHub にサインインしていません",
+          "detail": "ターミナルで GitHub CLI にサインインしてから、再試行してください:"
+        },
+        "error": {
+          "title": "GitHub に接続できませんでした",
+          "detail": "GitHub CLI が応答しませんでした。もう一度お試しください。"
+        }
+      }
     },
     "gallery": {
       "researchAgent": "Research · completed",
@@ -2409,7 +2509,8 @@
         "details": "Details",
         "agent": "Agent",
         "device": "Device",
-        "thread": "Thread"
+        "thread": "Thread",
+        "pr": "プルリクエスト"
       },
       "addTab": "Add a tab",
       "closeTab": "Close {{name}}",
@@ -2613,6 +2714,25 @@
       "detail": "Remove all local app data and restart with a fresh setup.",
       "confirmation": "This permanently deletes every local profile, API key, chat, routine, memory, installed skill, browser session, downloaded model, and files in the app’s default bot and session folders. This cannot be undone. Files outside the app data folder and your online Abacus.AI account are unchanged.",
       "confirm": "Delete all data and restart"
+    },
+    "github": {
+      "title": "GitHub",
+      "integration": "GitHub 連携",
+      "integrationDetail": "セッションにプルリクエストの状態、CI チェック、レビューを表示します。セッションが動作する場所の GitHub CLI (gh) を使います。",
+      "cli": "GitHub CLI",
+      "connectedAs": "{{host}} に @{{account}} としてサインイン中",
+      "missingDetail": "cli.github.com から gh をインストールし (macOS: brew install gh)、gh auth login を実行してください。",
+      "unauthenticatedDetail": "ターミナルで gh auth login を実行してから、もう一度確認してください。",
+      "checking": "確認中…",
+      "checkAgain": "もう一度確認",
+      "install": "gh を入手",
+      "state": {
+        "ok": "接続済み",
+        "missing": "未インストール",
+        "unauthenticated": "未サインイン",
+        "disabled": "オフ",
+        "error": "利用不可"
+      }
     }
   },
   "onboardingFlow": {
