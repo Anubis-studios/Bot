@@ -346,7 +346,12 @@ export class AguiRelayService implements AguiSource {
       this.#host.workspaceOf(threadId) == null
     )
       return;
-    const thread = this.#thread(threadId);
+    let thread: ThreadRelay;
+    try {
+      thread = this.#thread(threadId);
+    } catch {
+      return; // Logged by the read; the next line tries again.
+    }
     const relayEvent = event as RelayEvent;
     const runtime = origin?.runtime ?? null;
     const chunk = thread.ingest(relayEvent, runtime);
@@ -1138,7 +1143,8 @@ export class AguiRelayService implements AguiSource {
         this.#log(
           `${threadId}: reading the thread file failed: ${String(error)}`
         );
-        return { file: null };
+        // Never an empty relay: its first save would replace the history.
+        throw unavailable("The conversation could not be read", 1_000);
       }
     };
     const initial = read();

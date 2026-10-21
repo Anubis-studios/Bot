@@ -189,4 +189,69 @@ function migrateFromDefaultStoreIfNeeded(): void {
 
 migrateFromDefaultStoreIfNeeded();
 
-export { store as workspaceStore };
+type StoreValues = Partial<WorkspaceStoreSchema>;
+
+const SAVE_RETRY_BASE_MS = 250;
+const SAVE_RETRY_MAX_MS = 30_000;
+/** About a minute of failed retries before the user is told. */
+const SAVE_FAILURES_BEFORE_NOTICE = 8;
+
+const unsaved: StoreValues = {};
+let saveRetry: ReturnType<typeof setTimeout> | null = null;
+let saveFailures = 0;
+const saveFailingListeners = new Set<() => void>();
+
+function flushUnsaved(): void {
+  if (saveRetry != null) {
+    clearTimeout(saveRetry);
+    saveRetry = null;
+  }
+  try {
+    // Every unsaved key in one of conf's atomic writes.
+    store.set({ ...unsaved });
+  } catch (error) {
+    saveFailures += 1;
+    // The first failure, then powers of two: a lasting one stays quiet.
+    if ((saveFailures & (saveFailures - 1)) === 0)
+      console.error(
+        `[workspace-store] saving ${STORE_FILE} failed (${saveFailures}x); retrying`,
+        error
+      );
+    if (saveFailures === SAVE_FAILURES_BEFORE_NOTICE)
+      for (const listener of saveFailingListeners) listener();
+    saveRetry = setTimeout(
+      flushUnsaved,
+      Math.min(SAVE_RETRY_BASE_MS * 2 ** (saveFailures - 1), SAVE_RETRY_MAX_MS)
+    );
+    saveRetry.unref?.();
+    return;
+  }
+  for (const key of Object.keys(unsaved) as (keyof StoreValues)[])
+    delete unsaved[key];
+  saveFailures = 0;
+}
+
+/** Called once per failure streak, when saves have kept failing. */
+export function onStoreSaveFailing(listener: () => void): () => void {
+  saveFailingListeners.add(listener);
+  return () => {
+    saveFailingListeners.delete(listener);
+  };
+}
+
+/**
+ * The store as its services use it. `set` never throws: a failed write
+ * (EMFILE, a locked file) is logged and retried, newest values winning.
+ */
+export const workspaceStore = {
+  get: <Key extends keyof WorkspaceStoreSchema>(
+    key: Key
+  ): WorkspaceStoreSchema[Key] => store.get(key),
+  set: <Key extends keyof WorkspaceStoreSchema>(
+    key: Key,
+    value: WorkspaceStoreSchema[Key]
+  ): void => {
+    unsaved[key] = value;
+    flushUnsaved();
+  },
+};

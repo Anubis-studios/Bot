@@ -17,7 +17,9 @@
  * Ownership comes before every write: a newer build's file (`foreign`) or
  * one that cannot be read is never replaced, by the repair
  * or `writeAgui` (which throws, so the relay keeps its history in memory and
- * logs the refusal). Hydration then serves v1 converted in memory.
+ * logs the refusal). Hydration then serves v1 converted in memory; with
+ * no v1 to serve, an unreadable file fails the read instead of reading as
+ * empty. Reads retry transient errors (EMFILE, a Windows lock) first.
  *
  * Every write and removal goes through `HeldFiles`: a file an unresolved
  * migration commit may cover (`isMigrationWriteBlocked`, spec 00 C.1) is not
@@ -33,7 +35,10 @@ import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
-import { writeFileAtomicSync } from "@abacus-ai/agent/atomic-file";
+import {
+  retryTransientSync,
+  writeFileAtomicSync,
+} from "@abacus-ai/agent/atomic-file";
 import type { UIMessage } from "@abacus-ai/contract/contract";
 import {
   decideConversion,
@@ -108,10 +113,13 @@ export const readTextChecked = (
 ): ReadResult => {
   try {
     if (Number.isFinite(maxBytes)) {
-      const { size } = fs.statSync(file);
+      const { size } = retryTransientSync(() => fs.statSync(file));
       if (size > maxBytes) return { status: "tooLarge", size };
     }
-    return { status: "ok", text: fs.readFileSync(file, "utf8") };
+    return {
+      status: "ok",
+      text: retryTransientSync(() => fs.readFileSync(file, "utf8")),
+    };
   } catch (error) {
     return isMissingError(error)
       ? { status: "missing" }
@@ -321,6 +329,14 @@ export class ThreadFileProtectedError extends Error {
   }
 }
 
+/** Thrown by reads when the thread file exists but cannot be read now. */
+export class ThreadFileUnavailableError extends Error {
+  constructor(readonly threadId: string) {
+    super(`${threadId}: the thread file cannot be read right now`);
+    this.name = "ThreadFileUnavailableError";
+  }
+}
+
 export interface ThreadStoreOptions {
   /** Defaults to `abacusBotHome()`, read on every call (tests set the env). */
   home?: () => string;
@@ -501,7 +517,12 @@ export class ThreadStore {
       // Never replaced, not even by a repair after a clear: served from v1
       // in memory, when v1 is history.
       this.log(`${sessionId}: thread file is ${twin.status}; left as is`);
-      if (v1.status !== "ok" || (marker !== null && !proven)) return null;
+      if (v1.status !== "ok" || (marker !== null && !proven)) {
+        // Served empty, the next save would replace history once readable.
+        if (twin.status === "unreadable")
+          throw new ThreadFileUnavailableError(sessionId);
+        return null;
+      }
       return this.convert(sessionId, v1, marker?.token);
     }
 
@@ -538,6 +559,7 @@ export class ThreadStore {
         const decision = decideConversion(v1.meta, twin);
         if (decision.action === "skip" && twin.status === "ok")
           return twin.file;
+        if (twin.status === "corrupt") this.keepCorrupt(threadFile);
         return this.repair(sessionId, threadFile, v1, marker?.token);
       }
     }
@@ -702,8 +724,26 @@ export class ThreadStore {
     switch (twin.status) {
       case "ok":
         return twin.source.kind === "agui" ? "agui" : "derived";
+      case "corrupt":
+        // The caller replaces it next: keep its bytes for recovery.
+        this.keepCorrupt(threadFile);
+        return "corrupt";
       default:
         return twin.status;
+    }
+  }
+
+  /** Copies an unparseable thread file aside (`<id>.json.corrupt-<ms>`). */
+  private keepCorrupt(threadFile: string): void {
+    if (this.held.pending(threadFile) !== null) return;
+    try {
+      fs.copyFileSync(
+        threadFile,
+        `${threadFile}.corrupt-${Date.now()}`,
+        fs.constants.COPYFILE_EXCL
+      );
+    } catch (error) {
+      this.log(`keeping ${path.basename(threadFile)}: ${String(error)}`);
     }
   }
 
@@ -762,7 +802,7 @@ export class ThreadStore {
     } else {
       let size: number;
       try {
-        size = fs.statSync(file).size;
+        size = retryTransientSync(() => fs.statSync(file)).size;
       } catch (error) {
         const code = (error as { code?: unknown })?.code;
         return {

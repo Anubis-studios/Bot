@@ -40,6 +40,12 @@ const LITERAL_PATHSPECS = {
 /** Paths per git call, well under any platform's argument limit. */
 const PATHSPEC_CHUNK = 200;
 
+/**
+ * Worktree files hashed at once. Each holds a descriptor while it is read,
+ * so thousands of changed files at once exhausted the process's limit.
+ */
+const FINGERPRINT_CONCURRENCY = 32;
+
 const chunks = <T>(items: T[], size: number): T[][] => {
   const out: T[][] = [];
   for (let start = 0; start < items.length; start += size)
@@ -953,23 +959,24 @@ export class GitService {
           ? Promise.resolve(new Map<string, string>())
           : this.headBlobs(checkoutPath, paths),
       ]);
-      await Promise.all(
-        changes.map(async (change) => {
-          const fingerprints: { staged?: string; unstaged?: string } = {};
-          const indexBlob = index.get(change.path) ?? null;
-          if (change.stagedStatus != null)
-            fingerprints.staged = fingerprint(
-              head ?? "unborn",
-              indexBlob ?? "absent"
-            );
-          if (change.unstagedStatus != null)
-            fingerprints.unstaged = fingerprint(
-              indexBlob ?? tree.get(change.path) ?? "absent",
-              await worktreeHash(path.join(checkoutPath, change.path))
-            );
-          change.fingerprints = fingerprints;
-        })
-      );
+      for (const batch of chunks(changes, FINGERPRINT_CONCURRENCY))
+        await Promise.all(
+          batch.map(async (change) => {
+            const fingerprints: { staged?: string; unstaged?: string } = {};
+            const indexBlob = index.get(change.path) ?? null;
+            if (change.stagedStatus != null)
+              fingerprints.staged = fingerprint(
+                head ?? "unborn",
+                indexBlob ?? "absent"
+              );
+            if (change.unstagedStatus != null)
+              fingerprints.unstaged = fingerprint(
+                indexBlob ?? tree.get(change.path) ?? "absent",
+                await worktreeHash(path.join(checkoutPath, change.path))
+              );
+            change.fingerprints = fingerprints;
+          })
+        );
     } catch (error) {
       console.warn(
         `[git] fingerprints for ${checkoutPath} failed: ${this.errorMessage(error)}`

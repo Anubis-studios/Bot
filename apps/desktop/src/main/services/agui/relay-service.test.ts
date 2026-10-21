@@ -654,6 +654,36 @@ describe("ai.subscribe, ai.hydrate, ai.joinRun", () => {
     expect(hydrated.abacus.runOutcomes.map((o) => o.runId)).toEqual(["run-1"]);
     expect(hydrated.abacus.cursor).toBe(0);
   });
+
+  it("a thread file it cannot read is UNAVAILABLE, never an empty history saved over it later", async () => {
+    const first = setup();
+    first.agent.boot();
+    for (const event of [...started("run-1"), finished("run-1")])
+      first.agent.emit("s1", event);
+    const file = path.join(home, "threads", "s1.json");
+    fs.renameSync(file, `${file}.away`);
+    fs.mkdirSync(file);
+
+    const second = setup();
+    second.agent.boot();
+    await expect(
+      second.client.ai.hydrate({ threadId: "s1" })
+    ).rejects.toMatchObject({ code: "UNAVAILABLE" });
+    second.agent.emit("s1", started("run-2")[1]!);
+
+    // Readable again: the history is back, and the next run adds to it.
+    fs.rmdirSync(file);
+    fs.renameSync(`${file}.away`, file);
+    const hydrated = await second.client.ai.hydrate({ threadId: "s1" });
+    expect(hydrated.abacus.runOutcomes.map((o) => o.runId)).toEqual(["run-1"]);
+    for (const event of [...started("run-3"), finished("run-3")])
+      second.agent.emit("s1", event);
+    expect(
+      second.store
+        .readCurrentFile("s1")
+        ?.runs.map((r) => (r as { runId: string }).runId)
+    ).toEqual(["run-1", "run-3"]);
+  });
 });
 
 const sleep = (ms: number) =>

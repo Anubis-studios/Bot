@@ -59,6 +59,35 @@ const sleepSync = (ms: number): void => {
   Atomics.wait(SLEEP_SIGNAL, 0, 0, ms);
 };
 
+/**
+ * Errors a short wait can clear: a process out of descriptors, and on
+ * Windows a file another process (an indexer, antivirus) holds open.
+ */
+const TRANSIENT_CODES = new Set([
+  "EMFILE",
+  "ENFILE",
+  "EAGAIN",
+  "EBUSY",
+  ...(process.platform === "win32" ? ["EPERM", "EACCES"] : []),
+]);
+const TRANSIENT_ATTEMPTS = 5;
+const TRANSIENT_BACKOFF_MS = 10;
+
+const isTransientFsError = (err: unknown): boolean =>
+  TRANSIENT_CODES.has((err as { code?: string })?.code ?? "");
+
+/** Runs a sync fs call, retrying transient errors for up to ~150 ms in all. */
+export function retryTransientSync<T>(run: () => T): T {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return run();
+    } catch (err) {
+      if (attempt >= TRANSIENT_ATTEMPTS || !isTransientFsError(err)) throw err;
+      sleepSync(TRANSIENT_BACKOFF_MS * 2 ** (attempt - 1));
+    }
+  }
+}
+
 export function writeFileAtomicSync(
   filePath: string,
   contents: string,
@@ -73,7 +102,7 @@ export function writeFileAtomicSync(
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   const temp = tempPathFor(filePath);
   try {
-    fs.writeFileSync(temp, contents, "utf-8");
+    retryTransientSync(() => fs.writeFileSync(temp, contents, "utf-8"));
     if (options.restrict === true) restrictToOwner(temp);
 
     for (let attempt = 1; attempt <= RENAME_ATTEMPTS; attempt++) {

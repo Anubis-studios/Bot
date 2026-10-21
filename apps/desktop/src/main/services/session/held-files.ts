@@ -16,6 +16,8 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
+import { retryTransientSync } from "@abacus-ai/agent/atomic-file";
+
 type Change = { op: "write"; text: string } | { op: "remove" };
 
 interface JournalEntry {
@@ -109,10 +111,13 @@ export class HeldFiles {
     }
     try {
       if (Number.isFinite(maxBytes)) {
-        const { size } = fs.statSync(file);
+        const { size } = retryTransientSync(() => fs.statSync(file));
         if (size > maxBytes) return { status: "tooLarge", size };
       }
-      return { status: "ok", text: fs.readFileSync(file, "utf8") };
+      return {
+        status: "ok",
+        text: retryTransientSync(() => fs.readFileSync(file, "utf8")),
+      };
     } catch (error) {
       return isMissingError(error)
         ? { status: "missing" }

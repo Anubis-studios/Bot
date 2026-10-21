@@ -57,6 +57,7 @@ import {
 import {
   fingerprintV1,
   peeksAsDerivedV2,
+  ThreadFileUnavailableError,
   ThreadStore,
   type ThreadStoreOptions,
 } from "./thread-store";
@@ -249,6 +250,52 @@ describe("C-T7 thread store", () => {
     fs.rmSync(v1File("s1"));
     expect(await threads.readCurrent("s1")).toEqual([]);
     expect(await threads.readCurrent("../escape")).toEqual([]);
+  });
+
+  it("retries a read that ran out of descriptors instead of losing the thread", async () => {
+    const { threads } = make();
+    put(v2File("s1"), aguiThread("s1"));
+    const readFileSync = fs.readFileSync;
+    let failures = 2;
+    const spy = vi.spyOn(fs, "readFileSync").mockImplementation(((
+      file: fs.PathOrFileDescriptor,
+      ...rest: unknown[]
+    ) => {
+      if (file === v2File("s1") && failures-- > 0)
+        throw Object.assign(new Error("EMFILE: too many open files"), {
+          code: "EMFILE",
+        });
+      return (readFileSync as (...args: unknown[]) => unknown)(file, ...rest);
+    }) as typeof fs.readFileSync);
+    try {
+      expect(ids(await threads.readCurrent("s1"))).toEqual(["m1"]);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("fails the read of a thread file it cannot read and has nothing else to serve", () => {
+    const { threads } = make();
+    fs.mkdirSync(v2File("s1"), { recursive: true });
+    expect(() => threads.readCurrentFile("s1")).toThrow(
+      ThreadFileUnavailableError
+    );
+    expect(fs.statSync(v2File("s1")).isDirectory()).toBe(true);
+  });
+
+  it("keeps the bytes of a corrupt thread file before replacing it", () => {
+    const { threads } = make();
+    put(v2File("s1"), "{torn");
+    threads.writeAgui("s1", { messages: [], runs: [] });
+    expect(readJson(v2File("s1")).source.kind).toBe("agui");
+    const kept = fs
+      .readdirSync(path.dirname(v2File("s1")))
+      .filter((name) => name.startsWith("s1.json.corrupt-"));
+    expect(
+      kept.map((name) =>
+        fs.readFileSync(path.join(path.dirname(v2File("s1")), name), "utf8")
+      )
+    ).toEqual(["{torn"]);
   });
 
   it("never replaces a twin it cannot read, and serves v1 instead", async () => {

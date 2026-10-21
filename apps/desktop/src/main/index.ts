@@ -138,6 +138,7 @@ import {
 import { getLocalUsageSnapshot } from "./services/providers/usage";
 import { accountStashKey } from "./services/session/account-session-stash";
 import { ArtifactResolverService } from "./services/session/artifact-resolver-service";
+import { onStoreSaveFailing } from "./services/session/workspace-store";
 import {
   initializeExperienceRuntime,
   registerAppScheme,
@@ -1404,6 +1405,14 @@ const appOperations: AppOperations = {
     lastRendererActivity = Date.now();
   },
 };
+
+// Saves keep retrying meanwhile; this only tells the user they are failing.
+onStoreSaveFailing(() =>
+  appOperations.showNotification(
+    "Changes are not being saved",
+    "The app cannot write to its data folder and keeps retrying. Check free disk space, then restart it if this continues."
+  )
+);
 
 /** The main window's state, as `window.state` reports it. */
 function mainWindowState(): WindowState | null {

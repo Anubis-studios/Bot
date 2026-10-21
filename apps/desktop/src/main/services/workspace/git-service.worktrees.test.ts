@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GitService, parseWorktreePorcelain } from "./git-service";
 
@@ -130,5 +130,48 @@ describe("Git worktrees", () => {
     });
     const children = await fs.readdir(managedRoot).catch(() => []);
     expect(children).toEqual([]);
+  });
+
+  it("hashes a large set of changed files a few at a time, within a low descriptor limit", async () => {
+    const files = Array.from({ length: 300 }, (_, i) => `file-${i}.txt`);
+    await Promise.all(
+      files.map((name) =>
+        fs.writeFile(path.join(repositoryPath, name), `${name}\n`)
+      )
+    );
+    const expected = await gitService.readGitChanges(repositoryPath, {
+      fingerprints: true,
+    });
+
+    // A process allowed 64 open files: past that, opens fail with EMFILE.
+    const readFile = fs.readFile;
+    let open = 0;
+    let peak = 0;
+    const spy = vi.spyOn(fs, "readFile").mockImplementation((async (
+      ...args: Parameters<typeof fs.readFile>
+    ) => {
+      if (open >= 64)
+        throw Object.assign(new Error("EMFILE: too many open files"), {
+          code: "EMFILE",
+        });
+      open += 1;
+      peak = Math.max(peak, open);
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        return await readFile(...args);
+      } finally {
+        open -= 1;
+      }
+    }) as typeof fs.readFile);
+    try {
+      const status = await gitService.readGitChanges(repositoryPath, {
+        fingerprints: true,
+      });
+      expect(status.changes).toHaveLength(300);
+      expect(status.changes).toEqual(expected.changes);
+      expect(peak).toBeLessThanOrEqual(32);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

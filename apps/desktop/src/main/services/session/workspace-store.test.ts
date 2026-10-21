@@ -8,6 +8,9 @@ let home: string;
 const previousHome = process.env.ABACUSAI_BOT_HOME;
 /** What `local-code.json` held when the store was opened. */
 let seen: string | null = null;
+/** The writes the store made, and how many more of them fail. */
+let writes: unknown[] = [];
+let failingWrites = 0;
 
 vi.mock("electron", () => ({ app: { getPath: () => home } }));
 // electron-store with `clearInvalidConfig` reads an unparsable file as empty
@@ -21,7 +24,15 @@ vi.mock("electron-store", () => ({
     get() {
       return undefined;
     }
-    set() {}
+    set(value: unknown) {
+      if (failingWrites > 0) {
+        failingWrites -= 1;
+        throw Object.assign(new Error("EMFILE: too many open files"), {
+          code: "EMFILE",
+        });
+      }
+      writes.push(value);
+    }
     delete() {}
   },
 }));
@@ -30,6 +41,8 @@ beforeEach(() => {
   home = fs.mkdtempSync(path.join(os.tmpdir(), "workspace-store-"));
   process.env.ABACUSAI_BOT_HOME = home;
   seen = null;
+  writes = [];
+  failingWrites = 0;
   vi.resetModules();
 });
 
@@ -125,4 +138,44 @@ it("changes nothing more on the launch after a restore", async () => {
   expect(fs.readdirSync(home).sort()).toEqual(after);
   expect(read("local-code.json")).toBe(full);
   expect(read("local-code.json.bak")).toBe(full);
+});
+
+it("a failed save never throws: it is retried until it lands, newest values winning", async () => {
+  vi.useFakeTimers();
+  const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    fs.writeFileSync(file(), full);
+    const { workspaceStore, onStoreSaveFailing } =
+      await import("./workspace-store");
+    const failing = vi.fn();
+    onStoreSaveFailing(failing);
+    writes = [];
+
+    failingWrites = 2;
+    expect(() =>
+      workspaceStore.set("localCode.agentSessions", [{ id: "s1" }])
+    ).not.toThrow();
+    workspaceStore.set("localCode.activeWorkspaceId", "w1");
+    expect(writes).toEqual([]);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(writes).toEqual([
+      {
+        "localCode.agentSessions": [{ id: "s1" }],
+        "localCode.activeWorkspaceId": "w1",
+      },
+    ]);
+    expect(failing).not.toHaveBeenCalled();
+
+    // Failing for a minute: the user is told once.
+    failingWrites = Number.POSITIVE_INFINITY;
+    workspaceStore.set("localCode.activeWorkspaceId", "w2");
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
+    expect(failing).toHaveBeenCalledOnce();
+    failingWrites = 0;
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(writes.at(-1)).toEqual({ "localCode.activeWorkspaceId": "w2" });
+  } finally {
+    error.mockRestore();
+    vi.useRealTimers();
+  }
 });
