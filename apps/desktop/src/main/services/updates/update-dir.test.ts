@@ -26,6 +26,7 @@ vi.mock("electron-updater", () => ({
       setFeedURL: () => {},
       checkForUpdates: mocks.check,
     }),
+    DebUpdater: class {},
   },
 }));
 const { UpdateService } = await import("./update-service");
