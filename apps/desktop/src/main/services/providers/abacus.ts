@@ -372,12 +372,12 @@ export const lockAbacusModelForPlan = (id: string): void => {
   }
 };
 
-/** The model a failed turn's upgrade card says the plan does not include. */
+/** The model a failed turn's card says the plan does not include. */
 export const planRefusedModel = (error?: {
   actions?: ReadonlyArray<{ type: string; cause?: string; model?: string }>;
 }): string | null =>
   error?.actions?.find(
-    (action) => action.type === "upgrade-abacus" && action.cause === "plan"
+    (action) => action.type === "model-unavailable" && action.cause === "plan"
   )?.model ?? null;
 
 /** Cached list, if a fetch already succeeded this run. */

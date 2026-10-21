@@ -871,9 +871,7 @@
     "paidWebApps": "Build and deploy full apps and websites",
     "paidWebResearch": "Deep research, slides and docs",
     "paidWebMedia": "Images and videos with top models",
-    "paidWebCta": "Go to AbacusAI Agent on the web",
-    "planTitle": "{{model}} n'est pas inclus dans votre offre",
-    "planNote": "Passez à une offre supérieure pour l'utiliser, ou continuez avec un modèle inclus dans votre offre."
+    "paidWebCta": "Go to AbacusAI Agent on the web"
   },
   "execBackends": {
     "daytona": {
@@ -4270,10 +4268,12 @@
       "renews": "Les crédits gratuits se renouvellent chaque mois.",
       "offer": "{{plan}} coûte {{price}} et vous offre :",
       "link": "Passez à l'offre supérieure ici : {{link}}",
-      "planModel": "Ce modèle n'est pas inclus dans votre offre. Choisissez un autre modèle dans l'app, ou passez à une offre supérieure pour l'utiliser.",
-      "planModelPaid": "Ce modèle n'est pas inclus dans votre offre. Choisissez un autre modèle dans l'app, ou passez à une offre supérieure : {{link}}",
       "repeat": "Toujours en pause : {{link}}",
       "paidOut": "Je me suis mis en pause car les crédits de ce mois-ci sont épuisés. Ajoutez des crédits pour continuer : {{link}}",
+      "unavailable": "{{model}} n'est plus disponible, je n'ai donc pas pu terminer. Votre message est conservé : passez à RouteLLM - Open dans le sélecteur de modèles de l'app pour continuer.",
+      "unavailableDown": "{{model}} n'est pas disponible pour le moment : son fournisseur continue d'échouer. Votre message est conservé : passez à RouteLLM - Open dans le sélecteur de modèles de l'app pour continuer.",
+      "unavailablePlan": "{{model}} n'est pas inclus dans votre offre. Passez à RouteLLM - Open dans le sélecteur de modèles de l'app pour continuer, ou passez à une offre supérieure pour l'utiliser.",
+      "unavailableOut": "{{model}} n'est pas disponible et vos crédits Abacus sont épuisés.",
       "ownKeyCredit": "Votre clé {{provider}} n'a plus de crédit.",
       "ownKeyRateLimit": "Votre clé {{provider}} a atteint sa limite d'utilisation.",
       "ownKeyDown": "{{provider}} ne répond pas en ce moment.",
@@ -4287,6 +4287,28 @@
       "contactFailed": "Je n'ai pas pu répondre à {{name}} tout à l'heure.",
       "contactFailedGeneric": "Je n'ai pas pu répondre à {{name}} tout à l'heure : un problème est survenu de mon côté.",
       "someone": "quelqu'un"
+    },
+    "unavailable": {
+      "title": {
+        "retired": "{{model}} n'est plus disponible",
+        "down": "{{model}} n'est pas disponible pour le moment",
+        "plan": "{{model}} n'est pas inclus dans votre offre"
+      },
+      "why": {
+        "retired": "Il a été retiré des modèles que vous pouvez utiliser.",
+        "down": "Son fournisseur continue d'échouer, même après de nouvelles tentatives."
+      },
+      "kept": "Votre message est conservé.",
+      "switch": "Passer à RouteLLM - Open",
+      "pickModel": "Choisir un autre modèle",
+      "creditsLeft": "Il vous reste {{credits}} crédits Abacus",
+      "creditsOut": "Vous avez aussi utilisé vos crédits Abacus gratuits.",
+      "offer": "{{plan}} vous offre :",
+      "upgradeIntro": "Passer à l'offre supérieure · {{price}} le premier mois",
+      "upgradeMonthly": "Passer à l'offre supérieure · {{price}}/mois",
+      "seePlans": "Voir les offres",
+      "planBody": "Continuez maintenant avec un modèle gratuit, ou passez à {{plan}} pour l'utiliser.",
+      "planBodyAny": "Continuez maintenant avec un modèle gratuit, ou passez à une offre supérieure pour l'utiliser."
     }
   }
 }

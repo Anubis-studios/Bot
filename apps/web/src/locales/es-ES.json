@@ -871,9 +871,7 @@
     "paidWebApps": "Build and deploy full apps and websites",
     "paidWebResearch": "Deep research, slides and docs",
     "paidWebMedia": "Images and videos with top models",
-    "paidWebCta": "Go to AbacusAI Agent on the web",
-    "planTitle": "{{model}} no está incluido en tu plan",
-    "planNote": "Mejora tu plan para usarlo o continúa con un modelo que incluya tu plan."
+    "paidWebCta": "Go to AbacusAI Agent on the web"
   },
   "execBackends": {
     "daytona": {
@@ -4270,10 +4268,12 @@
       "renews": "Los créditos gratis se renuevan cada mes.",
       "offer": "{{plan}} cuesta {{price}} y te da:",
       "link": "Mejora aquí: {{link}}",
-      "planModel": "Ese modelo no está incluido en tu plan. Elige otro modelo en la app o mejora tu plan para usarlo.",
-      "planModelPaid": "Ese modelo no está incluido en tu plan. Elige otro modelo en la app o mejora tu plan: {{link}}",
       "repeat": "Sigo en pausa: {{link}}",
       "paidOut": "Me he detenido porque se agotaron los créditos de este mes. Añade créditos para seguir: {{link}}",
+      "unavailable": "{{model}} ya no está disponible, así que no pude terminar eso. Tu mensaje se conserva: cambia a RouteLLM - Open en el selector de modelos de la app para seguir.",
+      "unavailableDown": "{{model}} no está disponible ahora: su proveedor sigue fallando. Tu mensaje se conserva: cambia a RouteLLM - Open en el selector de modelos de la app para seguir.",
+      "unavailablePlan": "{{model}} no está incluido en tu plan. Cambia a RouteLLM - Open en el selector de modelos de la app para seguir, o mejora tu plan para usarlo.",
+      "unavailableOut": "{{model}} no está disponible y tus créditos de Abacus se agotaron.",
       "ownKeyCredit": "Tu clave de {{provider}} se quedó sin saldo.",
       "ownKeyRateLimit": "Tu clave de {{provider}} alcanzó su límite de uso.",
       "ownKeyDown": "{{provider}} no responde ahora mismo.",
@@ -4287,6 +4287,28 @@
       "contactFailed": "No pude responder a {{name}} hace un momento.",
       "contactFailedGeneric": "No pude responder a {{name}} hace un momento: algo falló por mi parte.",
       "someone": "alguien"
+    },
+    "unavailable": {
+      "title": {
+        "retired": "{{model}} ya no está disponible",
+        "down": "{{model}} no está disponible ahora",
+        "plan": "{{model}} no está incluido en tu plan"
+      },
+      "why": {
+        "retired": "Se retiró de los modelos que puedes usar.",
+        "down": "Su proveedor sigue fallando, incluso tras reintentar."
+      },
+      "kept": "Tu mensaje se conserva.",
+      "switch": "Cambiar a RouteLLM - Open",
+      "pickModel": "Elegir otro modelo",
+      "creditsLeft": "Te quedan {{credits}} créditos de Abacus",
+      "creditsOut": "Además, ya usaste tus créditos gratis de Abacus.",
+      "offer": "{{plan}} te ofrece:",
+      "upgradeIntro": "Mejorar · {{price}} el primer mes",
+      "upgradeMonthly": "Mejorar · {{price}}/mes",
+      "seePlans": "Ver planes",
+      "planBody": "Sigue ahora con un modelo gratis o mejora a {{plan}} para usarlo.",
+      "planBodyAny": "Sigue ahora con un modelo gratis o mejora tu plan para usarlo."
     }
   }
 }

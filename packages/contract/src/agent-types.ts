@@ -76,8 +76,11 @@ interface NotificationAction {
   providers?: string[];
   /**
    * `own-key-unavailable`: credit, rate_limit, down or network.
-   * `upgrade-abacus`: exhausted or expired (absent reads as exhausted), or
-   * plan when the plan does not include `model` (named by `label`).
+   * `upgrade-abacus`: exhausted or expired (absent reads as exhausted).
+   * `model-unavailable`: the picked `model` (named by `label`) cannot serve
+   * the turn: retired, down (still failing after the retries) or plan (the
+   * plan does not include it). Its card leads with `switch-to-abacus` when
+   * credits are left, and with `upgrade-abacus` when they are used up.
    * `free-pool-out`: busy when the free models are only rate-limited.
    * `continue-free` (keep going on the free models at the credit wall),
    * `new-chat`, `fix-key` and `retry` carry nothing else.

@@ -113,12 +113,6 @@ describe("the out-of-credits pause", () => {
       false
     );
     expect(ranOutOfAbacusCredits({})).toBe(false);
-    // A model the plan does not include: the next fire resolves off it.
-    expect(
-      ranOutOfAbacusCredits({
-        actions: [{ type: "upgrade-abacus", cause: "plan" }],
-      })
-    ).toBe(false);
   });
 });
 

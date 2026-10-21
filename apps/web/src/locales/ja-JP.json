@@ -871,9 +871,7 @@
     "paidWebApps": "Build and deploy full apps and websites",
     "paidWebResearch": "Deep research, slides and docs",
     "paidWebMedia": "Images and videos with top models",
-    "paidWebCta": "Go to AbacusAI Agent on the web",
-    "planTitle": "{{model}} はご利用のプランに含まれていません",
-    "planNote": "アップグレードして使うか、プランに含まれるモデルで続けてください。"
+    "paidWebCta": "Go to AbacusAI Agent on the web"
   },
   "execBackends": {
     "daytona": {
@@ -4270,10 +4268,12 @@
       "renews": "無料クレジットは毎月更新されます。",
       "offer": "{{plan}} は {{price}} で、次のものが使えます:",
       "link": "アップグレードはこちら: {{link}}",
-      "planModel": "そのモデルはご利用のプランに含まれていません。アプリで別のモデルを選ぶか、アップグレードしてご利用ください。",
-      "planModelPaid": "そのモデルはご利用のプランに含まれていません。アプリで別のモデルを選ぶか、こちらからアップグレードしてください: {{link}}",
       "repeat": "一時停止中です: {{link}}",
       "paidOut": "今月のクレジットを使い切ったため、一時停止しました。続けるにはクレジットを追加してください: {{link}}",
+      "unavailable": "{{model}} は利用できなくなったため、完了できませんでした。メッセージは保持されています。アプリのモデル選択で RouteLLM - Open に切り替えると続けられます。",
+      "unavailableDown": "{{model}} は現在利用できません。プロバイダーでエラーが続いています。メッセージは保持されています。アプリのモデル選択で RouteLLM - Open に切り替えると続けられます。",
+      "unavailablePlan": "{{model}} はご利用のプランに含まれていません。アプリのモデル選択で RouteLLM - Open に切り替えて続けるか、アップグレードしてご利用ください。",
+      "unavailableOut": "{{model}} は利用できず、Abacus クレジットも使い切りました。",
       "ownKeyCredit": "{{provider}} のキーの残高がなくなりました。",
       "ownKeyRateLimit": "{{provider}} のキーが利用制限に達しました。",
       "ownKeyDown": "{{provider}} は現在応答していません。",
@@ -4287,6 +4287,28 @@
       "contactFailed": "先ほど {{name}} さんに返信できませんでした。",
       "contactFailedGeneric": "先ほど {{name}} さんに返信できませんでした: こちらで問題が起きました。",
       "someone": "相手"
+    },
+    "unavailable": {
+      "title": {
+        "retired": "{{model}} は利用できなくなりました",
+        "down": "{{model}} は現在利用できません",
+        "plan": "{{model}} はご利用のプランに含まれていません"
+      },
+      "why": {
+        "retired": "利用できるモデルから削除されました。",
+        "down": "再試行してもプロバイダーでエラーが続いています。"
+      },
+      "kept": "メッセージは保持されています。",
+      "switch": "RouteLLM - Open に切り替える",
+      "pickModel": "別のモデルを選ぶ",
+      "creditsLeft": "Abacus クレジット残り {{credits}}",
+      "creditsOut": "無料の Abacus クレジットも使い切りました。",
+      "offer": "{{plan}} で利用できるもの:",
+      "upgradeIntro": "アップグレード · 初月 {{price}}",
+      "upgradeMonthly": "アップグレード · {{price}}/月",
+      "seePlans": "プランを見る",
+      "planBody": "今は無料モデルで続けるか、{{plan}} にアップグレードしてご利用ください。",
+      "planBodyAny": "今は無料モデルで続けるか、プランをアップグレードしてご利用ください。"
     }
   }
 }

@@ -308,6 +308,19 @@ const routedMessage = (failure: TurnFailure): string => {
   }
 };
 
+/** The English line for the model-unavailable card; the app shows its own. */
+const unavailableMessage = (action: NotificationAction): string => {
+  const model = action.label ?? action.model ?? "This model";
+  switch (action.cause) {
+    case "plan":
+      return `${model} isn't included in your plan. Your message is kept.`;
+    case "down":
+      return `${model} isn't available right now: its provider keeps failing. Your message is kept.`;
+    default:
+      return `${model} isn't available anymore. Your message is kept.`;
+  }
+};
+
 /** The one line that says "busy": every failed call was a real rate limit. */
 export const OPENLLM_POOL_BUSY_MESSAGE =
   "All free models are busy right now. Try again in a few minutes, or switch to a different model.";
@@ -318,12 +331,54 @@ export const EMPTY_REPLY_MESSAGE =
 const isCredits = (cause: FailureCause): boolean =>
   cause === "credits_exhausted" || cause === "credits_expired";
 
+/** Why the model the user picked cannot serve the turn, as its card says it. */
+const UNAVAILABLE_KIND: Partial<Record<FailureCause, string>> = {
+  model_unavailable: "retired",
+  rate_limited: "down",
+  not_in_plan: "plan",
+};
+
+/**
+ * The one card for a model the user picked that cannot serve the turn (gone,
+ * outside the plan, or still failing after the retries): it names the model
+ * and why. With Abacus credits left the way on is RouteLLM - Open, chosen by
+ * the user, never switched to; with them used up it is the plan. The user's
+ * own key keeps its own card; on the pool the router picked no model.
+ */
+const modelUnavailableActions = (
+  failure: TurnFailure,
+  context: FailureContext
+): NotificationAction[] | null => {
+  const kind = UNAVAILABLE_KIND[failure.cause];
+  if (
+    kind == null ||
+    context.routed ||
+    context.model == null ||
+    context.abacus == null ||
+    failure.provider !== "abacus"
+  )
+    return null;
+  return [
+    {
+      type: "model-unavailable",
+      cause: kind,
+      model: context.model.model,
+      label: context.model.label,
+    },
+    context.abacus === "credits"
+      ? { type: "switch-to-abacus" }
+      : { type: "upgrade-abacus", cause: "exhausted" },
+  ];
+};
+
 /** The actions a cause offers; see NotificationAction for how each renders. */
 const failureActions = (
   failure: TurnFailure,
   context: FailureContext
 ): NotificationAction[] => {
   const provider = failure.provider;
+  const unavailable = modelUnavailableActions(failure, context);
+  if (unavailable != null) return unavailable;
   switch (failure.cause) {
     case "credits_exhausted":
     case "credits_expired":
@@ -348,25 +403,6 @@ const failureActions = (
               model: choice.model,
               label: choice.label,
             }))),
-      ];
-    case "not_in_plan":
-      // The upgrade card naming the model, so the app stops offering it,
-      // with Abacus's own free models one click away. On the pool the router
-      // picked the model, so another one is the way on.
-      if (context.routed || context.model == null)
-        return [{ type: "switch-model" }];
-      return [
-        {
-          type: "upgrade-abacus",
-          cause: "plan",
-          model: context.model.model,
-          label: context.model.label,
-        },
-        ...context.abacusFreeModels.map((choice) => ({
-          type: "switch-model",
-          model: choice.model,
-          label: choice.label,
-        })),
       ];
     case "connection":
       return [{ type: "retry" }];
@@ -400,6 +436,7 @@ const failureActions = (
         ? [{ type: "own-key-unavailable", provider, cause: own }]
         : [{ type: "switch-model" }];
     }
+    case "not_in_plan":
     case "model_unavailable":
       return [{ type: "switch-model" }];
     case "empty":
@@ -447,11 +484,17 @@ export function presentFailure(
     ownKey(failure.provider);
   const pooledLine =
     context.routed || connection || ownKeyLine || failure.cause === "empty";
-  const message = pooledLine
-    ? routedMessage(failure)
-    : isProviderFailure(failure.raw)
-      ? terminalProviderMessage(failure.raw)
-      : readableFailure(failure.raw);
+  const unavailable = actions.find(
+    (action) => action.type === "model-unavailable"
+  );
+  const message =
+    unavailable != null
+      ? unavailableMessage(unavailable)
+      : pooledLine
+        ? routedMessage(failure)
+        : isProviderFailure(failure.raw)
+          ? terminalProviderMessage(failure.raw)
+          : readableFailure(failure.raw);
   // The connection card's details say what failed; on the pool the user
   // picked no model, so no provider's sentence is shown.
   const detail = connection

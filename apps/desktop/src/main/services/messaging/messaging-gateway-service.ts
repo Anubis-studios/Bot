@@ -1483,7 +1483,9 @@ export class MessagingGatewayService {
       offering
         ? withinMs(fetchUpgradeUrl("channel"), UPGRADE_URL_WAIT_MS)
         : null,
-      offering || failureKind(failure) === "upgrade-abacus"
+      offering ||
+      failureKind(failure) === "upgrade-abacus" ||
+      failureKind(failure) === "model-gone"
         ? withinMs(fetchBillingPlan(false), UPGRADE_URL_WAIT_MS)
         : null,
     ]);

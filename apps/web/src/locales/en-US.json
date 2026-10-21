@@ -871,9 +871,7 @@
     "paidWebApps": "Build and deploy full apps and websites",
     "paidWebResearch": "Deep research, slides and docs",
     "paidWebMedia": "Images and videos with top models",
-    "paidWebCta": "Go to AbacusAI Agent on the web",
-    "planTitle": "{{model}} isn't included in your plan",
-    "planNote": "Upgrade to use it, or continue on a model your plan includes."
+    "paidWebCta": "Go to AbacusAI Agent on the web"
   },
   "execBackends": {
     "daytona": {
@@ -4270,10 +4268,12 @@
       "renews": "Free credits renew every month.",
       "offer": "{{plan}} is {{price}} and gives you:",
       "link": "Upgrade here: {{link}}",
-      "planModel": "That model isn't included in your plan. Pick another model in the app, or upgrade to use it.",
-      "planModelPaid": "That model isn't included in your plan. Pick another model in the app, or upgrade: {{link}}",
       "repeat": "Still paused: {{link}}",
       "paidOut": "I've paused because this month's credits are used up. Add credits to keep going: {{link}}",
+      "unavailable": "{{model}} isn't available anymore, so I couldn't finish that. Your message is kept: switch to RouteLLM - Open in the app's model picker to keep going.",
+      "unavailableDown": "{{model}} isn't available right now: its provider keeps failing. Your message is kept: switch to RouteLLM - Open in the app's model picker to keep going.",
+      "unavailablePlan": "{{model}} isn't included in your plan. Switch to RouteLLM - Open in the app's model picker to keep going, or upgrade to use it.",
+      "unavailableOut": "{{model}} isn't available, and your Abacus credits are used up.",
       "ownKeyCredit": "Your {{provider}} key is out of credit.",
       "ownKeyRateLimit": "Your {{provider}} key hit its rate limit.",
       "ownKeyDown": "{{provider}} isn't responding right now.",
@@ -4287,6 +4287,28 @@
       "contactFailed": "I couldn't reply to {{name}} just now.",
       "contactFailedGeneric": "I couldn't reply to {{name}} just now: something went wrong on my side.",
       "someone": "someone"
+    },
+    "unavailable": {
+      "title": {
+        "retired": "{{model}} isn't available anymore",
+        "down": "{{model}} isn't available right now",
+        "plan": "{{model}} isn't included in your plan"
+      },
+      "why": {
+        "retired": "It was removed from the models you can use.",
+        "down": "Its provider keeps failing, even after retrying."
+      },
+      "kept": "Your message is kept.",
+      "switch": "Switch to RouteLLM - Open",
+      "pickModel": "Pick another model",
+      "creditsLeft": "{{credits}} Abacus credits left",
+      "creditsOut": "You've also used your free Abacus credits.",
+      "offer": "{{plan}} gets you:",
+      "upgradeIntro": "Upgrade · {{price}} first month",
+      "upgradeMonthly": "Upgrade · {{price}}/month",
+      "seePlans": "See plans",
+      "planBody": "Keep going on a free model now, or upgrade to {{plan}} to use it.",
+      "planBodyAny": "Keep going on a free model now, or upgrade your plan to use it."
     }
   }
 }

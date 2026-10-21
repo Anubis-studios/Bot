@@ -350,12 +350,20 @@ describe("a model the plan refused", () => {
       const model = planRefusedModel({
         actions: [
           { type: "switch-model" },
-          { type: "upgrade-abacus", cause: "plan", model: "abacus/paid" },
+          { type: "model-unavailable", cause: "plan", model: "abacus/paid" },
         ],
       });
       expect(model).toBe("abacus/paid");
       expect(
         planRefusedModel({ actions: [{ type: "upgrade-abacus" }] })
+      ).toBeNull();
+      // A retired or failing model is not locked: only the plan's refusal.
+      expect(
+        planRefusedModel({
+          actions: [
+            { type: "model-unavailable", cause: "retired", model: "abacus/x" },
+          ],
+        })
       ).toBeNull();
       lockAbacusModelForPlan(model!);
       // Only Abacus ids: another provider's model is its key's business.

@@ -810,35 +810,6 @@ describe("the user's own key, refused or spent", () => {
     ]);
   });
 
-  it("an Abacus model the plan does not include names it on the upgrade card", () => {
-    const raw =
-      "403: Model 'claude-sonnet-5' is not available on the free tier. Call /v1/models for the models available to you, or upgrade your plan.";
-    const shown = presentFailure(
-      { cause: classifyAttempt(raw, "abacus"), provider: "abacus", raw },
-      {
-        routed: false,
-        freeLaneProviders: [],
-        onFreeLane: false,
-        abacusFreeModels: [{ model: "abacus/free-1", label: "Free 1" }],
-        abacus: "credits",
-        model: { model: "abacus/claude-sonnet-5", label: "Sonnet 5" },
-      }
-    );
-
-    expect(shown.cause).toBe("not_in_plan");
-    expect(shown.actions).toEqual([
-      {
-        type: "upgrade-abacus",
-        cause: "plan",
-        model: "abacus/claude-sonnet-5",
-        label: "Sonnet 5",
-      },
-      { type: "switch-model", model: "abacus/free-1", label: "Free 1" },
-    ]);
-    // The plan, not the key.
-    expect(shown.message).not.toMatch(/key/i);
-  });
-
   it("an Abacus-served turn past the free window carries the cause", () => {
     const actions =
       pinned(
@@ -848,6 +819,89 @@ describe("the user's own key, refused or spent", () => {
       ).actions ?? [];
 
     expect(actions[0]).toEqual({ type: "upgrade-abacus", cause: "expired" });
+  });
+});
+
+describe("a picked model that cannot serve the turn", () => {
+  const SONNET = { model: "abacus/claude-sonnet-5", label: "Sonnet 5" };
+  const PLAN_REFUSAL =
+    "403: Model 'claude-sonnet-5' is not available on the free tier. Call /v1/models for the models available to you, or upgrade your plan.";
+  const GONE = '404: {"error":{"message":"model not found"}}';
+  const DOWN = "503: Service Unavailable";
+  const shown = (
+    raw: string,
+    abacus: "credits" | "out",
+    provider = "abacus",
+    routed = false
+  ) =>
+    presentFailure(
+      { cause: classifyAttempt(raw, provider), provider, raw },
+      {
+        routed,
+        freeLaneProviders: [],
+        onFreeLane: false,
+        abacusFreeModels: [{ model: "abacus/free-1", label: "Free 1" }],
+        abacus,
+        model: SONNET,
+      }
+    );
+
+  it("an unavailable model with credits left offers RouteLLM - Open, naming the model", () => {
+    const failure = shown(GONE, "credits");
+    expect(failure.cause).toBe("model_unavailable");
+    expect(failure.actions).toEqual([
+      { type: "model-unavailable", cause: "retired", ...SONNET },
+      { type: "switch-to-abacus" },
+    ]);
+    expect(failure.message).toBe(
+      "Sonnet 5 isn't available anymore. Your message is kept."
+    );
+  });
+
+  it("a provider still failing after the retries says so, with the same way on", () => {
+    expect(shown(DOWN, "credits").actions).toEqual([
+      { type: "model-unavailable", cause: "down", ...SONNET },
+      { type: "switch-to-abacus" },
+    ]);
+  });
+
+  it("with the credits used up, the plan is the way on, never a free model", () => {
+    expect(shown(GONE, "out").actions).toEqual([
+      { type: "model-unavailable", cause: "retired", ...SONNET },
+      { type: "upgrade-abacus", cause: "exhausted" },
+    ]);
+  });
+
+  it("a model the plan does not include leads with RouteLLM - Open while credits are left", () => {
+    const failure = shown(PLAN_REFUSAL, "credits");
+    expect(failure.cause).toBe("not_in_plan");
+    // The card's secondary link is the upgrade; main locks the model.
+    expect(failure.actions).toEqual([
+      { type: "model-unavailable", cause: "plan", ...SONNET },
+      { type: "switch-to-abacus" },
+    ]);
+    expect(failure.message).not.toMatch(/key/i);
+    expect(shown(PLAN_REFUSAL, "out").actions?.[1]).toEqual({
+      type: "upgrade-abacus",
+      cause: "exhausted",
+    });
+  });
+
+  it("leaves the user's own key and the pool to their own cards", () => {
+    expect(
+      shown("401 Incorrect API key provided", "credits", "openai").actions
+    ).toEqual([
+      { type: "fix-key", provider: "openai" },
+      { type: "switch-to-abacus" },
+    ]);
+    expect(shown(GONE, "credits", "openai").actions).toEqual([
+      { type: "switch-model" },
+    ]);
+    expect(
+      shown(GONE, "credits", "abacus", true).actions?.some(
+        (action) => action.type === "model-unavailable"
+      )
+    ).toBe(false);
   });
 });
 

@@ -871,9 +871,7 @@
     "paidWebApps": "Eksiksiz uygulamalar ve web siteleri oluştur ve yayınla",
     "paidWebResearch": "Derin araştırma, sunumlar ve belgeler",
     "paidWebMedia": "En iyi modellerle görseller ve videolar",
-    "paidWebCta": "Web'de AbacusAI Agent'a git",
-    "planTitle": "{{model}} planınıza dahil değil",
-    "planNote": "Kullanmak için yükseltin veya planınıza dahil bir modelle devam edin."
+    "paidWebCta": "Web'de AbacusAI Agent'a git"
   },
   "execBackends": {
     "daytona": {
@@ -4270,10 +4268,12 @@
       "renews": "Ücretsiz krediler her ay yenilenir.",
       "offer": "{{plan}} planı {{price}} ve sana şunları sunar:",
       "link": "Buradan yükselt: {{link}}",
-      "planModel": "Bu model planına dahil değil. Uygulamada başka bir model seç ya da kullanmak için planını yükselt.",
-      "planModelPaid": "Bu model planına dahil değil. Uygulamada başka bir model seç ya da planını yükselt: {{link}}",
       "repeat": "Hâlâ duraklatıldı: {{link}}",
       "paidOut": "Bu ayın kredileri bittiği için durakladım. Devam etmek için kredi ekle: {{link}}",
+      "unavailable": "{{model}} artık kullanılamıyor, bu yüzden bunu bitiremedim. Mesajın saklandı: devam etmek için uygulamanın model seçicisinde RouteLLM - Open'a geç.",
+      "unavailableDown": "{{model}} şu anda kullanılamıyor: sağlayıcısı hata vermeye devam ediyor. Mesajın saklandı: devam etmek için uygulamanın model seçicisinde RouteLLM - Open'a geç.",
+      "unavailablePlan": "{{model}} planına dahil değil. Devam etmek için uygulamanın model seçicisinde RouteLLM - Open'a geç ya da kullanmak için planını yükselt.",
+      "unavailableOut": "{{model}} kullanılamıyor ve Abacus kredilerin bitti.",
       "ownKeyCredit": "{{provider}} anahtarının bakiyesi bitti.",
       "ownKeyRateLimit": "{{provider}} anahtarın kullanım sınırına ulaştı.",
       "ownKeyDown": "{{provider}} şu anda yanıt vermiyor.",
@@ -4287,6 +4287,28 @@
       "contactFailed": "Az önce {{name}} kişisine yanıt veremedim.",
       "contactFailedGeneric": "Az önce {{name}} kişisine yanıt veremedim: benim tarafımda bir sorun oldu.",
       "someone": "birisi"
+    },
+    "unavailable": {
+      "title": {
+        "retired": "{{model}} artık kullanılamıyor",
+        "down": "{{model}} şu anda kullanılamıyor",
+        "plan": "{{model}} planına dahil değil"
+      },
+      "why": {
+        "retired": "Kullanabildiğin modellerden kaldırıldı.",
+        "down": "Sağlayıcısı yeniden denemelere rağmen hata vermeye devam ediyor."
+      },
+      "kept": "Mesajın saklandı.",
+      "switch": "RouteLLM - Open'a geç",
+      "pickModel": "Başka bir model seç",
+      "creditsLeft": "{{credits}} Abacus kredisi kaldı",
+      "creditsOut": "Ücretsiz Abacus kredilerini de kullandın.",
+      "offer": "{{plan}} sana şunları sunar:",
+      "upgradeIntro": "Yükselt · ilk ay {{price}}",
+      "upgradeMonthly": "Yükselt · {{price}}/ay",
+      "seePlans": "Planları gör",
+      "planBody": "Şimdi ücretsiz bir modelle devam et ya da kullanmak için {{plan}} planına yükselt.",
+      "planBodyAny": "Şimdi ücretsiz bir modelle devam et ya da kullanmak için planını yükselt."
     }
   }
 }

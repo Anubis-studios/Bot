@@ -113,12 +113,9 @@ export const runOutcomeOf = (event: {
 /**
  * A run stopped by an empty Abacus.AI balance, which every later fire would
  * hit too. The agent offers the upgrade only then, and only for a model
- * Abacus.AI serves. A model the plan does not include is not that: the next
- * fire resolves to a model the plan runs.
+ * Abacus.AI serves.
  */
 export const ranOutOfAbacusCredits = (error: {
-  actions?: Array<{ type: string; cause?: string }>;
+  actions?: Array<{ type: string }>;
 }): boolean =>
-  error.actions?.some(
-    (action) => action.type === "upgrade-abacus" && action.cause !== "plan"
-  ) === true;
+  error.actions?.some((action) => action.type === "upgrade-abacus") === true;

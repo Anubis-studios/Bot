@@ -11,6 +11,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { CreditsCard } from "#renderer/components/credits-card";
+import { ModelUnavailableCard } from "#renderer/components/credits-card/model-unavailable";
 import { GroupCard } from "#renderer/components/form-kit/page";
 import { usePrefs } from "#renderer/data/db/prefs";
 import { ABACUS_AGENT_URL } from "#renderer/lib/abacus-links";
@@ -327,11 +328,9 @@ const creditsExpired = (actions?: ErrorAction[]): boolean =>
     (action) => action.type === "upgrade-abacus" && action.cause === "expired"
   ) === true;
 
-/** The model the plan does not include, when that is why the turn ended. */
-const planRefused = (actions?: ErrorAction[]): ErrorAction | undefined =>
-  actions?.find(
-    (action) => action.type === "upgrade-abacus" && action.cause === "plan"
-  );
+/** The picked model that cannot serve the turn, when that is why it ended. */
+const modelUnavailable = (actions?: ErrorAction[]): ErrorAction | undefined =>
+  actions?.find((action) => action.type === "model-unavailable");
 
 const exhaustedScope = (actions?: ErrorAction[]): "abacus" | "pool" =>
   actions?.some((action) => action.type === "upgrade-abacus") === true
@@ -463,10 +462,11 @@ export const ErrorCard = ({
     tier === "paid" || tier === "basic"
   );
   const cause = (error as { cause?: string }).cause;
-  // A model the plan does not include: the upgrade card names it, and main
-  // has locked it, so the picker re-reads without it.
-  const refused = planRefused(actions);
-  const refusedModel = refused?.model;
+  // A model the plan does not include: main has locked it, so the picker
+  // re-reads without it.
+  const unavailable = modelUnavailable(actions);
+  const refusedModel =
+    unavailable?.cause === "plan" ? unavailable.model : undefined;
   useEffect(() => {
     if (refusedModel != null)
       void runtime.host.refreshModels?.().catch(() => {});
@@ -488,6 +488,69 @@ export const ErrorCard = ({
     !(ownKey.cause === "network" && globalThis.navigator?.onLine === false)
   )
     return <OwnKeyCard failure={ownKey} tier={tier} runId={outcome.runId} />;
+  if (unavailable != null)
+    return (
+      <div
+        role="group"
+        aria-label={t("chat.error.label")}
+        className="mx-auto w-full max-w-[calc(var(--composer-max-w)-var(--spacing)*8)]"
+        data-slot="error-card"
+        data-variant="model-unavailable"
+      >
+        <ModelUnavailableCard
+          host={runtime.host}
+          kind={
+            unavailable.cause === "plan" || unavailable.cause === "down"
+              ? unavailable.cause
+              : "retired"
+          }
+          label={unavailable.label ?? unavailable.model ?? ""}
+          creditsOut={actions.some(
+            (action) => action.type === "upgrade-abacus"
+          )}
+          {...(latest &&
+            canReply &&
+            actions.some((action) => action.type === "switch-to-abacus") && {
+              // The kept message goes again on RouteLLM - Open, by choice.
+              onSwitch: () =>
+                void session
+                  .retry(
+                    {
+                      model: OPENLLM_ID,
+                      ...(composer.fixedMode
+                        ? { mode: composer.fixedMode }
+                        : {}),
+                    },
+                    t("workspace.retryMessage")
+                  )
+                  .catch(() => {}),
+            })}
+          {...(composer.model != null &&
+            canReply && {
+              onPickModel: (from: HTMLElement) =>
+                from
+                  .closest('[data-slot="chat-view"]')
+                  ?.querySelector<HTMLButtonElement>(
+                    '[data-slot="chat-model-picker"]'
+                  )
+                  ?.click(),
+            })}
+          {...(canReply && {
+            onUpgrade: () =>
+              requestUpgradeDialog(
+                {
+                  kind: "credits",
+                  key: `model-unavailable:${outcome.runId}:${Date.now()}`,
+                  threadId: session.threadId,
+                  pendingText: lastUserText(session.hostStore.state.messages),
+                  resume,
+                },
+                true
+              ),
+          })}
+        />
+      </div>
+    );
   if (upgrade) {
     const ready =
       slots.renderDeliverables == null
@@ -505,10 +568,7 @@ export const ErrorCard = ({
         t("workspace.retryMessage")
       );
     };
-    // A model outside the plan is not the credit wall: no balance, no free lane.
-    const atWall = actions.some(
-      (action) => action.type === "upgrade-abacus" && action.cause !== "plan"
-    );
+    const atWall = actions.some((action) => action.type === "upgrade-abacus");
     const continueFree = actions.find(
       (action) => action.type === "continue-free"
     );
@@ -526,12 +586,6 @@ export const ErrorCard = ({
           scope={exhaustedScope(actions)}
           {...(creditsExpired(actions) && {
             title: t("creditsCard.expiredTitle"),
-          })}
-          {...(refused != null && {
-            title: t("creditsCard.planTitle", {
-              model: refused.label ?? refused.model,
-            }),
-            note: t("creditsCard.planNote"),
           })}
           {...(ready.length > 0 && {
             ready: slots.renderDeliverables?.(ready),

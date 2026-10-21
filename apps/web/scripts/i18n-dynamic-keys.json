@@ -1586,8 +1586,10 @@
       "offer",
       "link",
       "repeat",
-      "planModel",
-      "planModelPaid",
+      "unavailable",
+      "unavailableDown",
+      "unavailablePlan",
+      "unavailableOut",
       "paidOut",
       "ownKeyCredit",
       "ownKeyRateLimit",
@@ -1606,5 +1608,15 @@
     "sources": [
       "../../desktop/src/main/services/messaging/chat-failure-reply.ts"
     ]
+  },
+  {
+    "prefix": "outcome.unavailable.title.",
+    "values": ["retired", "down", "plan"],
+    "sources": ["components/credits-card/model-unavailable.tsx"]
+  },
+  {
+    "prefix": "outcome.unavailable.why.",
+    "values": ["retired", "down"],
+    "sources": ["components/credits-card/model-unavailable.tsx"]
   }
 ]
