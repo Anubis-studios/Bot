@@ -17,5 +17,5 @@
 {"type":"event","event":{"type":"status_changed","status":"streaming"}}
 {"type":"event","event":{"type":"turn_complete","usage":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"requests":1,"model":"big:free"}}}
 {"type":"event","event":{"type":"status_changed","status":"idle"}}
-{"type":"event","event":{"type":"error","error":{"message":"All free models are busy right now. Switch to a different model, or try again in a few minutes.","code":"turn_failed","actions":[{"type":"switch-model"}]}}}
+{"type":"event","event":{"type":"error","error":{"message":"All free models are busy right now. Switch to a different model, or try again in a few minutes.","code":"turn_failed","actions":[{"type":"free-pool-out","cause":"busy"},{"type":"switch-model"}]}}}
 {"type":"event","event":{"type":"status_changed","status":"idle"}}

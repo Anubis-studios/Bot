@@ -46,7 +46,8 @@ export const MESSAGING_TOOLS: ToolDefinition[] = [
       },
       required: ["platform", "to", "message"],
     },
-    run: (host, args) => host.sendChatMessage(args),
+    run: (host, args, callerSession) =>
+      host.sendChatMessage(args, callerSession),
   },
   {
     name: "send_to_whatsapp",
@@ -221,8 +222,8 @@ export const MESSAGING_TOOLS: ToolDefinition[] = [
       },
       required: ["to", "message"],
     },
-    run: (host, args) =>
-      host.sendChatMessage({ ...args, platform: "whatsapp" }),
+    run: (host, args, callerSession) =>
+      host.sendChatMessage({ ...args, platform: "whatsapp" }, callerSession),
   },
   {
     name: "read_whatsapp_messages",
@@ -334,8 +335,8 @@ export const MESSAGING_TOOLS: ToolDefinition[] = [
       },
       required: ["to", "message"],
     },
-    run: (host, args) =>
-      host.sendChatMessage({ ...args, platform: "telegram" }),
+    run: (host, args, callerSession) =>
+      host.sendChatMessage({ ...args, platform: "telegram" }, callerSession),
   },
   {
     name: "read_telegram_messages",
@@ -437,7 +438,8 @@ export const MESSAGING_TOOLS: ToolDefinition[] = [
       },
       required: ["to", "message"],
     },
-    run: (host, args) => host.sendChatMessage({ ...args, platform: "discord" }),
+    run: (host, args, callerSession) =>
+      host.sendChatMessage({ ...args, platform: "discord" }, callerSession),
   },
   {
     name: "read_discord_messages",
@@ -558,6 +560,31 @@ export const MESSAGING_TOOLS: ToolDefinition[] = [
       },
     },
     run: (host, args) => host.readChatMessages(args),
+  },
+  {
+    name: "take_chat_app_messages",
+    toolsets: ["messaging"],
+    botsOnly: true,
+    botAlways: true,
+    description: [
+      "Make this bot the one the user's own WhatsApp, Telegram or Discord chat",
+      "goes to: what they type there then comes to this chat, and your replies",
+      "go back there. Each app's own chat goes to one bot at a time.",
+      "",
+      'Only when the user asks for it ("send my Telegram messages to you").',
+      "Only works in a bot's own chat. Once it succeeds, tell the user in one",
+      "short line, in their language, that their messages on that app now come",
+      "to you.",
+    ].join("\n"),
+    inputSchema: {
+      type: "object",
+      properties: {
+        app: { type: "string", enum: ["whatsapp", "telegram", "discord"] },
+      },
+      required: ["app"],
+    },
+    run: (host, args, callerSession) =>
+      host.takeChatAppMessages(args, callerSession),
   },
   {
     name: "auto_reply",

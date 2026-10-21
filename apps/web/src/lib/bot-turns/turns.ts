@@ -2,13 +2,15 @@
  * A bot thread as turns (spec 03 §11.3): the assistant messages between two
  * user messages are one turn. What the bot skin shows of a turn is exactly
  * the old `spokenItems`: text with content, notices (`notification`,
- * `feature_limit`) and sub-agent parts. A turn with none of those and no
- * deliverables renders nothing; tool calls alone never make it visible.
+ * `feature_limit`) and sub-agent parts, plus `offer_session`'s and
+ * `paid_feature`'s cards. A turn with none of those and no deliverables
+ * renders nothing; other tool calls never make it visible.
  *
  * `botThreadView` derives, once per messages array, what each message shows:
  * hidden or not, a gap stamp before it, the reaction badge on a user
  * message, and the turn's deliverables after its last shown message.
  */
+import { PAID_FEATURE_TOOL } from "@abacus-ai/contract/toolsets";
 import type { UIMessage } from "@tanstack/ai-client";
 
 import { hiddenUserMessage, userMessageText } from "../user-message";
@@ -55,7 +57,17 @@ const kindOf = (part: object): string | null => {
 export type SpokenPart =
   | { kind: "text"; content: string }
   | { kind: "notice" }
-  | { kind: "subagent" };
+  | { kind: "subagent" }
+  | { kind: "session-offer" }
+  | { kind: "paid-feature" };
+
+/** Prefixed with its MCP server's name (`agent-tools_offer_session`): matched by suffix. */
+export const isSessionOfferTool = (name: string): boolean =>
+  name === "offer_session" || name.endsWith("_offer_session");
+
+/** `paid_feature`, under its MCP server's prefix or bare. */
+export const isPaidFeatureTool = (name: string): boolean =>
+  name === PAID_FEATURE_TOOL || name.endsWith(`_${PAID_FEATURE_TOOL}`);
 
 const indexes = new WeakMap<readonly UIMessage[], Map<string, number>>();
 
@@ -84,6 +96,16 @@ export function spokenParts(message: UIMessage): SpokenPart[] {
   for (const part of message.parts) {
     if (part.type === "subagent") {
       out.push({ kind: "subagent" });
+      continue;
+    }
+    // Its card is part of the reply: the bot's text points at its button.
+    if (part.type === "tool-call" && isSessionOfferTool(part.name)) {
+      out.push({ kind: "session-offer" });
+      continue;
+    }
+    // The upgrade the reply points at.
+    if (part.type === "tool-call" && isPaidFeatureTool(part.name)) {
+      out.push({ kind: "paid-feature" });
       continue;
     }
     if (part.type !== "text") continue;

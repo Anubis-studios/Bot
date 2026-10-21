@@ -1,9 +1,13 @@
+import type { HomeChannel } from "@abacus-ai/contract/bots";
 import type { BotRow } from "@abacus-ai/contract/contract";
 import { Store } from "@tanstack/react-store";
 
 import { isRpcError } from "#renderer/data/query-client";
 import { resolveLook } from "#renderer/lib/bots/avatar";
-import { BOT_TEMPLATES } from "#renderer/lib/bots/templates";
+import {
+  BOT_TEMPLATES,
+  TEMPLATE_FOR_CONNECTOR,
+} from "#renderer/lib/bots/templates";
 
 import { onboardingStore } from "./store";
 export type FirstBotResult = {
@@ -11,9 +15,28 @@ export type FirstBotResult = {
   checkInRoutineId: string | null;
   preview?: boolean;
 };
+/** Onboarding's first bot: the agent of the chat app connected last, else the Chief of Staff. */
+export const firstBotTemplateId = (chatApp?: HomeChannel | null): string => {
+  const agent =
+    chatApp != null ? TEMPLATE_FOR_CONNECTOR[`messaging-${chatApp}`] : null;
+  return agent != null && BOT_TEMPLATES.some((row) => row.id === agent)
+    ? agent
+    : "chief-of-staff";
+};
+/** A chat app just connected in onboarding: it picks the first bot, so a stale preview goes. */
+export const noteConnectedChatApp = (chatApp: HomeChannel): void => {
+  onboardingStore.setState((state) => ({ ...state, chatApp }));
+  const first = firstBotStore.state;
+  if (first.state === "ready" && first.result.preview === true)
+    firstBotStore.setState(() => ({ state: "idle" }));
+};
 /** A historical first-bot step previews the role; persistence waits for completion. */
-export const previewFirstBot = (id: string, name: string): FirstBotResult => {
-  const template = BOT_TEMPLATES.find((row) => row.id === "chief-of-staff")!;
+export const previewFirstBot = (
+  id: string,
+  name: string,
+  templateId = "chief-of-staff"
+): FirstBotResult => {
+  const template = BOT_TEMPLATES.find((row) => row.id === templateId)!;
   const look = resolveLook({
     name,
     avatarShape: template.avatarShape,
@@ -32,6 +55,9 @@ export const previewFirstBot = (id: string, name: string): FirstBotResult => {
       avatarColor: look.color,
       model: null,
       channel: null,
+      ...(template.homeChannel != null
+        ? { homeChannel: template.homeChannel }
+        : {}),
       sessionId: null,
       workspaceId: null,
       createdAt: Date.now(),

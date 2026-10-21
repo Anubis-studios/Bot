@@ -34,7 +34,21 @@ vi.mock("./services/providers/abacus", async (original) => ({
   ...(await original<typeof import("./services/providers/abacus")>()),
   fetchAbacusAccount: account,
 }));
+const catalog = vi.hoisted(() => ({
+  rows: [] as Array<Record<string, unknown>>,
+  reads: 0,
+}));
+vi.mock("./services/providers/models", async (original) => ({
+  ...(await original<typeof import("./services/providers/models")>()),
+  listAvailableModels: async () => {
+    catalog.reads += 1;
+    return catalog.rows;
+  },
+  cachedRecommendedModelId: () => "openllm/auto",
+}));
 const { ServiceHost } = await import("./service-host");
+const { createBot } = await import("./services/bots/bot-store");
+const { setDefaultModel } = await import("./services/config/settings");
 let home: string;
 const previousHome = process.env.ABACUSAI_BOT_HOME;
 beforeEach(() => {
@@ -258,5 +272,94 @@ describe("a routine fired while signed out", () => {
       result: "skipped: signed out",
       kind: "skipped",
     });
+  });
+});
+
+describe("the model a session with none of its own starts on", () => {
+  const row = (id: string, configured: boolean, recommended = false) => ({
+    id,
+    label: id,
+    provider: id.split("/")[0],
+    tier: "default",
+    configured,
+    ...(recommended ? { recommended: true } : {}),
+  });
+  beforeEach(() => {
+    // A free account: the tier recommends the free pool.
+    catalog.reads = 0;
+    catalog.rows = [
+      row("openllm/auto", true, true),
+      row("custom/flash", true),
+      row("custom/bot-model", true),
+      row("removed/model", false),
+    ];
+  });
+  const start = async (
+    session: { routineId: string | null; model: string | null },
+    model?: string
+  ) => {
+    const updates: string[] = [];
+    const ready = vi.fn(async () => ({ success: true, created: true }));
+    const host = Object.assign(Object.create(ServiceHost.prototype), {
+      isWorkspaceDeleted: () => false,
+      agentSessionManagerService: {
+        get: () => session,
+        updateModel: (_id: string, next: string) => {
+          session.model = next;
+          updates.push(next);
+          return true;
+        },
+      },
+      botService: { botIdForSession: () => null },
+      agentManagerService: { startSessionReady: ready },
+      emitEvent: vi.fn(),
+    }) as InstanceType<typeof ServiceHost>;
+    await host.startAgentSession({
+      workspaceId: "w",
+      sessionId: "run-1",
+      ...(model != null ? { model } : {}),
+    });
+    const [request] = ready.mock.calls[0] as unknown as [{ model?: string }];
+    return { model: request.model, updates };
+  };
+
+  it("a routine with no bot runs on the stored custom-provider default, not the free pool, and keeps it", async () => {
+    setDefaultModel("custom/flash");
+    const job = createJob({ prompt: "p", schedule: "0 9 * * *" });
+    const run = await start({ routineId: job.id, model: null });
+    expect(run.model).toBe("custom/flash");
+    expect(run.updates).toEqual(["custom/flash"]);
+  });
+
+  it("a routine with a bot runs on the bot's model", async () => {
+    setDefaultModel("custom/flash");
+    const bot = createBot({
+      name: "Digest",
+      description: "Sends the digest",
+      model: "custom/bot-model",
+    });
+    const job = createJob({
+      prompt: "p",
+      schedule: "0 9 * * *",
+      botId: bot.id,
+    });
+    const run = await start({ routineId: job.id, model: null });
+    expect(run.model).toBe("custom/bot-model");
+    expect(run.updates).toEqual(["custom/bot-model"]);
+  });
+
+  it("a chat starts on the composer's model, unresolved and unwritten", async () => {
+    setDefaultModel("custom/flash");
+    const run = await start({ routineId: null, model: null }, "chosen/model");
+    expect(run.model).toBe("chosen/model");
+    expect(run.updates).toEqual([]);
+    expect(catalog.reads).toBe(0);
+  });
+
+  it("an unconfigured stored default falls back to the tier's recommendation", async () => {
+    setDefaultModel("removed/model");
+    const job = createJob({ prompt: "p", schedule: "0 9 * * *" });
+    const run = await start({ routineId: job.id, model: null });
+    expect(run.model).toBe("openllm/auto");
   });
 });

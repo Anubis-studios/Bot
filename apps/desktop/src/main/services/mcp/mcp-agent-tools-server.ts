@@ -13,6 +13,7 @@ import {
   type ChannelCapabilities,
   WHATSAPP_CHANNEL,
 } from "@abacus-ai/agent/channel";
+import { modelPath } from "@abacus-ai/agent/model-path";
 import { isWithin, resolveSecretPaths } from "@abacus-ai/agent/secret-paths";
 import {
   DOCUMENT_MAX_BYTES,
@@ -20,6 +21,7 @@ import {
   mediaLine,
   parseSendMedia,
   type ResolvedMedia,
+  takesDocument,
 } from "@abacus-ai/agent/send-media";
 import { UNATTENDED_TOOLS } from "@abacus-ai/agent/tool-policy";
 import {
@@ -27,6 +29,11 @@ import {
   resolveConnector,
   type Connector,
 } from "@abacus-ai/connectors/registry";
+import {
+  HOME_CHANNEL_NAMES,
+  HOME_CHANNELS,
+  type HomeChannel,
+} from "@abacus-ai/contract/bots";
 import type {
   ConnectorStatus,
   ConnectorStatuses,
@@ -38,12 +45,14 @@ import {
   type MessagingPlatformId,
   describePlatformForAgent,
 } from "@abacus-ai/contract/messaging";
+import type { AbacusPlanTier } from "@abacus-ai/contract/models";
 import type {
   Routine,
   RoutineCreateInput,
   RoutineListItem,
   RoutineRunner,
 } from "@abacus-ai/contract/routines";
+import { PAID_FEATURES } from "@abacus-ai/contract/toolsets";
 
 import { emitHostEvent } from "#main/rpc/emit";
 
@@ -100,6 +109,7 @@ import {
   resolveSender,
   type SenderCandidate,
 } from "../messaging/sender-resolution";
+import { fetchBillingPlan } from "../providers/abacus-upgrade";
 import type {
   PreviewOutcome,
   PreviewTargets,
@@ -108,10 +118,12 @@ import { locateHostFile } from "../workspace/host-path";
 import type { SkillsService } from "../workspace/skills-service";
 import { McpHttpServer, type McpToolListing } from "./mcp-http-server";
 import { agentTool, AGENT_TOOL_NAMES, AGENT_TOOLS } from "./tools";
+import { withUpgradeNudge } from "./tools/billing";
 import type {
   ConnectOutcome,
   DisconnectOutcome,
 } from "./tools/connect-outcome";
+import { alwaysOnNote } from "./tools/cronjob";
 import {
   describeHostedRoutine,
   hostedCreatedNote,
@@ -121,7 +133,12 @@ import {
   requestedRunner,
   requestedSources,
 } from "./tools/cronjob-hosted";
-import type { ToolDefinition, ToolResult } from "./tools/definition";
+import type {
+  HostCapabilities,
+  ToolDefinition,
+  ToolResult,
+} from "./tools/definition";
+import { paidFeatureResult, withheldFeatures } from "./tools/paid-features";
 import {
   NOT_YET_PHONE_OWNED,
   PHONE_AGENT_TOOLS,
@@ -179,6 +196,26 @@ const loopbackOrigin = (url: string): string | null => {
 /** Files that go to a chat as pictures. */
 const IMAGE_FILE = /\.(png|jpe?g|webp)$/i;
 
+/** A file the chat cannot carry at all (its type, or past the size limit), not one that needs fixing first. */
+type KeptFile = { id: string } | { reason: string; unfit?: true };
+
+/**
+ * What the session hears once for files the chat cannot carry. Repackaging
+ * cannot get them through, so it says what can: the content in a form the
+ * chat takes, and the file itself where it lives.
+ */
+function unfitNote(labels: string[]): string {
+  const where =
+    import.meta.env.ABACUS_WEB_HOST === true
+      ? "The file itself reaches them in the AbacusAI Bot desktop app (bot.abacus.ai on a computer), where you can make it again for them."
+      : "The file itself is saved on their computer: tell them where it is.";
+  return (
+    `WhatsApp cannot carry ${labels.join(", ")}, and a zip or renamed copy is refused too, so do not try. ` +
+    "Tell the user once, in their language, and give them what fits this chat instead: the readable " +
+    `content as a txt, md or PDF document, a short summary, or a \`page\`. ${where}`
+  );
+}
+
 /** A tool as some caller sees it: the app's definition, or the phone's own. */
 type ListedTool = ToolDefinition | PhoneToolDefinition;
 
@@ -203,6 +240,8 @@ export interface McpAgentToolsServerOptions {
   hostedRoutines?: () => boolean;
   /** Re-read per request so toggles take effect live. */
   enabledToolsets: () => Set<string>;
+  /** The account's plan as last read; absent or unknown, no plan-locked capability is offered. */
+  planTier?: () => AbacusPlanTier;
   workspacePath: () => string | null;
   workspaceId?: () => string | null;
   /** `trigger` lets the run log tell "Run now" from the first fire at creation. */
@@ -279,6 +318,11 @@ export interface McpAgentToolsServerOptions {
       options?: { byAgent?: boolean; runAtText?: string | null }
     ) => Promise<Routine>;
     hosted: HostedRoutines;
+    /**
+     * The once-per-user word on 24/7 routines, claimed by this create: the
+     * plan to speak to, or null (already told, or the plan is unknown).
+     */
+    alwaysOnNote?: () => Promise<"free" | "paid" | null>;
   };
   /** Every conversation a bot owns, with its agent log; for my_activity. */
   ownActivity?: (botId: string) => Array<{
@@ -300,6 +344,10 @@ export interface McpAgentToolsServerOptions {
     /** Bounded. */
     awaitReady?: (platform?: MessagingPlatformId) => Promise<void>;
     disablePlatform?: (id: MessagingPlatformId) => Promise<void>;
+    /** A bot asked to connect this platform: it is the default home bot if the app's own chat links. */
+    claimSelfLane?: (platform: MessagingPlatformId, botId: string) => void;
+    /** Make the bot the chat app's home bot (the one setter behind it). */
+    setHomeBot?: (app: HomeChannel, botId: string) => void;
     /** Capped. */
     listChats: (
       query?: string,
@@ -326,7 +374,9 @@ export interface McpAgentToolsServerOptions {
     send: (
       platform: MessagingPlatformId,
       chatId: string,
-      text: string
+      text: string,
+      /** The calling bot, named on what it sends to the user's own chat. */
+      fromBotId?: string
     ) => Promise<void>;
     /** Throws where unsupported. */
     sendFile?: (
@@ -460,7 +510,7 @@ export class McpAgentToolsServer extends McpHttpServer {
     const forBot = this.isBotCaller(callerSession);
     const forEditor = this.isRoutineEditor(callerSession);
     const channel = this.channelFor(callerSession);
-    const host = { hostedRoutines: this.options.hostedRoutines?.() === true };
+    const host = this.hostCapabilities();
     // A run nobody is watching is offered only what it may call.
     const held = this.isHeld(callerSession);
 
@@ -484,6 +534,34 @@ export class McpAgentToolsServer extends McpHttpServer {
             ? definition.inputSchema(channel, host)
             : definition.inputSchema,
       }));
+  }
+
+  private hostCapabilities(): HostCapabilities {
+    const enabled = this.options.enabledToolsets();
+    return {
+      hostedRoutines: this.options.hostedRoutines?.() === true,
+      withheldFeatures: withheldFeatures(this.planTier(), (feature) =>
+        this.featureListed(feature.toolsets, enabled)
+      ),
+    };
+  }
+
+  private planTier(): AbacusPlanTier {
+    return this.options.planTier?.() ?? "unknown";
+  }
+
+  /** Whether any tool of these toolsets is listed: switched on, with what it needs set. */
+  private featureListed(
+    toolsets: readonly string[],
+    enabled: Set<string>
+  ): boolean {
+    return AGENT_TOOLS.some(
+      (definition) =>
+        definition.toolsets !== "always" &&
+        definition.toolsets.some((toolset) => toolsets.includes(toolset)) &&
+        isToolEnabled(definition, enabled) &&
+        this.isToolConfigured(definition)
+    );
   }
 
   /**
@@ -635,7 +713,9 @@ export class McpAgentToolsServer extends McpHttpServer {
     try {
       return await definition.run(this, args, callerSession);
     } catch (error) {
-      return this.err(error instanceof Error ? error.message : String(error));
+      return this.err(
+        withUpgradeNudge(error instanceof Error ? error.message : String(error))
+      );
     }
   }
 
@@ -699,12 +779,14 @@ export class McpAgentToolsServer extends McpHttpServer {
       const workspacePath = this.options.workspacePath();
       const suggestion =
         workspacePath != null
-          ? path.join(
-              workspacePath,
-              WORKSPACE_DIR_NAME,
-              "skills",
-              `${id}`,
-              "SKILL.md"
+          ? modelPath(
+              path.join(
+                workspacePath,
+                WORKSPACE_DIR_NAME,
+                "skills",
+                `${id}`,
+                "SKILL.md"
+              )
             )
           : `<workspace>/${WORKSPACE_DIR_NAME}/skills/${id}/SKILL.md`;
 
@@ -719,7 +801,7 @@ export class McpAgentToolsServer extends McpHttpServer {
       : skill.path;
 
     return this.ok(
-      `${skill.name} lives at:\n${target}\n\nEdit it with the file tools.`
+      `${skill.name} lives at:\n${modelPath(target)}\n\nEdit it with the file tools.`
     );
   }
 
@@ -927,8 +1009,11 @@ export class McpAgentToolsServer extends McpHttpServer {
         // and that what it was asked to read waits for the user. A local one
         // runs with this conversation's reach.
         const held = job.runner === "hosted" || job.access === "unattended";
+        const where =
+          " It runs on this computer, only while the computer is on and AbacusAI Bot is open;" +
+          " routines here are unlimited on every plan.";
         const reach = !held
-          ? " Its runs have full access on this computer while the app is open."
+          ? " Its runs have full access, like this conversation."
           : " Its runs are unattended: they search the web and read its own folder, but " +
             "cannot write files, run commands or message anyone, unless the user gives it " +
             "full access on its page." +
@@ -937,8 +1022,11 @@ export class McpAgentToolsServer extends McpHttpServer {
                 [...reads, ...sources].join(", ") +
                 ") until the user allows it on the routine's page: tell them."
               : "");
+        const note = alwaysOnNote(
+          (await this.options.routines?.alwaysOnNote?.()) ?? null
+        );
         return this.ok(
-          `Created. ${delivery}${reach}${first}${hook}\n\n${describeJob(job)}`
+          `Created. ${delivery}${where}${reach}${first}${hook}${note}\n\n${describeJob(job)}`
         );
       }
 
@@ -1263,7 +1351,7 @@ export class McpAgentToolsServer extends McpHttpServer {
       .slice(0, 80);
 
     return this.ok(
-      `Saved to ${file}\n\nShow it to the user with: ![${alt}](${fileUrl(file)})\n${artifactPathLine(file)}`
+      `Saved to ${modelPath(file)}\n\nShow it to the user with: ![${alt}](${fileUrl(file)})\n${artifactPathLine(file)}`
     );
   }
 
@@ -1275,7 +1363,7 @@ export class McpAgentToolsServer extends McpHttpServer {
     const voice = typeof args.voice === "string" ? args.voice : undefined;
     const file = await generateSpeech(text, voice);
 
-    return this.ok(`Saved to ${file}\n${artifactPathLine(file)}`);
+    return this.ok(`Saved to ${modelPath(file)}\n${artifactPathLine(file)}`);
   }
 
   async pdf(args: Record<string, unknown>): Promise<ToolResult> {
@@ -1302,12 +1390,12 @@ export class McpAgentToolsServer extends McpHttpServer {
 
         return this.ok(
           [
-            `Printed ${printed.htmlPath} (${printed.pages} pages in ${printed.seconds}s): ${printed.pdfPath}`,
+            `Printed ${modelPath(printed.htmlPath)} (${printed.pages} pages in ${printed.seconds}s): ${modelPath(printed.pdfPath)}`,
             ...(printed.previewPath != null
-              ? [`Rendered page, as a PNG: ${printed.previewPath}`]
+              ? [`Rendered page, as a PNG: ${modelPath(printed.previewPath)}`]
               : []),
             "",
-            `Hand it over: present_deliverable with ${printed.pdfPath}`,
+            `Hand it over: present_deliverable with ${modelPath(printed.pdfPath)}`,
           ].join("\n")
         );
       }
@@ -1497,7 +1585,7 @@ export class McpAgentToolsServer extends McpHttpServer {
         const channel = this.channelFor(callerSession);
         return this.ok(
           [
-            `Serving ${served.directory} at ${served.url}`,
+            `Serving ${modelPath(served.directory)} at ${served.url}`,
             "",
             ...(channel.pane
               ? []
@@ -1639,13 +1727,15 @@ export class McpAgentToolsServer extends McpHttpServer {
   ): Promise<ToolResult> {
     const going: Array<{ line: string; id: string; target: string }> = [];
     const refused: string[] = [];
+    const unfit: string[] = [];
     for (const item of valid) {
       const label = oneLine(item.label);
-      const kept = item.isUrl
+      const kept: KeptFile = item.isUrl
         ? await this.screenshotServed(item.target, sessionId, chatMedia)
         : await this.keepFile(item.target, sessionId, chatMedia);
       if ("reason" in kept) {
         refused.push(`${label}: ${oneLine(kept.reason)}`);
+        if (kept.unfit === true) unfit.push(label);
         continue;
       }
       going.push({
@@ -1665,9 +1755,15 @@ export class McpAgentToolsServer extends McpHttpServer {
             ),
           ]
         : [];
+    const unfitLines = unfit.length > 0 ? ["", unfitNote(unfit)] : [];
     if (going.length === 0)
       return this.err(
-        ["Nothing was sent to the chat.", ...refused, ...notFound].join("\n")
+        [
+          "Nothing was sent to the chat.",
+          ...refused,
+          ...notFound,
+          ...unfitLines,
+        ].join("\n")
       );
 
     // One line each: a newline could pose as a media line.
@@ -1682,6 +1778,7 @@ export class McpAgentToolsServer extends McpHttpServer {
         ? ["", "Not sent:", ...refused.map((line) => `- ${line}`)]
         : []),
       ...(notFound.length > 0 ? ["", ...notFound] : []),
+      ...unfitLines,
       "",
       ...going.map((item) => mediaLine(item.id)),
       ...going.map((item) => artifactPathLine(oneLine(item.target))),
@@ -1720,7 +1817,7 @@ export class McpAgentToolsServer extends McpHttpServer {
     filePath: string,
     sessionId: string,
     chatMedia: ChatMedia
-  ): Promise<{ id: string } | { reason: string }> {
+  ): Promise<KeptFile> {
     let handle: fs.promises.FileHandle | null = null;
     try {
       const real = await fs.promises.realpath(filePath);
@@ -1773,12 +1870,20 @@ export class McpAgentToolsServer extends McpHttpServer {
         length += bytesRead;
       }
       if (length > DOCUMENT_MAX_BYTES)
-        return { reason: "it is larger than 16 MB, the most the chat takes." };
-      return chatMedia.keep(
+        return {
+          reason: "it is larger than 16 MB, the most the chat takes.",
+          unfit: true,
+        };
+      const name = path.basename(real);
+      const kept = chatMedia.keep(
         sessionId,
         Buffer.from(buffer.subarray(0, length)),
-        path.basename(real)
+        name
       );
+      // Refused for its type: no copy of it can go either.
+      return "reason" in kept && !IMAGE_FILE.test(name) && !takesDocument(name)
+        ? { ...kept, unfit: true }
+        : kept;
     } catch (error) {
       console.error(
         `[agent-tools] could not read a deliverable: ${error instanceof Error ? error.message : String(error)}`
@@ -1814,7 +1919,7 @@ export class McpAgentToolsServer extends McpHttpServer {
 
       // A page count that disagrees with the slide count is a bad pagination.
       return this.ok(
-        `Wrote ${result.pdfPath}\n${result.slides} slides at ${result.widthPx}x${result.heightPx}, ` +
+        `Wrote ${modelPath(result.pdfPath)}\n${result.slides} slides at ${result.widthPx}x${result.heightPx}, ` +
           `${Math.round(result.bytes / 1024)} KB.\n\n` +
           "Read the PDF back and look at it before showing the user. Overflowing text is obvious in the render and invisible in the markup."
       );
@@ -1868,7 +1973,9 @@ export class McpAgentToolsServer extends McpHttpServer {
       this.fileExists(finished);
 
     return this.ok(
-      `Done. ${result.message}${isFile ? `\n${artifactPathLine(finished)}` : ""}`
+      isFile
+        ? `Done. ${modelPath(finished)}\n${artifactPathLine(finished)}`
+        : `Done. ${result.message}`
     );
   }
 
@@ -1913,7 +2020,8 @@ export class McpAgentToolsServer extends McpHttpServer {
       (isToolEnabled(definition, enabled) ||
         (forBot && definition.botAlways === true)) &&
       this.isToolConfigured(definition) &&
-      (forBot || definition.botsOnly !== true)
+      (forBot || definition.botsOnly !== true) &&
+      (definition.offered?.(this.hostCapabilities()) ?? true)
     );
   }
 
@@ -1956,7 +2064,10 @@ export class McpAgentToolsServer extends McpHttpServer {
     );
   }
 
-  async sendChatMessage(args: Record<string, unknown>): Promise<ToolResult> {
+  async sendChatMessage(
+    args: Record<string, unknown>,
+    callerSession?: string
+  ): Promise<ToolResult> {
     const messaging = this.options.messaging;
     if (messaging == null || messaging.runningPlatforms().length === 0)
       return this.messagingSetupHint();
@@ -1998,7 +2109,11 @@ export class McpAgentToolsServer extends McpHttpServer {
       return this.ok(`Sent the file to ${to} on ${platform}.`);
     }
 
-    await messaging.send(platform, to, message);
+    const fromBotId =
+      callerSession != null
+        ? (this.options.botIdForSession?.(callerSession) ?? undefined)
+        : undefined;
+    await messaging.send(platform, to, message, fromBotId);
 
     return this.ok(`Sent to ${to} on ${platform}.`);
   }
@@ -2128,6 +2243,14 @@ export class McpAgentToolsServer extends McpHttpServer {
             : "unreachable",
       };
 
+    // A bot connecting a chat app is the default for the app's own chat.
+    const claimant =
+      match.kind === "messaging" && callerSession != null
+        ? (this.options.botIdForSession?.(callerSession) ?? null)
+        : null;
+    if (match.kind === "messaging" && claimant != null)
+      this.options.messaging?.claimSelfLane?.(match.platform, claimant);
+
     // Nothing here waits for the user: the call answers at once, a card (in
     // the app) and a link (anywhere) do the connecting, and the chat that
     // asked is told when it lands.
@@ -2235,6 +2358,35 @@ export class McpAgentToolsServer extends McpHttpServer {
     const error = await connectors.disconnect(match.id);
     if (error != null) return { code: "failed", error };
     return { code: "disconnected", name: match.name, kind: match.kind };
+  }
+
+  /** take_chat_app_messages: the calling bot gets the user's own chat on an app. */
+  takeChatAppMessages(
+    args: Record<string, unknown>,
+    callerSession?: string
+  ): ToolResult {
+    const app = String(args.app ?? "")
+      .trim()
+      .toLowerCase();
+    if (!(HOME_CHANNELS as readonly string[]).includes(app))
+      return this.err(
+        `Unknown app "${app}". Use "whatsapp", "telegram" or "discord".`
+      );
+    const botId =
+      callerSession != null
+        ? (this.options.botIdForSession?.(callerSession) ?? null)
+        : null;
+    if (botId == null)
+      return this.err(
+        "Not changed: only a bot's own chat can take the user's chat-app messages. Tell the user to ask the bot they want, in that bot's chat."
+      );
+    const setHomeBot = this.options.messaging?.setHomeBot;
+    if (setHomeBot == null)
+      return this.err("Chat apps are not available in this build.");
+    setHomeBot(app as HomeChannel, botId);
+    return this.ok(
+      `Done: what the user types in their own ${HOME_CHANNEL_NAMES[app as HomeChannel]} chat now comes to you, here. Tell them so in one short line, in their language.`
+    );
   }
 
   /**
@@ -2730,6 +2882,34 @@ export class McpAgentToolsServer extends McpHttpServer {
     return this.ok(
       action === "on" ? `Auto-reply is on. ${allowedLine}` : allowedLine
     );
+  }
+
+  // ── Paid-plan capabilities ───────────────────────────────────────────────
+
+  async paidFeature(
+    args: Record<string, unknown>,
+    callerSession?: string
+  ): Promise<ToolResult> {
+    const feature = PAID_FEATURES.find(
+      (entry) => entry.feature === args.feature
+    );
+    if (feature == null)
+      return this.err(
+        `Unknown feature. One of: ${PAID_FEATURES.map((entry) => entry.feature).join(", ")}.`
+      );
+    const tier = this.planTier();
+    const listed = this.featureListed(
+      feature.toolsets,
+      this.options.enabledToolsets()
+    );
+    // A bot answering in a chat app has no card to show: its reply carries the link.
+    const card =
+      !this.isBotCaller(callerSession) ||
+      (callerSession != null &&
+        this.options.isAppBotChat?.(callerSession) === true);
+    const plan =
+      tier === "free" && !listed ? await fetchBillingPlan(!card) : null;
+    return paidFeatureResult(this, { feature, tier, listed, card, plan });
   }
 
   // ── Integrations ─────────────────────────────────────────────────────────

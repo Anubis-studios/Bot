@@ -1,10 +1,12 @@
-import type { MessagingPlatformId } from "@abacus-ai/contract/messaging";
+import type {
+  MessagingPlatformId,
+  SelfLanePlatform,
+} from "@abacus-ai/contract/messaging";
 /**
  * WHICH bot answers depends on who is talking. The user's own chat routes to
- * the dedicated self bot (the Telegram bootstrap's "AbacusAI Bot <-> You");
- * everyone else routes to the general auto-reply bot. One shared id used to
- * send a WhatsApp group's auto-reply conversations into the user's personal
- * Telegram bot.
+ * that app's home bot; everyone else routes to the general auto-reply bot.
+ * One shared id used to send a WhatsApp group's auto-reply conversations
+ * into the user's personal Telegram bot.
  */
 import { describe, expect, it, vi } from "vitest";
 
@@ -14,10 +16,11 @@ const settings = {
   respondToInbound: true,
   workspaceId: "ws" as string | null,
   botId: null as string | null,
-  selfBotId: null as string | null,
-  selfBotIds: {} as Partial<Record<MessagingPlatformId, string>>,
   autoReplyBootstrapped: true,
 };
+
+/** The home bot per lane, as the bot service would answer. */
+let homes: Partial<Record<SelfLanePlatform, string>> = {};
 
 vi.mock("./messaging-config-service", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./messaging-config-service")>()),
@@ -61,6 +64,11 @@ const harness = (): {
     sendMessage: () => {},
     emitUserMessage: () => {},
     emitChanged: () => {},
+    homeBots: {
+      get: (lane: SelfLanePlatform) => homes[lane] ?? null,
+      set: () => {},
+      ensure: (lane: SelfLanePlatform) => homes[lane] ?? null,
+    },
     openBotChat: async (botId: string) => {
       botsOpened.push(botId);
       return { botId, workspaceId: "ws-bot", sessionId: `chat-${botId}` };
@@ -111,18 +119,18 @@ const harness = (): {
 };
 
 describe("who answers whom", () => {
-  it("sends the user's own chat to the self bot, never the general one", async () => {
-    settings.selfBotId = "self-bot";
+  it("sends the user's own chat to the app's home bot, never the general one", async () => {
+    homes = { whatsapp: "home-bot" };
     settings.botId = "general-bot";
 
     const h = harness();
     await h.inbound("ME", "hi");
 
-    expect(h.botsOpened).toEqual(["self-bot"]);
+    expect(h.botsOpened).toEqual(["home-bot"]);
   });
 
-  it("sends a group to the general bot, never the self bot", async () => {
-    settings.selfBotId = "self-bot";
+  it("sends a group to the general bot, never the home bot", async () => {
+    homes = { whatsapp: "home-bot" };
     settings.botId = "general-bot";
 
     const h = harness();
@@ -131,11 +139,11 @@ describe("who answers whom", () => {
     expect(h.botsOpened).toEqual(["general-bot"]);
   });
 
-  it("keeps a group away from the self bot when no general bot is picked", async () => {
-    // The field case: only the bootstrap bot existed, and the group's
-    // auto-reply conversations were filed under the user's personal
-    // Telegram bot. With no general bot, a group gets a gateway session.
-    settings.selfBotId = "self-bot";
+  it("keeps a group away from the home bot when no general bot is picked", async () => {
+    // The field case: only the self lane's bot existed, and the group's
+    // auto-reply conversations were filed under the user's personal bot.
+    // With no general bot, a group gets a gateway session.
+    homes = { whatsapp: "home-bot" };
     settings.botId = null;
 
     const h = harness();
@@ -145,9 +153,8 @@ describe("who answers whom", () => {
     expect(h.gatewaySessions).toBe(1);
   });
 
-  it("sends the Abacus AI Discord DM to its own bot, never Telegram's", async () => {
-    settings.selfBotId = "self-bot";
-    settings.selfBotIds = { abacus_discord: "discord-bot" };
+  it("sends the Abacus AI Discord DM to Discord's home bot, never WhatsApp's", async () => {
+    homes = { whatsapp: "home-bot", abacus_discord: "discord-bot" };
     settings.botId = "general-bot";
 
     const h = harness();
@@ -156,12 +163,11 @@ describe("who answers whom", () => {
     expect(h.botsOpened).toEqual(["discord-bot"]);
   });
 
-  it("never lets the Discord DM fall through to Telegram's bot", async () => {
-    // Before the Discord lane has its bot, the DM must not borrow the
-    // Telegram one, nor the general bot, which is for other people. It
-    // gets a plain gateway session.
-    settings.selfBotId = "self-bot";
-    settings.selfBotIds = {};
+  it("never lets the self chat fall through to another lane's bot or the general one", async () => {
+    // No home bot to be had for Discord (none could be made): the DM gets a
+    // plain gateway session, not WhatsApp's bot nor the general bot, which
+    // is for other people.
+    homes = { whatsapp: "home-bot" };
     settings.botId = "general-bot";
 
     const h = harness();
@@ -169,15 +175,5 @@ describe("who answers whom", () => {
 
     expect(h.botsOpened).toEqual([]);
     expect(h.gatewaySessions).toBe(1);
-  });
-
-  it("still serves the self chat off a legacy botId-only config", async () => {
-    settings.selfBotId = null;
-    settings.botId = "legacy-bot";
-
-    const h = harness();
-    await h.inbound("ME", "hi");
-
-    expect(h.botsOpened).toEqual(["legacy-bot"]);
   });
 });

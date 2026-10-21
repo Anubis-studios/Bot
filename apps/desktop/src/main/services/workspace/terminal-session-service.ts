@@ -1,5 +1,6 @@
 import path from "node:path";
 
+import { childProcessEnv } from "@abacus-ai/agent/child-env";
 import type {
   PromoteTerminalSessionScopeRequest,
   ResizeTerminalSessionRequest,
@@ -62,13 +63,6 @@ const loadSpawn = async (): Promise<PtySpawn> => {
     throw cachedSpawnError;
   }
 };
-
-const sanitizeEnv = (value: NodeJS.ProcessEnv): Record<string, string> =>
-  Object.fromEntries(
-    Object.entries(value).filter(
-      (entry): entry is [string, string] => typeof entry[1] === "string"
-    )
-  );
 
 /**
  * The shell a start request asks for: the one it names, else the stored
@@ -175,7 +169,7 @@ export class TerminalSessionService {
         const spawn = await loadSpawn();
         return spawn(shell.file, shell.args, {
           cwd: workspacePath,
-          env: { ...sanitizeEnv(process.env), ...shell.env },
+          env: childProcessEnv(process.env, shell.env),
           cols,
           rows,
           encoding: "utf8",

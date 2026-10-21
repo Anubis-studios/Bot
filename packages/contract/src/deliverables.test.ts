@@ -50,6 +50,21 @@ describe("presentedDeliverables", () => {
     expect(items).toEqual([{ path: REPORT, label: "Brief", isUrl: false }]);
   });
 
+  it("labels a Windows path whichever separators the model wrote", () => {
+    // The model is shown `C:/w/brief.pdf`; the tool may declare `C:\w\brief.pdf`.
+    const items = presentedDeliverables(
+      {
+        items: [
+          { path: "C:/w/brief.pdf", label: "Brief" },
+          { path: "out/deck.pdf", label: "Deck" },
+        ],
+      },
+      `${artifactPathLine("C:\\w\\brief.pdf")}\n${artifactPathLine("C:\\w\\out\\deck.pdf")}`
+    );
+
+    expect(items.map((item) => item.label)).toEqual(["Brief", "Deck"]);
+  });
+
   it("falls back to the request when the result declares nothing", () => {
     // Results written before the tool declared its items.
     const items = presentedDeliverables(

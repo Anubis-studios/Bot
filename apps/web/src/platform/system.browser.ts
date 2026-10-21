@@ -53,24 +53,6 @@ export const connectTarget = (name: string): ConnectTarget => {
   };
 };
 
-/** The tab is taken inside the click; the link fills it once the host answers. */
-export const openSharedLink = async (
-  client: AppClient,
-  input: Parameters<AppClient["messaging"]["openSharedLink"]>[0]
-): Promise<void> => {
-  const tab = window.open("about:blank", "_blank");
-  if (tab) tab.opener = null;
-  try {
-    const url = await client.messaging.openSharedLink(input);
-    if (!url || !/^https?:/i.test(url)) tab?.close();
-    else if (tab) tab.location.href = url;
-    else openTab(url);
-  } catch (error) {
-    tab?.close();
-    throw error;
-  }
-};
-
 /** A link the host has to look up first: the tab is taken inside the click, then filled. */
 export const openPendingLink = async (
   _client: AppClient,

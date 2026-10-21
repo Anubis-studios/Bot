@@ -43,6 +43,7 @@ import type {
 } from "@abacus-ai/contract/agent-types";
 import { SessionId } from "@abacus-ai/contract/contract/ids";
 import { sessionConversationKey } from "@abacus-ai/contract/conversation-scope";
+import { feedbackSegmentId } from "@abacus-ai/contract/transcript/feedback-target";
 
 import { EmptyState } from "#renderer/components/empty-state";
 import { hasInAppViewer, isUrl } from "#renderer/components/file-preview";
@@ -54,6 +55,7 @@ import {
   deliverablesAfter,
   rowEndIndex,
   sessionDeliverablesCard,
+  type SessionDeliverablesOptions,
 } from "#renderer/features/sessions/chat/deliverables";
 import { SessionKnownFiles } from "#renderer/features/sessions/chat/known-files";
 import { SessionContextTray } from "#renderer/features/sessions/context/context-tray";
@@ -400,6 +402,16 @@ const SessionRoute = () => {
     select(ref);
     return ref;
   };
+  const deliverableOptions: SessionDeliverablesOptions = {
+    workspaceRoot: root,
+    onOpenFile: openFile,
+    onOpenUrl: openUrl,
+    onOpenExternal: (url) =>
+      void platformSystem(transport.client).openExternal({ url }),
+    onReveal: IS_ELECTRON
+      ? (path) => void transport.client.system.showItemInFolder({ path })
+      : undefined,
+  };
   return (
     <>
       <PreviewRegistration
@@ -478,6 +490,8 @@ const SessionRoute = () => {
                   <ComposerUpdateNotice />
                 </>
               ),
+              renderDeliverables: (items) =>
+                sessionDeliverablesCard(items, deliverableOptions),
               decorateMessage: (message, context) => {
                 if (message.role !== "assistant") return null;
                 // A coalesced row is keyed by its host; the turn's carrier
@@ -494,26 +508,18 @@ const SessionRoute = () => {
                 const after =
                   files == null
                     ? undefined
-                    : sessionDeliverablesCard(files, {
-                        workspaceRoot: root,
-                        onOpenFile: openFile,
-                        onOpenUrl: openUrl,
-                        onOpenExternal: (url) =>
-                          void platformSystem(transport.client).openExternal({
-                            url,
-                          }),
-                        onReveal: IS_ELECTRON
-                          ? (path) =>
-                              void transport.client.system.showItemInFolder({
-                                path,
-                              })
-                          : undefined,
-                      });
+                    : sessionDeliverablesCard(files, deliverableOptions);
                 if (context.runActive && at === context.messages.length - 1)
                   return after != null ? { after } : null;
-                const source = message.metadata?.abacus?.segmentId;
+                // Keyed on the stored host message, not the shown row: the
+                // key counts stored parts, and the tool-only messages folded
+                // in after it hold no text. Nothing spoken, nothing to rate.
+                const stored = context.messages.find(
+                  (row) => row.id === message.id
+                );
                 const segmentId =
-                  typeof source === "string" ? source : message.id;
+                  stored == null ? null : feedbackSegmentId(stored);
+                if (segmentId == null) return after != null ? { after } : null;
                 return {
                   ...(after != null ? { after } : {}),
                   actions: (

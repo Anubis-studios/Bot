@@ -7,6 +7,7 @@
  */
 import path from "path";
 
+import { modelPath } from "./model-path.js";
 import { listServed, serveDirectory, stopDirectory } from "./static-server.js";
 
 interface PiToolDefinitionLike {
@@ -103,7 +104,7 @@ export function buildServeTool(
           const served = await serveDirectory(resolve(directory));
 
           return text(
-            `Serving ${served.directory} at ${served.url}\n\n` +
+            `Serving ${modelPath(served.directory)} at ${served.url}\n\n` +
               `Hand it over: present_deliverable with ${served.url}`
           );
         }

@@ -72,7 +72,11 @@ interface NotificationAction {
   label?: string;
   /** `own-key-unavailable`: the provider id whose key failed. */
   provider?: string;
-  /** `own-key-unavailable`: credit, rate_limit, down or network. */
+  /**
+   * `own-key-unavailable`: credit, rate_limit, down or network.
+   * `upgrade-abacus`: exhausted or expired (absent reads as exhausted).
+   * `free-pool-out`: busy when the free models are only rate-limited.
+   */
   cause?: string;
 }
 
@@ -468,6 +472,8 @@ export type DesktopCommand =
   | { type: "refresh_providers" }
   /** The desktop's connectivity owner changed its mind, or the machine woke. */
   | { type: "connectivity"; state: string; resumed?: boolean }
+  /** The Abacus balance as the desktop last read it; see credit-balance.ts. */
+  | { type: "credit_balance"; remaining: number; granted: number; at: number }
   /**
    * Reconnect every MCP server. With `requestId`, the agent answers
    * `mcp_refreshed` (or `mcp_refresh_failed`) carrying it once done.
@@ -533,9 +539,9 @@ export interface CliMcpStatusEvent {
 }
 
 /**
- * Services the desktop process performs for a tool in the agent process. A
- * closed list: each genuinely needs Electron. The `*_templates`, `*_catalog`
- * and `deck_slots` services describe templates and slots, never markup; the
+ * Services the desktop process performs for the agent process. A closed
+ * list: each needs Electron or the desktop's account. The `*_templates`,
+ * `*_catalog` and `deck_slots` services describe templates and slots, never markup; the
  * `render_*` services own the markup and stylesheets, so a caller supplies
  * content and cannot produce a document that fails to lay out.
  */
@@ -546,7 +552,9 @@ export type HostService =
   | "render_design"
   | "deck_templates"
   | "deck_slots"
-  | "render_deck";
+  | "render_deck"
+  /** Re-read the Abacus account; answers with its credit snapshot or null. */
+  | "credit_balance";
 
 /** Events sent from ndjson IPC host to main process (stdout). */
 export type DesktopEvent =

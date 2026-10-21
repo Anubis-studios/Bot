@@ -72,6 +72,25 @@ vi.mock("../providers/abacus-upgrade", async (original) => ({
   ...(await original<typeof import("../providers/abacus-upgrade")>()),
   fetchBillingPlan: billingPlan,
 }));
+/** The media providers' keys this machine has; any other credential reads as usual. */
+const mediaKeys = vi.hoisted(() => new Map<string, string>());
+const MEDIA_KEYS = [
+  "ABACUS_API_KEY",
+  "OPENAI_API_KEY",
+  "FAL_KEY",
+  "ELEVENLABS_API_KEY",
+  "BFL_API_KEY",
+];
+vi.mock("../config/settings", async (original) => {
+  const actual = await original<typeof import("../config/settings")>();
+  return {
+    ...actual,
+    credentialFor: (name: string) =>
+      MEDIA_KEYS.includes(name)
+        ? (mediaKeys.get(name) ?? "")
+        : actual.credentialFor(name),
+  };
+});
 
 let statuses: ConnectorStatuses;
 const link = vi.fn(async (connectorId: string) =>
@@ -130,6 +149,7 @@ const call = async (
 
 beforeEach(() => {
   statuses = {};
+  mediaKeys.clear();
   vi.clearAllMocks();
 });
 
@@ -419,5 +439,183 @@ describe("disconnect_connector on the phone", () => {
     const { text } = await call("disconnect_connector", { service: "slack" });
     expect(disconnect).toHaveBeenCalledWith("abacus-slack");
     expect(text).toMatch(/^Slack is disconnected\./);
+  });
+});
+
+describe("paid-plan capabilities", () => {
+  const BASIC_FIRST_MONTH: BillingPlan = {
+    current: {
+      planName: "Free",
+      creditsRemaining: 1_000,
+      creditsGranted: 2_000,
+      freeTierExpiresAt: null,
+    },
+    plans: [],
+    upgrades: [
+      {
+        plan: "basic",
+        planName: "Basic",
+        priceText: "$10/mo",
+        firstMonthPriceCents: 700,
+        priceCents: 1_000,
+        percentOff: 30,
+        features: ["Top models", "Image and video generation"],
+        url: "https://upgrade.example/basic",
+      },
+    ],
+    topUpUrl: null,
+    upgradeInMobileApp: false,
+  };
+
+  const planServer = (
+    tier: "free" | "basic" | "unknown",
+    toolsets: string[] = ["todo"],
+    options: { bot?: boolean; appBotChat?: boolean } = {}
+  ) =>
+    new McpAgentToolsServer({
+      skillsService: {} as never,
+      enabledToolsets: () => new Set(toolsets),
+      planTier: () => tier,
+      workspacePath: () => null,
+      channelForSession: (session: string) =>
+        session === PHONE ? WHATSAPP_CHANNEL : null,
+      isUnattended: (session: string) => session === "routine-run",
+      ...(options.bot === true
+        ? {
+            botIdForSession: () => "bot-1",
+            isAppBotChat: () => options.appBotChat === true,
+          }
+        : {}),
+    } as never);
+
+  const listed = (server: McpAgentToolsServer, session = "ui-session") =>
+    (
+      server as unknown as { listTools: (s?: string) => McpToolListing[] }
+    ).listTools(session);
+
+  const featureEnum = (tool: McpToolListing | undefined): unknown =>
+    (
+      tool?.inputSchema as
+        | { properties: { feature: { enum: string[] } } }
+        | undefined
+    )?.properties.feature.enum;
+
+  const callOn = async (
+    server: McpAgentToolsServer,
+    feature: string,
+    session = "ui-session"
+  ) => {
+    const result = (await server.executeTool(
+      "paid_feature",
+      { feature },
+      session
+    )) as { content: Array<{ text?: string }>; isError?: boolean };
+    return {
+      text: result.content.map((part) => part.text ?? "").join("\n"),
+      isError: result.isError === true,
+    };
+  };
+
+  it("tells a free account's model that video, image and speech come with the paid plans", () => {
+    mediaKeys.set("ABACUS_API_KEY", "key");
+    const tools = listed(planServer("free"));
+    const names = tools.map((tool) => tool.name);
+    expect(names).not.toContain("video_generate");
+    expect(names).not.toContain("image_generate");
+    const tool = tools.find((entry) => entry.name === "paid_feature");
+    expect(tool?.description).toMatch(
+      /video generation, image generation, and text to speech/i
+    );
+    expect(tool?.description).toMatch(/Never tell the user you cannot/);
+    expect(featureEnum(tool)).toEqual(["video_gen", "image_gen", "tts"]);
+  });
+
+  it("answers a free account's video ask with Basic, its price and the card, never a refusal", async () => {
+    mediaKeys.set("ABACUS_API_KEY", "key");
+    billingPlan.mockResolvedValue(BASIC_FIRST_MONTH);
+    const { text, isError } = await callOn(planServer("free"), "video_gen");
+    expect(isError).toBe(false);
+    expect(billingPlan).toHaveBeenCalledWith(false);
+    expect(text).toMatch(/Basic, \$7 for the first month \(30% off/);
+    expect(text).toContain("Image and video generation");
+    expect(text).toMatch(/Abacus AI Agent on the web, not in this app/);
+    expect(text).toMatch(/Upgrade card under your reply/);
+    expect(text).not.toContain("https://upgrade.example/basic");
+    expect(text).toMatch(/Never say you cannot do it/);
+  });
+
+  it("gives the upgrade link where no card can show: a bot answering in a chat app", async () => {
+    mediaKeys.set("ABACUS_API_KEY", "key");
+    billingPlan.mockResolvedValue(BASIC_FIRST_MONTH);
+    const { text } = await callOn(
+      planServer("free", ["todo"], { bot: true }),
+      "image_gen"
+    );
+    expect(billingPlan).toHaveBeenCalledWith(true);
+    expect(text).toContain("Their upgrade link: https://upgrade.example/basic");
+    expect(text).toMatch(/in this app once they upgrade/);
+  });
+
+  it("leaves a free account the real tool when it has one: a toggle on and a provider to run it", () => {
+    mediaKeys.set("FAL_KEY", "key");
+    const tools = listed(planServer("free", ["video_gen"]));
+    expect(tools.map((tool) => tool.name)).toContain("video_generate");
+    const tool = tools.find((entry) => entry.name === "paid_feature");
+    expect(featureEnum(tool)).toEqual(["image_gen", "tts"]);
+  });
+
+  it("gives a paid account the real image and speech tools, and no offer for them", () => {
+    mediaKeys.set("ABACUS_API_KEY", "key");
+    const tools = listed(planServer("basic", ["image_gen", "tts"]));
+    const names = tools.map((tool) => tool.name);
+    expect(names).toEqual(
+      expect.arrayContaining(["image_generate", "text_to_speech"])
+    );
+    const tool = tools.find((entry) => entry.name === "paid_feature");
+    expect(featureEnum(tool)).toEqual(["video_gen"]);
+  });
+
+  it("points a paid account without a video provider to the web, with no upgrade", async () => {
+    mediaKeys.set("ABACUS_API_KEY", "key");
+    const { text } = await callOn(
+      planServer("basic", ["image_gen", "tts"]),
+      "video_gen"
+    );
+    expect(billingPlan).not.toHaveBeenCalled();
+    expect(text).toMatch(/^Their plan includes video generation/);
+    expect(text).toMatch(/Abacus AI Agent on the web/);
+    expect(text).toMatch(/Never say you cannot do it/);
+  });
+
+  it("offers nothing while the plan is unread, nor to a paid account with every capability", () => {
+    mediaKeys.set("ABACUS_API_KEY", "key");
+    mediaKeys.set("BFL_API_KEY", "key");
+    expect(
+      listed(planServer("unknown")).map((tool) => tool.name)
+    ).not.toContain("paid_feature");
+    expect(
+      listed(planServer("basic", ["image_gen", "tts", "video_gen"])).map(
+        (tool) => tool.name
+      )
+    ).not.toContain("paid_feature");
+  });
+
+  it("never reaches the phone or a routine nobody is watching", async () => {
+    mediaKeys.set("ABACUS_API_KEY", "key");
+    const server = planServer("free");
+    expect(listed(server, PHONE).map((tool) => tool.name)).not.toContain(
+      "paid_feature"
+    );
+    expect(
+      listed(server, "routine-run").map((tool) => tool.name)
+    ).not.toContain("paid_feature");
+    expect(await callOn(server, "video_gen", PHONE)).toEqual({
+      text: "Unknown tool: paid_feature",
+      isError: true,
+    });
+    expect((await callOn(server, "video_gen", "routine-run")).isError).toBe(
+      true
+    );
+    expect(billingPlan).not.toHaveBeenCalled();
   });
 });

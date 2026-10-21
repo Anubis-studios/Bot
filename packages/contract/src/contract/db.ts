@@ -6,6 +6,7 @@
 import { eventIterator, type } from "@orpc/contract";
 import * as v from "valibot";
 
+import { HOME_CHANNELS } from "../bots";
 import { THEME_COLOR_KEYS } from "../look";
 import { base, mutation, query, subscription } from "./base";
 import { AvatarAccessorySchema, BotWallpaperSchema } from "./bots";
@@ -48,6 +49,7 @@ const write = <TInput extends v.GenericSchema>(input: TInput) =>
 
 export const BotCreateInputSchema = v.object({
   sponsoredFirstRun: v.optional(v.boolean()),
+  homeChannel: v.optional(v.nullable(v.picklist(HOME_CHANNELS))),
   name: v.pipe(v.string(), v.nonEmpty()),
   title: v.optional(v.string()),
   description: v.string(),
@@ -186,6 +188,12 @@ export const PREFS_GROUP_ENTRIES = {
     routeLlmSwitched: v.boolean(),
     /** The upgrade's new-look notice, dismissed. */
     newLookSeenAt: NullableTimestamp,
+    /** The agent told the user, once, where routines run 24/7. */
+    routinesAlwaysOnToldAt: NullableTimestamp,
+    /** The Routines page's 24/7 card, dismissed. */
+    routinesAlwaysOnCardAt: NullableTimestamp,
+    /** The newest missed-runs notice shown (its `missed.at`). */
+    routinesMissedSeenAt: NullableTimestamp,
   },
   motion: { reduce: v.picklist(["system", "on", "off"]) },
   sounds: {

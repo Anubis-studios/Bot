@@ -9,6 +9,7 @@
  * (spec 03 P32; the spec's shared/bots/templates.ts). Looks keep the legacy
  * shape and colour ids; lib/bots/avatar.ts resolveLook maps them.
  */
+import type { HomeChannel } from "../bots";
 
 export type BotTemplateCategory =
   | "featured"
@@ -34,6 +35,8 @@ export const BOT_TEMPLATE_CATEGORIES: readonly BotTemplateCategory[] = [
 
 export interface BotTemplate {
   id: string;
+  /** A chat-app agent's home: the app the user talks to it in (see Bot.homeChannel). */
+  homeChannel?: HomeChannel;
   /** i18n keys: bots.templates.<id>.name / .description */
   name: string;
   /** The role line shown in the dialog's description field. */
@@ -87,6 +90,7 @@ export const BOT_TEMPLATES: BotTemplate[] = [
   {
     // Mirrors DeepAgent's "WhatsApp Agent" starter persona.
     id: "whatsapp-agent",
+    homeChannel: "whatsapp",
     name: "WhatsApp Agent",
     title: "Your agent in WhatsApp - message it anytime",
     persona:
@@ -121,6 +125,7 @@ export const BOT_TEMPLATES: BotTemplate[] = [
   {
     // Mirrors DeepAgent's "Telegram Agent" starter persona.
     id: "telegram-agent",
+    homeChannel: "telegram",
     name: "Telegram Agent",
     title: "Your agent in Telegram - message it anytime",
     persona:
@@ -210,6 +215,7 @@ export const BOT_TEMPLATES: BotTemplate[] = [
   {
     // Mirrors DeepAgent's "Discord Agent" starter persona.
     id: "discord-agent",
+    homeChannel: "discord",
     name: "Discord Agent",
     title: "Your agent in Discord - DM it or add it to a server",
     persona:

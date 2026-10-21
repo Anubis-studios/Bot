@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 
 import type { ChannelCapabilities } from "@abacus-ai/agent/channel";
+import { modelPath } from "@abacus-ai/agent/model-path";
 import { MEDIA_CHECK_TOOL_NAME, MEDIA_HELD } from "@abacus-ai/agent/send-media";
 import { readTravelers } from "@abacus-ai/agent/traveler-store";
 import type { IpcEvent } from "@abacus-ai/contract/contracts";
@@ -2330,7 +2331,7 @@ export class McpBrowserServer extends McpHttpServer {
             {
               type: "text",
               text:
-                `${summary}\n\nScreenshot saved to ${filePath}` +
+                `${summary}\n\nScreenshot saved to ${modelPath(filePath)}` +
                 (mediaId != null ? `\nmedia id: ${mediaId}` : ""),
             },
           ],

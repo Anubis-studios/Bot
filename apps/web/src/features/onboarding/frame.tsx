@@ -145,7 +145,7 @@ export const OnboardingFrame = ({
             phase={phase}
             reduced={reduce}
             cast={db?.collections.bots.toArray
-              .filter((item) => item.channel == null && item.id !== bot?.id)
+              .filter((item) => item.id !== bot?.id)
               .slice(0, 3)}
             onPoke={() => sound.play("pop")}
           />

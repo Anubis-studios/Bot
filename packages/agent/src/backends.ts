@@ -14,7 +14,9 @@ import {
 } from "@earendil-works/pi-coding-agent";
 
 import { registerForegroundProcess } from "./background-processes.js";
+import { childProcessEnv } from "./child-env.js";
 import { currentMode } from "./current-mode.js";
+import { modelPath } from "./model-path.js";
 import {
   posixShell,
   posixShellEnv,
@@ -69,21 +71,6 @@ export function selectedBackend(): BackendId {
 }
 
 /**
- * `env` with `extra` merged into its PATH, under the key it already uses:
- * Windows spells it `Path`, and writing `PATH` beside it leaves two spellings
- * of which libuv keeps only one.
- */
-function withMergedPath(
-  env: NodeJS.ProcessEnv,
-  extra: string | undefined
-): NodeJS.ProcessEnv {
-  const key = env.PATH == null && env.Path != null ? "Path" : "PATH";
-  const merged = mergePath(env.PATH ?? env.Path, extra);
-
-  return merged != null ? { ...env, [key]: merged } : { ...env };
-}
-
-/**
  * The deadline for one command, as a timer, or null. `BashOperations.exec`
  * receives `timeout` in SECONDS; passed raw to `setTimeout` the stamped 120s
  * becomes 120ms and every command is SIGKILLed before its first byte.
@@ -133,14 +120,7 @@ function dockerOperations(image: string): BashOperations {
           "docker",
           args,
           options.env != null
-            ? {
-                env: {
-                  ...(process.env.PATH != null
-                    ? { PATH: process.env.PATH }
-                    : {}),
-                  ...options.env,
-                },
-              }
+            ? { env: childProcessEnv({ PATH: process.env.PATH }, options.env) }
             : {}
         );
 
@@ -253,16 +233,18 @@ function localSandboxedOperations(
     // The profile is sourced once, in `loginEnvironment` (sandbox/shell.ts);
     // inheriting this process's env would mean the launchd PATH.
     const shell = loginEnvironment();
-    const inherited =
-      options.env != null
-        ? withMergedPath(options.env, shell.PATH ?? shell.Path)
-        : shell;
-    // Node's own fetch ignores the proxy variables unless told; without this a
-    // Node tool's request goes direct, is refused, and no card can be raised.
-    const childEnv =
+    const inherited = childProcessEnv(options.env ?? shell);
+    const merged =
+      options.env != null ? mergePath(inherited.PATH, shell.PATH) : undefined;
+    const childEnv = childProcessEnv(
+      inherited,
+      merged != null ? { PATH: merged } : undefined,
+      // Node's own fetch ignores the proxy variables unless told; without this
+      // a Node tool's request goes direct, is refused, and no card can be raised.
       policy.network.kind === "filtered"
-        ? { ...inherited, NODE_USE_ENV_PROXY: "1" }
-        : inherited;
+        ? { NODE_USE_ENV_PROXY: "1" }
+        : undefined
+    );
 
     const commandId = `command-${++commandCounter}`;
     // On Windows the command runs under the bundled POSIX shell, confined or
@@ -435,7 +417,7 @@ export function describeDenials(
     .map((denial) =>
       denial.kind === "host"
         ? `${denial.kind} ${denial.host}:${denial.port}`
-        : `${denial.kind} ${denial.path}`
+        : `${denial.kind} ${modelPath(denial.path)}`
     )
     .filter((text) => !seen.has(text) && seen.add(text) !== undefined)
     .join(", ");

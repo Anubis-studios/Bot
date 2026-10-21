@@ -1,3 +1,4 @@
+import type { HomeChannel } from "@abacus-ai/contract/bots";
 import type { AbacusAuthOutcome } from "@abacus-ai/contract/contracts";
 import { Store } from "@tanstack/react-store";
 
@@ -14,6 +15,8 @@ export interface SignInAttempt {
 export const onboardingStore = new Store<{
   signIn: SignInAttempt | null;
   createdBotId: string | null;
+  /** The chat app connected last in the connectors step; it picks the first bot. */
+  chatApp?: HomeChannel | null;
 }>({ signIn: null, createdBotId: null });
 export const startSignIn = (
   transport: Transport,

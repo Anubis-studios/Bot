@@ -240,6 +240,10 @@ describe("RouteLLM - Open from first credit to last source", () => {
     behaviour.set("big:free", OPENROUTER_DAY_SPENT);
     turn = await chat.turn("seventh task");
     expect(turn.error?.message).toBe(OPENLLM_POOL_SHUT_MESSAGE);
+    // A free account is offered the plan rather than "try again".
+    expect(turn.error?.actions?.map((action) => action.type)).toContain(
+      "free-pool-out"
+    );
 
     // 7. The rest connected at once: Mistral first.
     connect("mistral", "nvidia", "cerebras", "groq");

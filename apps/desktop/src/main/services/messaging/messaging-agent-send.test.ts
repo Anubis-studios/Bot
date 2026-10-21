@@ -423,3 +423,74 @@ describe("sending to yourself", () => {
     expect(sent).toHaveLength(0);
   });
 });
+
+/**
+ * The user's own chat on an app is its home bot's conversation. Any other
+ * bot may still send the user an update there, signed with its name, so the
+ * user can tell who is talking.
+ */
+describe("a bot's update to the user's own chat", () => {
+  const selfLane = () => {
+    const sent: Array<[string, string]> = [];
+    const gateway = new MessagingGatewayService({
+      resolveWorkspaceId: () => null,
+      createAgentSession: () => ({ id: "s" }) as never,
+      updateSessionLabel: () => {},
+      startSession: async () => ({ success: true }) as never,
+      sendMessage: () => {},
+      emitUserMessage: () => {},
+      emitChanged: () => {},
+      homeBots: {
+        get: () => "bot-home",
+        set: () => {},
+        ensure: () => "bot-home",
+      },
+    } as never);
+    (gateway as unknown as { connectors: Map<string, unknown> }).connectors.set(
+      "abacus_telegram",
+      {
+        id: "abacus_telegram",
+        start: async () => {},
+        stop: async () => {},
+        selfChatId: () => "self-chat",
+        sendText: async (chatId: string, text: string) => {
+          sent.push([chatId, text]);
+        },
+      }
+    );
+    return { gateway, sent };
+  };
+
+  it("is signed by any bot but the home bot", async () => {
+    const { gateway, sent } = selfLane();
+
+    await gateway.sendToChat("abacus_telegram", "me", "BTC is up 4%", {
+      botId: "bot-prices",
+      name: "Price Watch",
+    });
+    await gateway.sendToChat("abacus_telegram", "me", "Morning!", {
+      botId: "bot-home",
+      name: "Telegram Agent",
+    });
+
+    expect(sent).toEqual([
+      ["self-chat", "[Price Watch] BTC is up 4%"],
+      ["self-chat", "Morning!"],
+    ]);
+  });
+
+  it("leaves a message to someone else, or from no bot, as written", async () => {
+    const { gateway, sent } = selfLane();
+
+    await gateway.sendToChat("abacus_telegram", "other-chat", "hi", {
+      botId: "bot-prices",
+      name: "Price Watch",
+    });
+    await gateway.sendToChat("abacus_telegram", "me", "plain");
+
+    expect(sent).toEqual([
+      ["other-chat", "hi"],
+      ["self-chat", "plain"],
+    ]);
+  });
+});

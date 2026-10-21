@@ -8,6 +8,8 @@
 import fs from "fs";
 import path from "path";
 
+import { modelPath } from "@abacus-ai/agent/model-path";
+
 import { abacusBotHome } from "../../paths";
 
 const GENERATED_DIR = (): string => path.join(abacusBotHome(), "generated");
@@ -154,7 +156,8 @@ export const readAsBase64 = async (
     };
   }
 
-  if (!fs.existsSync(source)) throw new Error(`No such file: ${source}`);
+  if (!fs.existsSync(source))
+    throw new Error(`No such file: ${modelPath(source)}`);
 
   return {
     base64: fs.readFileSync(source).toString("base64"),

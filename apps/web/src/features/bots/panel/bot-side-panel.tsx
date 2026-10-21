@@ -84,7 +84,8 @@ export const DetailsTab = ({
   const reachable =
     messaging.data?.platforms.filter(
       (platform) =>
-        platform.id === bot.channel ||
+        // Its home app: the user's own chat there comes to this bot.
+        platform.homeBotId === bot.id ||
         messaging.data.approved.some(
           (row) => row.platform === platform.id && row.botId === bot.id
         )
@@ -104,15 +105,13 @@ export const DetailsTab = ({
         <p className="text-muted-foreground max-w-full text-center text-xs [overflow-wrap:anywhere]">
           {botTagline(bot, t)}
         </p>
-        {bot.channel == null && (
-          <AppLink
-            to="/bots/$botId/edit"
-            params={{ botId: bot.id }}
-            className="bg-secondary mt-2 rounded-full px-3 py-2 text-xs"
-          >
-            {t("bots.sidebar.edit")}
-          </AppLink>
-        )}
+        <AppLink
+          to="/bots/$botId/edit"
+          params={{ botId: bot.id }}
+          className="bg-secondary mt-2 rounded-full px-3 py-2 text-xs"
+        >
+          {t("bots.sidebar.edit")}
+        </AppLink>
       </div>
       <GroupCard className="px-0">
         <div
@@ -129,7 +128,7 @@ export const DetailsTab = ({
             </span>
           ) : (
             <div className="flex min-w-0 justify-end">
-              <ModelPicker binding={binding} readOnly={bot.channel != null} />
+              <ModelPicker binding={binding} />
             </div>
           )}
         </div>
@@ -266,15 +265,13 @@ export const DetailsTab = ({
         >
           {t(pinned ? "bots.sidebar.unpin" : "bots.sidebar.pin")}
         </Button>
-        {bot.channel == null && (
-          <Button
-            variant="ghost"
-            className="text-destructive flex-1"
-            onClick={() => setDeleting(true)}
-          >
-            {t("bots.sidebar.delete")}
-          </Button>
-        )}
+        <Button
+          variant="ghost"
+          className="text-destructive flex-1"
+          onClick={() => setDeleting(true)}
+        >
+          {t("bots.sidebar.delete")}
+        </Button>
       </div>
       <DeleteBotDialog
         bot={deleting ? bot : null}

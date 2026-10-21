@@ -20,6 +20,7 @@ import type { Transport } from "#renderer/data/transport";
 import { lazyChatRuntimeFor } from "#renderer/features/chat/runtime/lazy-runtime";
 import type { ChatRuntime } from "#renderer/features/chat/runtime/runtime";
 import type { NavType } from "#renderer/lib/motion";
+import { rememberLocation } from "#renderer/lib/navigation/last-location";
 import { rendererHistory } from "#renderer/lib/navigation/renderer-history";
 
 import { routeTree } from "./routeTree.gen";
@@ -139,7 +140,7 @@ export const createAppRouter = ({ context, history }: AppRouterOptions) => {
     context.chat != null
       ? { chat: context.chat, prepareChat: async () => {} }
       : lazyChatRuntimeFor(context.transport, credentialsChanged);
-  return createRouter({
+  const router = createRouter({
     routeTree,
     ...(history ? { history } : rendererHistory()),
     context: {
@@ -163,6 +164,8 @@ export const createAppRouter = ({ context, history }: AppRouterOptions) => {
     defaultViewTransition: undefined,
     defaultStructuralSharing: true,
   });
+  rememberLocation(router);
+  return router;
 };
 
 export type AppRouter = ReturnType<typeof createAppRouter>;

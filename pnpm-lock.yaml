@@ -204,7 +204,7 @@ catalogs:
       specifier: ^7.10.5
       version: 7.10.5
     vite:
-      specifier: ^8.2.4
+      specifier: ~8.2.4
       version: 8.2.4
     vitest:
       specifier: ^4.1.11

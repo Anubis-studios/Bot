@@ -7,7 +7,12 @@ Most sessions start with workspace files, terminal and process control, task
 planning, browser automation, web access, deliverables, memory, skills,
 delegation, and document tools enabled. Device control, media generation, smart
 home access, and other tools that need extra software or credentials start off.
-The page in the installed app shows the current defaults.
+On a paid Abacus.AI plan, image generation and text to speech start on, since the
+plan runs them. The page in the installed app shows the current defaults.
+
+When a paid plan includes a capability this account does not have here, such as
+media generation on the free plan, the agent says which plan includes it and
+where, and the app shows an upgrade card instead of a refusal.
 
 Most built-in tool changes apply when the next agent process starts. Memory,
 skills, task planning, web search, MCP, and newly connected services can refresh

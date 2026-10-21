@@ -1,22 +1,21 @@
-import type { MessagingPlatformId } from "@abacus-ai/contract/messaging";
+import type {
+  MessagingPlatformId,
+  SelfLanePlatform,
+} from "@abacus-ai/contract/messaging";
 /**
  * Linking a self lane (the shared Abacus AI bots, WhatsApp's "Message
  * yourself") must leave the user with a working conversation, not a
- * dashboard of switches: the moment the link proves which chat is theirs, a
- * dedicated bot is created and that chat starts answering. Only the self
+ * dashboard of switches: the moment the link proves which chat is theirs,
+ * the lane gets its home bot and that chat starts answering. Only the self
  * lane: the first cut of this feature flipped the global respondToInbound
  * switch, and a friend's WhatsApp "hi" got an auto-reply as the user the
  * moment the link finished. The bootstrap must never touch the switch that
  * governs other people.
  *
- * The invariant pinned here is ONCE EVER. The link callback re-fires on every
- * app start (restored links) and every relink, and the bootstrap must not ride
- * it into recreating a bot the user deleted; the stored per-lane flag absorbs
- * every firing after the first.
- *
- * The own-account Telegram lane once minted its own bot through BotFather and
- * bootstrapped into the single `selfBotId` slot; that lane is gone, and the
- * slot is only read as WhatsApp's fallback.
+ * Which bot: the one that asked to connect the app, from its own chat;
+ * onboarding's first bot for a lane linked during onboarding; otherwise the
+ * template rule (homeBots.ensure). And ONCE EVER: the link callback re-fires
+ * on every app start and relink, and must never move the home bot again.
  */
 import { describe, expect, it, vi } from "vitest";
 
@@ -28,7 +27,6 @@ const settings = {
   respondToInbound: false,
   workspaceId: null as string | null,
   botId: null as string | null,
-  selfBotId: null as string | null,
   selfBotIds: {} as Partial<Record<MessagingPlatformId, string | null>>,
   autoReplyBootstrapped: false,
   autoReplyBootstrappedFor: [] as MessagingPlatformId[],
@@ -67,16 +65,24 @@ const { MessagingGatewayService } = await import("./messaging-gateway-service");
 
 type Callbacks = { onSelfLinked?: () => void };
 
-const service = (): {
+/** What each lane's template rule would make: the "<lane>-agent" bot. */
+const templateBot = (lane: SelfLanePlatform): string => `${lane}-agent`;
+
+const service = (
+  options: { onboarding?: boolean; now?: () => number } = {}
+): {
   gateway: InstanceType<typeof MessagingGatewayService>;
-  captured: Callbacks[];
   /** The same callbacks, by the platform they were built for. */
   byId: Map<MessagingPlatformId, Callbacks>;
-  createCalls: string[];
+  /** Every home-bot write, as "lane:bot", and every template fallback. */
+  calls: string[];
+  homes: Partial<Record<SelfLanePlatform, string>>;
+  state: { onboarding: boolean };
 } => {
-  const captured: Callbacks[] = [];
   const byId = new Map<MessagingPlatformId, Callbacks>();
-  const createCalls: string[] = [];
+  const calls: string[] = [];
+  const homes: Partial<Record<SelfLanePlatform, string>> = {};
+  const state = { onboarding: options.onboarding === true };
 
   const gateway = new MessagingGatewayService({
     resolveWorkspaceId: () => null,
@@ -86,13 +92,19 @@ const service = (): {
     sendMessage: () => {},
     emitUserMessage: () => {},
     emitChanged: () => {},
-    createAutoReplyBot: (platform: string) => {
-      createCalls.push(platform);
-      return platform === "abacus_telegram"
-        ? "bot-telegram"
-        : platform === "whatsapp"
-          ? "bot-whatsapp"
-          : "bot-discord";
+    ...(options.now != null ? { now: options.now } : {}),
+    deferSelfLaneDefaults: () => state.onboarding,
+    homeBots: {
+      get: (lane: SelfLanePlatform) => homes[lane] ?? null,
+      set: (lane: SelfLanePlatform, botId: string) => {
+        calls.push(`set ${lane}:${botId}`);
+        homes[lane] = botId;
+      },
+      ensure: (lane: SelfLanePlatform) => {
+        calls.push(`ensure ${lane}`);
+        homes[lane] ??= templateBot(lane);
+        return homes[lane];
+      },
     },
   } as never);
 
@@ -109,26 +121,24 @@ const service = (): {
     // Reuse the real callback wiring; the bootstrap trigger is what is
     // under test, and rebuilding it here would test the test.
     const real = build(id) as { callbacks: Callbacks };
-    captured.push(real.callbacks);
     byId.set(id, real.callbacks);
     return {
       id,
       start: async () => {},
       stop: async () => {},
       sendText: async () => {},
+      selfChatId: () => (id === "telegram" ? null : "me"),
       callbacks: real.callbacks,
     };
   };
 
-  return { gateway, captured, byId, createCalls };
+  return { gateway, byId, calls, homes, state };
 };
 
-const linked = async (): Promise<{
-  captured: Callbacks[];
-  byId: Map<MessagingPlatformId, Callbacks>;
-  createCalls: string[];
-}> => {
-  const built = service();
+const linked = async (
+  options?: Parameters<typeof service>[0]
+): Promise<ReturnType<typeof service>> => {
+  const built = service(options);
   await built.gateway.syncConnectors();
   return built;
 };
@@ -136,21 +146,20 @@ const linked = async (): Promise<{
 const reset = (): void => {
   settings.respondToInbound = false;
   settings.botId = null;
-  settings.selfBotId = null;
   settings.selfBotIds = {};
   settings.autoReplyBootstrapped = false;
   settings.autoReplyBootstrappedFor = [];
 };
 
-describe("the Abacus AI Telegram self-lane bootstrap", () => {
-  it("creates its own bot on first link, once ever", async () => {
+describe("a self lane linked from settings", () => {
+  it("gets the template rule's bot on first link, once ever", async () => {
     reset();
-    const { byId, createCalls } = await linked();
+    const { byId, calls, homes } = await linked();
     const telegram = byId.get("abacus_telegram")!;
     telegram.onSelfLinked?.();
 
-    expect(createCalls).toEqual(["abacus_telegram"]);
-    expect(settings.selfBotIds.abacus_telegram).toBe("bot-telegram");
+    expect(calls).toEqual(["ensure abacus_telegram"]);
+    expect(homes.abacus_telegram).toBe("abacus_telegram-agent");
     // The global switch answers every chat as the user; the bootstrap must
     // leave it exactly where the user had it, and the general bot alone.
     expect(settings.botId).toBeNull();
@@ -160,125 +169,100 @@ describe("the Abacus AI Telegram self-lane bootstrap", () => {
     // Restored links and relinks re-fire the callback; nothing happens.
     telegram.onSelfLinked?.();
     telegram.onSelfLinked?.();
-    expect(createCalls).toHaveLength(1);
+    expect(calls).toHaveLength(1);
   });
 
   it("is not triggered by the user's own Telegram account linking", async () => {
     // The own-account lane reads and sends as the user; it has no self chat
-    // of its own any more, so it mints nothing and touches no slot.
+    // of its own, so it sets nothing.
     reset();
-    const { byId, createCalls } = await linked();
+    const { byId, calls } = await linked();
     byId.get("telegram")!.onSelfLinked?.();
 
-    expect(createCalls).toHaveLength(0);
-    expect(settings.selfBotId).toBeNull();
-    expect(settings.selfBotIds).toEqual({});
-    expect(settings.autoReplyBootstrapped).toBe(false);
+    expect(calls).toHaveLength(0);
+    expect(settings.autoReplyBootstrappedFor).toEqual([]);
   });
 
-  it("leaves the retired bootstrap's slot as it found it", async () => {
-    // The old own-account bootstrap parked its bot in selfBotId. The shared
-    // lane's bootstrap adopts that bot by name in service-host; here it must
-    // simply not rewrite the slot, so WhatsApp's fallback keeps working.
+  it("keeps the home bot an older install already has", async () => {
+    // The adopted "… AbacusAI Bot <-> You" bot counts as set.
     reset();
-    settings.selfBotId = "bot-auto-reply";
-    settings.autoReplyBootstrapped = true;
-
-    const { byId, createCalls } = await linked();
-    byId.get("abacus_telegram")!.onSelfLinked?.();
-
-    expect(createCalls).toEqual(["abacus_telegram"]);
-    expect(settings.selfBotIds.abacus_telegram).toBe("bot-telegram");
-    expect(settings.selfBotId).toBe("bot-auto-reply");
-    expect(settings.autoReplyBootstrapped).toBe(true);
-  });
-});
-
-/**
- * The Abacus AI Discord bot's chat is a lane of its own. The first cut fed
- * it through the old Telegram bootstrap, so the Discord DM turned up in the
- * app under "AbacusAI Bot <-> You", a bot whose brief said it lived in
- * Telegram.
- */
-describe("the Abacus AI Discord self-lane bootstrap", () => {
-  it("creates its own bot on first link, once ever", async () => {
-    reset();
-    const { byId, createCalls } = await linked();
-    const discord = byId.get("abacus_discord")!;
-    discord.onSelfLinked?.();
-
-    expect(createCalls).toEqual(["abacus_discord"]);
-    expect(settings.selfBotIds.abacus_discord).toBe("bot-discord");
-    // The other slots are not its business.
-    expect(settings.selfBotId).toBeNull();
-    expect(settings.botId).toBeNull();
-    expect(settings.autoReplyBootstrapped).toBe(false);
-    expect(settings.respondToInbound).toBe(false);
-    expect(settings.autoReplyBootstrappedFor).toEqual(["abacus_discord"]);
-
-    discord.onSelfLinked?.();
-    discord.onSelfLinked?.();
-    expect(createCalls).toEqual(["abacus_discord"]);
-  });
-
-  it("still gets its own bot when the retired bootstrap had run", async () => {
-    reset();
-    settings.selfBotId = "bot-auto-reply";
-    settings.autoReplyBootstrapped = true;
-
-    const { byId, createCalls } = await linked();
-    byId.get("abacus_discord")!.onSelfLinked?.();
-
-    expect(createCalls).toEqual(["abacus_discord"]);
-    expect(settings.selfBotIds.abacus_discord).toBe("bot-discord");
-    expect(settings.selfBotId).toBe("bot-auto-reply");
-  });
-
-  it("keeps its slot when the Telegram lane links later", async () => {
-    reset();
-    const { byId, createCalls } = await linked();
-    byId.get("abacus_discord")!.onSelfLinked?.();
-    byId.get("abacus_telegram")!.onSelfLinked?.();
-
-    expect(createCalls).toEqual(["abacus_discord", "abacus_telegram"]);
-    expect(settings.selfBotIds.abacus_discord).toBe("bot-discord");
-    expect(settings.selfBotIds.abacus_telegram).toBe("bot-telegram");
-  });
-});
-
-/**
- * WhatsApp's "Message yourself" chat is a self lane like the others: the link
- * proving the user's own number mints its bot and that chat starts answering,
- * with nothing to switch on. It used to ride the old Telegram bootstrap bot,
- * so a WhatsApp-only user got no bot at all, and the global switch stays off.
- */
-describe("the WhatsApp self-lane bootstrap", () => {
-  it("creates its own bot on first link, once ever", async () => {
-    reset();
-    const { byId, createCalls } = await linked();
+    const { byId, calls, homes } = await linked();
+    homes.whatsapp = "bot-adopted";
     byId.get("whatsapp")!.onSelfLinked?.();
 
-    expect(createCalls).toEqual(["whatsapp"]);
-    expect(settings.selfBotIds.whatsapp).toBe("bot-whatsapp");
-    expect(settings.selfBotId).toBeNull();
-    expect(settings.botId).toBeNull();
-    expect(settings.respondToInbound).toBe(false);
+    expect(calls).toEqual([]);
+    expect(homes.whatsapp).toBe("bot-adopted");
     expect(settings.autoReplyBootstrappedFor).toEqual(["whatsapp"]);
-
-    byId.get("whatsapp")!.onSelfLinked?.();
-    expect(createCalls).toEqual(["whatsapp"]);
   });
 
-  it("gets its own bot even when the retired bootstrap had run", async () => {
+  it("gives each lane its own home bot", async () => {
     reset();
-    settings.selfBotId = "bot-auto-reply";
-    settings.autoReplyBootstrapped = true;
-
-    const { byId, createCalls } = await linked();
+    const { byId, homes } = await linked();
+    byId.get("abacus_discord")!.onSelfLinked?.();
+    byId.get("abacus_telegram")!.onSelfLinked?.();
     byId.get("whatsapp")!.onSelfLinked?.();
 
-    expect(createCalls).toEqual(["whatsapp"]);
-    expect(settings.selfBotIds.whatsapp).toBe("bot-whatsapp");
-    expect(settings.selfBotId).toBe("bot-auto-reply");
+    expect(homes).toEqual({
+      abacus_discord: "abacus_discord-agent",
+      abacus_telegram: "abacus_telegram-agent",
+      whatsapp: "whatsapp-agent",
+    });
+  });
+});
+
+describe("a self lane connected from a bot's own chat", () => {
+  it("makes that bot the home bot", async () => {
+    reset();
+    const { gateway, byId, calls, homes } = await linked();
+    // connect_connector in the Price Watch bot's chat, for "telegram".
+    gateway.claimSelfLane("telegram", "bot-prices");
+    byId.get("abacus_telegram")!.onSelfLinked?.();
+
+    expect(calls).toEqual(["set abacus_telegram:bot-prices"]);
+    expect(homes.abacus_telegram).toBe("bot-prices");
+  });
+
+  it("does not move a home bot set before, from whichever bot", async () => {
+    reset();
+    const { gateway, byId, homes } = await linked();
+    byId.get("whatsapp")!.onSelfLinked?.();
+
+    // Later: another bot connects WhatsApp again, and it relinks.
+    gateway.claimSelfLane("whatsapp", "bot-prices");
+    byId.get("whatsapp")!.onSelfLinked?.();
+
+    expect(homes.whatsapp).toBe("whatsapp-agent");
+  });
+
+  it("lets a claim go stale", async () => {
+    reset();
+    let now = 1_000_000;
+    const { gateway, byId, homes } = await linked({ now: () => now });
+    gateway.claimSelfLane("discord", "bot-prices");
+    now += 31 * 60_000;
+    byId.get("abacus_discord")!.onSelfLinked?.();
+
+    expect(homes.abacus_discord).toBe("abacus_discord-agent");
+  });
+});
+
+describe("a self lane linked during onboarding", () => {
+  it("waits for onboarding, then takes the template rule (onboarding's bot)", async () => {
+    reset();
+    const { gateway, byId, calls, homes, state } = await linked({
+      onboarding: true,
+    });
+    byId.get("abacus_telegram")!.onSelfLinked?.();
+
+    // Nothing yet: the bot onboarding makes does not exist so far.
+    expect(calls).toEqual([]);
+    expect(settings.autoReplyBootstrappedFor).toEqual([]);
+
+    state.onboarding = false;
+    gateway.settleSelfLaneDefaults();
+
+    expect(calls).toContain("ensure abacus_telegram");
+    expect(homes.abacus_telegram).toBe("abacus_telegram-agent");
+    expect(settings.autoReplyBootstrappedFor).toContain("abacus_telegram");
   });
 });

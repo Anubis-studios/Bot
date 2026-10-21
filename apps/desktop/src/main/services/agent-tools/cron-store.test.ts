@@ -525,6 +525,14 @@ describe("full access and a rewrite", () => {
 });
 
 describe("a fire that comes due without a network", () => {
+  // Made just before the first tick, as a routine made while the app runs.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(2026, 9, 13, 8, 50) });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   /** A scheduler whose network the test controls, and the runs it started. */
   const scheduler = () => {
     const state = { online: false, held: 0 };
@@ -624,12 +632,14 @@ describe("a fire that comes due without a network", () => {
     await cron.tick(new Date(2026, 9, 13, 9, 37));
 
     expect(runs).toEqual([job.id]);
+    expect(getJob(job.id)?.missed?.count).toBe(4);
     expect(
       missedJobs(new Date(2026, 9, 13, 8, 51), new Date(2026, 9, 13, 9, 37))
     ).toHaveLength(1);
   });
 
   it("never probes the network on a tick with nothing due", async () => {
+    vi.setSystemTime(new Date(2026, 9, 13, 9, 30));
     createJob({ schedule: "0 9 * * *", prompt: "x" });
     const ready = vi.fn(async () => true);
     const cron = new CronScheduler(async () => {}, ready);
@@ -637,5 +647,87 @@ describe("a fire that comes due without a network", () => {
     await cron.tick(new Date(2026, 9, 13, 10, 0));
 
     expect(ready).not.toHaveBeenCalled();
+  });
+});
+
+describe("fires missed while the app was closed", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(2026, 9, 13, 8, 55) });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** A process just started: its first tick has no tick before it. */
+  const relaunch = () => {
+    const runs: string[] = [];
+    const cron = new CronScheduler(async (id) => {
+      runs.push(id);
+    });
+    return { cron, runs };
+  };
+
+  it("are counted from its last run and run once on the first tick", async () => {
+    const job = createJob({ schedule: "*/10 * * * *", prompt: "x" });
+    vi.setSystemTime(new Date(2026, 9, 13, 9, 0, 5));
+    recordRun(job.id, "started session s", "schedule", { kind: "started" });
+
+    // Closed after 9:00; opened at 9:37: 9:10, 9:20 and 9:30 were missed.
+    const { cron, runs } = relaunch();
+    await cron.tick(new Date(2026, 9, 13, 9, 37));
+
+    expect(runs).toEqual([job.id]);
+    expect(getJob(job.id)?.missed).toEqual({
+      count: 3,
+      at: new Date(2026, 9, 13, 9, 37).getTime(),
+    });
+  });
+
+  it("count none for a routine made just before the app opened", async () => {
+    const job = createJob({ schedule: "0 9 * * *", prompt: "x" });
+    const { cron, runs } = relaunch();
+    await cron.tick(new Date(2026, 9, 13, 8, 56));
+
+    expect(runs).toEqual([]);
+    expect(getJob(job.id)?.missed ?? null).toBeNull();
+  });
+
+  it("count only the schedule's fires after its fire on creation", async () => {
+    const job = createJob({ schedule: "*/10 * * * *", prompt: "x" });
+    vi.setSystemTime(new Date(2026, 9, 13, 8, 55, 10));
+    recordRun(job.id, "started session s", "create", { kind: "started" });
+
+    const { cron } = relaunch();
+    await cron.tick(new Date(2026, 9, 13, 9, 25));
+
+    // 9:00, 9:10 and 9:20; the run at creation is none of them.
+    expect(getJob(job.id)?.missed?.count).toBe(3);
+  });
+
+  it("start after a schedule change, and after a resume", async () => {
+    const changed = createJob({ webhook: true, prompt: "x" });
+    const paused = createJob({ schedule: "*/10 * * * *", prompt: "y" });
+    updateJob(paused.id, { enabled: false });
+    vi.setSystemTime(new Date(2026, 9, 13, 9, 25));
+    updateJob(changed.id, { schedule: "*/10 * * * *" });
+    updateJob(paused.id, { enabled: true });
+
+    const { cron } = relaunch();
+    await cron.tick(new Date(2026, 9, 13, 9, 45));
+
+    expect(getJob(changed.id)?.missed?.count).toBe(2);
+    expect(getJob(paused.id)?.missed?.count).toBe(2);
+  });
+
+  it("are cleared by its next on-time fire, not by the catch-up", async () => {
+    const job = createJob({ schedule: "*/10 * * * *", prompt: "x" });
+    const { cron } = relaunch();
+    await cron.tick(new Date(2026, 9, 13, 9, 25));
+    expect(getJob(job.id)?.missed?.count).toBe(3);
+
+    await cron.tick(new Date(2026, 9, 13, 9, 26));
+    expect(getJob(job.id)?.missed?.count).toBe(3);
+    await cron.tick(new Date(2026, 9, 13, 9, 30));
+    expect(getJob(job.id)?.missed ?? null).toBeNull();
   });
 });

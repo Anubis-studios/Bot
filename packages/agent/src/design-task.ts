@@ -19,6 +19,7 @@ import { subAgentBasePrompt } from "./base-prompt.js";
 import { excludedTools } from "./excluded-tools.js";
 import guardrails from "./extensions/guardrails.js";
 import type { HostServiceClient } from "./host-services.js";
+import { modelPath, MODEL_PATH_RESOURCES } from "./model-path.js";
 import type { AgentEvent } from "./protocol.js";
 import { forwardChildToolEvents } from "./subagent-events.js";
 import {
@@ -233,7 +234,7 @@ const buildTools = (
             {
               type: "text" as const,
               text: [
-                `Rendered ${(result.screens ?? []).length} screens: ${result.canvasPath}`,
+                `Rendered ${(result.screens ?? []).length} screens: ${modelPath(result.canvasPath)}`,
                 ...(missing.length > 0
                   ? [
                       `No PNG for: ${missing.join(", ")} (those screens came out empty).`,
@@ -282,6 +283,8 @@ export async function runDesignTask(
 
   try {
     const resourceLoader = new DefaultResourceLoader({
+      // Skill and AGENTS.md paths as the model should copy them.
+      ...MODEL_PATH_RESOURCES,
       cwd: context.cwd,
       agentDir: context.agentDir,
       settingsManager: context.settingsManager,

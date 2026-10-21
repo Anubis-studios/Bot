@@ -16,6 +16,27 @@ export const showError = (
       : {}),
   });
 };
-export const showInfo = (title: string): void => {
-  toast.add({ title });
+export const showInfo = (
+  title: string,
+  options?: {
+    description?: string;
+    action?: { label: string; onClick(): void };
+    timeout?: number;
+  }
+): void => {
+  toast.add({
+    title,
+    ...(options?.description != null
+      ? { description: options.description }
+      : {}),
+    ...(options?.timeout != null ? { timeout: options.timeout } : {}),
+    ...(options?.action
+      ? {
+          actionProps: {
+            children: options.action.label,
+            onClick: options.action.onClick,
+          },
+        }
+      : {}),
+  });
 };

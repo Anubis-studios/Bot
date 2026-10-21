@@ -167,6 +167,10 @@ const expectedFailures: Record<string, { code: string; message: string }> = {
     code: "20",
     message: "This operation was aborted",
   },
+  "messaging.setHomeBot": {
+    code: "NOT_FOUND",
+    message: "No bot fixture",
+  },
   "system.events": {
     code: "20",
     message: "This operation was aborted",

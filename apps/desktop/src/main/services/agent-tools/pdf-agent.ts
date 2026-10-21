@@ -9,6 +9,8 @@ import fs from "fs/promises";
 import path from "path";
 import { promisify } from "util";
 
+import { modelPath } from "@abacus-ai/agent/model-path";
+
 import { resourcePath } from "#main/resources";
 
 import { localiseImages, rewriteImageSources } from "./document-images";
@@ -327,7 +329,7 @@ const refuseForeignOverwrite = async (
     .catch(() => false);
   if (ours) return;
   throw new Error(
-    `${pdfPath} already exists and was not written by this tool. Choose a new output_path.`
+    `${modelPath(pdfPath)} already exists and was not written by this tool. Choose a new output_path.`
   );
 };
 
@@ -461,7 +463,7 @@ ${sections.map((section, index) => `  <section>\n    <h2>${escapeHtml(section.he
     ...(theme === "dark" ? { fullBleed: true } : {}),
   }).catch((error: unknown) => {
     throw new Error(
-      `the document was written to ${htmlPath} but the PDF export failed: ${(error as Error)?.message ?? "unknown error"}`
+      `the document was written to ${modelPath(htmlPath)} but the PDF export failed: ${(error as Error)?.message ?? "unknown error"}`
     );
   });
 
@@ -524,7 +526,7 @@ export const reprintPdf = async (request: {
 
   if (!/\.html?$/i.test(htmlPath)) {
     throw new Error(
-      `reprint takes the document's HTML file; ${path.extname(htmlPath) || "that path"} is not one: ${htmlPath}`
+      `reprint takes the document's HTML file; ${path.extname(htmlPath) || "that path"} is not one: ${modelPath(htmlPath)}`
     );
   }
 
@@ -548,7 +550,7 @@ export const reprintPdf = async (request: {
 
     if (occupied) {
       throw new Error(
-        `${pdfPath} already exists. Omit output_path to update the document this HTML was printed to, ` +
+        `${modelPath(pdfPath)} already exists. Omit output_path to update the document this HTML was printed to, ` +
           "or choose a path that does not exist yet."
       );
     }

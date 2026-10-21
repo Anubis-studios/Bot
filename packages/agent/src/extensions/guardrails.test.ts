@@ -14,6 +14,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { ALLOWED_PATHS_ENV } from "../allowed-paths.js";
 import { setCurrentMode } from "../current-mode.js";
+import { modelPath } from "../model-path.js";
 import { AgentMode } from "../protocol.js";
 import guardrails, { bashWriteTargets, isProtectedPath } from "./guardrails.js";
 
@@ -73,8 +74,8 @@ describe("replacing an existing file", () => {
     )) as { content: Array<{ text: string }> } | undefined;
 
     const text = result?.content.map((part) => part.text).join("\n") ?? "";
-    // The message names the copy the way the platform spells a path.
-    expect(text).toContain(path.join(".abacusai-bot", "backups"));
+    // The message names the copy as the model spells a path (forward slashes).
+    expect(text).toContain(modelPath(path.join(".abacusai-bot", "backups")));
     expect(text).toContain("cp ");
     expect(text).toContain("server.js");
   });

@@ -23,6 +23,8 @@ import {
   OpenLlmRotation,
   OPENLLM_ACCOUNT_COOLDOWN_MS,
   accountWideFailure,
+  creditWall,
+  isOwnKeyOutOfCredit,
 } from "./openllm.js";
 import type { ModelChoice } from "./providers.js";
 
@@ -634,5 +636,46 @@ describe("the sources a key adds to the pool", () => {
       "cerebras/gpt-oss-120b",
       "groq/openai/gpt-oss-120b",
     ]);
+  });
+});
+
+describe("why the Abacus credit gate refused", () => {
+  const THROTTLED =
+    "429: You have used a high percentage of your overall credits. Please purchase more credits to continue.";
+  const EXPIRED =
+    "429: Your free AbacusAI credits have expired, so you have no remaining credits to use the API.";
+
+  it.each([
+    ["the high-usage throttle, as before", THROTTLED, "exhausted"],
+    ["an expired free tier", EXPIRED, "expired"],
+    [
+      "an empty balance",
+      "429: You have no remaining credits to use the LLM apis.",
+      "exhausted",
+    ],
+    ["a 402", "402: Payment required", "exhausted"],
+  ])("reads %s", (_label, failure, wall) => {
+    expect(creditWall(failure)).toBe(wall);
+  });
+
+  it.each([
+    [
+      "a Studio key's metric quota",
+      '429: {"error":{"code":429,"message":"Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests","status":"RESOURCE_EXHAUSTED"}}',
+    ],
+    [
+      "another provider's credit limit",
+      "429: You hit the credit limit for this key.",
+    ],
+    ["a plain rate limit", "429: Too many requests, slow down"],
+  ])("leaves %s off the Abacus wall", (_label, failure) => {
+    expect(creditWall(failure)).toBeNull();
+    expect(accountWideFailure(failure, "abacus")).toBeNull();
+  });
+
+  it("still reads a credit limit on the user's own key as its balance", () => {
+    expect(
+      isOwnKeyOutOfCredit("429: You hit the credit limit for this key.", "xai")
+    ).toBe(true);
   });
 });

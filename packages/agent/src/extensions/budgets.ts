@@ -11,11 +11,18 @@
  * enough. There is no cap, only a nudge. Show your work: a run that has written
  * files but presented nothing is told, unseen by the user, to present what it
  * has after 10 minutes of working time, and again after 20; time
- * spent waiting on an approval is not working time. Temperature
- * (ABACUSAI_BOT_TEMPERATURE, default 0.3, "off" to disable) when unset.
+ * spent waiting on an approval is not working time. Credits: a session on
+ * billed Abacus credits with under a tenth left is told once, unseen, to wrap
+ * up and hand over. Temperature (ABACUSAI_BOT_TEMPERATURE, default 0.3, "off"
+ * to disable) when unset.
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
+import {
+  hostCreditBalance,
+  refreshCreditBalanceIfStale,
+  type CreditBalance,
+} from "../credit-balance.js";
 import { connectorToolMeta } from "../mcp/index.js";
 import { WRITE_TOOLS } from "../permissions.js";
 
@@ -30,6 +37,8 @@ const CONNECTOR_REMINDER_EVERY = 5;
 const PRESENT_NUDGE_MS = 10 * 60_000;
 const PRESENT_AGAIN_MS = 20 * 60_000;
 const PRESENT_TOOL = "present_deliverable";
+/** The share of granted credits below which a billed run is told to wrap up. */
+const CREDITS_LOW_SHARE = 0.1;
 
 /** Why the budget stopped the current run, or null. Cleared as the next run starts. */
 let stoppedBecause: string | null = null;
@@ -86,6 +95,19 @@ const presentNudgePrompt = (minutes: number): string =>
   `with CSS or placeholder images instead of generated art, and present that. You can keep ` +
   `improving it afterwards.`;
 
+const creditsLowPrompt = (balance: CreditBalance): string =>
+  `Credit check: the user's Abacus.AI account has ${Math.max(0, Math.floor(balance.remaining))} of ` +
+  `${balance.granted} credits left, and the run stops mid-step when they run out. Wrap up now: ` +
+  `finish the smallest useful version of what you are building, hand over every deliverable with ` +
+  `${PRESENT_TOOL}, then tell the user, in their own language, what is done and what is left. Do not ` +
+  `start new work.`;
+
+/** A model that spends Abacus credits: the platform marks the ones that bill nothing. */
+const billedAbacus = (model: unknown): boolean => {
+  const choice = model as { provider?: string; free?: boolean } | undefined;
+  return choice?.provider === "abacus" && choice.free !== true;
+};
+
 /** The tool that hands work over, under its own name or a server's prefix. */
 const isPresentTool = (name: string): boolean =>
   name === PRESENT_TOOL || name.endsWith(`_${PRESENT_TOOL}`);
@@ -117,6 +139,11 @@ export default function (pi: ExtensionAPI) {
   let wroteFile = false;
   let presented = false;
   let presentNudges = 0;
+  // Once per session: a top-up between runs does not earn a second warning.
+  let creditsNudged = false;
+  const refreshCredits = (ctx: { model?: unknown } | undefined): void => {
+    if (billedAbacus(ctx?.model)) refreshCreditBalanceIfStale();
+  };
   const track = (change: () => void): void => {
     const now = Date.now();
     if (activeSince != null) workedMs += now - activeSince;
@@ -149,11 +176,16 @@ export default function (pi: ExtensionAPI) {
     track(() => runningTools.add(event.toolCallId));
   });
 
-  pi.on("tool_execution_end", (event) => {
+  pi.on("tool_execution_end", (event, ctx) => {
     track(() => runningTools.delete(event.toolCallId));
+    refreshCredits(ctx);
     if (event.isError) return;
     if (WRITE_TOOLS.has(event.toolName)) wroteFile = true;
     if (isPresentTool(event.toolName)) presented = true;
+  });
+
+  pi.on("turn_end", (_event, ctx) => {
+    refreshCredits(ctx);
   });
 
   pi.on("turn_start", async (_event, ctx) => {
@@ -161,6 +193,24 @@ export default function (pi: ExtensionAPI) {
     track(() => {
       generating = true;
     });
+    const balance = hostCreditBalance();
+    if (
+      !creditsNudged &&
+      billedAbacus(ctx.model) &&
+      balance != null &&
+      balance.remaining < balance.granted * CREDITS_LOW_SHARE
+    ) {
+      creditsNudged = true;
+      // Hidden: what the user reads is the model's own wrap-up.
+      pi.sendMessage(
+        {
+          customType: "abacusai-bot-credits-low",
+          content: creditsLowPrompt(balance),
+          display: false,
+        },
+        { deliverAs: "steer" }
+      );
+    }
     // Hidden from the user: the preview appearing is what they see.
     const showWork = (content: string): void => {
       pi.sendMessage(

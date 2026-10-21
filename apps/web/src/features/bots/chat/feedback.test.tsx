@@ -52,3 +52,87 @@ it.each(["not-synced", "failed"] as const)(
     );
   }
 );
+
+const placeholder = (): string | null =>
+  screen
+    .getByRole("textbox", { name: "Tell us more" })
+    .getAttribute("placeholder");
+const pressed = (name: string): string | null =>
+  screen.getByRole("button", { name }).getAttribute("aria-pressed");
+
+it("asks a question that matches the pressed thumb", async () => {
+  const send = vi.fn(async () => ({ ok: true as const }));
+  current = await renderWithDb(<MessageFeedback send={send} />);
+  fireEvent.click(screen.getByRole("button", { name: "Good response" }));
+  await screen.findByText("Thanks for the feedback");
+  expect(placeholder()).toBe("What did you like?");
+  fireEvent.click(screen.getByRole("button", { name: "Bad response" }));
+  await waitFor(() => expect(pressed("Bad response")).toBe("true"));
+  expect(pressed("Good response")).toBe("false");
+  expect(placeholder()).toBe("What went wrong?");
+  expect(send).toHaveBeenLastCalledWith("down", undefined);
+});
+
+it("keeps a failed rating pressed with its comment, and retries it rather than clearing", async () => {
+  const send = vi
+    .fn<(rating: string, comment?: string) => Promise<TurnFeedbackOutcome>>()
+    .mockResolvedValueOnce({ ok: false, reason: "failed" })
+    .mockResolvedValueOnce({ ok: false, reason: "failed" })
+    .mockResolvedValue({ ok: true });
+  current = await renderWithDb(<MessageFeedback send={send} />);
+  fireEvent.click(screen.getByRole("button", { name: "Good response" }));
+  await screen.findByText("Couldn't send your feedback. Please try again.");
+  expect(pressed("Good response")).toBe("true");
+  expect(placeholder()).toBe("What did you like?");
+  // An empty comment still retries a failed send.
+  const submit = screen.getByRole("button", {
+    name: "Send",
+  }) as HTMLButtonElement;
+  expect(submit.disabled).toBe(false);
+  fireEvent.change(screen.getByRole("textbox", { name: "Tell us more" }), {
+    target: { value: "Quick and right" },
+  });
+  fireEvent.click(submit);
+  await waitFor(() => expect(send).toHaveBeenCalledTimes(2));
+  expect(send).toHaveBeenLastCalledWith("up", "Quick and right");
+  await screen.findByText("Couldn't send your feedback. Please try again.");
+  expect(
+    (
+      screen.getByRole("textbox", {
+        name: "Tell us more",
+      }) as HTMLTextAreaElement
+    ).value
+  ).toBe("Quick and right");
+  // The thumb again: the server holds nothing, so it sends the rating again.
+  fireEvent.click(screen.getByRole("button", { name: "Good response" }));
+  await screen.findByText("Thanks for the feedback");
+  expect(send).toHaveBeenLastCalledWith("up", "Quick and right");
+  expect(pressed("Good response")).toBe("true");
+});
+
+it("puts the held rating back when clearing it fails", async () => {
+  const send = vi
+    .fn<(rating: string, comment?: string) => Promise<TurnFeedbackOutcome>>()
+    .mockResolvedValueOnce({ ok: true })
+    .mockResolvedValueOnce({ ok: false, reason: "failed" })
+    .mockResolvedValue({ ok: true });
+  current = await renderWithDb(<MessageFeedback send={send} />);
+  fireEvent.click(screen.getByRole("button", { name: "Bad response" }));
+  await screen.findByText("Thanks for the feedback");
+  // The same thumb again also closes its popover, so this reads the thumb,
+  // not the form and status line inside a popover that is going away.
+  fireEvent.click(screen.getByRole("button", { name: "Bad response" }));
+  await waitFor(() =>
+    expect(
+      screen
+        .getByRole("button", { name: "Bad response" })
+        .getAttribute("data-status")
+    ).toBe("failed")
+  );
+  expect(send).toHaveBeenLastCalledWith("clear", undefined);
+  expect(pressed("Bad response")).toBe("true");
+  // Still held, so the next click clears again.
+  fireEvent.click(screen.getByRole("button", { name: "Bad response" }));
+  await waitFor(() => expect(pressed("Bad response")).toBe("false"));
+  expect(send).toHaveBeenLastCalledWith("clear", undefined);
+});

@@ -174,6 +174,34 @@ describe("the fire prompt", () => {
     );
   });
 
+  // A model copying `\notes.md` into a JSON tool call reads `\n` as a
+  // newline; on Windows the prompt names every path with forward slashes.
+  it("names the notes file with forward slashes on Windows", () => {
+    const home = "C:\\Users\\someone";
+    const prompt = buildRoutineFirePrompt(
+      job(),
+      "schedule",
+      null,
+      {
+        dir: `${home}\\project\\.abacusai-bot\\routines\\job-1`,
+        runs: 1,
+        lastRun: null,
+        workingDirectory: `${home}\\project`,
+        workspaces: [`${home}\\project`, `${home}\\temp\\notes`],
+      },
+      "win32"
+    );
+
+    expect(prompt).toContain(
+      "C:/Users/someone/project/.abacusai-bot/routines/job-1/notes.md"
+    );
+    expect(prompt).toContain(
+      "Your working directory is C:/Users/someone/project,"
+    );
+    expect(prompt).toContain("  C:/Users/someone/temp/notes");
+    expect(prompt).not.toContain("\\");
+  });
+
   // One run's wrong refusal was fed to the next as the previous reply, and
   // the next copied it. The reply is a record, and is labelled as one.
   it("hands the previous reply over as a record, not an example", () => {

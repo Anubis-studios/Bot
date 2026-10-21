@@ -12,6 +12,17 @@ import { downloadGenerated, writeGenerated } from "./generated-files";
 // where a Finder launch means an empty environment (see credentialFor).
 const env = (name: string): string => credentialFor(name);
 
+const anyKey = (...names: string[]): boolean =>
+  names.some((name) => env(name).length > 0);
+
+/** A provider for each kind is configured, so its tools can be listed. */
+export const imageGenerationReady = (): boolean =>
+  anyKey("ABACUS_API_KEY", "OPENAI_API_KEY", "FAL_KEY");
+export const speechGenerationReady = (): boolean =>
+  anyKey("ABACUS_API_KEY", "OPENAI_API_KEY", "ELEVENLABS_API_KEY");
+export const videoGenerationReady = (): boolean =>
+  anyKey("BFL_API_KEY", "FAL_KEY");
+
 /**
  * Run the first configured provider, falling back to the next on failure. A
  * lone provider's error surfaces untouched; when all fail the aggregated error

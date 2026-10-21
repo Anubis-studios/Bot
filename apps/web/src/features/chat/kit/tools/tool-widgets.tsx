@@ -8,11 +8,17 @@
 import type { ToolProps } from "@tanstack/ai-react/ui";
 import { useEffect, type ComponentType } from "react";
 
+import {
+  isPaidFeatureTool,
+  isSessionOfferTool,
+} from "#renderer/lib/bot-turns/turns";
+
 import { descriptorFor, useThreadStore } from "../../store/selectors";
 import { toolKey } from "../../store/thread-store";
 import { useChatView, useSubagentScope } from "../context";
 import { PermissionCard } from "../permissions/permission-card";
-import { isSessionOfferTool, SessionOfferCard } from "./session-offer";
+import { PaidFeatureToolCard } from "./paid-feature";
+import { SessionOfferCard } from "./session-offer";
 import { expanderFor, ToolLine } from "./tool-line";
 
 type Widget = ComponentType<ToolProps<unknown>>;
@@ -49,7 +55,11 @@ const GenericLine = ({ part, result }: ToolProps<unknown>) => (
 
 export const sessionToolWidgets = new Proxy(KNOWN_TOOL_WIDGETS, {
   get: (known, name) =>
-    typeof name === "string" ? (known[name] ?? GenericLine) : undefined,
+    typeof name !== "string"
+      ? undefined
+      : isPaidFeatureTool(name)
+        ? PaidFeatureToolCard
+        : (known[name] ?? GenericLine),
 }) as Record<string, Widget>;
 
 /** Bots: the inline approval card of the canvas BotApproval board. */
@@ -74,5 +84,7 @@ export const botToolWidgets = new Proxy({} as Record<string, Widget>, {
       ? undefined
       : isSessionOfferTool(name)
         ? SessionOfferCard
-        : BotToolSlot,
+        : isPaidFeatureTool(name)
+          ? PaidFeatureToolCard
+          : BotToolSlot,
 }) as Record<string, Widget>;

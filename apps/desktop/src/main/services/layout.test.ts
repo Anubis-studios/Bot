@@ -129,6 +129,12 @@ const MAIN_ROOT_FILES = [
   "spellcheck-dictionary.ts",
   "startup-theme.test.ts",
   "startup-theme.ts",
+  // Main's requests on the system proxy and certificate store. Process-level
+  // for the same reason as profile-home-init: it must run before any module
+  // that keeps a reference to fetch loads.
+  "system-network-init.ts",
+  "system-network.test.ts",
+  "system-network.ts",
   "window-chrome-options.test.ts",
   "window-chrome-options.ts",
   "window-chrome-probe.test.ts",

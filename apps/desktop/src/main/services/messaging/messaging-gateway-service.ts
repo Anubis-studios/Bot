@@ -1,3 +1,4 @@
+import { modelPath } from "@abacus-ai/agent/model-path";
 import type { UserTextTags } from "@abacus-ai/contract/agent-types";
 import { AgentMode, AgentStatus } from "@abacus-ai/contract/agent-types";
 import type { DesktopEvent } from "@abacus-ai/contract/agent-types";
@@ -8,12 +9,15 @@ import type {
 import {
   MESSAGING_PLATFORM_CATALOG,
   SHARED_BOT_PLATFORM_OF,
+  appOfSelfLane,
   messagingPlatformSpec,
+  selfLaneOf,
   redactSecret,
   type MessagingPlatformId,
   type MessagingPlatformInfo,
   type MessagingPlatformState,
   type MessagingSnapshot,
+  type SelfLanePlatform,
   type SharedChannelLink,
 } from "@abacus-ai/contract/messaging";
 import {
@@ -23,8 +27,19 @@ import {
 
 import type { HostPlatform } from "../../platform/capabilities";
 import { readDefaultAgentMode } from "../config/settings";
+import { cachedAbacusAccount, onFreePlan } from "../providers/abacus";
+import { fetchUpgradeUrl } from "../providers/abacus-upgrade";
 import { environmentNoticeService } from "../providers/environment-notice-service";
 import { AbacusChannelsConnector } from "./abacus-channels-connector";
+import {
+  chatReplyForFailure,
+  contactFailureNotice,
+  FailureReplyThrottle,
+  failureKind,
+  wantsUpgradeUrl,
+  type AccountKind,
+  type TurnFailure,
+} from "./chat-failure-reply";
 import { forChat } from "./chat-markdown";
 import { backoffDelayMs, looksLikeBotOutput } from "./connector";
 import type { InboundMessage, MessagingConnector } from "./connector";
@@ -86,9 +101,6 @@ const DEFERRAL = "let me get back to you on that";
 
 /** Who the transcript's second bubble is from, matching the sender's label. */
 const RESPONSE_LABEL = "[Response from AbacusAI Bot]";
-/** What a phone hears when the desktop has no model to answer with. */
-const NO_MODEL_REPLY =
-  "The desktop app is not signed in to Abacus.AI right now. Open the app and sign in, then message me again.";
 
 /**
  * The words for the other person, out of everything the model wrote. Asking
@@ -193,14 +205,39 @@ type GatewayOptions = {
   ) => void;
   /** Broadcast so the Messaging pane re-reads its snapshot. */
   emitChanged: () => void;
+  /** The failure-reply throttle's clock; tests pass a fake one. */
+  now?: () => number;
   /**
    * A platform started or stopped, so the messaging tools just came or went.
    * For the running agent, not the pane: the send tools are withheld from
    * `tools/list` while no platform runs.
    */
   onToolAvailabilityChanged?: () => void;
-  /** Create the self-lane bot for one platform; once ever per lane. */
-  createAutoReplyBot?: (platform: SelfLanePlatform) => string | null;
+  /**
+   * The chat apps' home bots: the one bot each self lane answers with. Kept
+   * by the bot service; absent in a build without bots.
+   */
+  homeBots?: {
+    /** The lane's home bot, or null while none is set (or it was deleted). */
+    get: (lane: SelfLanePlatform) => string | null;
+    /** The one setter; throws for a bot that does not exist. */
+    set: (lane: SelfLanePlatform, botId: string) => void;
+    /**
+     * The home bot, set first when there is none: the first bot made from the
+     * app's agent template, else a new one. Null when none can be had.
+     */
+    ensure: (lane: SelfLanePlatform) => string | null;
+  };
+  /**
+   * While onboarding runs, a lane that links waits for its default: the bot
+   * onboarding makes for it is the one (see settleSelfLaneDefaults).
+   */
+  deferSelfLaneDefaults?: () => boolean;
+  /**
+   * Whether the session is mid-turn by any hand. A turn the user started in
+   * the app is theirs there: a self-lane message waits for it to end.
+   */
+  isSessionBusy?: (workspaceId: string, sessionId: string) => boolean;
   /** Resolve a bot's forever chat, creating or reviving it as needed. */
   openBotChat?: (
     botId: string
@@ -233,41 +270,16 @@ type GatewayOptions = {
   }>;
 };
 
-/**
- * Platforms whose own chat with the user gets a dedicated bot on link, keyed
- * by platform in `selfBotIds`. The older single `selfBotId` slot belonged to
- * the retired own-account Telegram bootstrap.
- */
-export type SelfLanePlatform =
-  | "abacus_discord"
-  | "abacus_telegram"
-  | "whatsapp";
-const SELF_LANES: readonly SelfLanePlatform[] = [
-  "abacus_discord",
-  "abacus_telegram",
-  "whatsapp",
-];
+/** The user's own chat on a chat app, answered by that app's home bot. */
 const isSelfLane = (
   platformId: MessagingPlatformId
-): platformId is SelfLanePlatform =>
-  (SELF_LANES as readonly MessagingPlatformId[]).includes(platformId);
+): platformId is SelfLanePlatform => appOfSelfLane(platformId) != null;
 
 /**
- * Which bot answers the user's own chat on a platform. Each lane reads its
- * own slot, so a Discord DM never lands in the user's Telegram conversation;
- * WhatsApp with an empty slot falls back to the older single slot until
- * relinked.
+ * How long a bot asking to connect a chat app stays its claimant: the lane
+ * linking inside this makes that bot its home bot (see takeLinkClaim).
  */
-const selfBotFor = (
-  settings: ReturnType<typeof readGatewaySettings>,
-  platformId: MessagingPlatformId
-): string | null => {
-  if (isSelfLane(platformId)) {
-    const own = settings.selfBotIds?.[platformId] ?? null;
-    if (own != null || platformId !== "whatsapp") return own;
-  }
-  return settings.selfBotId ?? settings.botId;
-};
+const LINK_CLAIM_MS = 30 * 60_000;
 
 /** One message the gateway saw, kept for the read_chat_messages tool. */
 type ChatLogEntry = {
@@ -312,6 +324,8 @@ type Route = {
   workspaceId: string;
   /** Approved sender who owns this conversation, so revoking can find it. */
   userId: string;
+  /** The sender's display name, for telling the user who went unanswered. */
+  userName: string | null;
   replyContext?: Record<string, string>;
   /**
    * Text of the turn's latest assistant message only. Narration before a
@@ -341,10 +355,20 @@ type Route = {
    * prompts carry the sender, not just the text.
    */
   viaBot: boolean;
+  /**
+   * The user's own chat (a self lane): the owner is the audience, so there
+   * are no auto-reply rules and no filter for words meant for the user.
+   */
+  owner: boolean;
   /** The sender line prefixed to prompts on bot routes. */
   senderLabel: string;
   /** Rules preamble still owed to the first dispatched prompt, then cleared. */
   pendingIntro: string | null;
+  /**
+   * A failed turn's line still being worded (the upgrade link is fetched).
+   * The turn does not finish until it has gone, so nothing overtakes it.
+   */
+  failureReply: Promise<void> | null;
 };
 
 /** How long a login probe may take before the last known state is used. */
@@ -407,7 +431,18 @@ export class MessagingGatewayService {
     { attempts: number; notBefore: number }
   >();
 
-  constructor(private readonly options: GatewayOptions) {}
+  /** A bot that asked to connect a chat app, by the lane it would answer. */
+  private readonly linkClaims = new Map<
+    SelfLanePlatform,
+    { botId: string; at: number }
+  >();
+
+  /** What each chat was already told about failed turns; see FailureReplyThrottle. */
+  private readonly failureThrottle: FailureReplyThrottle;
+
+  constructor(private readonly options: GatewayOptions) {
+    this.failureThrottle = new FailureReplyThrottle(options.now);
+  }
 
   /**
    * Bring every enabled+configured platform up. Called once at startup and
@@ -730,7 +765,7 @@ export class MessagingGatewayService {
     // the agent all see where the file is instead of "📷 Photo".
     if (message.attachments != null && message.attachments.length > 0) {
       const lines = message.attachments.map(
-        (file) => `[attachment: ${file.name} saved to ${file.path}]`
+        (file) => `[attachment: ${file.name} saved to ${modelPath(file.path)}]`
       );
       message = {
         ...message,
@@ -758,8 +793,6 @@ export class MessagingGatewayService {
     const selfId = this.connectors.get(platformId)?.selfChatId?.() ?? null;
     const isSelf = selfId != null && selfId === message.userId;
 
-    const selfBot = selfBotFor(settings, platformId);
-
     // Another AbacusBot's reply in the user's own chat is not the user
     // talking. The connector drops the signed ones; this catches the rest.
     if (isSelf && looksLikeBotOutput(message.text)) {
@@ -772,7 +805,10 @@ export class MessagingGatewayService {
     // Listening is the opt-in: off, a message is logged, the sender stored
     // approved (nothing to gate) and no turn runs. The user's own chat is
     // exempt; the switch governs other people.
-    if (!settings.respondToInbound && !(isSelf && selfBot != null)) {
+    if (
+      !settings.respondToInbound &&
+      !(isSelf && this.options.homeBots != null)
+    ) {
       recordPairingRequest({
         platform: platformId,
         userId: message.userId,
@@ -862,22 +898,18 @@ export class MessagingGatewayService {
     }
 
     // A bot wins over the per-sender gateway sessions: the user's own chat
-    // goes to the self bot, everyone else to the bot on their row, falling
-    // back to the general auto-reply bot.
+    // goes to the app's home bot (made now if it was deleted), everyone else
+    // to the bot on their row, falling back to the general auto-reply bot.
     const pairedRow = findPairing(platformId, message.userId);
-    const routeBot = isSelf ? selfBot : (pairedRow?.botId ?? settings.botId);
+    const routeBot = isSelf
+      ? isSelfLane(platformId)
+        ? (this.options.homeBots?.ensure(platformId) ?? null)
+        : null
+      : (pairedRow?.botId ?? settings.botId);
     let route: Route | null;
 
     if (routeBot != null && this.options.openBotChat != null) {
-      // The self chat goes to the bot's forever chat, where the user can see
-      // it: only the user is ever in it, so there is no sender to keep apart.
-      const foreverChat = isSelf;
-      route = await this.ensureBotRoute(
-        platformId,
-        message,
-        routeBot,
-        foreverChat
-      );
+      route = await this.ensureBotRoute(platformId, message, routeBot, isSelf);
     } else {
       const workspaceId = this.options.resolveWorkspaceId();
       if (workspaceId == null) {
@@ -889,7 +921,7 @@ export class MessagingGatewayService {
         );
         return;
       }
-      route = await this.ensureRoute(platformId, message, workspaceId);
+      route = await this.ensureRoute(platformId, message, workspaceId, isSelf);
     }
     if (route == null) return;
 
@@ -899,6 +931,7 @@ export class MessagingGatewayService {
     const named = senderLabel(platformId, message);
     if (named !== route.senderLabel && message.userName != null)
       route.senderLabel = named;
+    if (message.userName != null) route.userName = message.userName;
 
     // Busyness belongs to the session, not the route: bot routes for
     // different chats share one session, and two prompts at once would mix
@@ -919,12 +952,21 @@ export class MessagingGatewayService {
       active.buffer = "";
     }
 
+    // A turn someone started in the app is theirs there; a message steered
+    // into it would carry its answer off to this chat.
+    const appTurn =
+      active?.busy !== true &&
+      this.options.isSessionBusy?.(route.workspaceId, route.sessionId) === true;
+    // Claimed so the turn's idle reaches here and starts the queue.
+    if (appTurn && active == null)
+      this.routesBySession.set(route.sessionId, route);
+
     // A second message mid-turn is queued, reply context included, rather
     // than dropped or interleaved.
-    if (active != null && active.busy) {
+    if ((active != null && active.busy) || appTurn) {
       // A follow-up from the chat whose turn is running steers that turn;
       // other chats wait, since theirs is a different conversation.
-      if (active === route) {
+      if (active === route && !appTurn) {
         this.steer(route, message.text, message.replyContext);
         return;
       }
@@ -962,7 +1004,7 @@ export class MessagingGatewayService {
     platformId: MessagingPlatformId,
     message: InboundMessage,
     botId: string,
-    foreverChat = false
+    owner: boolean
   ): Promise<Route | null> {
     const key = `${platformId}:${message.chatId}`;
 
@@ -972,10 +1014,11 @@ export class MessagingGatewayService {
     const creating = (async (): Promise<Route | null> => {
       let handle: { workspaceId: string; sessionId: string };
       try {
-        // The bot's conversation with this chat, revived if dead; the forever
-        // chat only for the self chat or a build wired without sender chats.
+        // The bot's conversation with this chat, revived if dead. The owner's
+        // own chat goes to the forever chat, where they see it: nobody else
+        // is ever in it. So does a build wired without sender chats.
         handle =
-          this.options.openBotSenderChat != null && !foreverChat
+          this.options.openBotSenderChat != null && !owner
             ? await this.options.openBotSenderChat(
                 botId,
                 platformId,
@@ -998,6 +1041,7 @@ export class MessagingGatewayService {
         sessionId: handle.sessionId,
         workspaceId: handle.workspaceId,
         userId: message.userId,
+        userName: message.userName,
         buffer: "",
         bufferMessageId: null,
         taggedReply: null,
@@ -1006,11 +1050,13 @@ export class MessagingGatewayService {
         queue: [],
         queueFullNotified: false,
         viaBot: true,
+        owner,
         senderLabel: senderLabel(platformId, message),
         pendingIntro:
           "intro" in handle && typeof handle.intro === "string"
             ? handle.intro
             : null,
+        failureReply: null,
       };
 
       if (existing != null) this.routesBySession.delete(existing.sessionId);
@@ -1028,7 +1074,8 @@ export class MessagingGatewayService {
   private async ensureRoute(
     platformId: MessagingPlatformId,
     message: InboundMessage,
-    workspaceId: string
+    workspaceId: string,
+    owner: boolean
   ): Promise<Route | null> {
     const key = `${platformId}:${message.chatId}`;
     const existing = this.routes.get(key);
@@ -1047,7 +1094,8 @@ export class MessagingGatewayService {
       key,
       platformId,
       message,
-      workspaceId
+      workspaceId,
+      owner
     ).finally(() => {
       this.pendingRoutes.delete(key);
     });
@@ -1059,7 +1107,8 @@ export class MessagingGatewayService {
     key: string,
     platformId: MessagingPlatformId,
     message: InboundMessage,
-    workspaceId: string
+    workspaceId: string,
+    owner: boolean
   ): Promise<Route | null> {
     const existing = this.routes.get(key);
 
@@ -1092,6 +1141,7 @@ export class MessagingGatewayService {
       sessionId: session.id,
       workspaceId,
       userId: message.userId,
+      userName: message.userName,
       buffer: "",
       bufferMessageId: null,
       taggedReply: null,
@@ -1100,8 +1150,10 @@ export class MessagingGatewayService {
       queue: [],
       queueFullNotified: false,
       viaBot: false,
+      owner,
       senderLabel: "",
       pendingIntro: null,
+      failureReply: null,
     };
 
     if (existing != null) {
@@ -1153,7 +1205,7 @@ export class MessagingGatewayService {
     const prompt =
       route.pendingIntro != null
         ? `${route.pendingIntro}\n\n${framed}`
-        : route.viaBot
+        : route.viaBot && !route.owner
           ? `${REPLY_REMINDER}\n\n${framed}`
           : framed;
     const userText: UserTextTags | undefined =
@@ -1256,38 +1308,66 @@ export class MessagingGatewayService {
         event.error?.message ??
         event.error?.segmentData?.message ??
         "The agent hit an error.";
-      // "No model provider is configured" and pi's own /login hint, with
-      // filesystem paths, went out to a phone as the bot's reply. Nothing on
-      // that side can act on it; the pane and the log keep the real text.
-      const detail =
-        event.error?.code === "model_unavailable" ? NO_MODEL_REPLY : raw;
-      if (detail !== raw)
-        console.log(
-          `[messaging] ${route.platform}:${route.chatId} model unavailable, replied generically: ${raw}`
-        );
-
       // Some provider failures are reported after the turn's idle event.
       // Forwarding one would send the remote user raw provider text about a
       // turn that was already answered; the pane and the log still show it.
       if (!route.busy) {
         console.log(
-          `[messaging] ${route.platform}:${route.chatId} error after the turn ended: ${detail}`
+          `[messaging] ${route.platform}:${route.chatId} error after the turn ended: ${raw}`
         );
         return;
       }
 
-      // The remote user gets what the agent produced plus the error, now. The
-      // route stays busy until the trailing idle so a queued message cannot
-      // race a turn still winding down.
-      route.buffer =
-        route.buffer.length > 0 ? `${route.buffer}\n\n${detail}` : detail;
+      // What the agent produced goes as it is; what the chat hears about the
+      // failure is chatReplyForFailure's. The route stays busy until the
+      // trailing idle, and that idle waits on the line, so a queued message
+      // cannot race a turn winding down.
+      console.log(
+        `[messaging] ${route.platform}:${route.chatId} turn failed: ${raw}`
+      );
       this.flushReply(route);
+      const failure: TurnFailure = {
+        code: event.error?.code,
+        actions: event.error?.actions ?? event.error?.segmentData?.actions,
+      };
+      route.failureReply = this.replyToFailure(route, failure)
+        .catch((error: unknown) => {
+          console.error(
+            `[messaging] ${route.platform}:${route.chatId} failure reply failed:`,
+            error
+          );
+        })
+        .finally(() => {
+          route.failureReply = null;
+        });
       return;
     }
 
     if (event.type === "status_changed" && event.status === AgentStatus.Idle) {
-      this.finishTurn(route);
+      // Not this gateway's turn (one the user ran in the app): what waited
+      // on it starts now.
+      if (route.busy) this.finishTurn(route);
+      else this.startQueued(route);
     }
+  }
+
+  /**
+   * The user wrote in the app to a session a relayed turn holds. The turn
+   * answers them there from now on, so no more of it goes to the chat; a
+   * reply it had already finished still does.
+   */
+  noteAppMessage(sessionId: string): void {
+    const route = this.routesBySession.get(sessionId);
+    if (route == null || !route.busy) return;
+    const written = lastTaggedReply(route.buffer) ?? route.taggedReply;
+    if (written != null && written !== "NO_REPLY") this.deliver(route, written);
+    console.log(
+      `[messaging] ${route.platform}:${route.chatId} turn joined from the app; the rest of it stays there`
+    );
+    route.busy = false;
+    route.buffer = "";
+    route.bufferMessageId = null;
+    route.taggedReply = null;
   }
 
   /** Send whatever the turn has produced so far and clear the buffer. */
@@ -1306,8 +1386,9 @@ export class MessagingGatewayService {
 
     // Words addressed to the user, about to be said to their friend. The
     // preamble forbids it, but an instruction the model can forget is not a
-    // guarantee against the one thing this feature must never do.
-    const meta = commentaryMarker(reply);
+    // guarantee against the one thing this feature must never do. In the
+    // owner's own chat, words for the user are the point.
+    const meta = route.owner ? null : commentaryMarker(reply);
     if (meta != null) {
       console.log(
         `[messaging] held back a reply meant for the user (${meta}) on ` +
@@ -1356,13 +1437,107 @@ export class MessagingGatewayService {
     return route != null && route.viaBot && route.busy;
   }
 
+  /**
+   * Tell the chat its turn failed, in chatReplyForFailure's words: the user's
+   * own chat gets the line; someone else's chat gets nothing, and the user's
+   * own chat on that platform hears who went unanswered.
+   */
+  private async replyToFailure(
+    route: Route,
+    failure: TurnFailure
+  ): Promise<void> {
+    const own = this.selfChatOf(route.platform);
+    const isOwn =
+      own != null &&
+      own.platform === route.platform &&
+      own.chatId === route.userId;
+    if (!isOwn && own == null) {
+      console.log(
+        `[messaging] ${route.platform}:${route.chatId} failed turn not reported: the platform has no own chat`
+      );
+      return;
+    }
+    if (
+      !isOwn &&
+      !this.failureThrottle.mayNotice(`${route.platform}:${route.chatId}`)
+    ) {
+      console.log(
+        `[messaging] ${route.platform}:${route.chatId} failed turn already reported to the user inside the window`
+      );
+      return;
+    }
+
+    const account = accountKind();
+    const upgradeUrl = wantsUpgradeUrl(failure, account)
+      ? await upgradeUrlWithin(UPGRADE_URL_WAIT_MS)
+      : null;
+    // The offer is throttled per chat it lands in, always the user's own.
+    const ownChatKey = isOwn
+      ? `${route.platform}:${route.chatId}`
+      : `${own.platform}:${own.chatId}`;
+    const line = chatReplyForFailure(
+      failure,
+      "own",
+      account,
+      upgradeUrl,
+      this.failureThrottle.repeat(ownChatKey, failureKind(failure))
+    );
+    if (line == null) return;
+    if (isOwn) this.deliver(route, line);
+    // Someone else's chat hears nothing; the user's own chat hears who.
+    else this.deliverToSelf(own, contactFailureNotice(route.userName, line));
+  }
+
+  /**
+   * The user's own chat on a platform, as something a notice can reach: the
+   * platform's self chat, else the shared Abacus bot's DM for that app (you
+   * cannot DM yourself on Discord). Null when there is none to reach.
+   */
+  private selfChatOf(
+    platformId: MessagingPlatformId
+  ): { platform: MessagingPlatformId; chatId: string } | null {
+    const own = this.connectors.get(platformId)?.selfChatId?.() ?? null;
+    if (own != null && own.length > 0)
+      return { platform: platformId, chatId: own };
+    const sharedId = SHARED_BOT_PLATFORM_OF[platformId];
+    if (sharedId == null) return null;
+    const shared = this.connectors.get(sharedId)?.selfChatId?.() ?? null;
+    return shared != null && shared.length > 0
+      ? { platform: sharedId, chatId: shared }
+      : null;
+  }
+
+  /** Send a notice to the user's own chat, shown in its transcript if routed. */
+  private deliverToSelf(
+    own: { platform: MessagingPlatformId; chatId: string },
+    text: string
+  ): void {
+    const route = this.routes.get(`${own.platform}:${own.chatId}`);
+    if (route != null) {
+      // Not a reply to anything said there: no reply context.
+      this.deliver({ ...route, replyContext: undefined }, text);
+      return;
+    }
+    void this.safeSend(own.platform, own.chatId, forChat(text, own.platform));
+  }
+
   /** Flush the buffered reply, free the route, start the next queued turn. */
   private finishTurn(route: Route): void {
     if (!route.busy) return;
 
+    // A failed turn's line is still on its way; the turn ends once it has gone.
+    if (route.failureReply != null) {
+      void route.failureReply.then(() => this.finishTurn(route));
+      return;
+    }
+
     this.flushReply(route);
     route.busy = false;
+    this.startQueued(route);
+  }
 
+  /** Start the next message waiting on the route's session, its own first. */
+  private startQueued(route: Route): void {
     const next = route.queue.shift();
     if (next != null) {
       this.dispatch(route, next.text, next.replyContext);
@@ -1371,15 +1546,13 @@ export class MessagingGatewayService {
 
     // Bot routes share the session: another chat may have queued while this
     // one held the turn, and nothing else will ever start it.
-    if (route.viaBot) {
-      for (const sibling of this.routes.values()) {
-        if (sibling.sessionId !== route.sessionId || sibling === route)
-          continue;
-        const queued = sibling.queue.shift();
-        if (queued != null) {
-          this.dispatch(sibling, queued.text, queued.replyContext);
-          return;
-        }
+    if (!route.viaBot) return;
+    for (const sibling of this.routes.values()) {
+      if (sibling.sessionId !== route.sessionId || sibling === route) continue;
+      const queued = sibling.queue.shift();
+      if (queued != null) {
+        this.dispatch(sibling, queued.text, queued.replyContext);
+        return;
       }
     }
   }
@@ -1669,25 +1842,66 @@ export class MessagingGatewayService {
   // ---------------------------------------------------------------------------
 
   /**
-   * The first time a platform proves which chat is the user's own, mint a
-   * dedicated self bot for it. Once ever: the stored flag survives relinks,
-   * so a user who deleted the bot is left be. The global switch and general
-   * bot stay untouched: that switch answers every chat on every platform as
-   * the user, and the bootstrap's promise is only the self chat.
+   * The first time a lane proves which chat is the user's own, it gets its
+   * default home bot: the bot that asked to connect it, else the template
+   * rule of `homeBots.ensure`. A home bot set already (an older install's)
+   * is kept. Once ever: the stored flag survives relinks, so a later
+   * connect, from whichever bot, never moves it. The global switch and
+   * general bot stay untouched: the bootstrap's promise is only the self chat.
    */
-  private maybeBootstrapSelfLane(platform: SelfLanePlatform): void {
-    const settings = readGatewaySettings();
-    if ((settings.autoReplyBootstrappedFor ?? []).includes(platform)) return;
-    const botId = this.options.createAutoReplyBot?.(platform) ?? null;
-    saveGatewaySettings({
-      autoReplyBootstrappedFor: [platform],
-      selfBotIds: { [platform]: botId },
-    });
+  private maybeBootstrapSelfLane(lane: SelfLanePlatform): void {
+    const homeBots = this.options.homeBots;
+    if (homeBots == null) return;
+    if (readGatewaySettings().autoReplyBootstrappedFor.includes(lane)) return;
+    // Onboarding's own first bot is the default; it settles on completion.
+    if (this.options.deferSelfLaneDefaults?.() === true) return;
+    const claimant = this.takeLinkClaim(lane);
+    let botId = homeBots.get(lane);
+    if (botId == null && claimant != null) {
+      try {
+        homeBots.set(lane, claimant);
+        botId = claimant;
+      } catch (error) {
+        console.error(`[messaging] ${lane}: claimant bot unusable:`, error);
+      }
+    }
+    botId ??= homeBots.ensure(lane);
+    saveGatewaySettings({ autoReplyBootstrappedFor: [lane] });
     if (botId == null) return;
-    console.log(
-      `[messaging] ${platform} linked, auto-reply bot ready in the self chat`
-    );
+    console.log(`[messaging] ${lane} linked, home bot ${botId}`);
     this.options.emitChanged();
+  }
+
+  /** Every linked lane still owed its default; onboarding just finished. */
+  settleSelfLaneDefaults(): void {
+    for (const [platformId, connector] of this.connectors) {
+      const self = connector.selfChatId?.() ?? null;
+      if (isSelfLane(platformId) && self != null && self.length > 0)
+        this.maybeBootstrapSelfLane(platformId);
+    }
+  }
+
+  /**
+   * A bot asked to connect a chat app (connect_connector in its chat): if
+   * that app's lane links soon, the bot is its home bot. Only the default:
+   * a lane that has one already ignores it.
+   */
+  claimSelfLane(platformId: MessagingPlatformId, botId: string): void {
+    const lane = selfLaneOf(platformId);
+    if (lane == null) return;
+    if (readGatewaySettings().autoReplyBootstrappedFor.includes(lane)) return;
+    this.linkClaims.set(lane, {
+      botId,
+      at: this.options.now?.() ?? Date.now(),
+    });
+  }
+
+  private takeLinkClaim(lane: SelfLanePlatform): string | null {
+    const claim = this.linkClaims.get(lane);
+    this.linkClaims.delete(lane);
+    if (claim == null) return null;
+    const now = this.options.now?.() ?? Date.now();
+    return now - claim.at <= LINK_CLAIM_MS ? claim.botId : null;
   }
 
   /** The two settings-pane switches, reachable from inside a bot's chat. */
@@ -1971,7 +2185,10 @@ export class MessagingGatewayService {
   async sendToChat(
     platformId: MessagingPlatformId,
     chatId: string,
-    text: string
+    text: string,
+    // The sending bot: named on what lands in the user's own chat, unless
+    // it is that chat's home bot.
+    from?: { botId: string; name: string }
   ): Promise<void> {
     // "me" on a platform with no self chat (Discord: you cannot DM yourself)
     // is still deliverable through the shared Abacus bot's DM.
@@ -1993,6 +2210,15 @@ export class MessagingGatewayService {
     // A send during startup waits rather than failing on "who is me".
     await this.awaitReady(platformId);
     const target = this.resolveTarget(platformId, chatId);
+    // The self chat is the home bot's conversation; another bot's update
+    // there says whose it is.
+    if (
+      from != null &&
+      isSelfLane(platformId) &&
+      target === connector.selfChatId?.() &&
+      this.options.homeBots?.get(platformId) !== from.botId
+    )
+      text = `[${from.name}] ${text}`;
     text = forChat(text, platformId);
     await connector.sendText(target, text);
     this.appendLog({
@@ -2033,7 +2259,7 @@ export class MessagingGatewayService {
       chatId: target,
       userId: "me",
       userName: null,
-      text: `[sent file: ${filePath}]${caption != null && caption.length > 0 ? ` ${caption}` : ""}`,
+      text: `[sent file: ${modelPath(filePath)}]${caption != null && caption.length > 0 ? ` ${caption}` : ""}`,
       direction: "out",
       at: new Date().toISOString(),
     });
@@ -2305,6 +2531,9 @@ export class MessagingGatewayService {
             (row) => row.platform === entry.id && row.status === "pending"
           ).length,
           sharedLink: this.sharedLink(entry.id),
+          ...(isSelfLane(entry.id)
+            ? { homeBotId: this.options.homeBots?.get(entry.id) ?? null }
+            : {}),
         };
       }
     );
@@ -2438,6 +2667,26 @@ const senderLabel = (
   `${platformLabel(platformId)} message from ${
     message.userName ?? message.userId
   }`;
+
+/**
+ * How long a failure line waits on the upgrade link: the turn cannot finish
+ * until the line has gone, and the plans page is a fine answer too.
+ */
+const UPGRADE_URL_WAIT_MS = 5_000;
+
+/** The account's upgrade link, or null when it fails or takes too long. */
+const upgradeUrlWithin = (ms: number): Promise<string | null> =>
+  Promise.race([
+    fetchUpgradeUrl().catch(() => null),
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), ms).unref()),
+  ]);
+
+/** The signed-in plan as last read; unknown words the offer like a paid one. */
+const accountKind = (): AccountKind => {
+  const account = cachedAbacusAccount();
+  if (account == null) return "unknown";
+  return onFreePlan(account) ? "free" : "paid";
+};
 
 const platformLabel = (platformId: MessagingPlatformId): string =>
   platformId === "abacus_discord"

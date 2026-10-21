@@ -10,7 +10,10 @@ import {
 import { afterEach, beforeEach, expect, it } from "vitest";
 
 import { onboardingStore } from "#renderer/features/onboarding";
-import { firstBotStore } from "#renderer/features/onboarding/first-bot";
+import {
+  firstBotStore,
+  noteConnectedChatApp,
+} from "#renderer/features/onboarding/first-bot";
 import {
   renderApp,
   defaultSeed,
@@ -95,13 +98,11 @@ it("R6-T7 real router preserves failed attempts and resumes persisted authentica
   ).toHaveLength(2);
 });
 
-it.each([false, true])(
-  "R6-T8 authenticated completion creates one sponsored Chief of Staff after onboarding, channel lane=%s",
-  async (hasChannelLane) => {
+it.each([null, "telegram"] as const)(
+  "R6-T8 authenticated completion creates one first bot after onboarding, chat app connected=%s",
+  async (chatApp) => {
     const seed = defaultSeed();
-    seed.bots = hasChannelLane
-      ? [{ ...seed.bots![0]!, channel: "telegram" }]
-      : [];
+    seed.bots = [];
     seed.routines = [];
     harness = await renderApp("/onboarding/models", {
       onboarded: false,
@@ -132,20 +133,28 @@ it.each([false, true])(
     await waitFor(() =>
       expect((continueConnectors as HTMLButtonElement).disabled).toBe(false)
     );
+    // What the connectors step's chat-app dialog notes once it links.
+    if (chatApp != null) noteConnectedChatApp(chatApp);
     fireEvent.click(continueConnectors);
     fireEvent.click(await screen.findByRole("button", { name: "Say hello" }));
     await waitFor(() =>
       expect(harness!.router.state.location.pathname).toMatch(/^\/bots\/bot-/)
     );
-    const ownBots = harness.collections.bots.toArray.filter(
-      (bot) => bot.channel == null
-    );
+    const ownBots = harness.collections.bots.toArray;
     expect(ownBots).toHaveLength(1);
-    expect(ownBots[0]).toMatchObject({
-      sponsoredFirstRun: true,
-    });
     expect(harness.collections.routines.toArray).toHaveLength(0);
-    expect(ownBots[0]!.description).toContain("create_draft_reply");
+    if (chatApp == null) {
+      expect(ownBots[0]).toMatchObject({ sponsoredFirstRun: true });
+      expect(ownBots[0]!.description).toContain("create_draft_reply");
+    } else {
+      // The Telegram Agent's own mission, no inbox pass, nothing sponsored.
+      expect(ownBots[0]).toMatchObject({
+        name: "Telegram Agent",
+        homeChannel: "telegram",
+      });
+      expect(ownBots[0]!.sponsoredFirstRun).toBeUndefined();
+      expect(ownBots[0]!.description).toContain("Live in my Telegram.");
+    }
     // Completion clears the exit only after the destination navigation settles.
     await waitFor(() =>
       expect(harness!.collections.prefs.get("app")).toMatchObject({
@@ -265,7 +274,7 @@ it("final setup retries a failed completion without duplicating its created Chie
   expect(harness.collections.bots.toArray).toHaveLength(1);
 });
 
-it("a website signup is offered its sponsored Chief, or building", async () => {
+it("a website signup is welcomed and set up like any sign-in, then offered its Chief", async () => {
   const seed = defaultSeed();
   seed.bots = [];
   seed.routines = [];
@@ -293,23 +302,20 @@ it("a website signup is offered its sponsored Chief, or building", async () => {
       },
     },
   });
+  // The welcome screen stays: a website signup is not sent past it.
+  expect(
+    await screen.findByRole("button", { name: "Get started" })
+  ).toBeTruthy();
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(harness.router.state.location.pathname).toBe("/onboarding/connected");
+  // Then the setup screens, as for any sign-in.
+  fireEvent.click(screen.getByRole("button", { name: "Get started" }));
   await waitFor(() =>
-    expect(harness!.router.state.location.pathname).toBe(
-      "/onboarding/first-bot"
+    expect(harness!.router.state.location.pathname).toMatch(
+      /^\/onboarding\/(models|connectors)$/
     )
   );
-  expect(
-    await screen.findByRole("button", { name: "Start building" })
-  ).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: "Say hello" }));
-  await waitFor(() =>
-    expect(harness!.router.state.location.pathname).toMatch(/^\/bots\/bot-/)
-  );
-  expect(harness.collections.bots.toArray).toHaveLength(1);
-  expect(harness.collections.bots.toArray[0]).toMatchObject({
-    sponsoredFirstRun: true,
-  });
-  expect(harness.collections.routines.toArray).toHaveLength(0);
+  expect(harness.collections.bots.toArray).toHaveLength(0);
 });
 
 /**

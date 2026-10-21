@@ -1,8 +1,9 @@
 /**
  * The scheduler half of cron: a minute tick that fires due jobs. What a run
  * actually does (spawn a session, send the prompt) is injected by the host.
- * A fire due while the network is down, or slept through, is held (on disk,
- * so a restart keeps it) and runs once when the network is back.
+ * A fire due while the network is down, or missed while the computer was off
+ * (asleep, or the app closed), is held (on disk, so a restart keeps it) and
+ * runs once when the network is back.
  */
 import {
   dueJobs,
@@ -12,6 +13,7 @@ import {
   recordRun,
   retireOnceJob,
   setHeld,
+  setMissed,
 } from "./cron-store";
 import { ROUTINE_RESULTS } from "./routine-attempts";
 
@@ -107,15 +109,19 @@ export class CronScheduler {
     }
 
     const due = dueJobs(now);
-    // Fires slept through are held like offline ones and run once below.
+    // Fires slept through, or missed while the app was closed (the first
+    // tick), are counted and held like offline ones, and run once below.
     const missed =
-      lastTickAt != null && now.getTime() - lastTickAt > MISSED_TICK_GAP_MS
-        ? missedJobs(new Date(lastTickAt), now)
+      lastTickAt == null || now.getTime() - lastTickAt > MISSED_TICK_GAP_MS
+        ? missedJobs(lastTickAt == null ? null : new Date(lastTickAt), now)
         : [];
     const dueIds = new Set(due.map((job) => job.id));
-    for (const job of missed)
+    const missedIds = new Set(missed.map(({ job }) => job.id));
+    for (const { job, count } of missed) {
+      setMissed(job.id, { count, at: now.getTime() });
       if (!dueIds.has(job.id) && job.heldSince == null)
         setHeld(job.id, now.getTime());
+    }
 
     if (
       (due.length > 0 || heldJobs().length > 0) &&
@@ -138,6 +144,8 @@ export class CronScheduler {
     for (const job of due) {
       // A due fire is the same run a held one would have been.
       if (job.heldSince != null) setHeld(job.id, null);
+      // Back on time: what it missed before is history.
+      if (job.missed != null && !missedIds.has(job.id)) setMissed(job.id, null);
       await this.fire(job.id, job.runAt != null);
     }
     if (missed.length > 0) this.onHeldChange();

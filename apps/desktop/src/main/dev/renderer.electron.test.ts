@@ -129,14 +129,56 @@ const harness = (op: string, input: object): void => {
 };
 
 /**
- * Wraps `document.startViewTransition` (after the app's own single-transition
- * guard) and records each transition separately: types, and the pseudo
- * elements tokens.css animated once it was ready.
+ * Wraps `document.startViewTransition` (after the app's own guards) and
+ * records each transition separately: its types, every `vt-*` animation seen
+ * on a pseudo element from `ready` until it finished (one snapshot at
+ * `ready` can miss one), and why it never animated if the browser or the app
+ * skipped it.
  */
 const RECORDER = `(() => {
   if (window.__vtRecorder) return;
   window.__vtRecorder = true;
   window.__vt = [];
+  // Every frame and every long main-thread task, so a transition that never
+  // captured says whether the window got no frames or the page was busy.
+  const frames = [];
+  // When the callback runs, not its frame timestamp: a late frame carries
+  // the time its BeginFrame was issued.
+  const tick = () => {
+    frames.push(performance.now());
+    if (frames.length > 4000) frames.splice(0, 2000);
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+  const longTasks = [];
+  try {
+    new PerformanceObserver((list) => {
+      for (const task of list.getEntries())
+        longTasks.push([task.startTime, task.startTime + task.duration]);
+    }).observe({ type: "longtask", buffered: true });
+  } catch {}
+  const timing = (from, to, updateAt) => {
+    const inside = frames.filter((at) => at >= from && at <= to);
+    const marks = [from, ...inside, to];
+    let maxGap = 0;
+    for (let i = 1; i < marks.length; i += 1)
+      maxGap = Math.max(maxGap, marks[i] - marks[i - 1]);
+    let busy = 0;
+    for (const [a, b] of longTasks) busy += Math.max(0, Math.min(b, to) - Math.max(a, from));
+    const before = frames.filter((at) => at < from);
+    const recent = frames.filter((at) => at >= from - 1000 && at < from);
+    return {
+      sinceFrame: before.length === 0 ? null : Math.round(from - before[before.length - 1]),
+      framesInSecondBefore: recent.length,
+      ms: Math.round(to - from),
+      update: updateAt == null ? null : Math.round(updateAt - from),
+      frames: inside.length,
+      maxFrameGap: Math.round(maxGap),
+      longTaskMs: Math.round(busy),
+      visibility: document.visibilityState,
+      focus: document.hasFocus(),
+    };
+  };
   const start = document.startViewTransition.bind(document);
   document.startViewTransition = (arg) => {
     const entry = {
@@ -147,15 +189,37 @@ const RECORDER = `(() => {
       done: false,
     };
     window.__vt.push(entry);
-    const transition = start(arg);
-    transition.ready.then(() => {
-      const ours = document.getAnimations().filter((a) =>
-        String(a.animationName || "").startsWith("vt-")
-      );
-      entry.animated = ours.map((a) => String(a.effect && a.effect.pseudoElement));
+    const started = performance.now();
+    let updateAt = null;
+    const update = typeof arg === "function" ? arg : arg && arg.update;
+    const transition = start({
+      ...(typeof arg === "object" ? arg : {}),
+      update: () => {
+        updateAt = performance.now();
+        return update && update();
+      },
+    });
+    const settle = () => { entry.timing = timing(started, performance.now(), updateAt); };
+    transition.ready.then(settle, settle);
+    const observe = () => {
+      for (const animation of document.getAnimations()) {
+        if (!String(animation.animationName || "").startsWith("vt-")) continue;
+        const pseudo = String(animation.effect && animation.effect.pseudoElement);
+        if (!entry.animated.includes(pseudo)) entry.animated.push(pseudo);
+      }
       entry.pane = entry.animated.some((p) => p.includes("app-pane"));
       entry.sidebar = entry.animated.some((p) => p.includes("app-sidebar"));
-    }).catch((error) => { entry.error = String(error); });
+    };
+    const watch = () => {
+      if (entry.done) return;
+      observe();
+      requestAnimationFrame(watch);
+    };
+    transition.ready.then(watch).catch((error) => {
+      entry.error =
+        String((error && error.name) || error) + ": " + String(error && error.message) +
+        " after " + Math.round(performance.now() - started) + " ms";
+    });
     transition.finished.finally(() => { entry.done = true; });
     return transition;
   };
@@ -168,6 +232,8 @@ type Recorded = {
   animated: string[];
   done: boolean;
   error?: string;
+  /** From the start until `ready` settled: frames, long tasks, visibility. */
+  timing?: Record<string, unknown>;
 };
 
 const booted = () => until("typeof window.__abacusDev === 'object'", 30_000);
@@ -366,10 +432,10 @@ describe.skipIf(!runnable)("renderer acceptance (Electron)", () => {
         "sessions"
       );
       const started = await transitions();
-      expect(started).toHaveLength(1);
-      expect(started[0]!.types).toEqual(["nav-lateral"]);
-      expect(started[0]!.pane).toBe(true);
-      expect(started[0]!.sidebar).toBe(true);
+      // The message is the whole entry: what animated, and any skip reason.
+      expect(started, JSON.stringify(started)).toMatchObject([
+        { types: ["nav-lateral"], pane: true, sidebar: true },
+      ]);
     });
 
     it("a masked pop-up opening and closing starts none", async () => {
@@ -396,12 +462,12 @@ describe.skipIf(!runnable)("renderer acceptance (Electron)", () => {
       const into = await transitions();
       await go("/bots/new");
       const out = await transitions();
-      expect(into.map((t) => t.types)).toEqual([["settings-in"]]);
-      expect(out.map((t) => t.types)).toEqual([["settings-out"]]);
-      for (const t of [...into, ...out]) {
-        expect(t.pane).toBe(true);
-        expect(t.sidebar).toBe(true);
-      }
+      expect(into, JSON.stringify(into)).toMatchObject([
+        { types: ["settings-in"], pane: true, sidebar: true },
+      ]);
+      expect(out, JSON.stringify(out)).toMatchObject([
+        { types: ["settings-out"], pane: true, sidebar: true },
+      ]);
     });
 
     it("a harness-created bot shows in the live sidebar; opening it is nav-forward, browser back is nav-back", async () => {
@@ -433,14 +499,16 @@ describe.skipIf(!runnable)("renderer acceptance (Electron)", () => {
       // runtime's 5 s readiness cap. Leave time for IPC and the transition
       // after that cap; this case checks transition types, not load latency.
       const forward = await transitions(10_000);
-      expect(forward.map((t) => t.types)).toEqual([["nav-forward"]]);
-      expect(forward[0]!.pane).toBe(true);
+      expect(forward, JSON.stringify(forward)).toMatchObject([
+        { types: ["nav-forward"], pane: true },
+      ]);
 
       await evaluate("history.back()");
       await until("window.location.hash === '#/bots/new'", 5_000);
       const back = await transitions();
-      expect(back.map((t) => t.types)).toEqual([["nav-back"]]);
-      expect(back[0]!.pane).toBe(true);
+      expect(back, JSON.stringify(back)).toMatchObject([
+        { types: ["nav-back"], pane: true },
+      ]);
     });
 
     it("a loader slower than the pending threshold commits its pending screen without one, then starts exactly one", async () => {
@@ -467,8 +535,9 @@ describe.skipIf(!runnable)("renderer acceptance (Electron)", () => {
         await evaluate("window.__abacusDev.setLoaderDelay(0)");
       }
       const started = await transitions();
-      expect(started.map((t) => t.types)).toEqual([["nav-lateral"]]);
-      expect(started[0]!.pane).toBe(true);
+      expect(started, JSON.stringify(started)).toMatchObject([
+        { types: ["nav-lateral"], pane: true },
+      ]);
     });
 
     it("never starts two transitions at once, a route with a React <ViewTransition> included", async () => {

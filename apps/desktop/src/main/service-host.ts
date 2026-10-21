@@ -164,14 +164,18 @@ import type {
   BackendStatus,
 } from "@abacus-ai/contract/exec-backends";
 import {
+  APP_OF_SELF_LANE,
+  SELF_LANE_FOR_APP,
   describePlatformForAgent,
   reportableLivePlatforms,
+  selfLaneOf,
   type MessagingPairingDecisionRequest,
   type MessagingPlatformId,
   type MessagingSnapshot,
   type UpdateMessagingPlatformRequest,
   type UpdateMessagingSettingsRequest,
 } from "@abacus-ai/contract/messaging";
+import { abacusPlanTier } from "@abacus-ai/contract/models";
 import {
   EntityNotFoundError,
   WORKSPACE_NOT_FOUND,
@@ -305,7 +309,6 @@ import {
 } from "./services/bots/bot-memory-store";
 import { BotService } from "./services/bots/bot-service";
 import {
-  assertNotChannelBot,
   getBot,
   listSenderSessionEntries,
   onBotStoreWrite,
@@ -313,7 +316,6 @@ import {
   recordSenderSession,
   removeSenderSession,
 } from "./services/bots/bot-store";
-import { effectiveBotModel } from "./services/bots/effective-model";
 import { BrowserProfilesService } from "./services/browser/browser-profiles-service";
 import type { BrowserTargetSource } from "./services/browser/browser-target";
 import { ChromeBrowserService } from "./services/browser/chrome/chrome-browser-service";
@@ -326,6 +328,7 @@ import {
   buildAgentAuthEnv,
   buildAgentConfigEnv,
 } from "./services/config/agent-env";
+import type { PrefsStore } from "./services/config/prefs-store";
 import {
   readExecBackend,
   readTerminalShell,
@@ -407,11 +410,14 @@ import {
   readGatewaySettings,
   saveGatewaySettings,
 } from "./services/messaging/messaging-config-service";
+import { MessagingGatewayService } from "./services/messaging/messaging-gateway-service";
 import {
-  MessagingGatewayService,
-  type SelfLanePlatform,
-} from "./services/messaging/messaging-gateway-service";
-import { fetchAbacusAccount, onFreePlan } from "./services/providers/abacus";
+  cachedAbacusAccount,
+  creditSnapshot,
+  fetchAbacusAccount,
+  onAbacusAccountRead,
+  onFreePlan,
+} from "./services/providers/abacus";
 import {
   connectButtonLink,
   connectLinkStatus,
@@ -420,10 +426,12 @@ import {
   listAbacusConnectors,
 } from "./services/providers/abacus-connector-service";
 import {
+  abacusAppHost,
   abacusRoutellmV1,
   abacusUserAgent,
   hostPublicBase,
 } from "./services/providers/abacus-host";
+import { readAccountState } from "./services/providers/account-service";
 import {
   environmentNoticeService,
   messageWithEnvironmentNotice,
@@ -435,11 +443,7 @@ import {
   clearBackendProbeCache,
   resolveBackend,
 } from "./services/providers/exec-backend-service";
-import {
-  cachedRecommendedModelId,
-  listAvailableModels,
-  recommendedModelId,
-} from "./services/providers/models";
+import { resolveSessionModel } from "./services/providers/session-model";
 import { SandboxProbeService } from "./services/sandbox/sandbox-probe-service";
 import { agentTurnBusy } from "./services/session/agent-busy";
 import { AgentSessionManagerService } from "./services/session/agent-session-manager-service";
@@ -478,6 +482,7 @@ import {
 import { WorkspaceRuntimeService } from "./services/workspace/workspace-runtime-service";
 import { WorkspaceService } from "./services/workspace/workspace-service";
 import { WorktreeMaterializer } from "./services/workspace/worktree-materialize";
+import { agentProxyEnv } from "./system-network";
 
 type EventDispatcher = (event: IpcEvent) => void;
 
@@ -486,67 +491,6 @@ type BusDispatcher = <C extends BusChannel>(
   channel: C,
   payload: BusChannels[C]
 ) => void;
-
-/** The bot each self lane gets on first link, one per platform. */
-const SELF_LANE_BOTS: Record<
-  SelfLanePlatform,
-  {
-    name: string;
-    channel: "telegram" | "discord" | "whatsapp";
-    aliases: string[];
-    description: string;
-  }
-> = {
-  abacus_discord: {
-    name: "Discord AbacusAI Bot <-> You",
-    channel: "discord",
-    aliases: ["AbacusAI Bot on Discord <-> You"],
-    description:
-      "You are the user's personal assistant living in their Discord DM " +
-      "with the Abacus AI bot. Every message they send to that DM comes " +
-      "to you, and every reply you write is delivered straight back to " +
-      'them there. Replying IS messaging them, so when they say "send ' +
-      'me X" or "message me on Discord", just answer with X; never ' +
-      "say you cannot reach them and never ask which chat is theirs. " +
-      "They can ask you for anything you can do: questions, tasks with " +
-      "your tools, code, documents, schedules, messages to other " +
-      "people. Be a helpful, concise assistant and keep replies " +
-      "chat-sized (Discord caps a message at 2000 characters).",
-  },
-  // The "Message yourself" chat is the WhatsApp self lane.
-  whatsapp: {
-    name: "WhatsApp AbacusAI Bot <-> You",
-    channel: "whatsapp",
-    aliases: [],
-    description:
-      "You are the user's personal assistant living in their WhatsApp " +
-      '"Message yourself" chat. Every message they send to that chat comes ' +
-      "to you, and every reply you write is delivered straight back to " +
-      'them there. Replying IS messaging them, so when they say "send ' +
-      'me X" or "message me", just answer with X; never say you ' +
-      "cannot reach them and never ask which chat is theirs. They can " +
-      "ask you for anything you can do: questions, tasks with your " +
-      "tools, code, documents, schedules, messages to other people. Be " +
-      "a helpful, concise assistant and keep replies chat-sized.",
-  },
-  abacus_telegram: {
-    name: "Telegram AbacusAI Bot <-> You",
-    channel: "telegram",
-    // The retired own-account Telegram bootstrap's names, adopted in place:
-    // one Telegram, one conversation, and the user's history stays with it.
-    aliases: ["AbacusAI Bot <-> You", "AbacusAI Bot on Telegram <-> You"],
-    description:
-      "You are the user's personal assistant living in their Telegram chat " +
-      "with the Abacus AI bot. Every message they send to that chat comes " +
-      "to you, and every reply you write is delivered straight back to " +
-      'them there. Replying IS messaging them, so when they say "send ' +
-      'me X" or "message me", just answer with X; never say you ' +
-      "cannot reach them and never ask which chat is theirs. They can " +
-      "ask you for anything you can do: questions, tasks with your " +
-      "tools, code, documents, schedules, messages to other people. Be " +
-      "a helpful, concise assistant and keep replies chat-sized.",
-  },
-};
 
 /**
  * Early-compaction threshold for routine sessions: every fire replays the chat
@@ -680,6 +624,9 @@ export class ServiceHost {
         );
       },
       markSent: (threadId) => {
+        // The user's own words in the app: a relayed turn they join answers
+        // them here, not in the chat app.
+        this.messagingGatewayService.noteAppMessage(threadId);
         const runtime = this.agentManagerService.getRuntimeInfo(threadId);
         if (runtime != null)
           this.sessionTurnStateService.markSent(runtime.workspaceId, threadId);
@@ -914,6 +861,28 @@ export class ServiceHost {
     this.browserRuntime = runtime;
   }
 
+  /** The app's prefs row, where once-only notes are stamped; the desktop attaches it. */
+  private prefs: (() => Pick<PrefsStore, "get" | "update">) | null = null;
+
+  attachPrefs(prefs: () => Pick<PrefsStore, "get" | "update">): void {
+    this.prefs = prefs;
+  }
+
+  /**
+   * The desktop's once-per-user word on 24/7 routines, claimed by the agent's
+   * first local routine: the plan to speak to, or null once told, on the
+   * hosted computer, or while the account cannot be read.
+   */
+  async claimAlwaysOnNote(): Promise<"free" | "paid" | null> {
+    const prefs = this.platform === "web-host" ? null : this.prefs?.();
+    if (prefs == null || prefs.get().dismissals.routinesAlwaysOnToldAt != null)
+      return null;
+    const tier = abacusPlanTier(await fetchAbacusAccount());
+    if (tier === "unknown") return null;
+    prefs.update({ dismissals: { routinesAlwaysOnToldAt: Date.now() } });
+    return tier === "free" ? "free" : "paid";
+  }
+
   /** The user's WhatsApp link to AbacusAI Bot's own number: the hosted computer attaches it, the desktop never. */
   private botNumber: BotNumber | null = null;
 
@@ -1084,6 +1053,7 @@ export class ServiceHost {
       const states = this.getToolsetStates();
       return new Set(Object.keys(states).filter((id) => states[id]));
     },
+    planTier: () => abacusPlanTier(cachedAbacusAccount()),
     workspacePath: () => {
       const workspace = this.workspaceService.getActiveWorkspace();
       return workspace?.isRemote === true ? null : (workspace?.path ?? null);
@@ -1142,13 +1112,7 @@ export class ServiceHost {
     // A routine's run is its bot's work too: a routine made from inside one
     // belongs to the bot, and `list` shows the bot its own.
     isAppBotChat: (sessionId) => this.botService.isAppBotChat(sessionId),
-    botIdForSession: (sessionId) =>
-      this.botService.botIdForSession(sessionId) ??
-      (() => {
-        const routineId =
-          this.agentSessionManagerService.get(sessionId)?.routineId ?? null;
-        return routineId != null ? (getJob(routineId)?.botId ?? null) : null;
-      })(),
+    botIdForSession: (sessionId) => this.botOfSession(sessionId),
     conversationKeyForSession: (sessionId) =>
       this.conversationKeyForSession(sessionId),
     channelForSession: (sessionId) => this.laneChannels.get(sessionId) ?? null,
@@ -1194,6 +1158,7 @@ export class ServiceHost {
         return routine;
       },
       hosted: this.hostedRoutines,
+      alwaysOnNote: () => this.claimAlwaysOnNote(),
     },
     ownActivity: (botId) => {
       const owned = this.agentSessionManagerService.listOwnedBy(botId);
@@ -1246,8 +1211,20 @@ export class ServiceHost {
       startingPlatforms: () => this.messagingGatewayService.startingPlatforms(),
       awaitReady: (platform) =>
         this.messagingGatewayService.awaitReady(platform),
-      send: (platform, chatId, text) =>
-        this.messagingGatewayService.sendToChat(platform, chatId, text),
+      send: (platform, chatId, text, fromBotId) => {
+        const from = fromBotId != null ? getBot(fromBotId) : null;
+        return this.messagingGatewayService.sendToChat(
+          platform,
+          chatId,
+          text,
+          from != null ? { botId: from.id, name: from.name } : undefined
+        );
+      },
+      claimSelfLane: (platform, botId) =>
+        this.messagingGatewayService.claimSelfLane(platform, botId),
+      setHomeBot: (app, botId) => {
+        this.botService.setHomeBot(app, botId);
+      },
       sendFile: (platform, chatId, filePath, caption) =>
         this.messagingGatewayService.sendFileToChat(
           platform,
@@ -1303,6 +1280,20 @@ export class ServiceHost {
   });
   /** Whether this machine can reach Abacus; see connectivity-service.ts. */
   readonly connectivity = new ConnectivityService();
+  /** Every account read reaches the agents, so a run can wrap up before the credits end. */
+  private readonly stopCreditForwarding = onAbacusAccountRead((snapshot) => {
+    this.agentManagerService.broadcastCommand({
+      type: "credit_balance",
+      ...snapshot,
+    });
+    // The plan decides which paid-plan capabilities are on or offered.
+    const tier = abacusPlanTier(cachedAbacusAccount());
+    if (tier !== this.listedPlanTier) {
+      this.listedPlanTier = tier;
+      this.toolAvailabilityChanged();
+    }
+  });
+  private listedPlanTier = abacusPlanTier(cachedAbacusAccount());
   private readonly cronScheduler = new CronScheduler(
     async (jobId, trigger) => {
       await this.runRoutine(jobId, trigger);
@@ -1947,30 +1938,24 @@ export class ServiceHost {
       return this.workspaceService.getActiveWorkspace()?.id ?? null;
     },
     createAgentSession: (workspaceId) => this.createAgentSession(workspaceId),
-    createAutoReplyBot: (platform) => {
-      try {
-        const { name, channel, aliases, description } =
-          SELF_LANE_BOTS[platform];
-        // Idempotent by current or earlier name, so a relink adopts the bot
-        // instead of minting a twin. The channel stamp hides the composer.
-        const existing = this.botService
-          .list()
-          .find((bot) => bot.name === name || aliases.includes(bot.name));
-        if (existing != null) {
-          if (existing.channel !== channel || existing.name !== name)
-            this.botService.update(existing.id, { name, channel });
-          return existing.id;
+    // Deferred through arrows: botService initializes after this field.
+    homeBots: {
+      get: (lane) => this.botService.homeBotId(APP_OF_SELF_LANE[lane]),
+      set: (lane, botId) => {
+        this.botService.setHomeBot(APP_OF_SELF_LANE[lane], botId);
+      },
+      ensure: (lane) => {
+        try {
+          return this.botService.ensureHomeBot(APP_OF_SELF_LANE[lane]);
+        } catch (err) {
+          console.error(`[bots] ${lane} has no home bot:`, err);
+          return null;
         }
-        const bot = this.botService.create({ name, description, channel });
-        void this.botService.openChat(bot.id).catch((err: unknown) => {
-          console.error("[bots] auto-reply bot failed to open its chat:", err);
-        });
-        return bot.id;
-      } catch (err) {
-        console.error("[bots] auto-reply bot creation failed:", err);
-        return null;
-      }
+      },
     },
+    deferSelfLaneDefaults: () => !readAccountState().onboarded,
+    isSessionBusy: (workspaceId, sessionId) =>
+      this.sessionTurnStateService.get(workspaceId, sessionId).isBusy,
     updateSessionLabel: (workspaceId, sessionId, label) => {
       this.updateAgentSessionLabel(workspaceId, sessionId, label);
     },
@@ -2063,15 +2048,7 @@ export class ServiceHost {
     // own model when configured, else the stored default when configured,
     // else the tier's recommendation, else the fallback.
     effectiveModel: (requested, pinned) =>
-      effectiveBotModel(
-        requested,
-        {
-          readDefault: () => readSettings().defaultModel,
-          listCatalog: () => listAvailableModels(),
-          cachedRecommended: () => cachedRecommendedModelId(),
-        },
-        pinned
-      ),
+      resolveSessionModel(requested, undefined, pinned),
     sessionInfo: (sessionId) => {
       const session = this.agentSessionManagerService.get(sessionId);
       return session == null
@@ -2081,6 +2058,22 @@ export class ServiceHost {
             owner: session.owner ?? null,
             model: session.model ?? null,
           };
+    },
+    homeBots: () => {
+      const stored = readGatewaySettings().selfBotIds;
+      return Object.fromEntries(
+        Object.entries(SELF_LANE_FOR_APP).flatMap(([app, lane]) => {
+          const id = stored[lane];
+          return id != null ? [[app, id]] : [];
+        })
+      );
+    },
+    saveHomeBot: (app, botId) => {
+      saveGatewaySettings({ selfBotIds: { [SELF_LANE_FOR_APP[app]]: botId } });
+      this.emitEvent({
+        type: "messaging-updated",
+        emittedAt: new Date().toISOString(),
+      });
     },
     onBotRemoved: (botId) => {
       // Its routines stay, paused: they were the bot's work, and without it
@@ -2154,8 +2147,10 @@ export class ServiceHost {
     },
     resolveArtifact: () => this.artifactResolverService.resolveBundledCliPath(),
     resolveAuthEnv: () => buildAgentAuthEnv(),
-    resolveAdditionalConfigEnv: async (sessionId: string) =>
-      this.buildAdditionalConfigEnv("code", sessionId),
+    resolveAdditionalConfigEnv: async (sessionId: string) => ({
+      ...(await agentProxyEnv(abacusAppHost())),
+      ...(await this.buildAdditionalConfigEnv("code", sessionId)),
+    }),
     resolveUnattended: (sessionId: string) => this.heldPolicy(sessionId),
     emitStateUpdated: (workspaceId, sessionId, state) => {
       if (state.status === "starting" || state.pid == null)
@@ -2514,6 +2509,10 @@ export class ServiceHost {
         return await deckSlots(payload as DeckSlotsRequest);
       case "render_deck":
         return await renderDeck(payload as RenderDeckRequest);
+      case "credit_balance":
+        // The read itself broadcasts the snapshot to every agent.
+        await fetchAbacusAccount(true);
+        return creditSnapshot();
       default:
         throw new Error(`Unknown host service: ${String(service)}`);
     }
@@ -2530,6 +2529,7 @@ export class ServiceHost {
     const workspaceIds = this.workspaceService.getWorkspaces().map((w) => w.id);
     this.agentSessionManagerService.initialize(workspaceIds);
     this.adoptLegacyBotSessions();
+    this.botService.adoptChannelBots();
     this.reconcileBotChatWorkspaces();
     this.sessionArtifactsService.initialize(workspaceIds);
   }
@@ -2600,6 +2600,7 @@ export class ServiceHost {
   /** Resolves once every agent child has exited; the quit path awaits it. */
   dispose(): Promise<void> {
     this.stop();
+    this.stopCreditForwarding();
     this.connectWatcher.stop();
     this.vault?.stop();
     this.builtinMcpLifecycle.stopBrowserServer();
@@ -3109,6 +3110,25 @@ export class ServiceHost {
     return this.messagingGatewayService.decidePairing(request);
   }
 
+  /** The card's picker: which bot the user's own chat on this app goes to. */
+  setMessagingHomeBot(
+    platformId: MessagingPlatformId,
+    botId: string
+  ): MessagingSnapshot {
+    const lane = selfLaneOf(platformId);
+    if (lane == null)
+      throw new InvalidInputError(
+        `${platformId} has no chat of the user's own.`
+      );
+    this.botService.setHomeBot(APP_OF_SELF_LANE[lane], botId);
+    return this.messagingGatewayService.getSnapshot();
+  }
+
+  /** Lanes linked during onboarding get their default now: its first bot exists. */
+  onboardingFinished(): void {
+    this.messagingGatewayService.settleSelfLaneDefaults();
+  }
+
   updateMessagingSettings(
     request: UpdateMessagingSettingsRequest
   ): Promise<MessagingSnapshot> {
@@ -3228,6 +3248,15 @@ export class ServiceHost {
     return previews;
   }
 
+  /** The bot a session works for: its chat, a sender's chat, or its routine's run. */
+  private botOfSession(sessionId: string): string | null {
+    const own = this.botService.botIdForSession(sessionId);
+    if (own != null) return own;
+    const routineId =
+      this.agentSessionManagerService.get(sessionId)?.routineId ?? null;
+    return routineId != null ? (getJob(routineId)?.botId ?? null) : null;
+  }
+
   /**
    * Backfill owner stamps from the legacy registries onto bot conversations
    * minted before owners existed. Idempotent: adoptOwner refuses a session
@@ -3308,7 +3337,6 @@ export class ServiceHost {
   }
 
   updateBot(id: string, changes: BotUpdateInput): Bot {
-    this.assertNotChannelBot(id, "edited");
     return this.botService.update(id, changes);
   }
 
@@ -3317,16 +3345,7 @@ export class ServiceHost {
   }
 
   deleteBot(id: string): void {
-    this.assertNotChannelBot(id, "deleted");
     this.botService.delete(id);
-  }
-
-  /**
-   * Channel bots are minted and retired by the link itself. Guarded on the IPC
-   * surface, not in BotService, which the link machinery edits through.
-   */
-  private assertNotChannelBot(id: string, verb: string): void {
-    assertNotChannelBot(id, verb);
   }
 
   openBotChat(botId: string): Promise<BotChatHandle> {
@@ -3539,8 +3558,10 @@ export class ServiceHost {
     // The chat's remembered model beats the composer's: the renderer starts a
     // session before its list has loaded, and the agent would then report the
     // wrong model back over the record that should have chosen it. With
-    // neither, the plan tier's default. Not the agent's own fallback, which
-    // is the free pool whatever the tier.
+    // neither (a routine's run, a bot's chat brought back), the one resolver:
+    // the session's bot's model, else the stored default, else the plan
+    // tier's. Not the agent's own fallback, which is the free pool whatever
+    // the tier. The pick is kept on the session, so it lists what runs.
     const remembered = this.agentSessionManagerService.get(
       request.sessionId
     )?.model;
@@ -3549,7 +3570,7 @@ export class ServiceHost {
         ? remembered
         : request.model != null && request.model.length > 0
           ? request.model
-          : await recommendedModelId();
+          : await this.resolveUnpinnedModel(request);
     // A start with no mode is main's own (a bot's chat brought back to
     // deliver a notice, say): it runs in the mode the Profile page chose.
     const withModel = {
@@ -3562,6 +3583,18 @@ export class ServiceHost {
     environmentNoticeService.markSessionStarted(request.sessionId);
 
     return this.agentManagerService.startSessionReady(withModel);
+  }
+
+  /** A session started with no model: resolved for it, and kept on it. */
+  private async resolveUnpinnedModel(
+    request: StartAgentSessionRequest
+  ): Promise<string | null> {
+    const botId = this.botOfSession(request.sessionId);
+    const bot = botId == null ? null : getBot(botId);
+    const model = await resolveSessionModel(bot?.model ?? null);
+    if (model != null)
+      this.setAgentSessionModel(request.workspaceId, request.sessionId, model);
+    return model;
   }
 
   stopAgentSession(
@@ -4299,6 +4332,8 @@ export class ServiceHost {
    */
   getToolsetStates(): Record<string, boolean> {
     const preferences = readToolsetPreferences();
+    const tier = abacusPlanTier(cachedAbacusAccount());
+    const paid = tier === "basic" || tier === "paid";
     const states: Record<string, boolean> = {};
 
     for (const toolset of TOOLSETS) {
@@ -4308,7 +4343,7 @@ export class ServiceHost {
           ? this.builtinMcpLifecycle.isBrowserEnabled()
           : toolset.delivery === "mcp-device"
             ? !this.mcpConfigService.isBuiltinDevicesDisabled()
-            : isToolsetEnabled(toolset.id, preferences);
+            : isToolsetEnabled(toolset.id, preferences, paid);
     }
 
     return states;
@@ -5499,6 +5534,7 @@ export class ServiceHost {
     } catch (err) {
       console.error("[mcp] failed to write runtime mcp config:", err);
     }
+    const credits = creditSnapshot();
     return {
       ...buildAgentConfigEnv(
         runtimeMcpPath,
@@ -5520,6 +5556,10 @@ export class ServiceHost {
       ABACUSAI_BOT_CHECKOUT_TOKEN: this.checkoutToken,
       // Kept current afterwards by the `connectivity` command.
       ABACUSAI_BOT_CONNECTIVITY: this.connectivity.state,
+      // Kept current afterwards by the `credit_balance` command.
+      ...(credits != null
+        ? { ABACUSAI_BOT_CREDITS: JSON.stringify(credits) }
+        : {}),
       // A routine's run (a bot's routine, a hosted one) may wait out a long
       // outage; a turn a person sent waits ten minutes.
       ...(sessionId != null &&

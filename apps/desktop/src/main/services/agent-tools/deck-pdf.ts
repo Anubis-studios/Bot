@@ -7,6 +7,7 @@
 import fs from "fs/promises";
 import path from "path";
 
+import { modelPath } from "@abacus-ai/agent/model-path";
 import { BrowserWindow } from "electron";
 
 import { exportDeckPptx } from "./deck-pptx-export";
@@ -276,7 +277,7 @@ export const exportDeckPdf = async (
   const htmlPath = path.resolve(options.htmlPath);
   const stat = await fs.stat(htmlPath).catch(() => null);
   if (stat == null || !stat.isFile()) {
-    throw new Error(`No such HTML file: ${htmlPath}`);
+    throw new Error(`No such HTML file: ${modelPath(htmlPath)}`);
   }
 
   const pdfPath = path.resolve(

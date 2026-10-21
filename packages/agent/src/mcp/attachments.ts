@@ -11,6 +11,8 @@ import path from "node:path";
 
 import { GATEWAY_SERVER_NAME } from "@abacus-ai/connectors/registry";
 
+import { modelPath } from "../model-path.js";
+
 /** Matches ATTACHMENT_SCHEMA_MARKER on the gateway. */
 const ATTACHMENT_MARKER = "x_abacus_attachment";
 
@@ -205,7 +207,7 @@ export function saveAttachmentBlocks(
         Buffer.from(resource.blob, "base64")
       );
       lines.push(
-        `Saved attachment ${finalName} to ${path.join(ATTACHMENTS_DIR, finalName)}`
+        `Saved attachment ${finalName} to ${modelPath(path.join(ATTACHMENTS_DIR, finalName))}`
       );
     } catch (error) {
       lines.push(

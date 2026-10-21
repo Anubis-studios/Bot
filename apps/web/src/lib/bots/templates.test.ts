@@ -136,4 +136,18 @@ describe("the templates behind the tabs", () => {
     const ids = BOT_TEMPLATES.map(({ id }) => id);
     expect(new Set(ids).size).toBe(ids.length);
   });
+
+  it("gives each chat-app agent its home app, and no other template one", () => {
+    const homes = Object.fromEntries(
+      BOT_TEMPLATES.filter((t) => t.homeChannel != null).map((t) => [
+        t.id,
+        t.homeChannel,
+      ])
+    );
+    expect(homes).toEqual({
+      "whatsapp-agent": "whatsapp",
+      "telegram-agent": "telegram",
+      "discord-agent": "discord",
+    });
+  });
 });

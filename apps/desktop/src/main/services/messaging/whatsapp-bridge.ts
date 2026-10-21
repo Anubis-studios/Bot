@@ -185,7 +185,10 @@ export class WhatsAppBridge {
     return { jid: result.jid, digits: result.digits };
   }
 
-  async listChats(options?: { onlyUnread?: boolean }): Promise<BridgeChat[]> {
+  /** The chats, or null while WhatsApp has not answered (it is still syncing after a link). */
+  async listChats(options?: {
+    onlyUnread?: boolean;
+  }): Promise<BridgeChat[] | null> {
     const rows = await this.host.run<BridgeChat[] | null>(LIST_CHATS_SCRIPT, {
       onlyUnread: options?.onlyUnread === true,
       timeoutMs: CHAT_LIST_WAIT_MS,
@@ -194,7 +197,7 @@ export class WhatsAppBridge {
       this.host.log(
         "whatsapp-web: the chat list did not answer in time (WhatsApp is still syncing); it will be read again"
       );
-    return Array.isArray(rows) ? rows : [];
+    return Array.isArray(rows) ? rows : null;
   }
 
   /** Send and wait for the server ack. A message stuck at ack 0 IS in the

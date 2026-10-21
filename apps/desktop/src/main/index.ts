@@ -4,6 +4,8 @@ import { existsSync } from "fs";
 // The account-profile home MUST resolve before any import below reads a path
 // under abacusBotHome(). Stores open files at module load. Keep this first.
 import "./profile-home-init";
+// Main's requests use the system proxy and certificate store. Keep it second.
+import "./system-network-init";
 import fs from "fs/promises";
 import os from "os";
 import { join } from "path";
@@ -520,6 +522,8 @@ export const recreateMainWindow = windowLifecycle.recreateMainWindow;
  * an unresolved commit, it is replaced by one over a session-only copy.
  */
 let prefsStore = new PrefsStore();
+// Read late: the store is replaced once the migrations settle.
+workspaceServiceHost.attachPrefs(() => prefsStore);
 
 async function createWindow(restored?: RecreatedWindowState) {
   const Store = (await import("electron-store")).default;
@@ -1267,7 +1271,11 @@ const appOperations: AppOperations = {
   // The local account; see shared/account.ts for why it is optional.
   account: {
     get: () => readAccountState(),
-    skip: () => accountChanged(skipOnboarding()),
+    skip: () => {
+      const state = accountChanged(skipOnboarding());
+      workspaceServiceHost.onboardingFinished();
+      return state;
+    },
     signOut: () => accountChanged(signOut()),
     forget: () => accountChanged(forgetAccount()),
   },

@@ -7,6 +7,7 @@ import { existsSync } from "fs";
 import { delimiter } from "path";
 import type { Writable } from "stream";
 
+import { childProcessEnv } from "@abacus-ai/agent/child-env";
 import type { UnattendedPolicy } from "@abacus-ai/agent/tool-policy";
 import {
   AgentMode,
@@ -319,16 +320,6 @@ const buildStoppedState = (
   agentStatus: AgentStatus.Idle,
 });
 
-const sanitizeEnv = (env: NodeJS.ProcessEnv): Record<string, string> => {
-  const next: Record<string, string> = {};
-  for (const [key, value] of Object.entries(env)) {
-    if (typeof value === "string") {
-      next[key] = value;
-    }
-  }
-  return next;
-};
-
 const trimBuffer = (value: string): string => {
   if (value.length <= MAX_BUFFER_SIZE) {
     return value;
@@ -626,42 +617,40 @@ export class AgentManagerService {
       return { success: false, created: false, state, error: message };
     }
 
-    const sanitized = sanitizeEnv(process.env);
+    const inherited = childProcessEnv();
     // An agent spawned from an installed experience lives under userData, so
     // the vendored rg/fd ride the child's PATH (appended: the user's own still
     // win). A PATH nicety must never break a spawn, hence the guard.
     try {
       const vendor = agentVendorDir();
-      if (
-        existsSync(vendor) &&
-        !(sanitized.PATH ?? "").split(delimiter).includes(vendor)
-      ) {
-        sanitized.PATH =
-          sanitized.PATH == null || sanitized.PATH === ""
-            ? vendor
-            : `${sanitized.PATH}${delimiter}${vendor}`;
+      const current = inherited.PATH ?? "";
+      if (existsSync(vendor) && !current.split(delimiter).includes(vendor)) {
+        inherited.PATH =
+          current === "" ? vendor : `${current}${delimiter}${vendor}`;
       }
     } catch {
       // Vendor resolution unavailable; the agent falls back to PATH.
     }
-    const env = {
-      ...sanitized,
-      // The agent entry is a plain Node script run by Electron's own binary.
-      ELECTRON_RUN_AS_NODE: "1",
-      ABACUSAI_BOT_CLIENT_KIND:
-        import.meta.env.ABACUS_WEB_HOST === true
-          ? "web_host"
-          : "desktop_code_mode",
+    const env = childProcessEnv(
+      inherited,
+      {
+        // The agent entry is a plain Node script run by Electron's own binary.
+        ELECTRON_RUN_AS_NODE: "1",
+        ABACUSAI_BOT_CLIENT_KIND:
+          import.meta.env.ABACUS_WEB_HOST === true
+            ? "web_host"
+            : "desktop_code_mode",
 
-      // Lets the agent pick this chat back up; without it the restored
-      // transcript is visible on screen and unknown to the model.
-      ABACUSAI_BOT_SESSION_ID: request.sessionId,
-      ...this.options.resolveAuthEnv(),
-      ...(await this.options.resolveAdditionalConfigEnv(request.sessionId)),
-      ...(import.meta.env.ABACUS_WEB_HOST === true
+        // Lets the agent pick this chat back up; without it the restored
+        // transcript is visible on screen and unknown to the model.
+        ABACUSAI_BOT_SESSION_ID: request.sessionId,
+      },
+      this.options.resolveAuthEnv(),
+      await this.options.resolveAdditionalConfigEnv(request.sessionId),
+      import.meta.env.ABACUS_WEB_HOST === true
         ? { ABACUSAI_BOT_SANDBOX: "off" }
-        : {}),
-    };
+        : {}
+    );
 
     const spawnArgs: string[] = [...artifact.execArgs];
     if (request.model != null && request.model.length > 0)

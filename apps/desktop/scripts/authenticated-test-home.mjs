@@ -23,8 +23,14 @@ export const authenticatedTestHome = (home) => {
   writeFileSync(
     preload,
     `
-const realFetch = globalThis.fetch;
-globalThis.fetch = (input, options) => {
+const nodeFetch = globalThis.fetch;
+let realFetch = nodeFetch;
+// The app installs its own fetch over this one (system-network.ts); that
+// becomes the real fetch underneath, and the fake stays in front. The app's
+// fetch keeps the fake as its Node fallback, so a call back in from it goes
+// straight to Node rather than round again.
+let inside = false;
+const fakeFetch = (input, options) => {
   const url = new URL(typeof input === "string" ? input : input.url ?? String(input));
   if (url.hostname === "abacus.ai" || url.hostname.endsWith(".abacus.ai")) {
     const body = url.pathname === "/v1/account"
@@ -32,8 +38,21 @@ globalThis.fetch = (input, options) => {
       : { data: [] };
     return Promise.resolve(new Response(JSON.stringify(body), { status: url.pathname === "/v1/account" || url.pathname === "/v1/models" ? 200 : 503, headers: { "content-type": "application/json" } }));
   }
-  return realFetch(input, options);
+  if (inside) return nodeFetch(input, options);
+  inside = true;
+  try {
+    return realFetch(input, options);
+  } finally {
+    inside = false;
+  }
 };
+Object.defineProperty(globalThis, "fetch", {
+  configurable: true,
+  get: () => fakeFetch,
+  set: (fetch) => {
+    realFetch = fetch;
+  },
+});
 `
   );
   return preload;

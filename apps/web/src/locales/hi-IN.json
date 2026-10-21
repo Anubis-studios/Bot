@@ -409,7 +409,8 @@
         "helpful": "Good response",
         "notHelpful": "Bad response",
         "tellUsMore": "Tell us more",
-        "placeholder": "What went wrong?",
+        "placeholderUp": "What did you like?",
+        "placeholderDown": "What went wrong?",
         "send": "Send",
         "sent": "Thanks for the feedback",
         "notSynced": "Couldn't send feedback yet",
@@ -426,12 +427,9 @@
         "stop": "कनेक्शन रोकें"
       },
       "placeholder": "{{name}} को संदेश",
-      "openApp": "Open {{app}}",
       "pause": "Pause auto-reply",
       "resume": "Resume",
       "paused": "Check-ins paused.",
-      "channelReadOnly": "This conversation lives in {{app}}. Message the Abacus AI bot there. Everything you and the bot say shows up here.",
-      "channelReadOnlyWhatsapp": "This conversation lives in WhatsApp. Message yourself there, from your “Message yourself” chat. Everything you and the bot say shows up here.",
       "senderReadOnly": "स्वतः-उत्तर वार्तालाप: {{bot}} यहाँ आपकी ओर से {{sender}} को उत्तर देता है। आप देख सकते हैं पर लिख नहीं सकते; बदलाव के लिए {{bot}} को उसकी अपनी चैट में बताएँ।",
       "openError": "बॉट की चैट नहीं खुल सकी।",
       "senderReadOnlyFallback": "{{bot}} इस बातचीत में जवाब देता है।",
@@ -581,6 +579,7 @@
       "device_snapshot": "स्क्रीन को एलिमेंट की सूची के रूप में पढ़ें।",
       "disconnect_connector": "Detach a connected service's account.",
       "discord_auto_reply": "चुने हुए लोगों के Discord संदेशों का स्वतः उत्तर दें (केवल बॉट)।",
+      "take_chat_app_messages": "आपकी अपनी WhatsApp, Telegram या Discord चैट इस बॉट को भेजता है (केवल बॉट)।",
       "document": "Write a document and print it as a PDF.",
       "edit": "फ़ाइल के अंदर ठीक वही टेक्स्ट बदलें।",
       "exit_plan_mode": "Ask to leave plan mode and start carrying out the plan.",
@@ -864,6 +863,8 @@
     "used": "इस्तेमाल किए गए क्रेडिट",
     "lowTitle": "क्रेडिट कम हो रहे हैं",
     "outTitle": "आपने अपने मुफ़्त क्रेडिट इस्तेमाल कर लिए हैं",
+    "expiredTitle": "Your free credits have expired",
+    "readyTitle": "What's ready",
     "sideSessions": "सेशन: टॉप मॉडल, लंबे रन, बड़े प्रोजेक्ट",
     "sideBots": "बॉट: रोज़ के रूटीन, हमेशा Telegram और WhatsApp पर",
     "paidWebTitle": "Do even more on AbacusAI Agent",
@@ -1069,6 +1070,8 @@
     },
     "fromEnvironment": "आपके एनवायरनमेंट में {{key}} द्वारा सेट किया गया",
     "finishLinkFirst": "Finish linking the Abacus AI bot to complete setup.",
+    "homeBot": "आपके संदेश यहाँ जाते हैं:",
+    "homeBotUnset": "अभी तय नहीं",
     "getCredentials": "अपने क्रेडेंशियल लें",
     "needsSetup": "सेटअप बाकी है",
     "openSetupGuide": "सेटअप गाइड खोलें",
@@ -1513,6 +1516,18 @@
       "awayTitle": "Routines",
       "away_one": "{{count}} result came in while you were away.",
       "away_other": "{{count}} results came in while you were away."
+    },
+    "alwaysOn": {
+      "local": "Routines run on this computer while it's on and AbacusAI Bot is open.",
+      "title": "Run around the clock",
+      "free": "Want routines to keep going with your laptop closed? Abacus AI Agent on the web runs them 24/7 on the Basic plan.",
+      "paid": "Your plan includes 24/7 routines in Abacus AI Agent on the web.",
+      "openAgent": "Open Abacus AI Agent",
+      "dismiss": "Dismiss",
+      "missed_one": "Missed {{count}} run while your computer was off",
+      "missed_other": "Missed {{count}} runs while your computer was off",
+      "missedNoticeFree": "{{names}}. On the Basic plan, Abacus AI Agent on the web runs routines 24/7, even with your computer off.",
+      "missedNoticePaid": "{{names}}. Your plan runs routines 24/7 in Abacus AI Agent on the web, even with your computer off."
     },
     "reach": {
       "gmailSearch": "Search Gmail",
@@ -3049,6 +3064,10 @@
     "visualizer": {
       "title": "Interactive visual",
       "drawing": "Drawing the visual"
+    },
+    "paidFeature": {
+      "title": "{{feature}} is included in Basic",
+      "webTitle": "{{feature}} is included in Basic, in Abacus AI Agent on the web"
     }
   },
   "notch": {

@@ -58,16 +58,47 @@ export interface FailureScope {
   free?: boolean;
 }
 
-/** Out of paid-for capacity, as providers phrase it: not a mere rate limit. */
-export function isOutOfCredits(raw: string): boolean {
-  const status = raw.match(/^\s*(\d{3})\b/)?.[1];
-  if (status === "402") return true;
-  // Credit gates phrase it these ways, 429s included; an exhausted account
-  // must never read as a mere rate limit.
-  return /no remaining credits|insufficient credit|out of credit|credit limit|quota exceeded|purchase more credits|high percentage of your (overall )?credits/i.test(
-    raw
+/**
+ * The HTTP status a failure carries: up front (`429: …`), else inside a bare
+ * JSON body (`{"error":{"code":429}}`) or named in prose (`HTTP 429`).
+ */
+export function failureStatus(raw: string): string | undefined {
+  return (
+    raw.match(/^\s*(\d{3})\b/)?.[1] ??
+    raw.match(/^\s*[[{][\s\S]*?"(?:code|status)"\s*:\s*"?(\d{3})\b/)?.[1] ??
+    raw.match(/\b(?:HTTP|status(?: code)?)\s*:?\s*(\d{3})\b/i)?.[1]
   );
 }
+
+/**
+ * Why the Abacus credit gate refused a turn: `expired` is a free tier past
+ * its window; `exhausted` is every other refusal, an empty balance included.
+ */
+export type CreditWall = "exhausted" | "expired";
+
+/**
+ * The credit wall a failure names, or null when it names none. Generic quota
+ * and "credit limit" text is left out: providers use it for rate limits and
+ * for the user's own key, neither of which an Abacus plan answers. A 402 is
+ * read as exhausted whoever sent it; callers gate the card on Abacus serving.
+ */
+export function creditWall(raw: string): CreditWall | null {
+  // First: the expiry sentence keeps "no remaining credits" for old clients.
+  if (
+    /credits have expired|free (tier|credits?) (has|have)? ?expired/i.test(raw)
+  ) {
+    return "expired";
+  }
+  if (failureStatus(raw) === "402") return "exhausted";
+  return /no remaining credits|no credits remaining|insufficient credit|out of credits?|purchase more credits|high percentage of your (overall )?credits/i.test(
+    raw
+  )
+    ? "exhausted"
+    : null;
+}
+
+/** Out of Abacus credits for any reason: never a mere rate limit. */
+export const isOutOfCredits = (raw: string): boolean => creditWall(raw) != null;
 
 /**
  * Balance and billing sentences that never mean a rate limit, whoever relays
@@ -107,7 +138,7 @@ export function isOwnKeyOutOfCredit(
     return false;
   }
 
-  const status = raw.match(/^\s*(\d{3})\b/)?.[1];
+  const status = failureStatus(raw);
 
   if (status === "402") return true;
 
@@ -116,6 +147,7 @@ export function isOwnKeyOutOfCredit(
   return (
     namesEmptyBalance(raw) ||
     (provider === "openai" && /exceeded your current quota/i.test(raw)) ||
+    /credit limit/i.test(raw) ||
     isOutOfCredits(raw)
   );
 }

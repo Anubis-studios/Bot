@@ -409,7 +409,8 @@
         "helpful": "Good response",
         "notHelpful": "Bad response",
         "tellUsMore": "Tell us more",
-        "placeholder": "What went wrong?",
+        "placeholderUp": "What did you like?",
+        "placeholderDown": "What went wrong?",
         "send": "Send",
         "sent": "Thanks for the feedback",
         "notSynced": "Couldn't send feedback yet",
@@ -426,12 +427,9 @@
         "stop": "Interrompi connessione"
       },
       "placeholder": "Messaggio a {{name}}",
-      "openApp": "Open {{app}}",
       "pause": "Pause auto-reply",
       "resume": "Resume",
       "paused": "Check-ins paused.",
-      "channelReadOnly": "This conversation lives in {{app}}. Message the Abacus AI bot there. Everything you and the bot say shows up here.",
-      "channelReadOnlyWhatsapp": "This conversation lives in WhatsApp. Message yourself there, from your “Message yourself” chat. Everything you and the bot say shows up here.",
       "senderReadOnly": "Conversazione con risposta automatica: {{bot}} risponde a {{sender}} qui a tuo nome. Puoi leggere ma non scrivere; per cambiare le risposte, dillo a {{bot}} nella sua chat.",
       "openError": "Impossibile aprire la chat del bot.",
       "senderReadOnlyFallback": "{{bot}} risponde in questa conversazione.",
@@ -581,6 +579,7 @@
       "device_snapshot": "Leggere lo schermo come elenco di elementi.",
       "disconnect_connector": "Detach a connected service's account.",
       "discord_auto_reply": "Rispondi automaticamente ai messaggi Discord di persone scelte (solo bot).",
+      "take_chat_app_messages": "Indirizza la tua chat WhatsApp, Telegram o Discord a questo bot (solo bot).",
       "document": "Write a document and print it as a PDF.",
       "edit": "Sostituire un testo esatto all’interno di un file.",
       "exit_plan_mode": "Ask to leave plan mode and start carrying out the plan.",
@@ -864,6 +863,8 @@
     "used": "Crediti usati",
     "lowTitle": "I crediti stanno finendo",
     "outTitle": "Hai usato i tuoi crediti gratuiti",
+    "expiredTitle": "Your free credits have expired",
+    "readyTitle": "Cosa è pronto",
     "sideSessions": "Sessioni: i migliori modelli, esecuzioni più lunghe, progetti più grandi",
     "sideBots": "Bot: routine quotidiane, sempre attivi su Telegram e WhatsApp",
     "paidWebTitle": "Do even more on AbacusAI Agent",
@@ -1069,6 +1070,8 @@
     },
     "fromEnvironment": "Impostato da {{key}} nel tuo ambiente",
     "finishLinkFirst": "Finish linking the Abacus AI bot to complete setup.",
+    "homeBot": "I tuoi messaggi vanno a:",
+    "homeBotUnset": "Non ancora scelto",
     "getCredentials": "Ottieni le tue credenziali",
     "needsSetup": "Da configurare",
     "openSetupGuide": "Apri la guida alla configurazione",
@@ -1513,6 +1516,18 @@
       "awayTitle": "Routine",
       "away_one": "È arrivato {{count}} risultato mentre eri via.",
       "away_other": "Sono arrivati {{count}} risultati mentre eri via."
+    },
+    "alwaysOn": {
+      "local": "Routines run on this computer while it's on and AbacusAI Bot is open.",
+      "title": "Run around the clock",
+      "free": "Want routines to keep going with your laptop closed? Abacus AI Agent on the web runs them 24/7 on the Basic plan.",
+      "paid": "Your plan includes 24/7 routines in Abacus AI Agent on the web.",
+      "openAgent": "Open Abacus AI Agent",
+      "dismiss": "Dismiss",
+      "missed_one": "Missed {{count}} run while your computer was off",
+      "missed_other": "Missed {{count}} runs while your computer was off",
+      "missedNoticeFree": "{{names}}. On the Basic plan, Abacus AI Agent on the web runs routines 24/7, even with your computer off.",
+      "missedNoticePaid": "{{names}}. Your plan runs routines 24/7 in Abacus AI Agent on the web, even with your computer off."
     },
     "reach": {
       "gmailSearch": "Search Gmail",
@@ -3049,6 +3064,10 @@
     "visualizer": {
       "title": "Interactive visual",
       "drawing": "Drawing the visual"
+    },
+    "paidFeature": {
+      "title": "{{feature}} è incluso in Basic",
+      "webTitle": "{{feature}} è incluso in Basic, in Abacus AI Agent sul web"
     }
   },
   "notch": {

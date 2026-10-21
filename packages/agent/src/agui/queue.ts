@@ -17,6 +17,7 @@ import {
   markHostGone,
   setHostConnectivity,
 } from "../connectivity.js";
+import { setHostCreditBalance } from "../credit-balance.js";
 import { tagEvent } from "../event-meta.js";
 import {
   AgentStatus,
@@ -283,6 +284,11 @@ export class HostCore {
 
       case "connectivity":
         setHostConnectivity(command.state, command.resumed === true);
+
+        return;
+
+      case "credit_balance":
+        setHostCreditBalance(command);
 
         return;
 

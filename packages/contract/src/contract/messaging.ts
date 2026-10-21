@@ -49,6 +49,10 @@ export const messaging = {
   updateSettings: mutation
     .input(UpdateMessagingSettingsRequestSchema)
     .output(type<MessagingSnapshot>()),
+  /** Which bot the user's own chat on a chat app goes to (its home bot). */
+  setHomeBot: mutation
+    .input(v.object({ platformId: MessagingPlatformIdSchema, botId: BotId }))
+    .output(type<MessagingSnapshot>()),
   /** Reopen the platform's own web login window. */
   showLogin: mutation.input(PlatformInput).output(type<void>()),
   /**

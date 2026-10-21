@@ -16,6 +16,7 @@ import type {
 
 import type { HostedRoutineRefusal } from "../../agent-tools/hosted-routines";
 import { isRoutineRead } from "../../agent-tools/routine-reach";
+import { billingPlanReady } from "./billing";
 
 const KINDS: readonly HostedRoutineKind[] = [
   "reminder",
@@ -143,9 +144,11 @@ const upgradeLine = (details: Record<string, unknown>): string => {
   const link = text(upgrade.url);
   const plan = text(upgrade.plan_name);
   const price = text(upgrade.price_text);
-  return link == null
-    ? "Upgrading to a paid plan allows more (do not quote a price)."
-    : `${[plan, price].filter((part) => part != null).join(", ")}: ${link}`;
+  if (link != null)
+    return `${[plan, price].filter((part) => part != null).join(", ")}: ${link}`;
+  return billingPlanReady()
+    ? "Call billing_plan with upgrade: true for the plan, its price and their upgrade link."
+    : "Upgrading to a paid plan allows more (do not quote a price).";
 };
 
 const count = (value: unknown): number | null =>

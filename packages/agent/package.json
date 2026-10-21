@@ -29,6 +29,10 @@
       "types": "./dist/model-catalog.d.ts",
       "default": "./dist/model-catalog.js"
     },
+    "./child-env": {
+      "types": "./dist/child-env.d.ts",
+      "default": "./dist/child-env.js"
+    },
     "./atomic-file": {
       "types": "./dist/atomic-file.d.ts",
       "default": "./dist/atomic-file.js"
@@ -77,6 +81,10 @@
     "./user-text": {
       "types": "./dist/user-text.d.ts",
       "default": "./dist/user-text.js"
+    },
+    "./model-path": {
+      "types": "./dist/model-path.d.ts",
+      "default": "./dist/model-path.js"
     }
   },
   "scripts": {

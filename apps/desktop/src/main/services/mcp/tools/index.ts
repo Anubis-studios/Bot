@@ -9,6 +9,7 @@ import { INTEGRATIONS_TOOLS } from "./integrations";
 import { MEDIA_TOOLS } from "./media";
 import { MEMORY_TOOLS } from "./memory";
 import { MESSAGING_TOOLS } from "./messaging";
+import { PAID_FEATURE_TOOLS } from "./paid-features";
 import { SESSIONS_TOOLS } from "./sessions";
 import { SKILLS_TOOLS } from "./skills";
 import { TODO_TOOLS } from "./todo";
@@ -32,6 +33,7 @@ export const AGENT_TOOLS: readonly ToolDefinition[] = [
   ...CONNECTORS_TOOLS,
   ...BOTS_TOOLS,
   ...BILLING_TOOLS,
+  ...PAID_FEATURE_TOOLS,
   ...MESSAGING_TOOLS,
   ...SESSIONS_TOOLS,
 ];

@@ -19,6 +19,14 @@ import {
   serializeCommand,
 } from "./cli-manager-service";
 
+/** Where the agent's vendored tools live; empty means none, as in a source checkout. */
+const vendor = vi.hoisted(() => ({ dir: "" }));
+
+vi.mock("#main/resources", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("#main/resources")>()),
+  agentVendorDir: () => vendor.dir,
+}));
+
 /** A child that stays up until it is told to go. */
 const IDLE_SCRIPT = "setInterval(() => {}, 1000);";
 
@@ -137,6 +145,48 @@ describe("the child's stdin", () => {
     expect(stdin?.listenerCount("error")).toBeGreaterThan(0);
 
     await manager.dispose();
+  }, 15_000);
+});
+
+describe("the agent's environment", () => {
+  it("has one PATH: the user's entries, then the vendored tools", async () => {
+    vendor.dir = fs.mkdtempSync(path.join(os.tmpdir(), "cli-vendor-"));
+    // The child reports every spelling of PATH it was given.
+    const manager = service(
+      "require('fs').writeFileSync('env.json', JSON.stringify(Object.entries(process.env)" +
+        ".filter(([key]) => key.toUpperCase() === 'PATH')));" +
+        IDLE_SCRIPT
+    );
+    const entries = (value: string): string[] =>
+      value.split(path.delimiter).filter((entry) => entry.length > 0);
+
+    try {
+      const started = await manager.startSession({
+        workspaceId: "workspace-1",
+        sessionId: "session-1",
+        startupTimeoutMs: 30_000,
+      });
+      expect(started.success).toBe(true);
+
+      const seen = await vi.waitFor(
+        () =>
+          JSON.parse(
+            fs.readFileSync(path.join(workspace!, "env.json"), "utf8")
+          ) as Array<[string, string]>,
+        { timeout: 10_000 }
+      );
+
+      // On Windows the parent's own variable is spelled `Path`.
+      expect(seen.map(([key]) => key)).toEqual(["PATH"]);
+      expect(entries(seen[0]![1])).toEqual([
+        ...entries(process.env.PATH ?? ""),
+        vendor.dir,
+      ]);
+    } finally {
+      await manager.dispose();
+      fs.rmSync(vendor.dir, { recursive: true, force: true });
+      vendor.dir = "";
+    }
   }, 15_000);
 });
 

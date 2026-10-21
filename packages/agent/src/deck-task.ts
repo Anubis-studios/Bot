@@ -20,6 +20,7 @@ import { subAgentBasePrompt } from "./base-prompt.js";
 import { excludedTools } from "./excluded-tools.js";
 import guardrails from "./extensions/guardrails.js";
 import type { HostServiceClient } from "./host-services.js";
+import { modelPath, MODEL_PATH_RESOURCES } from "./model-path.js";
 import type { AgentEvent } from "./protocol.js";
 import { forwardChildToolEvents } from "./subagent-events.js";
 import {
@@ -276,7 +277,7 @@ const buildTools = (
       }
       if (draft.printed != null)
         return failed(
-          `Already printed to ${draft.printed.pdfPath}. Do not render twice.`
+          `Already printed to ${modelPath(draft.printed.pdfPath)}. Do not render twice.`
         );
 
       const given = Array.isArray(params.slides) ? params.slides : [];
@@ -353,16 +354,16 @@ const buildTools = (
 
         return ok(
           [
-            `Printed ${result.slides ?? slides.length} slides to ${result.pdfPath}`,
+            `Printed ${result.slides ?? slides.length} slides to ${modelPath(result.pdfPath)}`,
             ...(result.pptxPath != null
               ? [
-                  `Editable PowerPoint: ${result.pptxPath} (same words, plain layout, not the template's design).`,
+                  `Editable PowerPoint: ${modelPath(result.pptxPath)} (same words, plain layout, not the template's design).`,
                 ]
               : [
                   `No editable PowerPoint this time: ${result.pptxError ?? "the export failed"}. The PDF above is unaffected; say so if the user asked for one.`,
                 ]),
             ...(result.htmlPath != null
-              ? [`HTML source: ${result.htmlPath}`]
+              ? [`HTML source: ${modelPath(result.htmlPath)}`]
               : []),
             ...notes,
             "You are done. Say what the deck covers.",
@@ -392,6 +393,8 @@ export async function runDeckTask(
 
   try {
     const resourceLoader = new DefaultResourceLoader({
+      // Skill and AGENTS.md paths as the model should copy them.
+      ...MODEL_PATH_RESOURCES,
       cwd: context.cwd,
       agentDir: context.agentDir,
       settingsManager: context.settingsManager,

@@ -9,6 +9,7 @@ import { useTranslation } from "react-i18next";
 import { AppLink } from "#renderer/lib/navigation/app-link";
 import { ROUTINE_TEMPLATES } from "#renderer/lib/routines/templates";
 
+import { RoutinesAlwaysOnCard } from "./always-on";
 import { RoutineCreateAction } from "./create-action";
 
 /** One hue per template, so each card reads apart; tints work in both themes. */
@@ -106,6 +107,7 @@ export const RoutinesLanding = () => {
             ))}
           </div>
         </section>
+        <RoutinesAlwaysOnCard />
       </div>
     </div>
   );

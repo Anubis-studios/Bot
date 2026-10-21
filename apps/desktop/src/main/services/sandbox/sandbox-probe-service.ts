@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import os from "node:os";
 
+import { childProcessEnv } from "@abacus-ai/agent/child-env";
 import { sandboxBackendFor } from "@abacus-ai/agent/sandbox-support";
 import type { SandboxSupport } from "@abacus-ai/contract/contracts";
 
@@ -52,7 +53,7 @@ export class SandboxProbeService {
         artifact.execPath,
         [...artifact.execArgs, "--sandbox-probe"],
         {
-          env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
+          env: childProcessEnv(process.env, { ELECTRON_RUN_AS_NODE: "1" }),
           timeout: 30_000,
           windowsHide: true,
         },

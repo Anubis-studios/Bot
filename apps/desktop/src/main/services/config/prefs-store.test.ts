@@ -244,6 +244,9 @@ describe("PrefsStore", () => {
       routeLlmNudgeAt: null,
       routeLlmSwitched: false,
       newLookSeenAt: null,
+      routinesAlwaysOnToldAt: null,
+      routinesAlwaysOnCardAt: null,
+      routinesMissedSeenAt: null,
     });
     expect(store.provenance()).toMatchObject({
       "dismissals.upsell": "legacy",

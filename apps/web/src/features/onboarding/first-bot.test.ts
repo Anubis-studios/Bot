@@ -2,7 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { fixtureBots } from "#renderer/data/fixture-db/rows";
 
-import { ensureFirstBot, firstBotStore } from "./first-bot";
+import {
+  ensureFirstBot,
+  firstBotStore,
+  firstBotTemplateId,
+  noteConnectedChatApp,
+  previewFirstBot,
+} from "./first-bot";
 import { onboardingStore } from "./store";
 const deferred = <T>() => {
   let resolve!: (value: T) => void;
@@ -40,5 +46,51 @@ describe("R6-T9 first-bot persistence", () => {
       reason: "has_bots",
     });
     expect(create).not.toHaveBeenCalled();
+  });
+});
+
+describe("which bot onboarding starts with", () => {
+  it("is the agent of the chat app connected during onboarding", () => {
+    expect(firstBotTemplateId("telegram")).toBe("telegram-agent");
+    expect(firstBotTemplateId("whatsapp")).toBe("whatsapp-agent");
+    expect(firstBotTemplateId("discord")).toBe("discord-agent");
+  });
+
+  it("is the Chief of Staff when no chat app was connected", () => {
+    expect(firstBotTemplateId(null)).toBe("chief-of-staff");
+    expect(firstBotTemplateId(undefined)).toBe("chief-of-staff");
+  });
+
+  it("follows the chat app connected last", () => {
+    noteConnectedChatApp("whatsapp");
+    noteConnectedChatApp("telegram");
+
+    expect(firstBotTemplateId(onboardingStore.state.chatApp)).toBe(
+      "telegram-agent"
+    );
+  });
+
+  it("previews the template's own role and mission, its home app with it", () => {
+    const { bot } = previewFirstBot(
+      "bot-x",
+      "Telegram Agent",
+      "telegram-agent"
+    );
+
+    expect(bot.title).toBe("Your agent in Telegram - message it anytime");
+    expect(bot.description).toContain("Live in my Telegram.");
+    expect(bot.description).not.toContain("Gmail");
+    expect(bot.homeChannel).toBe("telegram");
+  });
+
+  it("drops a preview made before the chat app was connected", () => {
+    firstBotStore.setState(() => ({
+      state: "ready",
+      result: previewFirstBot("bot-x", "Chief of Staff"),
+    }));
+
+    noteConnectedChatApp("discord");
+
+    expect(firstBotStore.state).toEqual({ state: "idle" });
   });
 });

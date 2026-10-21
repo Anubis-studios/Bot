@@ -38,10 +38,14 @@ export default defineConfig({
     "src/sandbox-support.ts",
     // And the shared atomic write. Imports only node's fs, so main pays nothing.
     "src/atomic-file.ts",
+    // Every child process's environment: no imports at all.
+    "src/child-env.ts",
     // The renderer's tool titles, kinds and result formatting. Browser-safe:
     // no node or pi anywhere in its closure (tool-display.test.ts).
     "src/tool-display.ts",
     "src/user-text.ts",
+    // How a path is spelled for the model; main and the renderer show it paths.
+    "src/model-path.ts",
     // The phone reply's bubble split, for the hosted app's WhatsApp lane.
     "src/phone/phone-bubbles.ts",
     // The phone loop's zone, check-in language and due loops, for its agenda.

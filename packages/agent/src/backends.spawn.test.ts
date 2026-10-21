@@ -552,11 +552,9 @@ describe("running a command on this machine", () => {
     });
   });
 
-  it("merges into the caller's own spelling of PATH", async () => {
+  it("merges into the caller's PATH whatever its spelling", async () => {
     // Windows spells it `Path`, and pi's getShellEnv() passes that casing
-    // through. Reading `PATH` found nothing and writing `PATH` left two
-    // spellings side by side: libuv keeps one, and it may be the one without
-    // pi's bin directory.
+    // through; two spellings side by side would leave libuv keeping one.
     onPlatform("win32");
     unconfined();
     const operations = await localOperations();
@@ -569,11 +567,10 @@ describe("running a command on this machine", () => {
 
     const { env } = lastSpawn().options as { env: Record<string, string> };
 
-    // One PATH, under the key that was already there, not a second one
-    // beside it.
-    expect(env.PATH).toBeUndefined();
-    expect(env.Path?.startsWith("C:\\pi\\bin")).toBe(true);
-    expect(env.Path).toContain(SHELL_ENV.PATH);
+    // One PATH, folded from the caller's `Path`.
+    expect(env.Path).toBeUndefined();
+    expect(env.PATH?.startsWith("C:\\pi\\bin")).toBe(true);
+    expect(env.PATH).toContain(SHELL_ENV.PATH);
   });
 
   it("hands the fallback command line over without re-quoting it", async () => {
@@ -618,7 +615,8 @@ describe("running a command on this machine", () => {
         windowsVerbatimArguments: true,
       });
       const { env } = lastSpawn().options as { env: Record<string, string> };
-      expect(env.Path?.startsWith("C:\\bb\\bin")).toBe(true);
+      expect(env.Path).toBeUndefined();
+      expect(env.PATH?.startsWith("C:\\bb\\bin")).toBe(true);
     } finally {
       bundledShell.value = undefined;
     }

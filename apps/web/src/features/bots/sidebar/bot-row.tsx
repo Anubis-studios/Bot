@@ -13,10 +13,6 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ACCENT_OUTLINE_CLASS } from "#renderer/components/bot-avatar";
-import {
-  ConnectorMark,
-  markForPlatform,
-} from "#renderer/components/connector-mark";
 import { cn } from "#renderer/lib/cn";
 import { motionFor, springs, useMotionPreference } from "#renderer/lib/motion";
 import { AppLink } from "#renderer/lib/navigation/app-link";
@@ -148,7 +144,6 @@ export const BotRowView = ({
   const [menuOpen, setMenuOpen] = useState(false);
   const motionPref = useMotionPreference();
   const line = secondaryLine(attention, bot, preview, t);
-  const mark = bot.channel != null ? markForPlatform(bot.channel) : null;
   const label = `${bot.name}, ${line.text}`;
   return (
     <motion.div
@@ -205,7 +200,6 @@ export const BotRowView = ({
                 >
                   {bot.name}
                 </span>
-                {mark != null && <ConnectorMark id={mark} size={16} />}
                 <span
                   style={{ visibility: menuOpen ? "hidden" : undefined }}
                   className="text-muted-foreground ml-auto shrink-0 text-[11px] group-focus-within/row:invisible group-hover/row:invisible [@media(hover:none)]:invisible"

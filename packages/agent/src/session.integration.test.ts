@@ -1203,13 +1203,16 @@ describe("OpenLLM", () => {
 
     const reported = harness.agent("error").at(0)?.error;
 
-    // One fixed line and the switch card: under the router the user never
-    // chose a model, so no provider's sentence about one is shown, and the
-    // way out is a button rather than a red line.
+    // One fixed line and the cards: under the router the user never chose a
+    // model, so no provider's sentence about one is shown. A free account is
+    // offered the plan for a busy pool; a paid one keeps the switch.
     expect(reported?.message).toBe(OPENLLM_POOL_EXHAUSTED_MESSAGE);
     expect(reported?.message).not.toMatch(/429|upstream|https?:\/\//);
     expect(reported?.detail).toBeUndefined();
-    expect(reported?.actions).toEqual([{ type: "switch-model" }]);
+    expect(reported?.actions).toEqual([
+      { type: "free-pool-out", cause: "busy" },
+      { type: "switch-model" },
+    ]);
   });
 
   describe("when the network goes", () => {

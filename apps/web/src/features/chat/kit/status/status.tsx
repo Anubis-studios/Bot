@@ -3,6 +3,7 @@
  * bubble, run outcome markers, the error card with its action table (and
  * the upgrade variant), and notices.
  */
+import { providerDisplayName } from "@abacus-ai/contract/settings";
 import type { UIMessage } from "@tanstack/ai-client";
 import { AlertTriangle, CheckCircle2, Info, X, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -11,12 +12,12 @@ import { useTranslation } from "react-i18next";
 import { CreditsCard } from "#renderer/components/credits-card";
 import { GroupCard } from "#renderer/components/form-kit/page";
 import { ABACUS_AGENT_URL } from "#renderer/lib/abacus-links";
+import { latestPresented } from "#renderer/lib/bot-turns/deliverables";
 import { cn } from "#renderer/lib/cn";
 import { AppLink } from "#renderer/lib/navigation/app-link";
 import {
   ownKeyFailure,
   ownKeyHeadlineKey,
-  providerDisplayName,
   type OwnKeyFailure,
 } from "#renderer/lib/own-key-unavailable";
 import { IS_ELECTRON } from "#renderer/lib/platform";
@@ -240,10 +241,18 @@ export const RunMarker = ({ outcome }: { outcome: RunOutcomeRecord }) => {
   );
 };
 
-const wantsUpgradeCard = (actions?: ErrorAction[]): boolean =>
+/** A busy free pool sells a plan to a free account only; a paying one switches. */
+const wantsUpgradeCard = (actions?: ErrorAction[], paying = false): boolean =>
   actions?.some(
     (action) =>
-      action.type === "upgrade-abacus" || action.type === "free-pool-out"
+      action.type === "upgrade-abacus" ||
+      (action.type === "free-pool-out" && !(paying && action.cause === "busy"))
+  ) === true;
+
+/** A free tier past its window, rather than an empty balance. */
+const creditsExpired = (actions?: ErrorAction[]): boolean =>
+  actions?.some(
+    (action) => action.type === "upgrade-abacus" && action.cause === "expired"
   ) === true;
 
 const exhaustedScope = (actions?: ErrorAction[]): "abacus" | "pool" =>
@@ -326,6 +335,16 @@ const OwnKeyCard = ({
   );
 };
 
+/** What the turn a wall cut off handed over, up to the outcome's anchor. */
+const readyBefore = (
+  messages: readonly UIMessage[],
+  afterMessageId: string | null
+) => {
+  if (afterMessageId == null) return [];
+  const at = messages.findIndex((message) => message.id === afterMessageId);
+  return latestPresented(at < 0 ? messages : messages.slice(0, at + 1));
+};
+
 export interface ErrorCardProps {
   outcome: RunOutcomeRecord;
   /** The latest terminal while the thread is idle (Retry is offered then). */
@@ -339,7 +358,7 @@ export const ErrorCard = ({
   tier: providedTier,
 }: ErrorCardProps) => {
   const { t } = useTranslation();
-  const { session, composer, runtime, skin } = useChatView();
+  const { session, composer, runtime, skin, slots } = useChatView();
   const [accountTier, setAccountTier] =
     useState<NonNullable<ErrorCardProps["tier"]>>("unknown");
   useEffect(() => {
@@ -360,10 +379,16 @@ export const ErrorCard = ({
   const actions = ((error as { actions?: ErrorAction[] }).actions ??
     []) as ErrorAction[];
   const detail = (error as { detail?: string }).detail;
-  const upgrade = wantsUpgradeCard(actions);
+  const upgrade = wantsUpgradeCard(
+    actions,
+    tier === "paid" || tier === "basic"
+  );
+  // A busy pool spent no credits.
+  const exhausted =
+    upgrade && !actions.some((action) => action.cause === "busy");
   useEffect(() => {
-    if (upgrade) void runtime.host.markCreditsExhausted?.().catch(() => {});
-  }, [upgrade, runtime]);
+    if (exhausted) void runtime.host.markCreditsExhausted?.().catch(() => {});
+  }, [exhausted, runtime]);
   const crashed = error.code === "agent_exit" || error.code === "agent_crashed";
   const canReply = composer.readOnly == null;
   const retry = () =>
@@ -381,7 +406,11 @@ export const ErrorCard = ({
     !(ownKey.cause === "network" && globalThis.navigator?.onLine === false)
   )
     return <OwnKeyCard failure={ownKey} tier={tier} runId={outcome.runId} />;
-  if (wantsUpgradeCard(actions)) {
+  if (upgrade) {
+    const ready =
+      slots.renderDeliverables == null
+        ? []
+        : readyBefore(session.hostStore.state.messages, outcome.afterMessageId);
     return (
       <div
         role="group"
@@ -394,6 +423,12 @@ export const ErrorCard = ({
           host={runtime.host}
           tier={tier}
           scope={exhaustedScope(actions)}
+          {...(creditsExpired(actions) && {
+            title: t("creditsCard.expiredTitle"),
+          })}
+          {...(ready.length > 0 && {
+            ready: slots.renderDeliverables?.(ready),
+          })}
           alternatives={
             canReply ? (
               <>

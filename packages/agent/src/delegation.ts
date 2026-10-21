@@ -23,6 +23,7 @@ import { subAgentBasePrompt } from "./base-prompt.js";
 import { excludedTools } from "./excluded-tools.js";
 import guardrails from "./extensions/guardrails.js";
 import { scopeGuard, taskScope } from "./extensions/scope-guard.js";
+import { modelPath, MODEL_PATH_RESOURCES } from "./model-path.js";
 import { windowsShellPrompt } from "./posix-shell.js";
 import type { AgentEvent } from "./protocol.js";
 import { forwardChildToolEvents } from "./subagent-events.js";
@@ -114,6 +115,8 @@ export async function runDelegatedTask(
 
   try {
     const resourceLoader = new DefaultResourceLoader({
+      // Skill and AGENTS.md paths as the model should copy them.
+      ...MODEL_PATH_RESOURCES,
       cwd: root,
       agentDir: context.agentDir,
       settingsManager: context.settingsManager,
@@ -133,7 +136,7 @@ export async function runDelegatedTask(
           "your intermediate steps. Make it complete and self-contained: state what you found, name",
           "the files and identifiers that matter, and say plainly if you could not determine something.",
           "",
-          `This task is about ${root}. Work there and with any path the task names. If something`,
+          `This task is about ${modelPath(root)}. Work there and with any path the task names. If something`,
           "you need is not there, report it as missing: do not search the rest of this machine for",
           "a copy, since another checkout or version would answer a different question. Paths",
           "elsewhere in the user's home folder are refused.",
@@ -246,11 +249,14 @@ function answerText(run: SubagentRunResult): string {
 function scopeNote(root: string, refused: string[]): string {
   if (refused.length === 0) return "";
   const unique = [...new Set(refused)];
-  const shown = unique.slice(0, 5).join(", ");
+  const shown = unique
+    .slice(0, 5)
+    .map((refusedPath) => modelPath(refusedPath))
+    .join(", ");
   const more = unique.length > 5 ? ` and ${unique.length - 5} more` : "";
 
   return (
-    `\n\n(Scope: the sub-agent was kept inside ${root} and refused ${unique.length} ` +
-    `path(s) outside it: ${shown}${more}. If it needed them, they are missing from ${root}.)`
+    `\n\n(Scope: the sub-agent was kept inside ${modelPath(root)} and refused ${unique.length} ` +
+    `path(s) outside it: ${shown}${more}. If it needed them, they are missing from ${modelPath(root)}.)`
   );
 }

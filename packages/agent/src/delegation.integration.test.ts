@@ -29,6 +29,7 @@ import { resolveTaskRoot, runDelegatedTask } from "./delegation.js";
 import { runDesignTask } from "./design-task.js";
 import { runDocumentTask } from "./document-task.js";
 import { HostServiceClient } from "./host-services.js";
+import { modelPath } from "./model-path.js";
 import type { AgentEvent } from "./protocol.js";
 import { createModelRuntime } from "./providers.js";
 
@@ -267,7 +268,7 @@ describe("where a delegated run may look", () => {
 
     expect(asked()).toMatch(/outside .*the folder this task is about/);
     expect(result.text).toContain("refused 1 path(s)");
-    expect(result.text).toContain(elsewhere);
+    expect(result.text).toContain(modelPath(elsewhere));
   });
 
   it("is refused a search of the whole disk", async () => {

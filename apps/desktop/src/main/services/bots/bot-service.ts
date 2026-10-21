@@ -10,12 +10,19 @@ import path from "path";
 import type { UserTextTags } from "@abacus-ai/contract/agent-types";
 import {
   type Bot,
+  type HomeChannel,
   type BotChangeNotice,
   type BotChatHandle,
   type BotCreateInput,
   type BotUpdateInput,
+  HOME_CHANNEL_NAMES,
+  HOME_CHANNELS,
   SPONSORED_RUN_MARKER,
 } from "@abacus-ai/contract/bots";
+import {
+  BOT_TEMPLATES,
+  type BotTemplate,
+} from "@abacus-ai/contract/bots/templates";
 import type { SessionOwner } from "@abacus-ai/contract/contracts";
 import { EntityNotFoundError } from "@abacus-ai/contract/not-found";
 
@@ -97,13 +104,63 @@ export interface BotServiceCallbacks {
    * routine would fire into a fresh anonymous session.
    */
   onBotRemoved?: (botId: string) => void;
+  /** Each chat app's stored home bot; may name a bot since deleted. */
+  homeBots?: () => Partial<Record<HomeChannel, string>>;
+  /** Persist a chat app's home bot. Only setHomeBot calls it. */
+  saveHomeBot?: (app: HomeChannel, botId: string) => void;
 }
+
+/** The app's agent template (Telegram Agent and the like). */
+const agentTemplateFor = (app: HomeChannel): BotTemplate => {
+  const template = BOT_TEMPLATES.find((row) => row.homeChannel === app);
+  if (template == null) throw new Error(`No agent template for ${app}.`);
+  return template;
+};
+
+/** A chat-app agent's home: the app the user talks to it in. */
+const homeChannelLines = (bot: Bot): string[] => {
+  if (bot.homeChannel == null) return [];
+  const app = HOME_CHANNEL_NAMES[bot.homeChannel];
+  return ["", `**Your main connector to use is ${app}.**`];
+};
+
+/**
+ * Which chat apps' own chats this bot answers, and for the others who does:
+ * the user asking a bot to chat on an app should hear where it goes now.
+ */
+const homeBotLines = (
+  bot: Bot,
+  homes: Partial<Record<HomeChannel, Bot>>
+): string[] =>
+  HOME_CHANNELS.flatMap((channel) => {
+    const home = homes[channel];
+    if (home == null) return [];
+    const app = HOME_CHANNEL_NAMES[channel];
+    return home.id === bot.id
+      ? [
+          "",
+          `The user's own ${app} chat comes to you: what they type there arrives here`,
+          `marked as from ${app}, and your reply goes straight back to them there.`,
+          'Replying IS messaging them, so when they say "send me X" or "message me",',
+          "just answer with X.",
+        ]
+      : [
+          "",
+          `If the user asks to chat with you on ${app}, say their ${app} messages`,
+          `currently go to ${home.name}, and offer to switch them to you; when they`,
+          `agree, call take_chat_app_messages with app "${channel}". You can still`,
+          `send them updates on ${app} either way.`,
+        ];
+  });
 
 /**
  * The bot's standing prompt, framed like custom instructions and explicit
  * that the persona does not widen permissions.
  */
-const renderPersona = (bot: Bot): string => {
+const renderPersona = (
+  bot: Bot,
+  homes: Partial<Record<HomeChannel, Bot>>
+): string => {
   const role = bot.title.length > 0 ? bot.title : "assistant";
 
   return [
@@ -115,6 +172,8 @@ const renderPersona = (bot: Bot): string => {
     ...(bot.persona.length > 0
       ? [`**Your voice (how you speak, in every message):** ${bot.persona}`]
       : []),
+    ...homeChannelLines(bot),
+    ...homeBotLines(bot, homes),
     "",
     `You are ${bot.name}, a persistent named agent. This conversation is your`,
     "single ongoing chat with your user: it keeps its history across restarts,",
@@ -254,6 +313,84 @@ export class BotService {
     this.callbacks.emitChanged();
 
     return bot;
+  }
+
+  /** The bot the user's own chat on this app goes to; null when unset or deleted. */
+  homeBotId(app: HomeChannel): string | null {
+    const id = this.callbacks.homeBots?.()[app] ?? null;
+    return id != null && getBot(id) != null ? id : null;
+  }
+
+  /** The one setter: every way a chat app's home bot changes comes here. */
+  setHomeBot(app: HomeChannel, botId: string): Bot {
+    const bot = getBot(botId);
+    if (bot == null)
+      throw new EntityNotFoundError("bot", botId, `No bot with id "${botId}".`);
+    if (this.homeBotId(app) === botId) return bot;
+    this.callbacks.saveHomeBot?.(app, botId);
+    // Every persona: the other bots name the home bot.
+    this.rewriteAllPersonas();
+    this.callbacks.emitChanged();
+    return bot;
+  }
+
+  /**
+   * The app's home bot, set when there is none (never set, or deleted): the
+   * first bot made from the app's agent template, else a new one from it.
+   */
+  ensureHomeBot(app: HomeChannel): string {
+    const current = this.homeBotId(app);
+    if (current != null) return current;
+    const first = listBots()
+      .filter((bot) => bot.homeChannel === app)
+      .sort((a, b) => a.createdAt - b.createdAt)[0];
+    const bot = first ?? this.createFromTemplate(agentTemplateFor(app));
+    return this.setHomeBot(app, bot.id).id;
+  }
+
+  /** A bot made from a template, speaking first in its chat. */
+  private createFromTemplate(template: BotTemplate): Bot {
+    const bot = this.create({
+      name: template.name,
+      title: template.title,
+      persona: template.persona,
+      description: template.mission,
+      avatarColor: template.avatarColor,
+      avatarShape: template.avatarShape,
+      homeChannel: template.homeChannel ?? null,
+    });
+    void this.openChat(bot.id).catch((error: unknown) => {
+      console.error(`[bots] ${bot.name} failed to open its chat:`, error);
+    });
+    return bot;
+  }
+
+  /**
+   * Older installs answered each self lane with a hidden "… AbacusAI Bot <->
+   * You" bot (stamped with `channel`). It becomes that app's agent, history
+   * kept, and its home bot unless the app has another. Idempotent: the
+   * stamp it clears is what selects it.
+   */
+  adoptChannelBots(): void {
+    let adopted = false;
+    for (const bot of listBots()) {
+      const app = HOME_CHANNELS.find((channel) => channel === bot.channel);
+      if (app == null) continue;
+      adopted = true;
+      const template = agentTemplateFor(app);
+      updateBot(bot.id, {
+        name: template.name,
+        title: template.title,
+        persona: template.persona,
+        description: template.mission,
+        homeChannel: app,
+        channel: null,
+      });
+      if (this.homeBotId(app) == null)
+        this.callbacks.saveHomeBot?.(app, bot.id);
+      console.log(`[bots] ${bot.id} adopted as the ${app} agent`);
+    }
+    if (adopted) this.rewriteAllPersonas();
   }
 
   /**
@@ -629,11 +766,11 @@ export class BotService {
     return botForSession(sessionId)?.id ?? null;
   }
 
-  /** A bot's forever chat that lives in the app, not behind a chat app's bot. */
+  /** A bot's forever chat, where the user is in the app. */
   isAppBotChat(sessionId: string): boolean {
     const bot = botForSession(sessionId);
     // A sender's chat runs the same bot but is that person's, not the owner's.
-    return bot != null && bot.sessionId === sessionId && bot.channel == null;
+    return bot != null && bot.sessionId === sessionId;
   }
 
   /**
@@ -661,17 +798,29 @@ export class BotService {
     return bot == null ? {} : sponsoredRunEnv(bot);
   }
 
-  private writePersona(bot: Bot): void {
+  private writePersona(bot: Bot, homes = this.homes()): void {
     const file = personaPath(bot.id);
     fs.mkdirSync(path.dirname(file), { recursive: true });
 
     const temp = `${file}.tmp`;
-    fs.writeFileSync(temp, `${renderPersona(bot)}\n`, "utf8");
+    fs.writeFileSync(temp, `${renderPersona(bot, homes)}\n`, "utf8");
     fs.renameSync(temp, file);
+  }
+
+  /** The home bots that exist, by app. */
+  private homes(): Partial<Record<HomeChannel, Bot>> {
+    const homes: Partial<Record<HomeChannel, Bot>> = {};
+    for (const app of HOME_CHANNELS) {
+      const id = this.homeBotId(app);
+      const bot = id != null ? getBot(id) : null;
+      if (bot != null) homes[app] = bot;
+    }
+    return homes;
   }
 
   /** Personas live on disk and running sessions re-read them per turn. */
   private rewriteAllPersonas(): void {
-    for (const bot of listBots()) this.writePersona(bot);
+    const homes = this.homes();
+    for (const bot of listBots()) this.writePersona(bot, homes);
   }
 }

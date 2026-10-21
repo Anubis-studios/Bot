@@ -109,6 +109,19 @@ export interface HostedRoutineInfo {
   createdAs?: string | null;
 }
 
+/**
+ * Abacus AI Agent on the web, where paid plans keep scheduled tasks that run
+ * on the server, with the computer off.
+ */
+export const ABACUS_AGENT_ROUTINES_URL = "https://apps.abacus.ai/chatllm/agent";
+
+/** Fires a local routine missed while the computer was off (asleep or the app closed). */
+export interface RoutineMissed {
+  count: number;
+  /** When the scheduler found them, on the next tick back. */
+  at: number;
+}
+
 export interface Routine {
   id: string;
   name: string;
@@ -139,6 +152,8 @@ export interface Routine {
   access?: "unattended" | "full";
   /** What a local routine's unattended runs may reach. */
   reach?: RoutineReach | null;
+  /** The fires it last missed while the computer was off; cleared by its next on-time fire. */
+  missed?: RoutineMissed | null;
 }
 
 export interface RoutineListItem extends Routine {

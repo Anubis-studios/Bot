@@ -19,6 +19,7 @@ let harness: (AppHarness & { view?: { unmount(): void } }) | null = null;
 afterEach(async () => {
   await harness?.cleanup();
   harness = null;
+  localStorage.clear();
 });
 
 type AnyRouteNode = {
@@ -104,6 +105,19 @@ describe("redirects", () => {
       expect(harness!.router.state.location.pathname).toBe(to)
     );
   });
+
+  it.each(["/bots/chief-of-staff", "/sessions/fix-sidebar-width"])(
+    "/ reopens the last page, %s",
+    async (page) => {
+      harness = await renderApp(page);
+      await act(async () => {
+        await harness!.router.navigate({ to: "/" });
+      });
+      await waitFor(() =>
+        expect(harness!.router.state.location.pathname).toBe(page)
+      );
+    }
+  );
 
   it("renders the start page and the bots sidebar on /bots/new", async () => {
     harness = await renderApp("/bots/new");

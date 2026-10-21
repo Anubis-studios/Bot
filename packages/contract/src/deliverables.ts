@@ -64,15 +64,15 @@ export interface PresentedDeliverable {
 /**
  * Does a declared target answer a requested path? The tool resolves a
  * relative path against the workspace, so the absolute form ends with it.
+ * Separators do not count: the model is shown `C:/x` for the tool's `C:\x`.
  */
 const answers = (declared: string, requested: string): boolean => {
-  if (declared === requested) return true;
-  if (isDeliverableUrl(requested) || /^([a-zA-Z]:)?[\\/]/.test(requested))
-    return false;
-  const relative = requested.replace(/^\.[\\/]/, "");
-  return (
-    declared.endsWith(`/${relative}`) || declared.endsWith(`\\${relative}`)
-  );
+  if (isDeliverableUrl(requested)) return declared === requested;
+  const target = declared.replaceAll("\\", "/");
+  const asked = requested.replaceAll("\\", "/");
+  if (target === asked) return true;
+  if (/^([a-zA-Z]:)?\//.test(asked)) return false;
+  return target.endsWith(`/${asked.replace(/^\.\//, "")}`);
 };
 
 /**

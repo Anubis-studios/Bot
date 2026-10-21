@@ -62,6 +62,8 @@ const harness = (options: {
   /** The caller: the user, a bot's own chat, or a bot's chat with someone else. */
   caller?: "user" | "bot" | "sender";
   created?: RoutineListItem;
+  /** The once-per-user 24/7 note's plan, as the host claims it. */
+  alwaysOn?: "free" | "paid" | null;
 }) => {
   const hosted = new HostedRoutines({
     call: async () => ({ ok: false, status: 404, body: {} }),
@@ -94,6 +96,7 @@ const harness = (options: {
       defaultRunner: () => options.defaultRunner ?? "local",
       create,
       hosted,
+      alwaysOnNote: async () => options.alwaysOn ?? null,
     },
   } as never);
   const call = async (args: Record<string, unknown>): Promise<string> => {
@@ -232,7 +235,7 @@ describe("cronjob, hosted", () => {
     }
   });
 
-  it("without the server's offer, mentions upgrading and quotes no price", async () => {
+  it("without the server's offer, sends the model to billing_plan and quotes no price", async () => {
     const { call } = harness({
       defaultRunner: "hosted",
       create: async () => {
@@ -247,7 +250,7 @@ describe("cronjob, hosted", () => {
       prompt: "x",
       schedule: "0 8 * * *",
     });
-    expect(text).toContain("do not quote a price");
+    expect(text).toContain("Call billing_plan with upgrade: true");
     expect(text).not.toMatch(/\$|Basic/);
   });
 
@@ -416,8 +419,33 @@ describe("cronjob, local", () => {
     );
     expect(runCronJob).toHaveBeenCalledWith(listJobs()[0]!.id, "create");
     expect(text).toMatch(/^Created\./);
-    expect(text).toContain("Its runs have full access on this computer");
+    expect(text).toContain(
+      "only while the computer is on and AbacusAI Bot is open"
+    );
+    expect(text).toContain("unlimited on every plan");
+    expect(text).toContain("Its runs have full access");
     expect(text).not.toContain("Its runs are unattended");
+    expect(text).not.toContain("[once]");
+  });
+
+  it("says once where routines run 24/7, by the plan", async () => {
+    const free = await harness({ alwaysOn: "free" }).call({
+      action: "create",
+      prompt: "Local digest",
+      schedule: "0 9 * * *",
+    });
+    expect(free).toContain("[once]");
+    expect(free).toContain("the Basic plan runs routines 24/7");
+    expect(free).toContain("https://apps.abacus.ai/chatllm/agent");
+    expect(free).toContain("billing_plan with upgrade: true");
+
+    const paid = await harness({ alwaysOn: "paid" }).call({
+      action: "create",
+      prompt: "Local digest 2",
+      schedule: "0 9 * * *",
+    });
+    expect(paid).toContain("their plan already includes routines");
+    expect(paid).not.toContain("billing_plan");
   });
 
   it("takes an explicit local runner where the default is hosted", async () => {

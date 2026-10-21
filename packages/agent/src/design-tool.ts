@@ -5,6 +5,7 @@ import { Type } from "typebox";
 
 import { runDesignTask, type DesignTaskContext } from "./design-task.js";
 import { scopeEmit, tagEvent } from "./event-meta.js";
+import { modelPath } from "./model-path.js";
 import type { AgentEvent } from "./protocol.js";
 import { resolveInWorkspace } from "./workspace-path.js";
 
@@ -43,6 +44,8 @@ export function buildDesignTool(
     label: "design",
     description: [
       "Design the screens of a product: a canvas of mockups, plus a PNG of each screen.",
+      "These are static pictures; not for anything the user wants to use. An app or a",
+      "prototype to click through is code: write it and serve it.",
       "",
       "Hand over the brief and an output directory; a sub-agent picks the palette, composes",
       "each screen from a block catalog, writes every word on them, and renders the canvas.",
@@ -196,10 +199,10 @@ export function buildDesignTool(
           {
             type: "text" as const,
             text: [
-              `Designed ${result.screens ?? 0} screens: ${result.canvasPath}`,
-              `Screens and PNGs: ${result.directory ?? outputDir}`,
+              `Designed ${result.screens ?? 0} screens: ${modelPath(result.canvasPath)}`,
+              `Screens and PNGs: ${modelPath(result.directory ?? outputDir)}`,
               "",
-              `Hand it over: present_deliverable with ${result.canvasPath}`,
+              `Hand it over: present_deliverable with ${modelPath(result.canvasPath)}`,
             ].join("\n"),
           },
         ],

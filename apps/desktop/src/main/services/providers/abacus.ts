@@ -317,6 +317,45 @@ const withCurrentConfigured = (
 
 let accountCache: { value: AbacusAccountInfo; at: number } | null = null;
 
+/** What is left of the account's credits, as of one read. */
+export interface CreditSnapshot {
+  remaining: number;
+  granted: number;
+  at: number;
+}
+
+const snapshotOf = (
+  cached: { value: AbacusAccountInfo; at: number } | null
+): CreditSnapshot | null => {
+  if (cached == null) return null;
+  const { credits_used: used, credits_granted: granted } = cached.value;
+  if (used == null || granted == null || granted <= 0) return null;
+  return { remaining: Math.max(0, granted - used), granted, at: cached.at };
+};
+
+/** The credit balance as of the last account read; null without one. */
+export const creditSnapshot = (): CreditSnapshot | null =>
+  snapshotOf(accountCache);
+
+const accountReadListeners = new Set<(snapshot: CreditSnapshot) => void>();
+
+/** Hears every fresh account read that carries a balance. */
+export function onAbacusAccountRead(
+  listener: (snapshot: CreditSnapshot) => void
+): () => void {
+  accountReadListeners.add(listener);
+  return () => {
+    accountReadListeners.delete(listener);
+  };
+}
+
+const remember = (value: AbacusAccountInfo): void => {
+  accountCache = { value, at: Date.now() };
+  const snapshot = snapshotOf(accountCache);
+  if (snapshot != null)
+    for (const listener of Array.from(accountReadListeners)) listener(snapshot);
+};
+
 export const clearAbacusCache = (): void => {
   cache = null;
   accountCache = null;
@@ -438,7 +477,7 @@ export const fetchAbacusAccount = async (
       if (!modelsResponse.ok) return accountCache?.value ?? null;
 
       const value = connectedAccountWithoutProfile();
-      accountCache = { value, at: Date.now() };
+      remember(value);
 
       return value;
     }
@@ -467,7 +506,7 @@ export const fetchAbacusAccount = async (
       google_sign_in: body.google_sign_in === true,
       focus: ABACUS_ACCOUNT_FOCI.find((focus) => focus === body.focus) ?? null,
     };
-    accountCache = { value, at: Date.now() };
+    remember(value);
 
     return value;
   } catch {

@@ -1,5 +1,6 @@
 import type { ChannelCapabilities } from "@abacus-ai/agent/channel";
 import type { MessagingPlatformId } from "@abacus-ai/contract/messaging";
+import type { PaidFeature } from "@abacus-ai/contract/toolsets";
 
 import type { McpAgentToolsServer } from "../mcp-agent-tools-server";
 import type { McpToolResult } from "../mcp-http-server";
@@ -37,7 +38,9 @@ export type ToolHost = Pick<
   | "listChats"
   | "readChatMessages"
   | "autoReply"
+  | "takeChatAppMessages"
   | "homeAssistant"
+  | "paidFeature"
   | "ok"
   | "err"
 >;
@@ -51,6 +54,8 @@ export type ToolHost = Pick<
 export interface HostCapabilities {
   /** Routines can be kept on the server (the hosted computer only). */
   hostedRoutines: boolean;
+  /** Paid-plan capabilities with none of their tools listed for this account. */
+  withheldFeatures: readonly PaidFeature[];
 }
 
 export interface ToolDefinition {
@@ -111,6 +116,8 @@ export interface ToolDefinition {
    * list should get the setup hint, not "unknown tool".
    */
   ready?: () => boolean;
+  /** Listed only when this holds for what the host offers the caller. */
+  offered?: (host: HostCapabilities) => boolean;
   run: (
     host: ToolHost,
     args: Record<string, unknown>,

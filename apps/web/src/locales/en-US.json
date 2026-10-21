@@ -409,7 +409,8 @@
         "helpful": "Good response",
         "notHelpful": "Bad response",
         "tellUsMore": "Tell us more",
-        "placeholder": "What went wrong?",
+        "placeholderUp": "What did you like?",
+        "placeholderDown": "What went wrong?",
         "send": "Send",
         "sent": "Thanks for the feedback",
         "notSynced": "Couldn't send feedback yet",
@@ -426,12 +427,9 @@
         "stop": "Stop connecting"
       },
       "placeholder": "Message {{name}}",
-      "openApp": "Open {{app}}",
       "pause": "Pause auto-reply",
       "resume": "Resume",
       "paused": "Check-ins paused.",
-      "channelReadOnly": "This bot replies on {{app}}.",
-      "channelReadOnlyWhatsapp": "This bot replies on WhatsApp.",
       "senderReadOnly": "{{bot}} replies to {{sender}} here.",
       "openError": "Couldn't open this bot",
       "senderReadOnlyFallback": "{{bot}} replies in this conversation.",
@@ -581,6 +579,7 @@
       "device_snapshot": "Read the screen as a list of elements.",
       "disconnect_connector": "Detach a connected service's account.",
       "discord_auto_reply": "Answer Discord messages from chosen people automatically (bots only).",
+      "take_chat_app_messages": "Send your own WhatsApp, Telegram or Discord chat to this bot (bots only).",
       "document": "Write a document and print it as a PDF.",
       "edit": "Replace an exact piece of text inside a file.",
       "exit_plan_mode": "Ask to leave plan mode and start carrying out the plan.",
@@ -864,6 +863,8 @@
     "used": "Credits used",
     "lowTitle": "Running low on credits",
     "outTitle": "You've used your free credits",
+    "expiredTitle": "Your free credits have expired",
+    "readyTitle": "What's ready",
     "sideSessions": "Sessions: top models, longer runs, bigger projects",
     "sideBots": "Bots: daily routines, always on Telegram and WhatsApp",
     "paidWebTitle": "Do even more on AbacusAI Agent",
@@ -1069,6 +1070,8 @@
     },
     "fromEnvironment": "Set by {{key}} in your environment",
     "finishLinkFirst": "Finish linking the Abacus AI bot to complete setup.",
+    "homeBot": "Your messages go to:",
+    "homeBotUnset": "Not set yet",
     "getCredentials": "Get your credentials",
     "needsSetup": "Needs setup",
     "openSetupGuide": "Open setup guide",
@@ -1513,6 +1516,18 @@
       "awayTitle": "Routines",
       "away_one": "{{count}} result came in while you were away.",
       "away_other": "{{count}} results came in while you were away."
+    },
+    "alwaysOn": {
+      "local": "Routines run on this computer while it's on and AbacusAI Bot is open.",
+      "title": "Run around the clock",
+      "free": "Want routines to keep going with your laptop closed? Abacus AI Agent on the web runs them 24/7 on the Basic plan.",
+      "paid": "Your plan includes 24/7 routines in Abacus AI Agent on the web.",
+      "openAgent": "Open Abacus AI Agent",
+      "dismiss": "Dismiss",
+      "missed_one": "Missed {{count}} run while your computer was off",
+      "missed_other": "Missed {{count}} runs while your computer was off",
+      "missedNoticeFree": "{{names}}. On the Basic plan, Abacus AI Agent on the web runs routines 24/7, even with your computer off.",
+      "missedNoticePaid": "{{names}}. Your plan runs routines 24/7 in Abacus AI Agent on the web, even with your computer off."
     },
     "reach": {
       "gmailSearch": "Search Gmail",
@@ -3049,6 +3064,10 @@
     "visualizer": {
       "title": "Interactive visual",
       "drawing": "Drawing the visual"
+    },
+    "paidFeature": {
+      "title": "{{feature}} is included in Basic",
+      "webTitle": "{{feature}} is included in Basic, in Abacus AI Agent on the web"
     }
   },
   "notch": {

@@ -64,6 +64,7 @@ import {
 import { McpToolSync } from "../mcp/tool-sync.js";
 import { buildMcpToolDefinitions, mcpToolCaller } from "../mcp/tools.js";
 import { MidTaskInbox, type MidTaskMessage } from "../mid-task-inbox.js";
+import { MODEL_PATH_RESOURCES } from "../model-path.js";
 import {
   BUSY_RETRY_PROMPT,
   BusyWait,
@@ -89,7 +90,12 @@ import {
   OPENLLM_CONTINUATION_TYPE,
   OpenLlmRouter,
 } from "../openllm-router.js";
-import { isOpenLlmReference, isOutOfCredits, OPENLLM_ID } from "../openllm.js";
+import {
+  creditWall,
+  isOpenLlmReference,
+  isOutOfCredits,
+  OPENLLM_ID,
+} from "../openllm.js";
 import { refreshOpenRouterLive } from "../openrouter-live.js";
 import { PendingSteers, type PendingSteer } from "../pending-steers.js";
 import {
@@ -97,6 +103,7 @@ import {
   MODE_NAMES,
   parseMode,
   parseModeStrict,
+  repairEscapedPaths,
 } from "../permissions.js";
 import { personaPrompt, readPersona } from "../persona.js";
 import { windowsShellPrompt } from "../posix-shell.js";
@@ -135,10 +142,12 @@ import {
   classifyProviderFailure,
   endedOnProviderError,
   isProviderFailure,
+  isRateLimitFailure,
   mcpPrompt,
   mcpRosterFingerprint,
   ownKeyFailureCause,
   providerDetail,
+  readableFailure,
   reserveContextHeadroom,
   terminalProviderMessage,
 } from "../session.js";
@@ -386,6 +395,8 @@ export class ForeverEngine {
     const sessionStartMemory = this.profile.memory.sessionStartPrompt();
 
     const resourceLoader = new DefaultResourceLoader({
+      // Skill and AGENTS.md paths as the model should copy them.
+      ...MODEL_PATH_RESOURCES,
       cwd: this.options.cwd,
       agentDir: dir,
       settingsManager,
@@ -1518,16 +1529,18 @@ export class ForeverEngine {
   private upgradeActionsFor(
     raw: string
   ):
-    | { actions: Array<{ type: string; link?: string }> }
+    | { actions: Array<{ type: string; link?: string; cause?: string }> }
     | Record<string, never> {
     const provider = this.session?.model?.provider;
     const abacusServed = provider === "abacus" || this.openLlmActive;
-    const actions: Array<{ type: string; link?: string }> = [];
+    const actions: Array<{ type: string; link?: string; cause?: string }> = [];
+    const wall = creditWall(raw);
 
-    if (abacusServed && isOutOfCredits(raw)) {
+    if (abacusServed && wall != null) {
       actions.push({
         type: "upgrade-abacus",
         link: "https://apps.abacus.ai/chatllm/choose-plan/",
+        cause: wall,
       });
     }
     // The router with every source used up: the card that connects another
@@ -1540,6 +1553,12 @@ export class ForeverEngine {
       !actions.some((action) => action.type === "upgrade-abacus")
     ) {
       actions.push({ type: "free-pool-out" });
+    } else if (this.openLlmActive && wall == null && isRateLimitFailure(raw)) {
+      // Free models rate-limited: a plan is a free account's way past it.
+      actions.push(
+        { type: "free-pool-out", cause: "busy" },
+        { type: "switch-model" }
+      );
     }
 
     return actions.length > 0 ? { actions } : {};
@@ -2186,6 +2205,8 @@ export class ForeverEngine {
     this.loadedPi = pi;
 
     pi.on("tool_call", async (event, ctx) => {
+      // Before the gate, so it judges the file the model meant.
+      repairEscapedPaths(event.input as Record<string, unknown>, ctx.cwd);
       const tool = this.toToolRequest(
         event.toolCallId,
         event.toolName,
@@ -2502,7 +2523,7 @@ const NO_MODEL_CONFIGURED =
 
 /** First sentence of a provider failure: bots never dump provider prose. */
 function compactFailure(raw: string): string {
-  const first = raw.split(/[.\n]/)[0]?.trim() ?? "";
+  const first = readableFailure(raw).split(/[.\n]/)[0]?.trim() ?? "";
 
   if (first.length === 0) return "The model provider had a problem.";
 

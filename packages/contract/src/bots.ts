@@ -33,10 +33,17 @@ export interface Bot {
    */
   kickstartedAt?: number | null;
   /**
-   * Set on the self-lane bots minted when a chat channel links: the app the
-   * conversation happens in. Such a bot's chat is a window, not a composer.
+   * Legacy: the hidden self-lane bots older installs minted per chat app.
+   * Main adopts them as that app's agent at startup and clears it
+   * (BotService.adoptChannelBots); the app's own chat now goes to its home
+   * bot, an ordinary bot.
    */
   channel?: string | null;
+  /**
+   * A chat-app agent's home (made from the WhatsApp, Telegram or Discord
+   * Agent template): where the user talks to it. Its standing prompt says so.
+   */
+  homeChannel?: HomeChannel | null;
   /** Per bot rather than per machine: the bot loop is tuned for cheap models. */
   model: string | null;
   /**
@@ -54,6 +61,17 @@ export const SPONSORED_FIRST_RUN_WINDOW_MS = 30 * 60 * 1000;
 /** The marker the app sends with a sponsored run's requests, as the platform expects it. */
 export const SPONSORED_RUN_MARKER = "cos-first-run";
 
+/** The chat apps a bot can call home. */
+export const HOME_CHANNELS = ["whatsapp", "telegram", "discord"] as const;
+export type HomeChannel = (typeof HOME_CHANNELS)[number];
+
+/** Each chat app's name as the agent and its prompts say it. */
+export const HOME_CHANNEL_NAMES: Record<HomeChannel, string> = {
+  whatsapp: "WhatsApp",
+  telegram: "Telegram",
+  discord: "Discord",
+};
+
 export interface BotCreateInput {
   name: string;
   title?: string;
@@ -66,6 +84,7 @@ export interface BotCreateInput {
   workspaceId?: string | null;
   model?: string | null;
   channel?: string | null;
+  homeChannel?: HomeChannel | null;
   /** Make this bot's first runs free of charge for SPONSORED_FIRST_RUN_WINDOW_MS; onboarding's Chief of Staff only. */
   sponsoredFirstRun?: boolean;
 }
@@ -92,6 +111,8 @@ export type BotUpdateInput = Partial<
     | "wallpaper"
     | "model"
     | "channel"
+    // Main only (adopting a legacy channel bot); the renderer cannot send it.
+    | "homeChannel"
   >
 >;
 
