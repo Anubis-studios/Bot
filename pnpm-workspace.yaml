@@ -89,9 +89,9 @@ overrides:
   # backend and image codec would only add native binaries the app never loads.
   onnxruntime-node: "-"
   sharp: "-"
-  # exceljs's streaming reader is the only user, and the agent's bundle stubs it
+  # exceljs's streaming reader, which the agent's bundle stubs out
   # (src/modules/unzipper-stub.cjs): two of its dependencies ship no license.
-  unzipper: "-"
+  "exceljs>unzipper": "-"
 
 minimumReleaseAgeExclude:
   # Pinned exact in apps/desktop, so the age gate could only block that one
