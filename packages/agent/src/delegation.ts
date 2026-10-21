@@ -24,7 +24,7 @@ import { excludedTools } from "./excluded-tools.js";
 import guardrails from "./extensions/guardrails.js";
 import { scopeGuard, taskScope } from "./extensions/scope-guard.js";
 import { modelPath, MODEL_PATH_RESOURCES } from "./model-path.js";
-import { managedPythonPrompt, windowsShellPrompt } from "./posix-shell.js";
+import { scriptRuntimesPrompt, windowsShellPrompt } from "./posix-shell.js";
 import type { AgentEvent } from "./protocol.js";
 import { forwardChildToolEvents } from "./subagent-events.js";
 import {
@@ -112,7 +112,7 @@ export async function runDelegatedTask(
 
   // The sub-agent runs commands through the same shell as its parent.
   const shellPrompt = windowsShellPrompt();
-  const pythonPrompt = managedPythonPrompt();
+  const scriptsPrompt = scriptRuntimesPrompt();
 
   try {
     const resourceLoader = new DefaultResourceLoader({
@@ -143,7 +143,7 @@ export async function runDelegatedTask(
           "elsewhere in the user's home folder are refused.",
         ].join("\n"),
         ...(shellPrompt == null ? [] : [shellPrompt]),
-        ...(pythonPrompt == null ? [] : [pythonPrompt]),
+        ...(scriptsPrompt == null ? [] : [scriptsPrompt]),
       ],
       // Guardrails only: the permission gate would prompt a user who is not
       // watching, and budgets and the verify loop belong to the parent.

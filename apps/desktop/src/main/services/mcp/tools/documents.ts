@@ -20,7 +20,7 @@ export const DOCUMENTS_TOOLS: ToolDefinition[] = [
       "             updated in place. This is how you edit a document; the other actions",
       "             move pages around and cannot change a word of the text.",
       '  "read":    text per page (path, optional pages).',
-      '  "tables":  tables as rows, per page (path, optional pages).',
+      '  "tables":  tables rebuilt from where text sits, as rows, per page (path, optional pages).',
       '  "info":    page count, metadata, and whether the text is extractable at all.',
       "             Run this first on a PDF you did not make: a scanned one yields no",
       "             text and needs OCR.",

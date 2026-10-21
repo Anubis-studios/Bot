@@ -1,14 +1,13 @@
 /**
- * The Python environments the app uses: private virtualenvs under the app's
- * own directory, never the system or user site-packages, so removing the app
- * removes everything it installed. The components run in one only the app
- * writes to; the agent's shell gets its own, which its commands may
- * `pip install` into and which nothing in this process runs.
+ * Python for the agent's shell on a machine that has no usable one: a private
+ * virtualenv under the app's own directory, put first on the shell's PATH, so
+ * `python` and `pip` work and removing the app removes everything installed.
+ * The app's own tools do not use Python.
  *
- * Their interpreter is the system Python when one meets the floor, otherwise
- * a pinned build that uv installs under the app's directory. uv itself is
- * fetched on first need from its pinned release and checked against the
- * digests below. Nothing runs at startup: most sessions never need Python.
+ * Its interpreter is a pinned build that uv installs under the app's
+ * directory; uv itself is fetched on first need from its pinned release and
+ * checked against the digests below. Set up the first time a shell command
+ * runs Python, never at startup.
  */
 import { execFile } from "child_process";
 import { createHash } from "crypto";
@@ -61,43 +60,21 @@ export const MANAGED_PYTHON_VERSION = "3.13.16";
 /** The oldest system Python used as is; anything older gets the managed one. */
 const PYTHON_FLOOR: readonly [number, number] = [3, 10];
 
-/** Import name → the pinned requirement that provides it. */
-const REQUIREMENTS: Record<string, string> = {
-  pypdf: "pypdf==6.20.1",
-  pdfplumber: "pdfplumber==0.11.10",
-  reportlab: "reportlab==5.0.1",
-};
-
 const PROBE_TIMEOUT_MS = 5_000;
 const SETUP_TIMEOUT_MS = 600_000;
 
 const isWindows = process.platform === "win32";
 
 /**
- * A virtualenv: where it lives, and whether it is the shell's (pip in it, and
- * writable by sandboxed commands, so this process never runs anything from it).
+ * The shell's environment. Sandboxed commands may write to it (`pip
+ * install`), so this process never runs anything from it.
  */
-type Env = { dir: () => string; shell: boolean };
-
-/** The components' packages. No sandboxed command can write here. */
-const APP_ENV: Env = {
-  dir: () => path.join(abacusBotHome(), "python"),
-  shell: false,
-};
-/** The agent shell's, on its PATH when the machine has no usable Python. */
-const SHELL_ENV: Env = {
-  dir: () => path.join(abacusBotHome(), "shell-python"),
-  shell: true,
-};
+const envDir = (): string => path.join(abacusBotHome(), "shell-python");
 
 /** uv, its cache and the Python builds it installs. */
 const runtimeDir = (): string => path.join(abacusBotHome(), "python-runtime");
 
-const binDir = (env: Env): string =>
-  path.join(env.dir(), isWindows ? "Scripts" : "bin");
-
-const pythonIn = (env: Env): string =>
-  path.join(binDir(env), isWindows ? "python.exe" : "python");
+const binDir = (): string => path.join(envDir(), isWindows ? "Scripts" : "bin");
 
 const exists = async (target: string): Promise<boolean> =>
   await fs
@@ -171,7 +148,7 @@ export const managedPythonEnv = async (): Promise<{
   binDir: string;
 } | null> =>
   (await systemPython()) == null
-    ? { envDir: SHELL_ENV.dir(), binDir: binDir(SHELL_ENV) }
+    ? { envDir: envDir(), binDir: binDir() }
     : null;
 
 /** uv's environment: app-owned locations only, and the system proxy and certificates. */
@@ -182,7 +159,7 @@ const uvEnv = async (): Promise<Record<string, string>> =>
     UV_PYTHON_INSTALL_DIR: path.join(runtimeDir(), "pythons"),
     UV_SYSTEM_CERTS: "1",
     UV_NO_PROGRESS: "1",
-    // An activated environment in the app's own environment must not redirect uv.
+    // An environment activated around the app must not redirect uv.
     VIRTUAL_ENV: undefined,
     UV_PYTHON: undefined,
   });
@@ -239,11 +216,8 @@ const ensureUv = async (): Promise<string> => {
   return target;
 };
 
-let managedBase: string | undefined;
-
 /** The managed interpreter, installed if needed (uv resumes or skips). */
 const managedPython = async (uv: string): Promise<string> => {
-  if (managedBase != null) return managedBase;
   await runUv(uv, [
     "python",
     "install",
@@ -259,45 +233,20 @@ const managedPython = async (uv: string): Promise<string> => {
     "--no-project",
     MANAGED_PYTHON_VERSION,
   ]);
-  managedBase = found.trim();
-  return managedBase;
+  return found.trim();
 };
 
-/** Environments checked in this process. */
-const ready = new Set<string>();
+let envReady = false;
 
-/** Whether the environment is usable; the shell's is judged from its files alone. */
-const healthy = async (env: Env): Promise<boolean> => {
-  if (!(await exists(pythonIn(env)))) return false;
-  if (!env.shell) return (await usablePython(pythonIn(env))) != null;
-  // Read, never run: the base it was made from must still be there.
+/** Judged from its files alone: the interpreter, and the base it was made from. */
+const envHealthy = async (): Promise<boolean> => {
+  if (!(await exists(path.join(binDir(), isWindows ? "python.exe" : "python"))))
+    return false;
   const config = await fs
-    .readFile(path.join(env.dir(), "pyvenv.cfg"), "utf8")
+    .readFile(path.join(envDir(), "pyvenv.cfg"), "utf8")
     .catch(() => "");
   const home = /^home\s*=\s*(.+)$/m.exec(config)?.[1]?.trim();
   return home != null && (await exists(home));
-};
-
-/** The environment, created on a usable base when missing or broken. */
-const ensureEnv = async (
-  env: Env,
-  uv: () => Promise<string>
-): Promise<void> => {
-  if (ready.has(env.dir())) return;
-  if (!(await healthy(env))) {
-    const tool = await uv();
-    const base = (await systemPython()) ?? (await managedPython(tool));
-    // --clear replaces a broken one.
-    await runUv(tool, [
-      "venv",
-      "--clear",
-      ...(env.shell ? ["--seed"] : []),
-      "--python",
-      base,
-      env.dir(),
-    ]);
-  }
-  ready.add(env.dir());
 };
 
 /** What a failed step tells the user: the cause they can act on. */
@@ -322,73 +271,26 @@ const setupError = (what: string, error: unknown): Error => {
   return new Error(`${what}: ${detail.trim().slice(0, 200)}`);
 };
 
-export type PythonEnv = {
-  /** Absolute path to the interpreter to run things with. */
-  python: string;
-  /** Packages installed during this call, for reporting back to the user. */
-  installed: string[];
-};
+let setup: Promise<void> | undefined;
 
-let ensureChain: Promise<unknown> = Promise.resolve();
-
-/** Serialized, so concurrent callers share one setup and one install. */
-const serialized = <T>(run: () => Promise<T>): Promise<T> => {
-  const result = ensureChain.then(run, run);
-  ensureChain = result.catch(() => undefined);
-
-  return result;
-};
-
-/** The components' interpreter with `imports` available, installing what is missing. */
-export const ensurePython = (imports: string[]): Promise<PythonEnv> =>
-  serialized(() => ensurePythonNow(imports));
-
-/** The agent shell's environment, set up if it is not there yet. */
+/**
+ * The shell's environment, set up if it is not there yet. Concurrent callers
+ * share one setup; a failed one is tried again by the next caller.
+ */
 export const ensureShellPython = (): Promise<void> =>
-  serialized(async () => {
-    let uv: string | undefined;
-    try {
-      await ensureEnv(SHELL_ENV, async () => (uv ??= await ensureUv()));
-    } catch (error) {
-      throw setupError("Could not set up Python", error);
-    }
-  });
-
-const ensurePythonNow = async (imports: string[]): Promise<PythonEnv> => {
-  let uv: string | undefined;
-  const getUv = async (): Promise<string> => (uv ??= await ensureUv());
-
-  try {
-    await ensureEnv(APP_ENV, getUv);
-  } catch (error) {
+  (setup ??= ensureShellPythonNow().catch((error: unknown) => {
+    setup = undefined;
     throw setupError("Could not set up Python", error);
-  }
+  }));
 
-  const missing: string[] = [];
-  for (const name of imports) {
-    try {
-      await execFileAsync(pythonIn(APP_ENV), ["-c", `import ${name}`], {
-        timeout: 30_000,
-        windowsHide: true,
-      });
-    } catch {
-      missing.push(REQUIREMENTS[name] ?? name);
-    }
+const ensureShellPythonNow = async (): Promise<void> => {
+  if (envReady || (await envHealthy())) {
+    envReady = true;
+    return;
   }
-
-  if (missing.length > 0) {
-    try {
-      await runUv(await getUv(), [
-        "pip",
-        "install",
-        "--python",
-        pythonIn(APP_ENV),
-        ...missing,
-      ]);
-    } catch (error) {
-      throw setupError(`Could not install ${missing.join(", ")}`, error);
-    }
-  }
-
-  return { python: pythonIn(APP_ENV), installed: missing };
+  const uv = await ensureUv();
+  const base = await managedPython(uv);
+  // --seed puts pip in it; --clear replaces a broken one.
+  await runUv(uv, ["venv", "--clear", "--seed", "--python", base, envDir()]);
+  envReady = true;
 };

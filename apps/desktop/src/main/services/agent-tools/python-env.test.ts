@@ -1,8 +1,8 @@
 /**
- * Which interpreter the app's Python environment is built on, and how its
- * setup behaves: the system Python when it meets the floor, otherwise the
- * pinned build uv installs; one setup shared by concurrent callers; a pinned
- * uv that must match its checksum; and failures that name what to fix.
+ * The agent shell's Python on a machine without one: when it applies, the
+ * pinned build uv installs, one setup shared by concurrent callers, a pinned
+ * uv that must match its checksum, failures that name what to fix, and an
+ * environment this process never runs (sandboxed commands can write to it).
  */
 import fs from "fs";
 import os from "os";
@@ -23,10 +23,8 @@ vi.mock("../../system-network", () => ({
 let home: string;
 
 const isWindows = process.platform === "win32";
-const envBin = (name = "python"): string =>
-  path.join(home, name, isWindows ? "Scripts" : "bin");
-const envPython = (name = "python"): string =>
-  path.join(envBin(name), isWindows ? "python.exe" : "python");
+const envDir = (): string => path.join(home, "shell-python");
+const envBin = (): string => path.join(envDir(), isWindows ? "Scripts" : "bin");
 const uvPath = (): string =>
   path.join(
     home,
@@ -40,14 +38,22 @@ const MANAGED = "/managed/cpython-3.13.16/bin/python3";
 type Machine = {
   /** `${major} ${minor}` of the system Python, or null for none. */
   system: string | null;
-  /** Imports the environment already has. */
-  present?: string[];
   /** A uv step fails with this message. */
   uvError?: { step: string; message: string };
 };
 
 /** Every uv invocation, as its arguments. */
 let uvRuns: string[][];
+
+/** An environment on disk whose pyvenv.cfg names `base`. */
+const writeEnv = (base: string): void => {
+  fs.mkdirSync(envBin(), { recursive: true });
+  fs.writeFileSync(
+    path.join(envBin(), isWindows ? "python.exe" : "python"),
+    ""
+  );
+  fs.writeFileSync(path.join(envDir(), "pyvenv.cfg"), `home = ${base}\n`);
+};
 
 const machine = (spec: Machine): void => {
   uvRuns = [];
@@ -67,27 +73,16 @@ const machine = (spec: Machine): void => {
         if (spec.uvError != null && step.startsWith(spec.uvError.step))
           return fail(spec.uvError.message);
         if (args[0] === "venv") {
-          const name = path.basename(args.at(-1) ?? "");
-          fs.mkdirSync(envBin(name), { recursive: true });
-          fs.writeFileSync(envPython(name), "");
+          writeEnv(home);
           return ok();
         }
         if (step === "python find") return ok(`${MANAGED}\n`);
         return ok();
       }
 
-      if (args[0] === "-c" && args[1]?.startsWith("import sys")) {
-        // The environment's own interpreter is the managed or system one.
-        if (file.startsWith(home)) return ok(`3 13 ${file}\n`);
+      if (args[0] === "-c") {
         if (spec.system == null) return fail(`spawn ${file} ENOENT`);
         return ok(`${spec.system} /usr/bin/${file}\n`);
-      }
-
-      if (args[0] === "-c") {
-        const name = (args[1] ?? "").replace(/^import\s+/, "");
-        return spec.present?.includes(name) === true
-          ? ok()
-          : fail(`No module named ${name}`);
       }
 
       if (file === "xcode-select") return ok("/Library/Developer\n");
@@ -117,146 +112,85 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("the interpreter the environment is built on", () => {
-  it("uses a system Python that meets the floor and installs pinned packages", async () => {
+describe("when the shell gets the app's own Python", () => {
+  it("not when the system has one that meets the floor", async () => {
     machine({ system: "3 12" });
-    haveUv();
-    const { ensurePython, managedPythonEnv } = await load();
+    const { managedPythonEnv } = await load();
 
-    const result = await ensurePython(["pypdf"]);
-
-    expect(uvRuns[0]).toEqual([
-      "venv",
-      "--clear",
-      "--python",
-      "/usr/bin/python3",
-      path.join(home, "python"),
-    ]);
-    expect(uvRuns.some((args) => args[0] === "python")).toBe(false);
-    expect(uvRuns.at(-1)).toEqual([
-      "pip",
-      "install",
-      "--python",
-      envPython(),
-      "pypdf==6.20.1",
-    ]);
-    expect(result).toEqual({
-      python: envPython(),
-      installed: ["pypdf==6.20.1"],
-    });
     expect(await managedPythonEnv()).toBeNull();
   });
 
   it.each([
     ["no Python at all", null],
     ["a Python below the floor", "3 8"],
-  ])("installs the pinned build with %s", async (_label, system) => {
+  ])("with %s, installing the pinned build", async (_label, system) => {
     machine({ system });
     haveUv();
-    const {
-      ensurePython,
-      ensureShellPython,
-      managedPythonEnv,
-      MANAGED_PYTHON_VERSION,
-    } = await load();
+    const { ensureShellPython, managedPythonEnv, MANAGED_PYTHON_VERSION } =
+      await load();
 
-    await ensurePython([]);
+    expect(await managedPythonEnv()).toEqual({
+      envDir: envDir(),
+      binDir: envBin(),
+    });
     await ensureShellPython();
 
-    expect(uvRuns[0]).toEqual([
-      "python",
-      "install",
-      MANAGED_PYTHON_VERSION,
-      "--no-bin",
-      "--no-registry",
+    expect(uvRuns).toEqual([
+      [
+        "python",
+        "install",
+        MANAGED_PYTHON_VERSION,
+        "--no-bin",
+        "--no-registry",
+      ],
+      [
+        "python",
+        "find",
+        "--managed-python",
+        "--no-project",
+        MANAGED_PYTHON_VERSION,
+      ],
+      ["venv", "--clear", "--seed", "--python", MANAGED, envDir()],
     ]);
-    expect(uvRuns[2]).toEqual([
-      "venv",
-      "--clear",
-      "--python",
-      MANAGED,
-      path.join(home, "python"),
-    ]);
-    // The shell's own environment, with pip for its commands, on the same base.
-    expect(uvRuns.at(-1)).toEqual([
-      "venv",
-      "--clear",
-      "--seed",
-      "--python",
-      MANAGED,
-      path.join(home, "shell-python"),
-    ]);
-    // Not the components' environment: a sandboxed pip may write to this one.
-    expect(await managedPythonEnv()).toEqual({
-      envDir: path.join(home, "shell-python"),
-      binDir: envBin("shell-python"),
-    });
-  });
-
-  it("keeps a working environment and needs no uv for what it already has", async () => {
-    machine({ system: null, present: ["pypdf"] });
-    fs.mkdirSync(envBin(), { recursive: true });
-    fs.writeFileSync(envPython(), "");
-    const { ensurePython } = await load();
-
-    expect(await ensurePython(["pypdf"])).toEqual({
-      python: envPython(),
-      installed: [],
-    });
-    expect(uvRuns).toEqual([]);
   });
 });
 
-describe("the shell's environment", () => {
-  /** A shell environment on disk whose pyvenv.cfg names `base`. */
-  const shellEnv = (base: string): void => {
-    fs.mkdirSync(envBin("shell-python"), { recursive: true });
-    fs.writeFileSync(envPython("shell-python"), "");
-    fs.writeFileSync(
-      path.join(home, "shell-python", "pyvenv.cfg"),
-      `home = ${base}\nversion_info = 3.13.16\n`
-    );
-  };
-
-  it("is never run by this process: sandboxed commands can write to it", async () => {
+describe("the environment", () => {
+  it("is never run by this process, only read", async () => {
     machine({ system: null });
-    shellEnv(home);
+    writeEnv(home);
     const { ensureShellPython } = await load();
 
     await ensureShellPython();
 
     const ran = mocks.execFile.mock.calls.map(([file]) => String(file));
-    expect(ran.some((file) => file.includes("shell-python"))).toBe(false);
+    expect(ran.some((file) => file.startsWith(envDir()))).toBe(false);
     expect(uvRuns).toEqual([]);
   });
 
   it("is made again when the interpreter it was made from is gone", async () => {
     machine({ system: null });
     haveUv();
-    shellEnv(path.join(home, "gone"));
+    writeEnv(path.join(home, "gone"));
     const { ensureShellPython } = await load();
 
     await ensureShellPython();
 
     expect(uvRuns.at(-1)?.slice(0, 3)).toEqual(["venv", "--clear", "--seed"]);
   });
-});
 
-describe("concurrent callers", () => {
-  it("share one setup", async () => {
+  it("is set up once for concurrent callers", async () => {
     machine({ system: null });
     haveUv();
-    const { ensurePython, ensureShellPython } = await load();
+    const { ensureShellPython } = await load();
 
     await Promise.all([
-      ensurePython([]),
       ensureShellPython(),
-      ensurePython([]),
+      ensureShellPython(),
       ensureShellPython(),
     ]);
 
-    // One per environment, on one install of the interpreter.
-    expect(uvRuns.filter((args) => args[0] === "venv")).toHaveLength(2);
+    expect(uvRuns.filter((args) => args[0] === "venv")).toHaveLength(1);
     expect(
       uvRuns.filter((args) => args.slice(0, 2).join(" ") === "python install")
     ).toHaveLength(1);
@@ -270,29 +204,29 @@ describe("uv itself", () => {
       "fetch",
       vi.fn(async () => new Response(new Uint8Array([1, 2, 3])))
     );
-    const { ensurePython } = await load();
+    const { ensureShellPython } = await load();
 
-    await expect(ensurePython([])).rejects.toThrow(/checksum/);
+    await expect(ensureShellPython()).rejects.toThrow(/checksum/);
     expect(fs.existsSync(uvPath())).toBe(false);
   });
 });
 
 describe("failures", () => {
-  it("says the download did not get through when offline", async () => {
+  it("says the download did not get through when offline, and the next caller retries", async () => {
     machine({ system: null });
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => {
-        throw new TypeError("fetch failed", {
-          cause: new Error("net::ERR_INTERNET_DISCONNECTED"),
-        });
-      })
-    );
-    const { ensurePython } = await load();
+    const fetch = vi.fn(async () => {
+      throw new TypeError("fetch failed", {
+        cause: new Error("net::ERR_INTERNET_DISCONNECTED"),
+      });
+    });
+    vi.stubGlobal("fetch", fetch);
+    const { ensureShellPython } = await load();
 
-    await expect(ensurePython([])).rejects.toThrow(
+    await expect(ensureShellPython()).rejects.toThrow(
       /^Could not set up Python: the download did not get through/
     );
+    await expect(ensureShellPython()).rejects.toThrow(/did not get through/);
+    expect(fetch).toHaveBeenCalledTimes(2);
   });
 
   it("says the disk is full", async () => {
@@ -304,26 +238,23 @@ describe("failures", () => {
       },
     });
     haveUv();
-    const { ensurePython } = await load();
+    const { ensureShellPython } = await load();
 
-    await expect(ensurePython([])).rejects.toThrow(/the disk is full/);
+    await expect(ensureShellPython()).rejects.toThrow(/the disk is full/);
   });
 
-  it("names the packages a failed install was for, and a retry runs again", async () => {
+  it("says the download did not get through when uv's own request fails", async () => {
     machine({
-      system: "3 12",
+      system: null,
       uvError: {
-        step: "pip install",
-        message: "error sending request for url (https://pypi.org/simple/)",
+        step: "python install",
+        message:
+          "Failed to install cpython\n  cause: error sending request for url\n  cause: tcp connect error",
       },
     });
     haveUv();
-    const { ensurePython } = await load();
+    const { ensureShellPython } = await load();
 
-    await expect(ensurePython(["pdfplumber"])).rejects.toThrow(
-      /^Could not install pdfplumber==0\.11\.10: the download did not get through/
-    );
-    await expect(ensurePython(["pdfplumber"])).rejects.toThrow(/pdfplumber/);
-    expect(uvRuns.filter((args) => args[0] === "pip")).toHaveLength(2);
+    await expect(ensureShellPython()).rejects.toThrow(/did not get through/);
   });
 });

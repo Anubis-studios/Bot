@@ -18,7 +18,7 @@ import {
   type PosixShell,
 } from "./posix-shell-install.js";
 import {
-  managedPythonPrompt,
+  scriptRuntimesPrompt,
   posixShellOperations,
   toolchainPrompt,
   windowsShellPrompt,
@@ -538,20 +538,34 @@ it.skipIf(process.platform !== "win32" || !existsSync(payload))(
   }
 );
 
-describe("managedPythonPrompt", () => {
-  const env = { ABACUSAI_BOT_PYTHON_ENV: "/home/u/.abacusai-bot/python" };
+describe("scriptRuntimesPrompt", () => {
+  const python = {
+    ABACUSAI_BOT_PYTHON_ENV: "/home/u/.abacusai-bot/shell-python",
+  };
+  const node = {
+    ABACUSAI_BOT_NODE:
+      "/Applications/AbacusAI-Bot.app/Contents/MacOS/AbacusAI-Bot",
+  };
 
-  it("is absent when the machine's own Python serves", () => {
-    expect(managedPythonPrompt({}, "linux")).toBeNull();
+  it("is absent when neither runtime is the app's", () => {
+    expect(scriptRuntimesPrompt({}, "linux")).toBeNull();
   });
 
-  it("tells the model python and pip work, and that the first use waits", () => {
-    const text = managedPythonPrompt(env, "darwin") ?? "";
+  it("points Word and Excel work at the app's Node and its libraries", () => {
+    const text = scriptRuntimesPrompt(node, "darwin") ?? "";
+    expect(text).toContain('"$ABACUSAI_BOT_NODE" script.cjs');
+    expect(text).toContain("`docx`, `mammoth`");
+    expect(text).toContain("PDFs go");
+    expect(text).not.toContain("pip");
+  });
+
+  it("says python and pip work, and that the first use downloads it", () => {
+    const text = scriptRuntimesPrompt({ ...node, ...python }, "darwin") ?? "";
     expect(text).toContain("`python3`, `python` and `pip`");
-    expect(text).toContain("The first command that uses it sets it up");
-    expect(text).toContain("`pip install`");
+    expect(text).toContain("The first command that uses it downloads it");
     // Windows environments have no python3.
-    expect(managedPythonPrompt(env, "win32")).toContain("`python` and `pip`");
-    expect(managedPythonPrompt(env, "win32")).not.toContain("python3");
+    const windows = scriptRuntimesPrompt(python, "win32") ?? "";
+    expect(windows).toContain("`python` and `pip`");
+    expect(windows).not.toContain("python3");
   });
 });

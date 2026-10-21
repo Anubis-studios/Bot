@@ -169,6 +169,8 @@ for (const entry of fs.readdirSync(path.join(root, "packages"))) {
 if (!graphOnly) {
   visit(path.join(root, "packages/agent"));
   visitSourceMaps(path.join(root, "packages/agent/dist"));
+  // The libraries the agent's own scripts require, one bundle each.
+  visitSourceMaps(path.join(root, "packages/agent/dist/modules"));
   for (const bundle of ["main", "preload", "renderer/assets"])
     visitSourceMaps(path.join(desktop, "dist", bundle));
   visitSourceMaps(path.join(desktop, "dist", "main/assets"), {

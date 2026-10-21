@@ -309,7 +309,7 @@ describe("the app's own Python", () => {
 
     await Promise.all([
       run(shell, "python3 make_doc.py"),
-      run(shell, "cd out; pip install python-docx"),
+      run(shell, "cd out; pip install pandas"),
       run(shell, "echo x | python -c 'import sys'"),
     ]);
     expect(provision).toHaveBeenCalledOnce();

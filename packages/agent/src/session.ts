@@ -120,7 +120,7 @@ import {
   repairEscapedPaths,
 } from "./permissions.js";
 import { personaPrompt, readPersona } from "./persona.js";
-import { managedPythonPrompt, windowsShellPrompt } from "./posix-shell.js";
+import { scriptRuntimesPrompt, windowsShellPrompt } from "./posix-shell.js";
 import {
   AgentMode,
   AgentStatus,
@@ -932,7 +932,7 @@ export class AbacusBotSession {
         displayPrompt(),
         // Null everywhere the tool is a real bash.
         windowsShellPrompt(),
-        managedPythonPrompt(),
+        scriptRuntimesPrompt(),
         planModePrompt(toolNames),
         githubPrompt(),
         serviceRoutingPrompt(),

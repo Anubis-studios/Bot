@@ -38,3 +38,31 @@ export function useBundledTools(
 
   return true;
 }
+
+/** The libraries the agent's own Node scripts `require`, built beside the bundle. */
+export function scriptModulesDir(): string {
+  return join(dirname(fileURLToPath(import.meta.url)), "modules");
+}
+
+/**
+ * Lets the shell run Node scripts on this app's own runtime, which every
+ * machine has: ABACUSAI_BOT_NODE names this process's executable (run as Node,
+ * as this process is) and NODE_PATH reaches the bundled libraries. Idempotent.
+ */
+export function useScriptRuntime(
+  env: NodeJS.ProcessEnv = process.env,
+  dir: string = scriptModulesDir(),
+  node: string = process.execPath
+): boolean {
+  if (!existsSync(dir)) return false;
+
+  // Forward slashes: the Windows shell drops unquoted backslashes.
+  env.ABACUSAI_BOT_NODE = node.replaceAll("\\", "/");
+  // The app's executable is Node only when told so; children inherit this.
+  if (process.versions.electron != null) env.ELECTRON_RUN_AS_NODE = "1";
+  const current = env.NODE_PATH ?? "";
+  if (!current.split(delimiter).includes(dir))
+    env.NODE_PATH = current === "" ? dir : `${dir}${delimiter}${current}`;
+
+  return true;
+}

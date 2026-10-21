@@ -211,23 +211,31 @@ export function managedPythonBin(
   return path.join(dir, platform === "win32" ? "Scripts" : "bin");
 }
 
-/** What the model is told when Python is the app's own, or null when it is the system's. */
-export function managedPythonPrompt(
+/**
+ * What the model is told about running scripts: the app's own Node, with the
+ * document libraries, wherever the agent runs on it; and the app's own Python
+ * where the machine has none. Null when neither applies.
+ */
+export function scriptRuntimesPrompt(
   env: NodeJS.ProcessEnv = process.env,
   platform: NodeJS.Platform = process.platform
 ): string | null {
-  if (managedPythonEnv(env) == null) return null;
-  const commands =
-    platform === "win32"
-      ? "`python` and `pip`"
-      : "`python3`, `python` and `pip`";
+  const lines: string[] = [];
+  if ((env.ABACUSAI_BOT_NODE ?? "") !== "")
+    lines.push(
+      "- Word and Excel files: write a CommonJS script (`.cjs`) and run it with",
+      '  `"$ABACUSAI_BOT_NODE" script.cjs`, this app\'s own Node. `require()` finds `docx`, `mammoth`,',
+      "  `exceljs` and `jszip` with nothing to install; the docx and xlsx skills show how. PDFs go",
+      "  through the pdf tool."
+    );
+  if (managedPythonEnv(env) != null)
+    lines.push(
+      `- ${platform === "win32" ? "`python` and `pip`" : "`python3`, `python` and `pip`"} run this app's own Python 3; the machine has no usable`,
+      "  Python of its own. The first command that uses it downloads it, which can take a minute or",
+      "  two. `pip install` adds packages to it, for analysis and scripts of your own."
+    );
 
-  return [
-    "# Python",
-    `${commands} run this app's own Python 3 environment; the machine has no usable Python of its own.`,
-    "The first command that uses it sets it up, which can take a minute or two. `pip install`",
-    "adds packages to it, so install what a task needs (python-docx, openpyxl, pandas) and use it.",
-  ].join("\n");
+  return lines.length > 0 ? ["# Running scripts", ...lines].join("\n") : null;
 }
 
 /** What ash finds on PATH without an extension. */
