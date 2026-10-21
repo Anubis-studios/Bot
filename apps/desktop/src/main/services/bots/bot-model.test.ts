@@ -21,10 +21,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { connectInProcess, fakeDeps } from "../../rpc/testing";
 import { AguiRelayService } from "../agui/relay-service";
+import { resolveSessionModel } from "../providers/session-model";
 import { ThreadStore } from "../session/thread-store";
 import { BotService } from "./bot-service";
 import { recordSenderSession, senderSessionKey } from "./bot-store";
-import { effectiveBotModel } from "./effective-model";
 
 let home: string;
 const previousHome = process.env.ABACUSAI_BOT_HOME;
@@ -115,7 +115,7 @@ const makeMain = () => {
         });
     },
     effectiveModel: (requested, pinned) =>
-      effectiveBotModel(
+      resolveSessionModel(
         requested,
         {
           readDefault: () => settings.defaultModel,

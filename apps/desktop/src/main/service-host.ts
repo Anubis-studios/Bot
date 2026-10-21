@@ -316,7 +316,6 @@ import {
   recordSenderSession,
   removeSenderSession,
 } from "./services/bots/bot-store";
-import { effectiveBotModel } from "./services/bots/effective-model";
 import { BrowserProfilesService } from "./services/browser/browser-profiles-service";
 import type { BrowserTargetSource } from "./services/browser/browser-target";
 import { ChromeBrowserService } from "./services/browser/chrome/chrome-browser-service";
@@ -444,11 +443,7 @@ import {
   clearBackendProbeCache,
   resolveBackend,
 } from "./services/providers/exec-backend-service";
-import {
-  cachedRecommendedModelId,
-  listAvailableModels,
-  recommendedModelId,
-} from "./services/providers/models";
+import { resolveSessionModel } from "./services/providers/session-model";
 import { SandboxProbeService } from "./services/sandbox/sandbox-probe-service";
 import { agentTurnBusy } from "./services/session/agent-busy";
 import { AgentSessionManagerService } from "./services/session/agent-session-manager-service";
@@ -2053,15 +2048,7 @@ export class ServiceHost {
     // own model when configured, else the stored default when configured,
     // else the tier's recommendation, else the fallback.
     effectiveModel: (requested, pinned) =>
-      effectiveBotModel(
-        requested,
-        {
-          readDefault: () => readSettings().defaultModel,
-          listCatalog: () => listAvailableModels(),
-          cachedRecommended: () => cachedRecommendedModelId(),
-        },
-        pinned
-      ),
+      resolveSessionModel(requested, undefined, pinned),
     sessionInfo: (sessionId) => {
       const session = this.agentSessionManagerService.get(sessionId);
       return session == null
@@ -3571,8 +3558,10 @@ export class ServiceHost {
     // The chat's remembered model beats the composer's: the renderer starts a
     // session before its list has loaded, and the agent would then report the
     // wrong model back over the record that should have chosen it. With
-    // neither, the plan tier's default. Not the agent's own fallback, which
-    // is the free pool whatever the tier.
+    // neither (a routine's run, a bot's chat brought back), the one resolver:
+    // the session's bot's model, else the stored default, else the plan
+    // tier's. Not the agent's own fallback, which is the free pool whatever
+    // the tier. The pick is kept on the session, so it lists what runs.
     const remembered = this.agentSessionManagerService.get(
       request.sessionId
     )?.model;
@@ -3581,7 +3570,7 @@ export class ServiceHost {
         ? remembered
         : request.model != null && request.model.length > 0
           ? request.model
-          : await recommendedModelId();
+          : await this.resolveUnpinnedModel(request);
     // A start with no mode is main's own (a bot's chat brought back to
     // deliver a notice, say): it runs in the mode the Profile page chose.
     const withModel = {
@@ -3594,6 +3583,18 @@ export class ServiceHost {
     environmentNoticeService.markSessionStarted(request.sessionId);
 
     return this.agentManagerService.startSessionReady(withModel);
+  }
+
+  /** A session started with no model: resolved for it, and kept on it. */
+  private async resolveUnpinnedModel(
+    request: StartAgentSessionRequest
+  ): Promise<string | null> {
+    const botId = this.botOfSession(request.sessionId);
+    const bot = botId == null ? null : getBot(botId);
+    const model = await resolveSessionModel(bot?.model ?? null);
+    if (model != null)
+      this.setAgentSessionModel(request.workspaceId, request.sessionId, model);
+    return model;
   }
 
   stopAgentSession(

@@ -59,22 +59,12 @@ const readConfig = (): AbacusBotConfigShape => {
 };
 
 /**
- * The plan tier's default, as of the last catalog read. A session spawned
- * with no model of its own starts here rather than on the agent's built-in
- * fallback, which is the free pool whatever the tier, so a Pro account's new
- * chat, bot or routine used to open on an empty pool and fall back with a
- * warning before the composer's pick could correct it.
+ * The plan tier's default, as of the last catalog read: the last step of
+ * `resolveSessionModel`, after the session's own ask and the stored default.
  */
 let lastRecommendedId: string | null = null;
 
 export const cachedRecommendedModelId = (): string | null => lastRecommendedId;
-
-/** The tier default, reading the catalog if nothing has yet. */
-export const recommendedModelId = async (): Promise<string | null> => {
-  if (lastRecommendedId == null) await listAvailableModels();
-
-  return lastRecommendedId;
-};
 
 export const listAvailableModels = async (
   refresh = false

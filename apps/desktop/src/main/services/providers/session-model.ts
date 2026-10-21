@@ -1,9 +1,9 @@
 /**
  * Main's side of the one model resolver (spec 03 §13.2, §24.10 a): the model
- * a bot session runs on, from the live catalog and the stored app default,
- * with the same `resolveConfiguredModel` the renderer displays with. An
- * unconfigured stored default or bot model (a removed credential) is never
- * started.
+ * a session runs on, whether a chat, a bot's chat or a routine's run, from
+ * the live catalog and the stored app default, with the same
+ * `resolveConfiguredModel` the renderer displays with. An unconfigured
+ * stored default or bot model (a removed credential) is never started.
  *
  * Only an authoritative answer moves a session off its stored pin: a catalog
  * row for the wanted model that says its credential is gone. A catalog that
@@ -18,7 +18,10 @@ import {
   type ModelAvailability,
 } from "@abacus-ai/contract/models";
 
-export interface EffectiveModelSources {
+import { readSettings } from "../config/settings";
+import { cachedRecommendedModelId, listAvailableModels } from "./models";
+
+export interface SessionModelSources {
   /** `config.json`'s `defaultModel` (the user's last pick), if any. */
   readDefault(): string | null | undefined;
   /** The catalog with `configured` and `recommended` (`listAvailableModels`). */
@@ -27,16 +30,24 @@ export interface EffectiveModelSources {
   cachedRecommended?(): string | null;
 }
 
+/** The app's own sources: the stored default and the live catalog. */
+const appModelSources: SessionModelSources = {
+  readDefault: () => readSettings().defaultModel,
+  listCatalog: () => listAvailableModels(),
+  cachedRecommended: () => cachedRecommendedModelId(),
+};
+
 const present = (id: string | null | undefined): string | null =>
   id == null || id.length === 0 ? null : id;
 
 /**
- * `requested` is the bot's own model (null: the app default); `pin` is the
- * session's stored model (null for a session not yet pinned).
+ * `requested` is the session's own ask: a bot's model, the bot a routine
+ * speaks as, or null for the app default. `pin` is the session's stored
+ * model (null for a session not yet pinned).
  */
-export const effectiveBotModel = async (
+export const resolveSessionModel = async (
   requested: string | null,
-  sources: EffectiveModelSources,
+  sources: SessionModelSources = appModelSources,
   pin: string | null = null
 ): Promise<string | null> => {
   const defaultModel = present(sources.readDefault());
