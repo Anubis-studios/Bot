@@ -3,8 +3,10 @@
  * it, and what the model is told about the shell it has. The install itself is
  * `posix-shell-install.ts`, which the desktop imports on its own.
  */
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { lstatSync } from "node:fs";
 import { access } from "node:fs/promises";
+import * as path from "node:path";
 
 import { createLocalBashOperations } from "@earendil-works/pi-coding-agent";
 
@@ -144,7 +146,7 @@ const WINDOWS_SHELL_PROMPT = [
   "  /cygdrive/c do not exist. Quote any path with a space ('C:/Program Files/...'). Avoid",
   '  backslashes: unquoted they vanish, and a trailing one inside "..." escapes the quote.',
   '- There is no /tmp. Scratch files go in "$TMPDIR" (the Windows temp dir; mktemp uses it).',
-  "- Installed programs (node, python, git, npm.cmd) are on PATH and take Windows arguments.",
+  "- Installed programs are on PATH and take Windows arguments (npm is npm.cmd).",
   "  Look one up with `command -v name`, not `where`.",
   "- There is no nohup, setsid, mount, file, lsof or top. For a long job, use the `background`",
   "  parameter of `bash` where it has one.",
@@ -155,9 +157,157 @@ const WINDOWS_SHELL_PROMPT = [
   "  -ExecutionPolicy Bypass -File on it. Prefer ash when it can do the job.",
 ].join("\n");
 
-/** What the model needs to know about the shell it has, or null where it has a real bash. */
+/** Only for the ANSI build, which this Windows needs because it predates the Unicode one. */
+const ANSI_SHELL_PROMPT = [
+  "- This Windows is too old for the Unicode shell, so command text outside the system code",
+  "  page (other scripts, emoji) arrives as '?'. Put such text in a file with the write tool",
+  "  and have the command read the file.",
+].join("\n");
+
+/**
+ * The interpreters and build tools a model reaches for without checking. A
+ * stock Windows has none of them, and a model that assumes `python3` or `node`
+ * spends turns on "not found" (or rewrites the work in sed) before it looks.
+ */
+export const WINDOWS_TOOLCHAIN: readonly string[] = [
+  "python",
+  "python3",
+  "py",
+  "pip",
+  "node",
+  "npm",
+  "npx",
+  "git",
+  "curl",
+  "php",
+  "dotnet",
+  "java",
+  "perl",
+  "ruby",
+  "pwsh",
+];
+
+/** What ash finds on PATH without an extension. */
+const COMMAND_EXTENSIONS = [".exe", ".com", ".cmd", ".bat"];
+
+/** How the inventory looks at the machine; the tests swap it. */
+export interface ToolchainProbe {
+  /** The first file PATH resolves `name` to, or undefined. */
+  find: (name: string, pathValue: string) => string | undefined;
+  /** Whether `file --version` runs: an App Installer alias only offers the Store. */
+  runs: (file: string) => boolean;
+}
+
+const defaultProbe: ToolchainProbe = {
+  find: (name, pathValue) => {
+    for (const dir of pathValue.split(";")) {
+      if (dir.length === 0) continue;
+      for (const extension of COMMAND_EXTENSIONS) {
+        const file = path.join(dir, `${name}${extension}`);
+        try {
+          // lstat: an app execution alias is a reparse point stat cannot open.
+          lstatSync(file);
+          return file;
+        } catch {
+          // Not here; the next directory may have it.
+        }
+      }
+    }
+
+    return undefined;
+  },
+  runs: (file) => {
+    const probe = spawnSync(file, ["--version"], {
+      stdio: "ignore",
+      timeout: 5_000,
+      windowsHide: true,
+    });
+
+    return probe.error == null && probe.status === 0;
+  },
+};
+
+/**
+ * Which of `WINDOWS_TOOLCHAIN` the shell's commands can run, on the PATH they
+ * get. A hit under WindowsApps is run once: with no Python installed, Windows
+ * puts `python.exe` and `python3.exe` aliases there that print a Store hint.
+ */
+export function windowsToolchain(
+  shell: PosixShell,
+  env: NodeJS.ProcessEnv = process.env,
+  probe: ToolchainProbe = defaultProbe
+): { present: string[]; missing: string[] } {
+  const pathValue = posixShellEnv(env, shell).PATH ?? "";
+  const present: string[] = [];
+  const missing: string[] = [];
+  for (const name of WINDOWS_TOOLCHAIN) {
+    const file = probe.find(name, pathValue);
+    const usable =
+      file != null &&
+      (!/[\\/]WindowsApps[\\/]/i.test(file) || probe.runs(file));
+    (usable ? present : missing).push(name);
+  }
+
+  return { present, missing };
+}
+
+/** The inventory as prompt lines: what is there, what is not, and how to start Python. */
+export function toolchainPrompt(toolchain: {
+  present: readonly string[];
+  missing: readonly string[];
+}): string {
+  const has = new Set(toolchain.present);
+  const lines = [
+    "- On PATH when this session started:",
+    `  ${toolchain.present.length > 0 ? toolchain.present.join(", ") : "none of the usual interpreters"}.`,
+    ...(toolchain.missing.length > 0
+      ? [
+          "- Not on PATH, so do not call them:",
+          `  ${toolchain.missing.join(", ")}.`,
+          "  Use what is there or a project's own copy (.venv/Scripts/python.exe,",
+          "  node_modules/.bin), or tell the user what to install.",
+        ]
+      : []),
+  ];
+  if (!has.has("python3") && (has.has("python") || has.has("py")))
+    lines.push(
+      `- There is no python3 here: run Python as \`${has.has("python") ? "python" : "py -3"}\`.`
+    );
+
+  return lines.join("\n");
+}
+
+let inventory: { sh: string; prompt: string } | undefined;
+
+/** Taken once per shell per process, so the system prompt stays byte-stable for the provider's cache. */
+function cachedToolchainPrompt(shell: PosixShell): string {
+  if (inventory?.sh !== shell.sh)
+    inventory = {
+      sh: shell.sh,
+      prompt: toolchainPrompt(windowsToolchain(shell)),
+    };
+
+  return inventory.prompt;
+}
+
+/** Test seam: forget the inventory. */
+export function resetToolchainForTesting(): void {
+  inventory = undefined;
+}
+
+/**
+ * What the model needs to know about the shell it has, or null where it has a
+ * real bash: which build it is, and which interpreters it can call.
+ */
 export function windowsShellPrompt(
-  shell: PosixShell | undefined = posixShell()
+  shell: PosixShell | undefined = posixShell(),
+  toolchain: string = shell == null ? "" : cachedToolchainPrompt(shell)
 ): string | null {
-  return shell == null ? null : WINDOWS_SHELL_PROMPT;
+  if (shell == null) return null;
+
+  return [
+    WINDOWS_SHELL_PROMPT,
+    ...(shell.ansi === true ? [ANSI_SHELL_PROMPT] : []),
+    ...(toolchain.length > 0 ? [toolchain] : []),
+  ].join("\n");
 }

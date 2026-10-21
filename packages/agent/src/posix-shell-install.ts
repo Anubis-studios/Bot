@@ -23,6 +23,7 @@
  * licence ships in THIRD-PARTY-NOTICES.txt and a NOTICE.txt sits beside the
  * installed copy.
  */
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   copyFileSync,
@@ -50,6 +51,14 @@ const BUSYBOX_SOURCE = `https://frippery.org/files/busybox/busybox-w32-${BUSYBOX
 /** The shipped file name, whichever upstream build it came from. */
 export const BUSYBOX_PAYLOAD = "busybox.exe";
 
+/**
+ * The ANSI build, shipped beside the Unicode one on x64. The Unicode build
+ * carries a UTF-8 code page manifest that Windows honours only from 10 1903;
+ * on anything older it refuses to start ("sh.exe: UTF8 manifest not
+ * supported"), so every command fails. The resolver falls back to this one.
+ */
+export const BUSYBOX_ANSI_PAYLOAD = "busybox-ansi.exe";
+
 /** Names the payload outright; the desktop sets it because an agent from an installed experience runs away from `vendor/`. */
 export const POSIX_SHELL_PAYLOAD_ENV = "ABACUSAI_BOT_POSIX_SHELL_PAYLOAD";
 
@@ -67,6 +76,14 @@ export interface PosixShell {
   readonly bin: string;
   /** `BB_OVERRIDE_APPLETS` for the child: an installed tool wins over the applet. */
   readonly overrideApplets: string;
+  /** The ANSI build: arguments outside the system code page arrive mangled. */
+  readonly ansi?: boolean;
+  /**
+   * PATH entries from the registry this process's own PATH lacks, appended for
+   * the child: a program installed after the app started is found, as in a new
+   * terminal.
+   */
+  readonly registryPath?: string;
 }
 
 /**
@@ -250,6 +267,8 @@ export interface InstallOptions {
   platform?: NodeJS.Platform;
   /** Overrides payload discovery; the tests use it, so does the env variable. */
   payload?: string;
+  /** The payload is the ANSI build. */
+  ansi?: boolean;
   /** Overrides the cache root. */
   cacheRoot?: string;
   env?: NodeJS.ProcessEnv;
@@ -411,6 +430,7 @@ export function installPosixShell(
   const env = options.env ?? process.env;
 
   const payload = options.payload ?? findPayload(env);
+  const ansi = options.ansi === true ? { ansi: true } : {};
   try {
     if (payload == null) {
       warnOnce("no bundled busybox; bash needs Git Bash or bash.exe on PATH");
@@ -432,6 +452,7 @@ export function installPosixShell(
       sh: path.join(cacheDir, "bin", "sh.exe"),
       bin: path.join(cacheDir, "bin"),
       overrideApplets: busyboxOverrideApplets(),
+      ...ansi,
     };
   } catch (error) {
     warnOnce(`could not install the bundled shell: ${String(error)}`);
@@ -443,9 +464,170 @@ export function installPosixShell(
           args: ["sh"],
           bin: path.dirname(payload),
           overrideApplets: busyboxOverrideApplets(),
+          ...ansi,
         }
       : undefined;
   }
+}
+
+/** Failure text from a shell that cannot run `printf ok`, or undefined when it can. */
+export type ShellSelfTest = (
+  shell: PosixShell,
+  env: NodeJS.ProcessEnv
+) => string | undefined;
+
+/** Generous: the first start of a freshly written executable waits on the virus scanner. */
+const SELF_TEST_TIMEOUT_MS = 20_000;
+
+/** Run the shell exactly as a command would, with the environment commands get. */
+export const selfTestPosixShell: ShellSelfTest = (shell, env) => {
+  const probe = spawnSync(
+    shell.sh,
+    [...(shell.args ?? []), "-c", "printf ok"],
+    {
+      env: posixShellEnv(env, shell),
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: SELF_TEST_TIMEOUT_MS,
+      windowsHide: true,
+    }
+  );
+  if (probe.error == null && probe.status === 0 && probe.stdout === "ok")
+    return undefined;
+
+  return (
+    probe.error?.message ??
+    (probe.stderr.trim() || `exit ${String(probe.status ?? probe.signal)}`)
+  );
+};
+
+export interface ResolveOptions extends Omit<InstallOptions, "ansi"> {
+  /** Overrides the probe; the tests use it. */
+  selfTest?: ShellSelfTest;
+  /** Overrides the registry read; the tests use it. */
+  readRegistry?: RegistryRead;
+}
+
+/** One registry value as `reg query` prints it, or undefined. */
+export type RegistryRead = (
+  key: string,
+  value: string,
+  env: NodeJS.ProcessEnv
+) => string | undefined;
+
+const ENVIRONMENT_KEYS = [
+  "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment",
+  "HKCU\\Environment",
+];
+
+const readRegistryValue: RegistryRead = (key, value, env) => {
+  const root = env.SystemRoot ?? env.windir ?? "C:\\Windows";
+  const probe = spawnSync(
+    path.join(root, "System32", "reg.exe"),
+    ["query", key, "/v", value],
+    { encoding: "utf8", timeout: 5_000, windowsHide: true }
+  );
+  if (probe.error != null || probe.status !== 0) return undefined;
+  const line = new RegExp(
+    `^\\s+${value}\\s+REG_(?:EXPAND_)?SZ\\s+(.*?)\\s*$`,
+    "im"
+  ).exec(probe.stdout);
+
+  return line?.[1];
+};
+
+/** `%NAME%` from `env`, any case; an unknown name stays as written. */
+function expandVariables(text: string, env: NodeJS.ProcessEnv): string {
+  const values = new Map(
+    Object.entries(env).map(([key, value]) => [key.toUpperCase(), value])
+  );
+
+  return text.replace(
+    /%([^%]+)%/g,
+    (whole, name: string) => values.get(name.toUpperCase()) ?? whole
+  );
+}
+
+/**
+ * The machine then the user PATH as the registry holds them now, less what
+ * this process's PATH already has. A desktop app started before an installer
+ * ran keeps the PATH it started with, so `node` is "not found" until a restart.
+ */
+export function registryPathEntries(
+  env: NodeJS.ProcessEnv,
+  read: RegistryRead = readRegistryValue
+): string | undefined {
+  const current = new Set(
+    (childProcessEnv(env).PATH ?? "")
+      .split(";")
+      .map((entry) => entry.replace(/[\\/]+$/, "").toLowerCase())
+  );
+  const fresh = ENVIRONMENT_KEYS.flatMap((key) =>
+    expandVariables(read(key, "Path", env) ?? "", env).split(";")
+  ).filter(
+    (entry) =>
+      entry.length > 0 &&
+      !current.has(entry.replace(/[\\/]+$/, "").toLowerCase())
+  );
+
+  return mergePath(fresh.join(";"), undefined, ";");
+}
+
+/** The builds to try, best first: the named payload, then the ANSI build beside it. */
+function candidates(
+  payload: string
+): readonly { payload: string; ansi: boolean }[] {
+  const fallback = path.join(path.dirname(payload), BUSYBOX_ANSI_PAYLOAD);
+
+  return [
+    { payload, ansi: path.basename(payload) === BUSYBOX_ANSI_PAYLOAD },
+    ...(fallback !== payload && exists(fallback)
+      ? [{ payload: fallback, ansi: true }]
+      : []),
+  ];
+}
+
+const reported = new Set<string>();
+
+function reportOnce(message: string): void {
+  if (reported.has(message)) return;
+  reported.add(message);
+  process.stderr.write(`[posix-shell] ${message}\n`);
+}
+
+/**
+ * The one place a Windows shell is chosen: each bundled build is installed and
+ * must run `printf ok` before it is used, the Unicode build first. Undefined
+ * when none runs, which leaves every caller on its no-bundled-shell path (pi's
+ * Git Bash lookup for the tool, cmd.exe for the rest) and the model without
+ * the busybox guidance.
+ */
+export function resolvePosixShell(
+  options: ResolveOptions = {}
+): PosixShell | undefined {
+  const platform = options.platform ?? process.platform;
+  if (platform !== "win32") return undefined;
+  const env = options.env ?? process.env;
+  const selfTest = options.selfTest ?? selfTestPosixShell;
+
+  const payload = options.payload ?? findPayload(env);
+  if (payload == null) return installPosixShell(options);
+
+  for (const candidate of candidates(payload)) {
+    const shell = installPosixShell({ ...options, ...candidate });
+    if (shell == null) continue;
+    const failure = selfTest(shell, env);
+    if (failure == null) {
+      const registryPath = registryPathEntries(env, options.readRegistry);
+      return registryPath == null ? shell : { ...shell, registryPath };
+    }
+    reportOnce(
+      `${path.basename(candidate.payload)} failed its self-test: ${failure}`
+    );
+  }
+  reportOnce("no bundled shell runs on this machine");
+
+  return undefined;
 }
 
 let resolved: PosixShell | undefined | null = null;
@@ -458,7 +640,7 @@ export function posixShell(): PosixShell | undefined {
     resolved === null ||
     ((resolved === undefined || resolved.args != null) && Date.now() >= retryAt)
   ) {
-    resolved = installPosixShell();
+    resolved = resolvePosixShell();
     retryAt = Date.now() + RETRY_MS;
   }
 
@@ -470,6 +652,7 @@ export function resetPosixShellForTesting(): void {
   resolved = null;
   retryAt = 0;
   warned = false;
+  reported.clear();
 }
 
 /**
@@ -502,7 +685,9 @@ export function posixShellEnv(
   const base = childProcessEnv(env);
 
   return childProcessEnv(base, tempDirEnv(base), {
-    PATH: mergePath(shell.bin, base.PATH) ?? shell.bin,
+    PATH:
+      mergePath(shell.bin, mergePath(base.PATH, shell.registryPath)) ??
+      shell.bin,
     BB_OVERRIDE_APPLETS: shell.overrideApplets,
   });
 }

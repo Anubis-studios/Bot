@@ -19,6 +19,9 @@ const pins = {
     "e67f873d19d58c535cc9f0c4965ffd622e19b7bab87e3da89cb2185fb54464d7",
   ],
 } as const;
+/** The x64 ANSI fallback for Windows before 10 1903; arm64 has none. */
+const ANSI_PIN =
+  "07bb1e5b095b00d68a695481f9240879f33c5724b40aa2308f999d54ed78f075";
 
 afterEach(() => {
   for (const home of homes.splice(0))
@@ -96,6 +99,12 @@ it.each(["x64", "arm64"] as const)(
     expect(result.status, result.stderr).toBe(0);
     const body = fs.readFileSync(f.shipped);
     expect(createHash("sha256").update(body).digest("hex")).toBe(pins[arch][1]);
+    const ansi = path.join(f.home, "vendor/busybox-ansi.exe");
+    if (arch === "x64")
+      expect(
+        createHash("sha256").update(fs.readFileSync(ansi)).digest("hex")
+      ).toBe(ANSI_PIN);
+    else expect(fs.existsSync(ansi)).toBe(false);
     expect(fs.existsSync(path.join(f.home, "requests"))).toBe(false);
   }
 );

@@ -157,6 +157,24 @@ const TOOLS = {
       },
     },
   },
+  // The same release's ANSI build, for a Windows older than 10 1903: there
+  // the Unicode build's UTF-8 manifest stops it starting at all. The agent
+  // falls back to it when the Unicode build fails its self-test. x64 only;
+  // upstream has no ANSI ARM build, and ARM Windows that old is not around.
+  "busybox-ansi": {
+    label: "busybox-w32 (ANSI)",
+    version: BUSYBOX_VERSION,
+    platforms: ["win32"],
+    executable: true,
+    optional: true,
+    targets: {
+      "win32-x64": {
+        asset: `busybox-w64-${BUSYBOX_VERSION}.exe`,
+        sha256:
+          "07bb1e5b095b00d68a695481f9240879f33c5724b40aa2308f999d54ed78f075",
+      },
+    },
+  },
 };
 
 /**
@@ -351,6 +369,8 @@ async function main() {
       !TOOLS[tool].platforms.includes(platform)
     )
       continue;
+    // Or on the targets it has no build for, where it is a fallback.
+    if (TOOLS[tool].optional && TOOLS[tool].targets[target] == null) continue;
     const cached = path.join(CACHE, target, tool + binaryExt);
 
     if (TOOLS[tool].executable || !fs.existsSync(cached)) {

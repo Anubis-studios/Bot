@@ -4,11 +4,11 @@ import * as path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const installPosixShell = vi.fn();
+const resolvePosixShell = vi.fn();
 
 vi.mock("@abacus-ai/agent/posix-shell-install", () => ({
   BUSYBOX_PAYLOAD: "busybox.exe",
-  installPosixShell: (...args: unknown[]) => installPosixShell(...args),
+  resolvePosixShell: (...args: unknown[]) => resolvePosixShell(...args),
   posixShellEnv: (env: NodeJS.ProcessEnv, shell: { bin: string }) => ({
     ...env,
     PATH: `${shell.bin}${path.delimiter}${env.PATH ?? ""}`,
@@ -44,7 +44,7 @@ beforeEach(() => {
   binDir = path.join(root, "bin");
   fs.mkdirSync(vendor, { recursive: true });
   fs.mkdirSync(binDir, { recursive: true });
-  installPosixShell.mockReset();
+  resolvePosixShell.mockReset();
   resetBusyboxForTesting();
 });
 
@@ -115,7 +115,7 @@ describe("terminal shells on Windows", () => {
       bin: path.join(root, "posix", "bin"),
       overrideApplets: ";tar",
     };
-    installPosixShell.mockReturnValue(installed);
+    resolvePosixShell.mockReturnValue(installed);
 
     const resolved = resolveTerminalShell("busybox", windows());
 
@@ -127,7 +127,7 @@ describe("terminal shells on Windows", () => {
 
   it("gives busybox an interactive shell with a prompt", () => {
     fs.writeFileSync(path.join(vendor, "busybox.exe"), "");
-    installPosixShell.mockReturnValue({
+    resolvePosixShell.mockReturnValue({
       sh: "sh.exe",
       bin: "bin",
       overrideApplets: "",
@@ -150,7 +150,7 @@ describe("terminal shells on Windows", () => {
   it("starts the shipped executable with the sh applet after an install failure", () => {
     const payload = path.join(vendor, "busybox.exe");
     fs.writeFileSync(payload, "");
-    installPosixShell.mockReturnValue({
+    resolvePosixShell.mockReturnValue({
       sh: payload,
       args: ["sh"],
       bin: vendor,
@@ -165,7 +165,7 @@ describe("terminal shells on Windows", () => {
 
   it("leaves a shell's own prompt and terminal alone", () => {
     fs.writeFileSync(path.join(vendor, "busybox.exe"), "");
-    installPosixShell.mockReturnValue({
+    resolvePosixShell.mockReturnValue({
       sh: "sh.exe",
       bin: "bin",
       overrideApplets: "",
@@ -183,7 +183,7 @@ describe("terminal shells on Windows", () => {
 
   it("installs busybox once however often a shell is resolved", () => {
     fs.writeFileSync(path.join(vendor, "busybox.exe"), "");
-    installPosixShell.mockReturnValue({
+    resolvePosixShell.mockReturnValue({
       sh: "sh.exe",
       bin: "bin",
       overrideApplets: "",
@@ -192,7 +192,7 @@ describe("terminal shells on Windows", () => {
     resolveTerminalShell("busybox", windows());
     resolveTerminalShell("busybox", windows());
 
-    expect(installPosixShell).toHaveBeenCalledOnce();
+    expect(resolvePosixShell).toHaveBeenCalledOnce();
   });
 
   it("offers busybox only when the payload shipped", () => {

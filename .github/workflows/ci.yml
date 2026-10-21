@@ -270,7 +270,9 @@ jobs:
       # launched by the agent itself (src/posix-shell.ts). Only a Windows
       # machine can run it, so the built bundle installs the payload and runs a
       # pipeline, a heredoc, a quoted path, a failing command, $TMPDIR and the
-      # PowerShell call form through the same operations the tool uses.
+      # PowerShell call form through the same operations the tool uses. Both
+      # builds: the Unicode one the resolver picks here, and the ANSI fallback
+      # a Windows before 10 1903 gets.
       - name: The bundled Windows shell installs and runs
         if: runner.os == 'Windows' && needs.plan.outputs.agent == 'true'
         env:
@@ -278,11 +280,20 @@ jobs:
         run: |
           set -euo pipefail
           node --input-type=module <<'JS'
-          import { posixShell, posixShellOperations } from "./packages/agent/dist/index.js";
+          import { existsSync } from "node:fs";
+          import { installPosixShell, posixShell, posixShellOperations } from "./packages/agent/dist/index.js";
 
           const shell = posixShell();
           if (shell == null) throw new Error("the bundled shell did not install");
-          const ops = posixShellOperations(shell);
+          if (shell.ansi) throw new Error("the resolver passed over the Unicode build on a current Windows");
+          const ansiPayload = "packages/agent/vendor/busybox-ansi.exe";
+          const ansi = existsSync(ansiPayload) ? installPosixShell({ payload: ansiPayload, ansi: true }) : undefined;
+          if (process.arch === "x64" && ansi == null) throw new Error("the ANSI build did not install");
+
+          for (const [name, candidate] of [["unicode", shell], ["ansi", ansi]]) {
+          if (candidate == null) continue;
+          console.log(`-- ${name} build`);
+          const ops = posixShellOperations(candidate);
 
           const run = async (command, env) => {
             let output = "";
@@ -312,6 +323,7 @@ jobs:
           await expect('f=$(mktemp) && printf ok > "$f" && cat "$f" && rm "$f"', "ok", 0, noTmpdir);
           // The PowerShell form the system prompt teaches, with a quoted path inside.
           await expect("powershell -NoProfile -Command '$p = \"C:/x y\"; Write-Output $p.Length'", "6");
+          }
           JS
 
   # The renderer's screenshot gate (spec 01 §10.2) in the real Electron

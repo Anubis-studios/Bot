@@ -12,8 +12,8 @@ import path from "node:path";
 
 import {
   BUSYBOX_PAYLOAD,
-  installPosixShell,
   posixShellEnv,
+  resolvePosixShell,
   type PosixShell,
 } from "@abacus-ai/agent/posix-shell-install";
 import {
@@ -112,8 +112,10 @@ const busybox = (
   )
     return installedBusybox;
   const payload = busyboxPayload();
+  // Resolved, not just installed: the build that runs here, the same one the
+  // agent's `bash` tool picked.
   installedBusybox =
-    payload == null ? undefined : installPosixShell({ payload, platform, env });
+    payload == null ? undefined : resolvePosixShell({ payload, platform, env });
   busyboxRetryAt = Date.now() + 30_000;
 
   return installedBusybox;

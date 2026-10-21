@@ -43,6 +43,10 @@ const REQUIRED = [
   // The POSIX shell `bash` runs under on Windows; without it every command
   // the model writes fails on a machine with no Git Bash.
   ...(process.platform === "win32" ? ["agent/vendor/busybox.exe"] : []),
+  // Its ANSI build, the fallback on Windows before 10 1903 (x64 only).
+  ...(process.platform === "win32" && process.arch === "x64"
+    ? ["agent/vendor/busybox-ansi.exe"]
+    : []),
   // The Windows sandbox runner (packages/agent/src/sandbox/mxc.ts); without it
   // every confined command is refused on a Windows 11 24H2 machine.
   ...(process.platform === "win32" ? ["agent/vendor/mxc/wxc-exec.exe"] : []),
@@ -167,17 +171,23 @@ function main() {
   }
 
   if (process.platform === "win32") {
-    const binary = path.join(resources, "agent", "vendor", "busybox.exe");
-    const probe = spawnSync(binary, ["sh", "-c", "printf ok"], {
-      encoding: "utf8",
-    });
+    const builds = [
+      "busybox.exe",
+      ...(process.arch === "x64" ? ["busybox-ansi.exe"] : []),
+    ];
+    for (const build of builds) {
+      const binary = path.join(resources, "agent", "vendor", build);
+      const probe = spawnSync(binary, ["sh", "-c", "printf ok"], {
+        encoding: "utf8",
+      });
 
-    if (probe.status !== 0 || probe.stdout !== "ok") {
-      dead.push(
-        `busybox: ${(probe.error?.message ?? probe.stderr ?? `exit ${probe.status}`).trim()}`
-      );
-    } else {
-      console.log(`[packaged-resources] busybox: sh -c works`);
+      if (probe.status !== 0 || probe.stdout !== "ok") {
+        dead.push(
+          `${build}: ${(probe.error?.message ?? probe.stderr ?? `exit ${probe.status}`).trim()}`
+        );
+      } else {
+        console.log(`[packaged-resources] ${build}: sh -c works`);
+      }
     }
   }
 

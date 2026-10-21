@@ -1,16 +1,204 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { installPosixShell, posixShellEnv } from "./posix-shell-install.js";
-import { posixShellOperations, windowsShellPrompt } from "./posix-shell.js";
+import {
+  BUSYBOX_ANSI_PAYLOAD,
+  BUSYBOX_PAYLOAD,
+  installPosixShell,
+  posixShellEnv,
+  registryPathEntries,
+  resolvePosixShell,
+  selfTestPosixShell,
+  type PosixShell,
+} from "./posix-shell-install.js";
+import {
+  posixShellOperations,
+  toolchainPrompt,
+  windowsShellPrompt,
+  windowsToolchain,
+  WINDOWS_TOOLCHAIN,
+} from "./posix-shell.js";
 
 const payload = fileURLToPath(
   new URL("../vendor/busybox.exe", import.meta.url)
+);
+const ansiPayload = fileURLToPath(
+  new URL("../vendor/busybox-ansi.exe", import.meta.url)
+);
+
+/** What the Unicode build prints on a Windows before 10 1903. */
+const MANIFEST_REFUSAL = "sh.exe: UTF8 manifest not supported";
+
+describe("resolvePosixShell", () => {
+  /** Stand-in payloads: the install only copies and links them. */
+  const vendor = (builds: readonly string[]) => {
+    const root = mkdtempSync(join(tmpdir(), "busybox-resolve-"));
+    for (const build of builds)
+      writeFileSync(join(root, build), `stand-in ${build}`);
+
+    return {
+      root,
+      payload: join(root, BUSYBOX_PAYLOAD),
+      cacheRoot: join(root, "cache"),
+      done: () => rmSync(root, { recursive: true, force: true }),
+    };
+  };
+  const both = [BUSYBOX_PAYLOAD, BUSYBOX_ANSI_PAYLOAD];
+
+  it("keeps the Unicode build when it runs", () => {
+    const v = vendor(both);
+    try {
+      const selfTest = vi.fn(() => undefined);
+      const shell = resolvePosixShell({
+        platform: "win32",
+        payload: v.payload,
+        cacheRoot: v.cacheRoot,
+        selfTest,
+      });
+      expect(shell?.ansi).toBeUndefined();
+      expect(shell?.sh.startsWith(v.cacheRoot)).toBe(true);
+      expect(selfTest).toHaveBeenCalledOnce();
+    } finally {
+      v.done();
+    }
+  });
+
+  it("falls back to the ANSI build when the Unicode one refuses its manifest", () => {
+    const v = vendor(both);
+    try {
+      const tested: PosixShell[] = [];
+      const shell = resolvePosixShell({
+        platform: "win32",
+        payload: v.payload,
+        cacheRoot: v.cacheRoot,
+        selfTest: (candidate) => {
+          tested.push(candidate);
+          return candidate.ansi === true ? undefined : MANIFEST_REFUSAL;
+        },
+      });
+      expect(shell?.ansi).toBe(true);
+      expect(tested.map((candidate) => candidate.ansi === true)).toEqual([
+        false,
+        true,
+      ]);
+      // Each build in its own digest-keyed install.
+      expect(shell?.sh).not.toBe(tested[0]?.sh);
+    } finally {
+      v.done();
+    }
+  });
+
+  it("gives up, leaving the no-bundled-shell path, when no build runs", () => {
+    for (const builds of [both, [BUSYBOX_PAYLOAD]]) {
+      const v = vendor(builds);
+      try {
+        const selfTest = vi.fn(() => MANIFEST_REFUSAL);
+        expect(
+          resolvePosixShell({
+            platform: "win32",
+            payload: v.payload,
+            cacheRoot: v.cacheRoot,
+            selfTest,
+          })
+        ).toBeUndefined();
+        expect(selfTest).toHaveBeenCalledTimes(builds.length);
+      } finally {
+        v.done();
+      }
+    }
+  });
+
+  it("adds what the registry's PATH has gained since the app started", () => {
+    const v = vendor(both);
+    try {
+      const shell = resolvePosixShell({
+        platform: "win32",
+        payload: v.payload,
+        cacheRoot: v.cacheRoot,
+        env: { PATH: "C:\\Windows\\System32", SystemRoot: "C:\\Windows" },
+        selfTest: () => undefined,
+        readRegistry: (key) =>
+          key.startsWith("HKLM")
+            ? "%SystemRoot%\\System32;C:\\Program Files\\nodejs\\"
+            : undefined,
+      });
+      expect(shell?.registryPath).toBe("C:\\Program Files\\nodejs\\");
+    } finally {
+      v.done();
+    }
+  });
+
+  it("only applies on Windows", () => {
+    const selfTest = vi.fn(() => undefined);
+    expect(resolvePosixShell({ platform: "darwin", selfTest })).toBeUndefined();
+    expect(selfTest).not.toHaveBeenCalled();
+  });
+
+  it("fails the probe with the shell's own words", () => {
+    // A shell that is not there: the spawn error is the reason.
+    expect(
+      selfTestPosixShell(
+        {
+          sh: join(tmpdir(), "no-such-shell.exe"),
+          bin: tmpdir(),
+          overrideApplets: "",
+        },
+        process.env
+      )
+    ).toMatch(/ENOENT/);
+  });
+});
+
+it.skipIf(process.platform !== "win32" || !existsSync(ansiPayload))(
+  "runs commands under the shipped ANSI build when the Unicode one cannot start",
+  async () => {
+    const root = mkdtempSync(join(tmpdir(), "busybox-ansi-"));
+    try {
+      // This runner's Windows is new enough for both, so the refusal is staged;
+      // the ANSI build's probe and the command after it are real.
+      const shell = resolvePosixShell({
+        payload,
+        cacheRoot: join(root, "cache"),
+        selfTest: (candidate, env) =>
+          candidate.ansi === true
+            ? selfTestPosixShell(candidate, env)
+            : MANIFEST_REFUSAL,
+      });
+      expect(shell?.ansi).toBe(true);
+      const output: Buffer[] = [];
+      const result = await posixShellOperations(shell)?.exec(
+        "printf 'b\\na\\n' | sort | head -1",
+        root,
+        { onData: (chunk) => output.push(chunk) }
+      );
+      expect(result?.exitCode).toBe(0);
+      expect(Buffer.concat(output).toString().trim()).toBe("a");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+);
+
+it.skipIf(process.platform !== "win32" || !existsSync(payload))(
+  "picks the Unicode build on a Windows that supports it",
+  () => {
+    const root = mkdtempSync(join(tmpdir(), "busybox-unicode-"));
+    try {
+      const shell = resolvePosixShell({
+        payload,
+        cacheRoot: join(root, "cache"),
+      });
+      expect(shell).toBeDefined();
+      expect(shell?.ansi).toBeUndefined();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
 );
 
 it.skipIf(process.platform !== "win32" || !existsSync(payload))(
@@ -47,6 +235,62 @@ const fakeShell = {
   bin: "C:/bb/bin",
   overrideApplets: ";x",
 };
+
+describe("registryPathEntries", () => {
+  const registry = (values: Record<string, string>) => (key: string) =>
+    values[key.startsWith("HKLM") ? "machine" : "user"];
+
+  it("returns machine then user entries this process lacks, expanded, once each", () => {
+    const fresh = registryPathEntries(
+      {
+        PATH: "C:\\Windows\\system32;C:\\Tools\\",
+        SystemRoot: "C:\\Windows",
+        USERPROFILE: "C:\\Users\\U",
+      },
+      registry({
+        machine: "%SYSTEMROOT%\\System32;C:\\Program Files\\Git\\cmd;C:\\Tools",
+        user: "%USERPROFILE%\\AppData\\Roaming\\npm;C:\\Program Files\\Git\\cmd;%NOPE%\\bin",
+      })
+    );
+    expect(fresh?.split(";")).toEqual([
+      "C:\\Program Files\\Git\\cmd",
+      "C:\\Users\\U\\AppData\\Roaming\\npm",
+      "%NOPE%\\bin",
+    ]);
+  });
+
+  it("is nothing when the registry cannot be read or adds nothing", () => {
+    expect(
+      registryPathEntries({ PATH: "C:\\A" }, () => undefined)
+    ).toBeUndefined();
+    expect(
+      registryPathEntries({ PATH: "C:\\A" }, registry({ machine: "c:\\a\\" }))
+    ).toBeUndefined();
+  });
+
+  it("goes after the process's own PATH for the child, never before it", () => {
+    const env = posixShellEnv(
+      { PATH: "system" },
+      { ...fakeShell, bin: "applets", registryPath: "nodejs" }
+    );
+    expect(env.PATH?.split(delimiter)).toEqual(["applets", "system", "nodejs"]);
+  });
+
+  it.skipIf(process.platform !== "win32")(
+    "reads this machine's registry PATH without error",
+    () => {
+      // The runner's own PATH already carries the registry's entries.
+      const fresh = registryPathEntries(process.env);
+      expect(fresh == null || typeof fresh === "string").toBe(true);
+      expect(
+        registryPathEntries({
+          PATH: "",
+          SystemRoot: process.env.SystemRoot,
+        })?.toLowerCase()
+      ).toContain("system32");
+    }
+  );
+});
 
 describe("posixShellEnv temp dir", () => {
   it("fills TMPDIR from the Windows temp dir when it is missing", () => {
@@ -95,7 +339,8 @@ describe("posixShellEnv temp dir", () => {
 });
 
 describe("windowsShellPrompt", () => {
-  const prompt = windowsShellPrompt(fakeShell) ?? "";
+  // The fixed part; the inventory is the machine's and is tested below.
+  const prompt = windowsShellPrompt(fakeShell, "") ?? "";
 
   it("states the shell's facts the model gets wrong", () => {
     for (const fact of [
@@ -120,6 +365,23 @@ describe("windowsShellPrompt", () => {
     expect(prompt.split("\n").every((line) => line.length <= 100)).toBe(true);
   });
 
+  it("tells the model when its shell is the ANSI build, and only then", () => {
+    const ansi = windowsShellPrompt({ ...fakeShell, ansi: true }, "") ?? "";
+    expect(ansi.startsWith(prompt)).toBe(true);
+    expect(ansi).toContain("Unicode shell");
+    expect(ansi).toContain("write tool");
+    expect(prompt).not.toContain("Unicode shell");
+    expect(ansi.length).toBeLessThan(2_100);
+    expect(ansi.split("\n").every((line) => line.length <= 100)).toBe(true);
+  });
+
+  it("never claims an interpreter is installed: the inventory says which are", () => {
+    expect(prompt).not.toMatch(/\b(node|python)\b/);
+    const inventory = toolchainPrompt({ present: ["git"], missing: [] });
+    const full = windowsShellPrompt(fakeShell, inventory);
+    expect(full?.endsWith(inventory)).toBe(true);
+  });
+
   it.skipIf(process.platform === "win32")(
     "is absent on macOS and Linux",
     () => {
@@ -128,6 +390,110 @@ describe("windowsShellPrompt", () => {
     }
   );
 });
+
+describe("windowsToolchain", () => {
+  /** A machine whose PATH holds `files` (name to path). */
+  const machine = (files: Record<string, string>, runs = () => true) => ({
+    find: (name: string) => files[name],
+    runs: vi.fn(runs),
+  });
+
+  it("sorts every tool into present or missing, on the PATH commands get", () => {
+    const seen: string[] = [];
+    const toolchain = windowsToolchain(
+      fakeShell,
+      { PATH: "C:/Program Files/Git/cmd" },
+      {
+        find: (name, pathValue) => {
+          seen.push(pathValue);
+          return name === "git"
+            ? "C:/Program Files/Git/cmd/git.exe"
+            : undefined;
+        },
+        runs: () => true,
+      }
+    );
+    expect(toolchain.present).toEqual(["git"]);
+    expect(toolchain.missing).toEqual(
+      WINDOWS_TOOLCHAIN.filter((n) => n !== "git")
+    );
+    // The applet directory leads, as it does for a command.
+    expect(seen[0]?.startsWith(fakeShell.bin)).toBe(true);
+  });
+
+  it("counts a Store alias only when it runs", () => {
+    const alias = "C:/Users/U/AppData/Local/Microsoft/WindowsApps/python3.exe";
+    const stub = machine({ python3: alias }, () => false);
+    expect(windowsToolchain(fakeShell, {}, stub).missing).toContain("python3");
+    expect(stub.runs).toHaveBeenCalledWith(alias);
+
+    const real = machine({ python3: alias, node: "C:/nodejs/node.exe" });
+    const toolchain = windowsToolchain(fakeShell, {}, real);
+    expect(toolchain.present).toEqual(["python3", "node"]);
+    // Only the alias is run; a plain file on PATH is trusted.
+    expect(real.runs).toHaveBeenCalledOnce();
+  });
+
+  it("names what is missing and how to start the Python that is there", () => {
+    const text = toolchainPrompt({
+      present: ["py", "git"],
+      missing: ["python", "python3", "node"],
+    });
+    expect(text).toContain("On PATH when this session started:\n  py, git.");
+    expect(text).toContain("do not call them:\n  python, python3, node.");
+    expect(text).toContain(".venv/Scripts/python.exe");
+    expect(text).toContain("run Python as `py -3`");
+    expect(
+      toolchainPrompt({ present: ["python"], missing: ["python3"] })
+    ).toContain("run Python as `python`");
+    expect(
+      toolchainPrompt({ present: ["python3"], missing: [] })
+    ).not.toContain("no python3");
+    expect(toolchainPrompt({ present: [], missing: ["node"] })).toContain(
+      "none of the usual interpreters"
+    );
+    expect(
+      toolchainPrompt({ present: ["git"], missing: [...WINDOWS_TOOLCHAIN] })
+        .split("\n")
+        .every((line) => line.length <= 100)
+    ).toBe(true);
+  });
+});
+
+it.skipIf(process.platform !== "win32" || !existsSync(payload))(
+  "takes the runner's real toolchain through the shipped shell's PATH",
+  () => {
+    const root = mkdtempSync(join(tmpdir(), "busybox-toolchain-"));
+    try {
+      const shell = resolvePosixShell({
+        payload,
+        cacheRoot: join(root, "cache"),
+      });
+      if (shell == null) throw new Error("no shell");
+      // The runner has both; the shell's own `command -v` agrees.
+      const toolchain = windowsToolchain(shell);
+      expect(toolchain.present).toEqual(
+        expect.arrayContaining(["git", "node"])
+      );
+      const env = posixShellEnv(process.env, shell);
+      for (const name of toolchain.present.filter(
+        (n) => n === "git" || n === "node"
+      ))
+        expect(
+          execFileSync(
+            shell.sh,
+            [...(shell.args ?? []), "-c", `command -v ${name}`],
+            {
+              encoding: "utf8",
+              env,
+            }
+          ).trim().length
+        ).toBeGreaterThan(0);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+);
 
 it.skipIf(process.platform !== "win32" || !existsSync(payload))(
   "gives the shipped shell a usable $TMPDIR",

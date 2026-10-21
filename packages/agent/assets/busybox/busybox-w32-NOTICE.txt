@@ -20,6 +20,9 @@ Binaries shipped
   arm64  busybox-w64a-FRP-6075-g169694ebd.exe
          sha256 e67f873d19d58c535cc9f0c4965ffd622e19b7bab87e3da89cb2185fb54464d7
 
+  x64    busybox-w64-FRP-6075-g169694ebd.exe (ANSI build, for Windows before 10 1903)
+         sha256 07bb1e5b095b00d68a695481f9240879f33c5724b40aa2308f999d54ed78f075
+
 Corresponding source
 --------------------
 
@@ -35,4 +38,5 @@ Build provenance
 
 These exact payloads were copied from CodeLLM commit e3af4fbf, where they were
 already checked in. Their SHA-256 hashes match this repository's existing
-upstream pins. The build verifies the committed bytes before staging them.
+upstream pins. The ANSI x64 build was downloaded from frippery.org/files/busybox/
+and matches the SHA256SUM published there. The build verifies the committed bytes before staging them.
