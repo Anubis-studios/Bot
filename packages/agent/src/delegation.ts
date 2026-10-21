@@ -26,6 +26,7 @@ import { scopeGuard, taskScope } from "./extensions/scope-guard.js";
 import { modelPath, MODEL_PATH_RESOURCES } from "./model-path.js";
 import { windowsShellPrompt } from "./posix-shell.js";
 import type { AgentEvent } from "./protocol.js";
+import { buildReadTool } from "./read-tool.js";
 import { forwardChildToolEvents } from "./subagent-events.js";
 import {
   runSubagent,
@@ -172,7 +173,10 @@ export async function runDelegatedTask(
       // The no-nesting rule plus the user's Capabilities choices, which must
       // reach sub-agents or the shell comes back off-switch.
       excludeTools: ["delegate_task", ...excludedTools()],
-      customTools: (confinedBash != null ? [confinedBash] : []) as never,
+      customTools: [
+        buildReadTool(root),
+        ...(confinedBash != null ? [confinedBash] : []),
+      ] as never,
       ...(context.model != null ? { model: context.model as never } : {}),
     });
 

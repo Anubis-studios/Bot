@@ -1,8 +1,9 @@
 /**
  * The pdf component, behind one tool. The `document` sub-agent writes content
  * and calls back for `renderDocument`, which takes sections, never a page, so
- * a caller cannot produce a document that fails to lay out. Reading and
- * editing shell out to a bundled Python script (pypdf, pdfplumber).
+ * a caller cannot produce a document that fails to lay out. Page and form
+ * work shells out to a bundled Python script (pypdf, pdfplumber); reading a
+ * PDF's text is the agent's own `read`, which needs no Python.
  */
 import { execFile } from "child_process";
 import fs from "fs/promises";
@@ -575,7 +576,7 @@ export const reprintPdf = async (request: {
 };
 
 // ---------------------------------------------------------------------------
-// Reading and editing
+// Pages, tables and forms
 // ---------------------------------------------------------------------------
 
 export type PdfScriptResult = Record<string, unknown> & { ok: boolean };

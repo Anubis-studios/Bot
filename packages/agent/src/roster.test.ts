@@ -6,6 +6,7 @@
  * made, with nothing to build.
  */
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -121,6 +122,82 @@ describe("building the roster", () => {
     for (const name of ["document", "design", "ppt"]) {
       expect(names).not.toContain(name);
     }
+  });
+});
+
+describe("the roster's read", () => {
+  const DOCS = path.join(HERE, "__fixtures__", "documents");
+  const read = (filePath: string): Promise<string> =>
+    (
+      OWN_TOOLS.find((entry) => entry.name === "read")!.build({
+        cwd: DOCS,
+      } as RosterContext) as unknown as {
+        execute: (
+          id: string,
+          params: { path: string }
+        ) => Promise<{ content: Array<{ type: string; text?: string }> }>;
+      }
+    )
+      .execute("call", { path: filePath })
+      .then((result) => result.content.map((part) => part.text ?? "").join(""));
+
+  const scratch = (name: string, bytes: Uint8Array): string => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "roster-read-"));
+    const file = path.join(dir, name);
+    fs.writeFileSync(file, bytes);
+    return file;
+  };
+
+  it("reads a PDF as its text, page by page, with no Python", async () => {
+    const text = await read("brief.pdf");
+
+    expect(text).toContain("[PDF, 2 pages]");
+    expect(text).toContain("--- Page 1 ---\nCampaign brief");
+    expect(text).toContain("--- Page 2 ---\nSecond page: budget");
+  });
+
+  it("says a PDF with no text layer is a scan instead of returning bytes", async () => {
+    expect(await read("scan.pdf")).toMatch(
+      /^\[PDF, 1 page, with no text layer/
+    );
+  });
+
+  it("reads a Word document as its text", async () => {
+    const text = await read("notes.docx");
+
+    expect(text).toContain("Conhecimento do agente");
+    expect(text).toContain("Posicionamento e direção criativa.");
+    expect(text).toContain("Barbearia");
+    expect(text).not.toContain("PK");
+  });
+
+  it("names any other binary file instead of dumping it", async () => {
+    const zip = scratch(
+      "kit.zip",
+      Buffer.from("PK\u0003\u0004\u0000\u0000rest")
+    );
+    const blob = scratch("tool.exe", Buffer.from([0x4d, 0x5a, 0, 0, 1, 2]));
+
+    expect(await read(zip)).toMatch(/kit\.zip is a zip archive .*unzip/);
+    expect(await read(blob)).toMatch(/tool\.exe is a binary file/);
+  });
+
+  it("reads UTF-16 text the way Windows tools write it", async () => {
+    const file = scratch(
+      "out.txt",
+      Buffer.concat([
+        Buffer.from([0xff, 0xfe]),
+        Buffer.from("olá\n", "utf16le"),
+      ])
+    );
+
+    expect(await read(file)).toBe("olá\n");
+  });
+
+  it("still reads plain text as it is", async () => {
+    expect(await read(scratch("a.md", Buffer.from("# Title\nbody")))).toBe(
+      "# Title\nbody"
+    );
   });
 });
 

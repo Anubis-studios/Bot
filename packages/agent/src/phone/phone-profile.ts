@@ -12,6 +12,7 @@ import { BOT_TIME_TOOL_NAME, buildBotTimeTool } from "../bot/bot-time-tool.js";
 import { WHATSAPP_CHANNEL } from "../channel.js";
 import type { ForeverProfile } from "../forever/profile.js";
 import { buildOwnerTools, OWNER_TOOL_NAMES } from "../owner-tools.js";
+import { buildReadTool } from "../read-tool.js";
 import { buildSendMediaTool } from "../send-media-tool.js";
 import { SEND_MEDIA_TOOL_NAME } from "../send-media.js";
 import { PHONE_MCP_TOOLS } from "../tool-policy.js";
@@ -121,7 +122,7 @@ export function createPhoneProfile(
         phoneReplyLanguage(home)
       ),
     ],
-    tools: (_cwd, host) => [
+    tools: (cwd, host) => [
       buildPhoneMemoryTool(home),
       buildPhonePageTool(home, options.pagePublisher),
       buildBotTimeTool(() => phoneZone(home)),
@@ -130,6 +131,7 @@ export function createPhoneProfile(
       buildSendMediaTool(undefined, host.mediaCheck),
       buildPhoneCheckinsTool(home),
       ...buildOwnerTools({ recentUserText }),
+      buildReadTool(cwd),
     ],
     // A browser run keeps the user posted, and hears them, from inside.
     browserTask: {

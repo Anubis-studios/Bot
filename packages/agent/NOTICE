@@ -22,3 +22,10 @@ This product depends on software from third parties:
 
   - ast-grep (https://github.com/ast-grep/ast-grep), MIT License. Structural
     search and edit, loaded as a native addon at run time.
+
+  - pdf.js (https://github.com/mozilla/pdf.js), Apache License 2.0, bundled
+    through unpdf (https://github.com/unjs/unpdf), MIT License. Reads the text
+    of PDFs.
+
+  - mammoth (https://github.com/mwilliamson/mammoth.js), BSD 2-Clause License.
+    Reads the text of Word documents.

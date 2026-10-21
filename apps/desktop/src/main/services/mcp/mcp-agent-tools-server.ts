@@ -1406,7 +1406,6 @@ export class McpAgentToolsServer extends McpHttpServer {
       const at = (key: string): string => this.resolveOutputPath(str(key));
       const byAction: Record<string, string[]> = {
         info: [at("path")],
-        read: [at("path"), ...(str("pages") ? ["--pages", str("pages")] : [])],
         tables: [
           at("path"),
           ...(str("pages") ? ["--pages", str("pages")] : []),

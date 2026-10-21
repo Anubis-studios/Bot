@@ -41,6 +41,7 @@ import { buildMcpToolDefinitions, mcpToolCaller } from "./mcp/tools.js";
 import { buildMemoryTool } from "./memory-tool.js";
 import { buildPresentDeliverableTool } from "./present-deliverable-tool.js";
 import type { AgentEvent, AgentMode } from "./protocol.js";
+import { buildReadTool } from "./read-tool.js";
 import { buildServeTool } from "./serve-tool.js";
 import {
   buildSessionSearchTool,
@@ -197,6 +198,12 @@ export const OWN_TOOLS: readonly RosterEntry[] = [
   { name: "grep", build: (ctx) => createGrepToolDefinition(ctx.cwd) },
   { name: "find", build: (ctx) => createFindToolDefinition(ctx.cwd) },
   { name: "ls", build: (ctx) => createLsToolDefinition(ctx.cwd) },
+  // Over pi's built-in, so a PDF or Word file reads as text without Python.
+  {
+    name: "read",
+    when: (ctx) => !ctx.excluded.includes("read"),
+    build: (ctx) => buildReadTool(ctx.cwd),
+  },
   // Here rather than on the desktop's tool server, so the agent can add a
   // skill without one.
   {

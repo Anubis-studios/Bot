@@ -12,7 +12,6 @@ an error the agent has to guess its way out of.
 
 Subcommands:
   info    <pdf>                      page count, metadata, whether text is extractable
-  read    <pdf> [--pages 1-3,7]      text per page
   tables  <pdf> [--pages 1-3]        tables as rows, per page
   merge   <out> <pdf> <pdf> [...]    concatenate
   split   <pdf> <outdir> [--ranges 1-3,4-9]   write one PDF per range
@@ -79,18 +78,6 @@ def cmd_info(args):
         # that before it reports an empty document as an empty document.
         'text_extractable': bool((first or '').strip()),
         'hint': None if (first or '').strip() else 'No text on page 1. It is likely scanned and needs OCR.',
-    }))
-
-
-def cmd_read(args):
-    pypdf = need('pypdf', 'pypdf')
-    reader = pypdf.PdfReader(args.pdf)
-    wanted = parse_pages(args.pages, len(reader.pages))
-    pages = [{'page': i + 1, 'text': (reader.pages[i].extract_text() or '')} for i in wanted]
-    print(json.dumps({
-        'ok': True,
-        'pages': pages,
-        'characters': sum(len(p['text']) for p in pages),
     }))
 
 
@@ -217,8 +204,6 @@ def main():
     sub = parser.add_subparsers(dest='command', required=True)
 
     p = sub.add_parser('info'); p.add_argument('pdf'); p.set_defaults(fn=cmd_info)
-
-    p = sub.add_parser('read'); p.add_argument('pdf'); p.add_argument('--pages'); p.set_defaults(fn=cmd_read)
 
     p = sub.add_parser('tables'); p.add_argument('pdf'); p.add_argument('--pages'); p.set_defaults(fn=cmd_tables)
 

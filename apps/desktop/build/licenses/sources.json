@@ -98,5 +98,13 @@
       "file": "packages/agent/scripts/download-tools.js",
       "constant": "MXC"
     }
+  },
+  {
+    "file": "pdfjs-LICENSE",
+    "asset": "pdf.js 6.1.200, bundled inside unpdf (reads the text of PDFs)",
+    "source": "https://github.com/mozilla/pdf.js/blob/v6.1.200/LICENSE",
+    "license": "Apache-2.0",
+    "version": "6.1.200",
+    "name": "pdf.js"
   }
 ]
