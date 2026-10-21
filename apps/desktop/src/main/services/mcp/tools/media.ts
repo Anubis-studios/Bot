@@ -1,8 +1,14 @@
-import { videoPromptingGuide } from "../../agent-tools/media-generation";
+import {
+  imageGenerationReady,
+  speechGenerationReady,
+  videoGenerationReady,
+  videoPromptingGuide,
+} from "../../agent-tools/media-generation";
 import type { ToolDefinition } from "./definition";
 
 /**
- * Understanding and generating images, audio and video.
+ * Understanding and generating images, audio and video. A generator is listed
+ * only with a provider to run on; without one, `paid_feature` says where to get it.
  */
 export const MEDIA_TOOLS: ToolDefinition[] = [
   {
@@ -42,6 +48,7 @@ export const MEDIA_TOOLS: ToolDefinition[] = [
   {
     name: "image_generate",
     toolsets: ["image_gen"],
+    ready: imageGenerationReady,
     description:
       "Generate an image from a prompt. Returns the path to the saved file, which you should show to the user as a markdown image so it renders in the chat. Never link to an image on a third-party site instead of generating one.",
     inputSchema: {
@@ -60,6 +67,7 @@ export const MEDIA_TOOLS: ToolDefinition[] = [
   {
     name: "text_to_speech",
     toolsets: ["tts"],
+    ready: speechGenerationReady,
     description:
       "Turn text into spoken audio. Returns the path to the saved file.",
     inputSchema: {
@@ -78,6 +86,7 @@ export const MEDIA_TOOLS: ToolDefinition[] = [
   {
     name: "video_generate",
     toolsets: ["video_gen"],
+    ready: videoGenerationReady,
     description:
       "Start generating a video from a prompt, optionally driven by a still image. Returns a job id. Generation takes minutes, so poll with bfl_flux3_get_result.",
     inputSchema: {
@@ -96,6 +105,7 @@ export const MEDIA_TOOLS: ToolDefinition[] = [
   {
     name: "xai_video_edit",
     toolsets: ["video_gen"],
+    ready: videoGenerationReady,
     description:
       "Re-generate an existing video against a new prompt. Returns a job id to poll.",
     inputSchema: {
@@ -108,6 +118,7 @@ export const MEDIA_TOOLS: ToolDefinition[] = [
   {
     name: "xai_video_extend",
     toolsets: ["video_gen"],
+    ready: videoGenerationReady,
     description:
       "Continue an existing video past its end. Returns a job id to poll.",
     inputSchema: {
@@ -120,6 +131,7 @@ export const MEDIA_TOOLS: ToolDefinition[] = [
   {
     name: "bfl_flux3_text_to_video",
     toolsets: ["bfl"],
+    ready: videoGenerationReady,
     description:
       "Start a video generation from a prompt alone. Returns a job id to poll.",
     inputSchema: {
@@ -132,6 +144,7 @@ export const MEDIA_TOOLS: ToolDefinition[] = [
   {
     name: "bfl_flux3_image_to_video",
     toolsets: ["bfl"],
+    ready: videoGenerationReady,
     description:
       "Start a video generation from a still image. Returns a job id to poll.",
     inputSchema: {
@@ -144,6 +157,7 @@ export const MEDIA_TOOLS: ToolDefinition[] = [
   {
     name: "bfl_flux3_keyframes_to_video",
     toolsets: ["bfl"],
+    ready: videoGenerationReady,
     description:
       "Start a video generation that passes through given keyframes. Returns a job id to poll.",
     inputSchema: {
@@ -163,6 +177,7 @@ export const MEDIA_TOOLS: ToolDefinition[] = [
   {
     name: "bfl_flux3_video_continuation",
     toolsets: ["bfl"],
+    ready: videoGenerationReady,
     description: "Continue an existing video. Returns a job id to poll.",
     inputSchema: {
       type: "object",
@@ -174,6 +189,7 @@ export const MEDIA_TOOLS: ToolDefinition[] = [
   {
     name: "bfl_flux3_get_result",
     toolsets: ["bfl", "video_gen"],
+    ready: videoGenerationReady,
     description:
       "Check a video job. Returns the file path once it is done, or how long it has been running. Poll every 20-30 seconds rather than in a tight loop.",
     inputSchema: {
@@ -186,6 +202,7 @@ export const MEDIA_TOOLS: ToolDefinition[] = [
   {
     name: "bfl_flux3_prompting_guide",
     toolsets: ["bfl", "video_gen"],
+    ready: videoGenerationReady,
     description:
       "Read guidance on writing video prompts before generating. Costs nothing and improves results.",
     inputSchema: { type: "object", properties: {} },

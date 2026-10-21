@@ -12,6 +12,7 @@ import { describe, expect, it } from "vitest";
 import {
   excludedBuiltinTools,
   isToolsetEnabled,
+  PAID_FEATURES,
   READY_TOOL_COUNT,
   TOOLSETS,
 } from "./toolsets";
@@ -37,6 +38,18 @@ describe("whether a group is on", () => {
     for (const set of planned) {
       expect(isToolsetEnabled(set.id, { [set.id]: true })).toBe(false);
     }
+  });
+
+  it("turns on what a paid plan serves here, unless the user switched it off", () => {
+    expect(isToolsetEnabled("image_gen", undefined)).toBe(false);
+    expect(isToolsetEnabled("image_gen", undefined, true)).toBe(true);
+    expect(isToolsetEnabled("tts", {}, true)).toBe(true);
+    expect(isToolsetEnabled("image_gen", { image_gen: false }, true)).toBe(
+      false
+    );
+    // Served only with a key of the user's own: off on every plan by default.
+    expect(isToolsetEnabled("video_gen", undefined, true)).toBe(false);
+    expect(isToolsetEnabled("device", undefined, true)).toBe(false);
   });
 
   it("reports an unknown id as off rather than throwing", () => {
@@ -252,4 +265,29 @@ describe("the always-on tools are in the registry", () => {
       expect(isToolsetEnabled(id, { [id]: false })).toBe(true);
     }
   );
+});
+
+describe("the paid-plan capabilities", () => {
+  it("group every toolset that delivers one, read off the registry", () => {
+    expect(PAID_FEATURES).toEqual([
+      {
+        feature: "video_gen",
+        name: "video generation",
+        inApp: false,
+        toolsets: ["bfl", "video_gen"],
+      },
+      {
+        feature: "image_gen",
+        name: "image generation",
+        inApp: true,
+        toolsets: ["image_gen"],
+      },
+      {
+        feature: "tts",
+        name: "text to speech",
+        inApp: true,
+        toolsets: ["tts"],
+      },
+    ]);
+  });
 });

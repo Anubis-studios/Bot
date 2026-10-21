@@ -3064,6 +3064,10 @@
     "visualizer": {
       "title": "Interactive visual",
       "drawing": "Drawing the visual"
+    },
+    "paidFeature": {
+      "title": "{{feature}}은(는) Basic에 포함되어 있습니다",
+      "webTitle": "{{feature}}은(는) Basic에 포함되어 있습니다(웹의 Abacus AI Agent에서 사용)"
     }
   },
   "notch": {

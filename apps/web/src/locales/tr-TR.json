@@ -3064,6 +3064,10 @@
     "visualizer": {
       "title": "Etkileşimli görsel",
       "drawing": "Görsel çiziliyor"
+    },
+    "paidFeature": {
+      "title": "{{feature}} Basic'e dahildir",
+      "webTitle": "{{feature}} Basic'e dahildir, web'deki Abacus AI Agent'ta"
     }
   },
   "notch": {

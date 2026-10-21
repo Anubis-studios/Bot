@@ -3064,6 +3064,10 @@
     "visualizer": {
       "title": "Interactive visual",
       "drawing": "Drawing the visual"
+    },
+    "paidFeature": {
+      "title": "{{feature}}はBasicに含まれています",
+      "webTitle": "{{feature}}はBasicに含まれています(Web版のAbacus AI Agentで利用できます)"
     }
   },
   "notch": {

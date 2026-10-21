@@ -3064,6 +3064,10 @@
     "visualizer": {
       "title": "Interactive visual",
       "drawing": "Drawing the visual"
+    },
+    "paidFeature": {
+      "title": "{{feature}} is included in Basic",
+      "webTitle": "{{feature}} is included in Basic, in Abacus AI Agent on the web"
     }
   },
   "notch": {

@@ -39,7 +39,8 @@ const GENERIC_REPLY =
 /** The plans page, for an account the one-time upgrade link does not cover. */
 const ABACUS_PLANS_URL = "https://apps.abacus.ai/chatllm/choose-plan/";
 
-const ABACUS_AGENT_URL = "https://apps.abacus.ai/chatllm";
+/** AbacusAI Agent on the web. */
+export const ABACUS_AGENT_URL = "https://apps.abacus.ai/chatllm";
 
 const ownKeyAction = (error: TurnFailure) =>
   error.actions?.find((action) => action.type === "own-key-unavailable");

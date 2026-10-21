@@ -480,7 +480,8 @@
     ],
     "sources": [
       "features/library/skills-tools.tsx",
-      "routes/_shell/(library)/library.tools.$toolsetId.tsx"
+      "routes/_shell/(library)/library.tools.$toolsetId.tsx",
+      "features/chat/kit/tools/paid-feature.tsx"
     ]
   },
   {

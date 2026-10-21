@@ -55,7 +55,24 @@ export interface Toolset {
    * say, so a switch would be a lie.
    */
   alwaysOn?: boolean;
+  /**
+   * A capability the paid plans include. On a paid plan it is on by default
+   * where `inApp` (the plan itself serves it here); on the free plan, or where
+   * this app cannot serve it, the agent is told it exists and where to get it.
+   */
+  paidPlan?: PaidPlanCapability;
 }
+
+export interface PaidPlanCapability {
+  /** The toolset id whose label names it; groups every toolset that delivers it. */
+  feature: string;
+  /** What the model calls it. */
+  name: string;
+  inApp: boolean;
+}
+
+/** The tool that tells the agent about a paid-plan capability this account lacks. */
+export const PAID_FEATURE_TOOL = "paid_feature";
 
 const tool = (name: string): ToolsetTool => ({ name, descriptionKey: name });
 
@@ -203,6 +220,7 @@ export const TOOLSETS: Toolset[] = [
       tool("bfl_flux3_prompting_guide"),
     ],
     defaultEnabled: false,
+    paidPlan: { feature: "video_gen", name: "video generation", inApp: false },
   },
   {
     id: "connectors",
@@ -253,6 +271,7 @@ export const TOOLSETS: Toolset[] = [
     delivery: "mcp-agent-tools",
     tools: [tool("image_generate")],
     defaultEnabled: false,
+    paidPlan: { feature: "image_gen", name: "image generation", inApp: true },
   },
   {
     id: "deliverables",
@@ -387,6 +406,7 @@ export const TOOLSETS: Toolset[] = [
     delivery: "mcp-agent-tools",
     tools: [tool("text_to_speech")],
     defaultEnabled: false,
+    paidPlan: { feature: "tts", name: "text to speech", inApp: true },
   },
   {
     id: "video",
@@ -407,6 +427,7 @@ export const TOOLSETS: Toolset[] = [
       tool("xai_video_extend"),
     ],
     defaultEnabled: false,
+    paidPlan: { feature: "video_gen", name: "video generation", inApp: false },
   },
   {
     id: "vision",
@@ -467,9 +488,38 @@ export const READY_TOOL_COUNT = new Set(
 /** The stored on/off state, keyed by toolset id. Absent means "use the default". */
 export type ToolsetPreferences = Record<string, boolean>;
 
+/** A paid-plan capability with every toolset that delivers it, read off the registry. */
+export interface PaidFeature extends PaidPlanCapability {
+  toolsets: readonly string[];
+}
+
+export const PAID_FEATURES: readonly PaidFeature[] = READY_TOOLSETS.reduce<
+  PaidFeature[]
+>((features, set) => {
+  if (set.paidPlan == null) return features;
+  const { feature, inApp } = set.paidPlan;
+  const known = features.find((entry) => entry.feature === feature);
+  if (known == null)
+    return [...features, { ...set.paidPlan, toolsets: [set.id] }];
+  return features.map((entry) =>
+    entry === known
+      ? {
+          ...entry,
+          inApp: entry.inApp && inApp,
+          toolsets: [...entry.toolsets, set.id],
+        }
+      : entry
+  );
+}, []);
+
+/**
+ * `paid`: the account is on a paid plan, which turns on what the plan serves
+ * here (`paidPlan.inApp`) unless the user switched it off.
+ */
 export const isToolsetEnabled = (
   id: string,
-  preferences: ToolsetPreferences | undefined
+  preferences: ToolsetPreferences | undefined,
+  paid = false
 ): boolean => {
   const toolset = TOOLSETS_BY_ID.get(id);
 
@@ -480,7 +530,10 @@ export const isToolsetEnabled = (
   // withhold agent-registered tools while the panel still showed them on.
   if (toolset.alwaysOn === true) return true;
 
-  return preferences?.[id] ?? toolset.defaultEnabled;
+  return (
+    preferences?.[id] ??
+    (toolset.defaultEnabled || (paid && toolset.paidPlan?.inApp === true))
+  );
 };
 
 /**

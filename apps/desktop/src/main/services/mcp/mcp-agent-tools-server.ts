@@ -45,12 +45,14 @@ import {
   type MessagingPlatformId,
   describePlatformForAgent,
 } from "@abacus-ai/contract/messaging";
+import type { AbacusPlanTier } from "@abacus-ai/contract/models";
 import type {
   Routine,
   RoutineCreateInput,
   RoutineListItem,
   RoutineRunner,
 } from "@abacus-ai/contract/routines";
+import { PAID_FEATURES } from "@abacus-ai/contract/toolsets";
 
 import { emitHostEvent } from "#main/rpc/emit";
 
@@ -107,6 +109,7 @@ import {
   resolveSender,
   type SenderCandidate,
 } from "../messaging/sender-resolution";
+import { fetchBillingPlan } from "../providers/abacus-upgrade";
 import type {
   PreviewOutcome,
   PreviewTargets,
@@ -130,7 +133,12 @@ import {
   requestedRunner,
   requestedSources,
 } from "./tools/cronjob-hosted";
-import type { ToolDefinition, ToolResult } from "./tools/definition";
+import type {
+  HostCapabilities,
+  ToolDefinition,
+  ToolResult,
+} from "./tools/definition";
+import { paidFeatureResult, withheldFeatures } from "./tools/paid-features";
 import {
   NOT_YET_PHONE_OWNED,
   PHONE_AGENT_TOOLS,
@@ -232,6 +240,8 @@ export interface McpAgentToolsServerOptions {
   hostedRoutines?: () => boolean;
   /** Re-read per request so toggles take effect live. */
   enabledToolsets: () => Set<string>;
+  /** The account's plan as last read; absent or unknown, no plan-locked capability is offered. */
+  planTier?: () => AbacusPlanTier;
   workspacePath: () => string | null;
   workspaceId?: () => string | null;
   /** `trigger` lets the run log tell "Run now" from the first fire at creation. */
@@ -500,7 +510,7 @@ export class McpAgentToolsServer extends McpHttpServer {
     const forBot = this.isBotCaller(callerSession);
     const forEditor = this.isRoutineEditor(callerSession);
     const channel = this.channelFor(callerSession);
-    const host = { hostedRoutines: this.options.hostedRoutines?.() === true };
+    const host = this.hostCapabilities();
     // A run nobody is watching is offered only what it may call.
     const held = this.isHeld(callerSession);
 
@@ -524,6 +534,34 @@ export class McpAgentToolsServer extends McpHttpServer {
             ? definition.inputSchema(channel, host)
             : definition.inputSchema,
       }));
+  }
+
+  private hostCapabilities(): HostCapabilities {
+    const enabled = this.options.enabledToolsets();
+    return {
+      hostedRoutines: this.options.hostedRoutines?.() === true,
+      withheldFeatures: withheldFeatures(this.planTier(), (feature) =>
+        this.featureListed(feature.toolsets, enabled)
+      ),
+    };
+  }
+
+  private planTier(): AbacusPlanTier {
+    return this.options.planTier?.() ?? "unknown";
+  }
+
+  /** Whether any tool of these toolsets is listed: switched on, with what it needs set. */
+  private featureListed(
+    toolsets: readonly string[],
+    enabled: Set<string>
+  ): boolean {
+    return AGENT_TOOLS.some(
+      (definition) =>
+        definition.toolsets !== "always" &&
+        definition.toolsets.some((toolset) => toolsets.includes(toolset)) &&
+        isToolEnabled(definition, enabled) &&
+        this.isToolConfigured(definition)
+    );
   }
 
   /**
@@ -1982,7 +2020,8 @@ export class McpAgentToolsServer extends McpHttpServer {
       (isToolEnabled(definition, enabled) ||
         (forBot && definition.botAlways === true)) &&
       this.isToolConfigured(definition) &&
-      (forBot || definition.botsOnly !== true)
+      (forBot || definition.botsOnly !== true) &&
+      (definition.offered?.(this.hostCapabilities()) ?? true)
     );
   }
 
@@ -2843,6 +2882,34 @@ export class McpAgentToolsServer extends McpHttpServer {
     return this.ok(
       action === "on" ? `Auto-reply is on. ${allowedLine}` : allowedLine
     );
+  }
+
+  // ── Paid-plan capabilities ───────────────────────────────────────────────
+
+  async paidFeature(
+    args: Record<string, unknown>,
+    callerSession?: string
+  ): Promise<ToolResult> {
+    const feature = PAID_FEATURES.find(
+      (entry) => entry.feature === args.feature
+    );
+    if (feature == null)
+      return this.err(
+        `Unknown feature. One of: ${PAID_FEATURES.map((entry) => entry.feature).join(", ")}.`
+      );
+    const tier = this.planTier();
+    const listed = this.featureListed(
+      feature.toolsets,
+      this.options.enabledToolsets()
+    );
+    // A bot answering in a chat app has no card to show: its reply carries the link.
+    const card =
+      !this.isBotCaller(callerSession) ||
+      (callerSession != null &&
+        this.options.isAppBotChat?.(callerSession) === true);
+    const plan =
+      tier === "free" && !listed ? await fetchBillingPlan(!card) : null;
+    return paidFeatureResult(this, { feature, tier, listed, card, plan });
   }
 
   // ── Integrations ─────────────────────────────────────────────────────────

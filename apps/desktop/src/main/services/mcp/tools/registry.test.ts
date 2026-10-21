@@ -21,12 +21,13 @@ import { AGENT_TOOL_NAMES, AGENT_TOOLS, agentTool } from "./index";
  * `my_activity` answers only a bot's own chat about that bot's other
  * conversations; it grants nothing and there is nothing for a user to switch.
  * `billing_plan` reads the user's own plan and prices; it grants nothing
- * either. `offer_session` draws a card that opens a session; it does nothing
+ * either, and nor does `paid_feature`, which says where a plan has a capability. `offer_session` draws a card that opens a session; it does nothing
  * until the user clicks it.
  */
 const NOT_IN_REGISTRY = new Set([
   "my_activity",
   "billing_plan",
+  "paid_feature",
   "offer_session",
 ]);
 

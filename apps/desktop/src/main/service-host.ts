@@ -413,6 +413,7 @@ import {
 } from "./services/messaging/messaging-config-service";
 import { MessagingGatewayService } from "./services/messaging/messaging-gateway-service";
 import {
+  cachedAbacusAccount,
   creditSnapshot,
   fetchAbacusAccount,
   onAbacusAccountRead,
@@ -1057,6 +1058,7 @@ export class ServiceHost {
       const states = this.getToolsetStates();
       return new Set(Object.keys(states).filter((id) => states[id]));
     },
+    planTier: () => abacusPlanTier(cachedAbacusAccount()),
     workspacePath: () => {
       const workspace = this.workspaceService.getActiveWorkspace();
       return workspace?.isRemote === true ? null : (workspace?.path ?? null);
@@ -1289,7 +1291,14 @@ export class ServiceHost {
       type: "credit_balance",
       ...snapshot,
     });
+    // The plan decides which paid-plan capabilities are on or offered.
+    const tier = abacusPlanTier(cachedAbacusAccount());
+    if (tier !== this.listedPlanTier) {
+      this.listedPlanTier = tier;
+      this.toolAvailabilityChanged();
+    }
   });
+  private listedPlanTier = abacusPlanTier(cachedAbacusAccount());
   private readonly cronScheduler = new CronScheduler(
     async (jobId, trigger) => {
       await this.runRoutine(jobId, trigger);
@@ -4322,6 +4331,8 @@ export class ServiceHost {
    */
   getToolsetStates(): Record<string, boolean> {
     const preferences = readToolsetPreferences();
+    const tier = abacusPlanTier(cachedAbacusAccount());
+    const paid = tier === "basic" || tier === "paid";
     const states: Record<string, boolean> = {};
 
     for (const toolset of TOOLSETS) {
@@ -4331,7 +4342,7 @@ export class ServiceHost {
           ? this.builtinMcpLifecycle.isBrowserEnabled()
           : toolset.delivery === "mcp-device"
             ? !this.mcpConfigService.isBuiltinDevicesDisabled()
-            : isToolsetEnabled(toolset.id, preferences);
+            : isToolsetEnabled(toolset.id, preferences, paid);
     }
 
     return states;
