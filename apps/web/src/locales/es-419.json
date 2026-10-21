@@ -3050,6 +3050,9 @@
       "agentTitle": "{{feature}} está en Abacus AI Agent en la web",
       "agentBody": "Tu plan incluye crear y editar imágenes y videos, y generar audio, en la web en Abacus AI Agent. Tu solicitud ya está escrita allí; adjunta allí cualquier imagen que quieras editar.",
       "openAgent": "Abrir en Abacus AI Agent"
+    },
+    "botHelp": {
+      "open": "Abrir"
     }
   },
   "notch": {

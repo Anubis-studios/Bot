@@ -51,6 +51,7 @@ export const PHONE_AGENT_TOOL_NAMES: readonly string[] = [
   "disconnect_connector",
   "billing_plan",
   "paid_feature",
+  "bot_help",
 ];
 
 /**
@@ -242,6 +243,7 @@ export const UNATTENDED_EXCLUDED_TOOLS: Readonly<Record<string, string>> = {
   session_search: "past conversations are not this run's input",
   my_activity: "past conversations are not this run's input",
   billing_plan: "mints one-time upgrade links for a person, not a routine",
+  bot_help: "answers a person's questions about the app, not a routine's",
   offer_session: "a card the user clicks in the bot's chat",
   exit_plan_mode: "never in plan mode",
   delegate_task: NO_SUBAGENT,

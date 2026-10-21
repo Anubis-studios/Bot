@@ -28,7 +28,9 @@ const READ_ACTIONS: Readonly<
   },
 };
 
-const READS = Object.keys(READ_ACTIONS) as RoutineRead[];
+/** Every account read a routine may be given, in the order the model is told them. */
+export const ROUTINE_READS = Object.keys(READ_ACTIONS) as RoutineRead[];
+const READS = ROUTINE_READS;
 
 export const isRoutineRead = (value: unknown): value is RoutineRead =>
   typeof value === "string" && READS.includes(value as RoutineRead);

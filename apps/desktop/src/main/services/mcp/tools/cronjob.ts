@@ -1,5 +1,6 @@
 import { ABACUS_AGENT_ROUTINES_URL } from "@abacus-ai/contract/routines";
 
+import { ROUTINE_READS } from "../../agent-tools/routine-reach";
 import { billingPlanReady } from "./billing";
 import type { ToolDefinition } from "./definition";
 
@@ -39,6 +40,9 @@ const BASE_DESCRIPTION = [
 ];
 
 /** The hosted computer, where a routine can live on the server: its options. */
+/** The account reads a hosted routine may be given, quoted. */
+const quotedReads = ROUTINE_READS.map((read) => `"${read}"`).join(", ");
+
 const HOSTED_DESCRIPTION = [
   'runner: "hosted" keeps the routine on the server: it runs on its own even while this',
   "computer is off, and results reach the user on WhatsApp or by email.",
@@ -53,43 +57,55 @@ const HOSTED_DESCRIPTION = [
   "Every routine's runs are unattended: they search the web and read, and cannot send",
   "messages, change files, pay, or make routines. Give what a run may read: sources,",
   "the page addresses it may read under (https://news.example.com/tech/), and reads,",
-  'the account data it may read ("gmail.search", "gmail.read", "calendar.read"), only',
+  `the account data it may read (${quotedReads}), only`,
   "what the routine needs; nothing else is reachable.",
 ];
 
+/**
+ * Where a hosted routine runs and what its runs reach, as `bot_help` says
+ * it: the same facts as the hosted lines above, without the tool's options.
+ */
+export const HOSTED_ROUTINE_FACTS = [
+  "Routines here are kept on the server: they run on their own even while the user's",
+  "computer is off, and results reach the user on WhatsApp or by email. Every run is",
+  "unattended: it searches the web and reads pages, and of the user's account data it",
+  `can read only ${ROUTINE_READS.join(", ")}. A run cannot send or read chat-app messages,`,
+  "change files, pay, or make routines.",
+];
+
 /** The desktop app: every routine runs here, with this conversation's reach. */
-const LOCAL_DESCRIPTION = [
+export const LOCAL_ROUTINE_FACTS = [
   "Routines run on this computer, only while it is on and the app is open, and are",
   "unlimited on every plan. They have full access: they read and write files, run",
   "commands and use connectors like this conversation.",
 ];
 
 /**
- * What a local create's result adds, once per user, about routines that run with
- * the computer off: a paid plan has them in Abacus AI Agent on the web.
+ * Where routines that run with the computer off are, for this plan: a paid
+ * plan has them in Abacus AI Agent on the web. One sentence, said by a local
+ * create's once-per-user note and by `bot_help`.
  */
-export const alwaysOnNote = (plan: "free" | "paid" | null): string => {
-  if (plan == null) return "";
-  const once =
-    "\n\n[once] After confirming the routine, add one short line, in the user's language: ";
-  const never = " Say it only this once; never bring it up again.";
-  if (plan === "paid")
-    return (
-      once +
-      "if it needs to run while their computer is off, their plan already includes routines " +
+export const alwaysOnLine = (plan: "free" | "paid"): string =>
+  plan === "paid"
+    ? "if it needs to run while their computer is off, their plan already includes routines " +
       "that run 24/7 in Abacus AI Agent on the web, set up there as a scheduled task: " +
-      `${ABACUS_AGENT_ROUTINES_URL} (give the link as written).${never}`
-    );
-  return (
-    once +
-    "if it should keep running with their laptop closed, the Basic plan runs routines 24/7 " +
-    `in Abacus AI Agent on the web (${ABACUS_AGENT_ROUTINES_URL}).` +
-    (billingPlanReady()
-      ? " Call billing_plan with upgrade: true and give their upgrade link with it."
-      : "") +
-    never
-  );
-};
+      `${ABACUS_AGENT_ROUTINES_URL} (give the link as written).`
+    : "if it should keep running with their laptop closed, the Basic plan runs routines 24/7 " +
+      `in Abacus AI Agent on the web (${ABACUS_AGENT_ROUTINES_URL}).` +
+      (billingPlanReady()
+        ? " Call billing_plan with upgrade: true and give their upgrade link with it."
+        : "");
+
+/**
+ * What a local create's result adds, once per user, about routines that run with
+ * the computer off.
+ */
+export const alwaysOnNote = (plan: "free" | "paid" | null): string =>
+  plan == null
+    ? ""
+    : "\n\n[once] After confirming the routine, add one short line, in the user's language: " +
+      alwaysOnLine(plan) +
+      " Say it only this once; never bring it up again.";
 
 const BASE_PROPERTIES = {
   action: {
@@ -171,7 +187,7 @@ const HOSTED_PROPERTIES = {
     type: "array",
     items: {
       type: "string",
-      enum: ["gmail.search", "gmail.read", "calendar.read"],
+      enum: ROUTINE_READS,
     },
     description: "The account data a run may read; none unless given.",
   },
@@ -195,7 +211,7 @@ export const CRONJOB_TOOLS: ToolDefinition[] = [
       [
         ...BASE_DESCRIPTION,
         "",
-        ...(host.hostedRoutines ? HOSTED_DESCRIPTION : LOCAL_DESCRIPTION),
+        ...(host.hostedRoutines ? HOSTED_DESCRIPTION : LOCAL_ROUTINE_FACTS),
       ].join("\n"),
     inputSchema: (_channel, host) => ({
       type: "object",

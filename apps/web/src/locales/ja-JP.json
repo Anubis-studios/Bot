@@ -3050,6 +3050,9 @@
       "agentTitle": "{{feature}}はWeb版のAbacus AI Agentで利用できます",
       "agentBody": "ご利用のプランでは、Web版のAbacus AI Agentで画像や動画の作成・編集、音声の作成ができます。リクエストは入力済みです。編集したい画像はそちらで添付してください。",
       "openAgent": "Abacus AI Agentで開く"
+    },
+    "botHelp": {
+      "open": "開く"
     }
   },
   "notch": {

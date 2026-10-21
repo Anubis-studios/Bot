@@ -3050,6 +3050,9 @@
       "agentTitle": "{{feature}} is in Abacus AI Agent on the web",
       "agentBody": "Your plan includes creating and editing images and videos, and making audio, on the web in Abacus AI Agent. Your request is filled in there; attach any image you want edited.",
       "openAgent": "Open in Abacus AI Agent"
+    },
+    "botHelp": {
+      "open": "Open"
     }
   },
   "notch": {

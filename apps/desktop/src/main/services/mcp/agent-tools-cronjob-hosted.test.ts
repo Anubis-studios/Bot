@@ -460,3 +460,77 @@ describe("cronjob, local", () => {
     expect(listJobs()).toHaveLength(1);
   });
 });
+
+/**
+ * `bot_help` on where and when routines run. Asked "will my WhatsApp and
+ * email monitoring keep running with the PC off?", the model said routines
+ * run on the server; on the desktop app none does. The answer is read off
+ * where this app's routines run, with the 24/7 handoff for the plan.
+ */
+describe("bot_help, routines", () => {
+  const guide = async (options: {
+    runner: "local" | "hosted";
+    tier?: "free" | "basic" | "paid" | "unknown";
+    topic?: string;
+  }): Promise<string> => {
+    const hosted = new HostedRoutines({
+      call: async () => ({ ok: false, status: 404, body: {} }),
+      hasKey: () => true,
+    });
+    vi.spyOn(hosted, "list").mockReturnValue(
+      options.runner === "hosted" ? [ROW] : []
+    );
+    const server = new McpAgentToolsServer({
+      skillsService: {} as never,
+      enabledToolsets: () => new Set(["cronjob"]),
+      workspacePath: () => null,
+      planTier: () => options.tier ?? "unknown",
+      routines: {
+        defaultRunner: () => options.runner,
+        create: async () => ROW as never,
+        hosted,
+      },
+    } as never);
+    const result = (await server.executeTool(
+      "bot_help",
+      { topic: options.topic ?? "routines" },
+      "s1"
+    )) as { content: Array<{ text?: string }> };
+    return result.content.map((part) => part.text ?? "").join("\n");
+  };
+
+  it("on the desktop app: only while the app is open, never on a server", async () => {
+    const text = await guide({ runner: "local", tier: "free" });
+    expect(text).toContain("only while it is on and the app is open");
+    expect(text).toContain("Nothing this app runs is kept on a server");
+    expect(text).not.toContain("Routines here are kept on the server");
+    expect(text).toContain("Where: Routines");
+  });
+
+  it("hands a free plan to billing_plan for 24/7, and gives a paid plan the link itself", async () => {
+    const free = await guide({ runner: "local", tier: "free" });
+    expect(free).toContain("the Basic plan runs routines 24/7");
+    expect(free).toContain("Call billing_plan with upgrade: true");
+    const paid = await guide({ runner: "local", tier: "paid" });
+    expect(paid).toContain(
+      "their plan already includes routines that run 24/7"
+    );
+    expect(paid).toContain("https://apps.abacus.ai/chatllm/agent");
+  });
+
+  it("hands plan questions to billing_plan on a paid plan too", async () => {
+    // billing_plan is listed on every plan, so no tier is told "not here".
+    const paid = await guide({ runner: "local", tier: "paid", topic: "plan" });
+    expect(paid).toContain("call billing_plan");
+    expect(paid).not.toContain("not in this answer");
+  });
+
+  it("on the hosted computer: on the server, and what a run can read", async () => {
+    const text = await guide({ runner: "hosted", tier: "paid" });
+    expect(text).toContain("Routines here are kept on the server");
+    expect(text).toContain("gmail.search, gmail.read, calendar.read");
+    expect(text).toContain("cannot send or read chat-app messages");
+    expect(text).not.toContain("Nothing this app runs is kept on a server");
+    expect(text).toContain("(1 on the server)");
+  });
+});
