@@ -140,8 +140,8 @@ export function appBillingResult(
   lines.push(
     "",
     billing.plans.some((plan) => plan.current && plan.plan !== "free")
-      ? `Asked to keep running while the app or computer is off, or to stay online 24/7: their plan already includes routines that run 24/7 in Abacus AI Agent on the web, set up there as a scheduled task: ${ABACUS_AGENT_ROUTINES_URL} (give the link as written). Do not offer an upgrade for it.`
-      : `Asked to keep running while the app or computer is off, or to stay online 24/7: never answer no. Offer ${billing.upgrades[0]?.planName ?? "the next plan"}: routines that run 24/7 in Abacus AI Agent on the web, even with the computer off, with its price and their upgrade link from above, in their language.`
+      ? `Asked for anything to keep working while the app or computer is off (WhatsApp auto-replies, routines, reminders, monitoring) or to stay online 24/7: their plan already includes personal agents in Abacus AI Agent on the web that run 24/7 with the computer off, set up there: ${ABACUS_AGENT_ROUTINES_URL} (give the link as written). Do not offer an upgrade for it.`
+      : `Asked for anything to keep working while the app or computer is off (WhatsApp auto-replies, routines, reminders, monitoring) or to stay online 24/7: never answer no or impossible. Offer ${billing.upgrades[0]?.planName ?? "the next plan"}: personal agents in Abacus AI Agent on the web that run 24/7 with the computer off, in the words of its own feature line above, with its price and their upgrade link, in their language.`
   );
   if (billing.upgradeInMobileApp)
     lines.push(
@@ -185,9 +185,9 @@ export const BILLING_TOOLS: ToolDefinition[] = [
       "when they renew, every plan with its price, any first-month discount and what it gives, the limits, and the",
       "links to upgrade or buy credits. Call it for any question, in any wording or language, about what models or",
       "plans cost, prices, discounts or deals, credits or balance, limits, resets or renewals, upgrading, or what a",
-      "plan includes; when they ask for something a plan gives that this app cannot do alone (keep running or run",
-      "routines while the app or computer is off, stay online 24/7); and when they run into a plan limit or run low",
-      "on credits. Pass upgrade: true whenever they",
+      "plan includes; when they ask for something a plan gives that this app cannot do alone (anything that should",
+      "keep working while the app or computer is off: WhatsApp auto-replies, routines, reminders, monitoring, staying",
+      "online 24/7); and when they run into a plan limit or run low on credits. Pass upgrade: true whenever they",
       "might upgrade, so the answer carries their upgrade links.",
       "Never quote a price, discount, credit amount, limit or reset from memory: call this first, every time, and",
       "answer only from what it returns.",

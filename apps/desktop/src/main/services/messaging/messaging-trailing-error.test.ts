@@ -767,7 +767,10 @@ describe("the chat app's own language", () => {
     await h.inbound("escreva o relatório");
     h.fail(WALL);
     // The locale file loads on first use.
-    await vi.waitFor(() => expect(h.sent()).toHaveLength(1));
+    await vi.waitFor(() => expect(h.sent()).toHaveLength(1), {
+      // A cold locale import on a loaded CI runner takes seconds.
+      timeout: 15_000,
+    });
     const line = h.sent()[0]!;
     expect(line).toContain("Pausei porque seus créditos grátis acabaram.");
     expect(line).toContain("Os créditos grátis renovam todo mês.");
@@ -783,7 +786,10 @@ describe("the chat app's own language", () => {
     const h = harness({ self: true });
     await h.inbound("raporu yaz");
     h.fail(WALL);
-    await vi.waitFor(() => expect(h.sent()).toHaveLength(1));
+    await vi.waitFor(() => expect(h.sent()).toHaveLength(1), {
+      // A cold locale import on a loaded CI runner takes seconds.
+      timeout: 15_000,
+    });
 
     expect(h.sent()[0]).toContain(
       "Ücretsiz kredilerin bittiği için durakladım."
