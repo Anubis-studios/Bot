@@ -81,6 +81,13 @@ main so switching routes does not destroy them.
 
 See [privacy and local data](privacy.md) for paths visible to users.
 
+## TLS trust
+
+Electron supplies the native TLS key blocklist for desktop processes. Standalone
+Node hosts load `packages/agent/src/tls-trust.ts` before networking starts to reject
+the compromised eMudhra CA keys while preserving private CAs. Replace this guard
+with a Node release containing the upstream TLS key blocklist when available.
+
 ## Testing
 
 Desktop tests have separate main, shared, and renderer projects. Main-process

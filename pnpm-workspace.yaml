@@ -22,7 +22,7 @@ catalog:
   tsdown: ^0.22.14
   typescript: ^7.0.2
   ultracite: ^7.10.5
-  vite: ^8.2.1
+  vite: ^8.2.4
   vitest: ^4.1.11
 
 # Electron and the native addons resolve their own binaries by walking up from
@@ -93,7 +93,7 @@ overrides:
 minimumReleaseAgeExclude:
   # Pinned exact in apps/desktop, so the age gate could only block that one
   # pinned install. Every bump is already an individual, human-reviewed PR.
-  - electron@44.4.5
+  - electron@44.9.3
   # Younger than the age window when #217 pinned it; the exclusion names the
   # exact version, so it lapses on its own at the next bump.
   - typebox@1.3.16

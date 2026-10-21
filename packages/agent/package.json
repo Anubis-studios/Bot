@@ -5,6 +5,10 @@
   "description": "The private agent process used by the AbacusAI Bot desktop app.",
   "type": "module",
   "exports": {
+    "./tls-trust": {
+      "types": "./dist/tls-trust.d.ts",
+      "default": "./dist/tls-trust.js"
+    },
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"

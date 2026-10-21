@@ -1,3 +1,4 @@
+import "@abacus-ai/agent/tls-trust";
 import { join } from "node:path";
 
 // Pod credentials must be removed before modules capture the inherited environment.

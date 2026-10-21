@@ -43,3 +43,8 @@ regexes = [
   # Maintainer-confirmed test number
   '''^\+919800000314$''',
 ]
+
+[[allowlists]]
+targetRules = ["private-key"]
+# Public loopback-only TLS test key; never used by a deployed service.
+paths = ['''^packages/agent/src/__fixtures__/tls/test-key\.pem$''']

@@ -5,6 +5,7 @@
  * compatibility channel (agui/host.ts). Runs standalone too:
  *   echo '{"type":"send","message":"list the files here"}' | node dist/main.js
  */
+import "./tls-trust.js";
 import * as fs from "node:fs";
 
 import {

@@ -24,6 +24,7 @@ export default defineConfig({
   entry: [
     "src/index.ts",
     "src/main.ts",
+    "src/tls-trust.ts",
     "src/usage-stats.ts",
     "src/custom-instructions.ts",
     // Same reason: the desktop's picker reads pi's model catalog
