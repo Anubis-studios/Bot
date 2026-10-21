@@ -1,7 +1,8 @@
 /**
  * The built host, end to end: a turn whose only edit is a real shell command
  * in a folder outside the workspace (no git anywhere) is recorded under the
- * message that asked, and restoring it puts the bytes back.
+ * message that asked, and restoring it puts the bytes back. `-i.bak`: BSD
+ * sed takes no bare `-i`.
  */
 import { spawn } from "node:child_process";
 import * as fs from "node:fs";
@@ -65,7 +66,7 @@ it("records a shell edit outside the workspace and restores it byte for byte", a
           call: {
             name: "bash",
             args: {
-              command: `cd "${site.replaceAll("\\", "/")}" && sed -i 's/working/broken/' app.py`,
+              command: `cd "${site.replaceAll("\\", "/")}" && sed -i.bak 's/working/broken/' app.py && rm app.py.bak`,
             },
           },
         }
