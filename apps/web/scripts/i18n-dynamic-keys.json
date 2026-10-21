@@ -1,6 +1,6 @@
 [
   {
-    "prefix": "sessions.checkpoints.kind.",
+    "prefix": "checkpoints.kind.",
     "values": ["modified", "created", "deleted"],
     "sources": ["features/sessions/chat/checkpoint-card.tsx"]
   },

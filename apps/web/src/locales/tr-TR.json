@@ -1719,30 +1719,6 @@
       "summary": "{{count}} dosya değişti",
       "review": "Değişiklikleri incele"
     },
-    "checkpoints": {
-      "summary_one": "{{count}} dosya değişti",
-      "summary_other": "{{count}} dosya değişti",
-      "restore": "Bu turdan önceki hâline döndür",
-      "restoreFile": "Bu dosyayı geri yükle",
-      "undoRestore": "Geri yüklemeyi geri al",
-      "busy": "Ajanın bu turu bitirmesini bekle",
-      "binary": "ikili",
-      "noCopy": "kopya tutulmadı",
-      "partial": "Bazı klasörler tamamen saklanamayacak kadar büyüktü; sınırı aşan dosyalar kapsanmıyor.",
-      "failed": "Geri yüklenemedi. Ajan bitirdikten sonra yeniden dene.",
-      "restored_one": "{{count}} dosya geri yüklendi.",
-      "restored_other": "{{count}} dosya geri yüklendi.",
-      "unrestorable_one": "{{count}} dosya kopyası tutulamayacak kadar büyüktü.",
-      "unrestorable_other": "{{count}} dosya kopyası tutulamayacak kadar büyüktü.",
-      "conflicts_one": "{{count}} dosya bu turdan sonra değişti ve olduğu gibi bırakıldı.",
-      "conflicts_other": "{{count}} dosya bu turdan sonra değişti ve olduğu gibi bırakıldı.",
-      "force": "Yine de geri yükle",
-      "kind": {
-        "modified": "Düzenlendi",
-        "created": "Eklendi",
-        "deleted": "Silindi"
-      }
-    },
     "missing": {
       "worktree": "Worktree klasörü bulunamıyor.",
       "folder": "Çalışma alanı klasörü bulunamıyor.",
@@ -3764,6 +3740,30 @@
     "showInFolder": "Klasörde göster",
     "showLess": "Daha az göster",
     "showMore": "+{{count}} daha"
+  },
+  "checkpoints": {
+    "summary_one": "{{count}} dosya değişti",
+    "summary_other": "{{count}} dosya değişti",
+    "restore": "Bu turdan önceki hâline döndür",
+    "restoreFile": "Bu dosyayı geri yükle",
+    "undoRestore": "Geri yüklemeyi geri al",
+    "busy": "Ajanın bu turu bitirmesini bekle",
+    "binary": "ikili",
+    "noCopy": "kopya tutulmadı",
+    "partial": "Bazı klasörler tamamen saklanamayacak kadar büyüktü; sınırı aşan dosyalar kapsanmıyor.",
+    "failed": "Geri yüklenemedi. Ajan bitirdikten sonra yeniden dene.",
+    "restored_one": "{{count}} dosya geri yüklendi.",
+    "restored_other": "{{count}} dosya geri yüklendi.",
+    "unrestorable_one": "{{count}} dosya kopyası tutulamayacak kadar büyüktü.",
+    "unrestorable_other": "{{count}} dosya kopyası tutulamayacak kadar büyüktü.",
+    "conflicts_one": "{{count}} dosya bu turdan sonra değişti ve olduğu gibi bırakıldı.",
+    "conflicts_other": "{{count}} dosya bu turdan sonra değişti ve olduğu gibi bırakıldı.",
+    "force": "Yine de geri yükle",
+    "kind": {
+      "modified": "Düzenlendi",
+      "created": "Eklendi",
+      "deleted": "Silindi"
+    }
   },
   "devicePanel": {
     "axPermissionNeeded": "Simülatörü penceresini göstermeden yansıtmak için Erişilebilirlik izni gerekiyor.",

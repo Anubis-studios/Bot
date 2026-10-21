@@ -1719,30 +1719,6 @@
       "summary": "{{count}} files changed",
       "review": "Review changes"
     },
-    "checkpoints": {
-      "summary_one": "Changed {{count}} file",
-      "summary_other": "Changed {{count}} files",
-      "restore": "Restore to before this turn",
-      "restoreFile": "Restore this file",
-      "undoRestore": "Undo restore",
-      "busy": "Wait for the agent to finish this turn",
-      "binary": "binary",
-      "noCopy": "no copy kept",
-      "partial": "Some folders were too large to keep whole; files past the limit are not covered.",
-      "failed": "Could not restore. Try again once the agent has finished.",
-      "restored_one": "Restored {{count}} file.",
-      "restored_other": "Restored {{count}} files.",
-      "unrestorable_one": "{{count}} file was too large to keep a copy of.",
-      "unrestorable_other": "{{count}} files were too large to keep a copy of.",
-      "conflicts_one": "{{count}} file changed after this turn and was left as it is.",
-      "conflicts_other": "{{count}} files changed after this turn and were left as they are.",
-      "force": "Restore anyway",
-      "kind": {
-        "modified": "Edited",
-        "created": "Added",
-        "deleted": "Deleted"
-      }
-    },
     "missing": {
       "worktree": "The worktree folder is missing.",
       "folder": "The workspace folder is missing.",
@@ -3764,6 +3740,30 @@
     "showInFolder": "Show in folder",
     "showLess": "Show less",
     "showMore": "+{{count}} more"
+  },
+  "checkpoints": {
+    "summary_one": "Changed {{count}} file",
+    "summary_other": "Changed {{count}} files",
+    "restore": "Restore to before this turn",
+    "restoreFile": "Restore this file",
+    "undoRestore": "Undo restore",
+    "busy": "Wait for the agent to finish this turn",
+    "binary": "binary",
+    "noCopy": "no copy kept",
+    "partial": "Some folders were too large to keep whole; files past the limit are not covered.",
+    "failed": "Could not restore. Try again once the agent has finished.",
+    "restored_one": "Restored {{count}} file.",
+    "restored_other": "Restored {{count}} files.",
+    "unrestorable_one": "{{count}} file was too large to keep a copy of.",
+    "unrestorable_other": "{{count}} files were too large to keep a copy of.",
+    "conflicts_one": "{{count}} file changed after this turn and was left as it is.",
+    "conflicts_other": "{{count}} files changed after this turn and were left as they are.",
+    "force": "Restore anyway",
+    "kind": {
+      "modified": "Edited",
+      "created": "Added",
+      "deleted": "Deleted"
+    }
   },
   "devicePanel": {
     "axPermissionNeeded": "A permissão de Acessibilidade é necessária para espelhar o simulador sem exibir sua janela.",

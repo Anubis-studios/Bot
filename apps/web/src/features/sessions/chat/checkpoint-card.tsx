@@ -149,27 +149,27 @@ export const CheckpointCard = ({
         onClick={() => onOpenDiff(file.path, turn.seq)}
       >
         <span className="text-muted-foreground w-14 shrink-0 text-left text-xs">
-          {t(`sessions.checkpoints.kind.${file.kind}`)}
+          {t(`checkpoints.kind.${file.kind}`)}
         </span>
         <span className="min-w-0 truncate">
           {shownPath(file.path, workspaceRoot)}
         </span>
         <span className="text-muted-foreground ml-auto shrink-0 font-mono text-xs">
           {file.binary
-            ? t("sessions.checkpoints.binary")
+            ? t("checkpoints.binary")
             : `+${file.added} −${file.removed}`}
         </span>
       </Button>
       {file.unrestorable ? (
         <span className="text-muted-foreground shrink-0 px-1.5 text-xs">
-          {t("sessions.checkpoints.noCopy")}
+          {t("checkpoints.noCopy")}
         </span>
       ) : (
         <Button
           variant="ghost"
           size="icon-sm"
-          aria-label={t("sessions.checkpoints.restoreFile")}
-          title={t("sessions.checkpoints.restoreFile")}
+          aria-label={t("checkpoints.restoreFile")}
+          title={t("checkpoints.restoreFile")}
           className="text-muted-foreground shrink-0"
           disabled={disabled}
           data-slot="checkpoint-restore-file"
@@ -194,7 +194,7 @@ export const CheckpointCard = ({
           onClick={() => setOpen((value) => !value)}
         >
           {open ? <ChevronDown /> : <ChevronRight />}
-          {t("sessions.checkpoints.summary", { count: turn.files.length })}
+          {t("checkpoints.summary", { count: turn.files.length })}
           <span className="font-mono">
             +{turn.added} −{turn.removed}
           </span>
@@ -209,19 +209,19 @@ export const CheckpointCard = ({
               onClick={() => restore.mutate({ seq: undo.seq })}
             >
               <Undo2 />
-              {t("sessions.checkpoints.undoRestore")}
+              {t("checkpoints.undoRestore")}
             </Button>
           )}
           <Button
             variant="secondary"
             size="xs"
             disabled={disabled}
-            title={busy ? t("sessions.checkpoints.busy") : undefined}
+            title={busy ? t("checkpoints.busy") : undefined}
             data-slot="checkpoint-restore"
             onClick={() => restore.mutate({ seq: turn.seq })}
           >
             <RotateCcw />
-            {t("sessions.checkpoints.restore")}
+            {t("checkpoints.restore")}
           </Button>
         </div>
       </div>
@@ -230,26 +230,26 @@ export const CheckpointCard = ({
       )}
       {turn.partial && (
         <p className="text-muted-foreground px-1.5 pt-1 text-xs">
-          {t("sessions.checkpoints.partial")}
+          {t("checkpoints.partial")}
         </p>
       )}
       {restore.isError && (
         <p role="alert" className="text-destructive px-1.5 pt-1 text-xs">
-          {t("sessions.checkpoints.failed")}
+          {t("checkpoints.failed")}
         </p>
       )}
       {result != null && (
         <div role="status" className="px-1.5 pt-1 text-xs">
           {result.restored.length > 0 && (
             <p>
-              {t("sessions.checkpoints.restored", {
+              {t("checkpoints.restored", {
                 count: result.restored.length,
               })}
             </p>
           )}
           {result.unrestorable.length > 0 && (
             <p className="text-muted-foreground">
-              {t("sessions.checkpoints.unrestorable", {
+              {t("checkpoints.unrestorable", {
                 count: result.unrestorable.length,
               })}
             </p>
@@ -260,7 +260,7 @@ export const CheckpointCard = ({
               data-slot="checkpoint-conflicts"
             >
               <span className="text-muted-foreground">
-                {t("sessions.checkpoints.conflicts", {
+                {t("checkpoints.conflicts", {
                   count: result.conflicts.length,
                 })}
               </span>
@@ -277,7 +277,7 @@ export const CheckpointCard = ({
                   })
                 }
               >
-                {t("sessions.checkpoints.force")}
+                {t("checkpoints.force")}
               </Button>
             </div>
           )}
