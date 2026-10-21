@@ -15,6 +15,7 @@ import type {
   RoutineReach,
   RoutineRun,
   RoutineRunKind,
+  RoutineTrigger,
 } from "@abacus-ai/contract/routines";
 import {
   matches,
@@ -44,7 +45,7 @@ export {
   parseCron,
 } from "@abacus-ai/contract/routines/cron";
 
-export type CronTrigger = "schedule" | "webhook" | "manual" | "create";
+export type CronTrigger = RoutineTrigger;
 
 /** How an attempt to fire a routine ended before any run began. */
 export type RoutineRunStart = "started" | "skipped" | "failed";
@@ -94,10 +95,19 @@ export interface CronJob {
   /** The server would not take it: it stays here, paused, with this reason. */
   notMoved?: string | null;
   /**
-   * When a fire came due with the network down; it runs once the network is
-   * back. On disk so a restart before then still runs it.
+   * When a fire came due with the network down, or was held to make up a
+   * missed one; it runs once the network is back. On disk so a restart
+   * before then still runs it.
    */
   heldSince?: number | null;
+  /** The scheduled moment a held fire stands for, and why it is held. */
+  heldSlot?: number | null;
+  heldFor?: "network" | "catch-up" | null;
+  /**
+   * The newest scheduled moment fired, claimed before its session starts:
+   * a slot at or before it never fires again, across restarts included.
+   */
+  firedSlot?: { at: number; attemptId: string } | null;
   /** When its schedule last changed: fires before then were never its to miss. */
   scheduledAt?: number | null;
   /** Fires it last missed while the computer was off, until its next on-time fire. */
@@ -472,13 +482,58 @@ export const markNotMoved = (id: string, reason: string): CronJob => {
   return updated;
 };
 
-/** Hold a job for the network (`at`), or let it go (null). */
-export const setHeld = (id: string, at: number | null): void => {
+/**
+ * Hold a job (`at`) for the scheduled moment `slot`, or let it go (null).
+ * A hold for a missed fire is a catch-up; any other waits for the network.
+ */
+export const setHeld = (
+  id: string,
+  at: number | null,
+  hold: { slot: number; reason: "network" | "catch-up" } | null = null
+): void => {
   const jobs = readForWrite();
   const index = jobs.findIndex((job) => job.id === id);
-  if (index < 0 || (jobs[index].heldSince ?? null) === at) return;
-  jobs[index] = { ...jobs[index], heldSince: at };
+  if (index < 0) return;
+  const job = jobs[index];
+  const slot = at == null ? null : (hold?.slot ?? minuteOf(at));
+  const reason = at == null ? null : (hold?.reason ?? "network");
+  if (
+    (job.heldSince ?? null) === at &&
+    (job.heldSlot ?? null) === slot &&
+    (job.heldFor ?? null) === reason
+  )
+    return;
+  jobs[index] = { ...job, heldSince: at, heldSlot: slot, heldFor: reason };
   write(jobs);
+};
+
+/** The start of `at`'s minute: the moment a cron fire stands for. */
+export const minuteOf = (at: number): number => {
+  const minute = new Date(at);
+  minute.setSeconds(0, 0);
+  return minute.getTime();
+};
+
+/** Whether the scheduled moment `slot` has already been fired. */
+const slotFired = (job: CronJob, slot: number): boolean =>
+  job.firedSlot != null && slot <= job.firedSlot.at;
+
+/**
+ * Claims the scheduled moment `slot` for one attempt, written before the
+ * run starts, so no restart or second tick fires it again. False when it
+ * (or a later one) was already claimed, or the job is gone.
+ */
+export const claimSlot = (
+  id: string,
+  slot: number,
+  attemptId: string
+): boolean => {
+  const jobs = readForWrite();
+  const index = jobs.findIndex((job) => job.id === id);
+  if (index < 0 || slotFired(jobs[index], slot)) return false;
+  jobs[index] = { ...jobs[index], firedSlot: { at: slot, attemptId } };
+  write(jobs);
+  return true;
 };
 
 /** Record the fires a job missed while the computer was off, or clear them (null). */
@@ -525,6 +580,8 @@ export const onRoutineRunStarted = (
 };
 
 export interface RecordRunDetails {
+  /** The attempt's id when claimed before the run (a scheduled slot); minted otherwise. */
+  id?: string;
   /** Defaults to what `result` says (main's own strings). */
   kind?: RoutineRunKind;
   sessionId?: string | null;
@@ -550,7 +607,11 @@ export const recordRun = (
 
   const at = Date.now();
   const run: CronRun = {
-    id: mintAttemptId(),
+    id:
+      details.id != null &&
+      !jobs[index].runs.some((entry) => entry.id === details.id)
+        ? details.id
+        : mintAttemptId(),
     at,
     trigger,
     result: result.slice(0, 300),
@@ -585,10 +646,21 @@ export const attemptOfSession = (
     (run) => isAttempt(run) && run.sessionId === sessionId
   ) ?? null;
 
-/** Jobs whose schedule matches this minute. Webhook-only jobs never tick. */
+/**
+ * The scheduled moment a fire at `at` stands for: a one-time job's own
+ * moment, or the minute a schedule matched.
+ */
+export const slotFor = (job: CronJob, at: Date): number =>
+  job.runAt ?? minuteOf(at.getTime());
+
+/**
+ * Jobs whose schedule matches this minute and whose slot has not fired.
+ * Webhook-only jobs never tick.
+ */
 export const dueJobs = (at: Date = new Date()): CronJob[] =>
   read().filter((job) => {
     if (!job.enabled) return false;
+    if (slotFired(job, slotFor(job, at))) return false;
     // Once: due from its moment until fired, so a slept-through fire happens.
     if (job.runAt != null) return job.runAt <= at.getTime();
     if (job.schedule == null) return false;
@@ -603,12 +675,14 @@ export const dueJobs = (at: Date = new Date()): CronJob[] =>
 
 /**
  * Since when a job's fires are accounted for, from what is on disk: its last
- * run (fire-on-create included), hold, resume, schedule change or creation.
+ * run (fire-on-create included), fired slot, hold, resume, schedule change
+ * or creation.
  */
 const accountedSince = (job: CronJob): number =>
   Math.max(
     job.createdAt,
     job.lastRunAt ?? 0,
+    job.firedSlot?.at ?? 0,
     job.heldSince ?? 0,
     job.resumedAt ?? 0,
     job.scheduledAt ?? 0
@@ -617,21 +691,60 @@ const accountedSince = (job: CronJob): number =>
 /** A missed window longer than this counts only its last year, as nextRun looks ahead. */
 const MISSED_WINDOW_MS = 366 * 24 * 60 * 60_000;
 
-/** Fires of `cron` after `from`'s minute and before `to` (a minute start). */
-const firesBetween = (cron: ParsedCron, from: number, to: number): number => {
+/**
+ * Fires of `cron` after `from`'s minute and before `to` (a minute start):
+ * how many, and the latest.
+ */
+const firesBetween = (
+  cron: ParsedCron,
+  from: number,
+  to: number
+): { count: number; latest: number | null } => {
   const at = new Date(Math.max(from, to - MISSED_WINDOW_MS));
   at.setSeconds(0, 0);
   at.setMinutes(at.getMinutes() + 1);
   let count = 0;
+  let latest: number | null = null;
   for (; at.getTime() < to; at.setMinutes(at.getMinutes() + 1))
-    if (matches(cron, at)) count++;
-  return count;
+    if (matches(cron, at)) {
+      count++;
+      latest = at.getTime();
+    }
+  return { count, latest };
+};
+
+/** No catch-up for a fire older than this, whatever the schedule's period. */
+const CATCH_UP_MAX_AGE_MS = 24 * 60 * 60_000;
+
+/** A next fire sooner than this (or half the period) makes a catch-up moot. */
+const CATCH_UP_NEAR_NEXT_MS = 30 * 60_000;
+
+/**
+ * Whether the missed fire `slot` is still worth making up at `now`: younger
+ * than one period (and a day), and not with the next fire about to come.
+ */
+export const catchUpWorthIt = (
+  schedule: string,
+  slot: number,
+  now: number
+): boolean => {
+  const next = nextRun(schedule, new Date(slot));
+  if (next == null) return now - slot <= CATCH_UP_MAX_AGE_MS;
+  const period = next.getTime() - slot;
+  if (now - slot > Math.min(period, CATCH_UP_MAX_AGE_MS)) return false;
+  const upcoming = nextRun(schedule, new Date(Math.max(now, slot)));
+  if (upcoming == null) return true;
+  return (
+    upcoming.getTime() - now >= Math.min(CATCH_UP_NEAR_NEXT_MS, period / 2)
+  );
 };
 
 export interface MissedJob {
   job: CronJob;
   /** How many fires it missed. */
   count: number;
+  /** The latest of them, the only one a catch-up makes up. */
+  latest: number;
 }
 
 /**
@@ -647,12 +760,12 @@ export const missedJobs = (from: Date | null, to: Date): MissedJob[] => {
     if (!job.enabled || job.runAt != null || job.schedule == null) return [];
     try {
       const since = Math.max(accountedSince(job), from?.getTime() ?? 0);
-      const count = firesBetween(
+      const { count, latest } = firesBetween(
         parseCron(job.schedule),
         since,
         minute.getTime()
       );
-      return count > 0 ? [{ job, count }] : [];
+      return count > 0 && latest != null ? [{ job, count, latest }] : [];
     } catch {
       return [];
     }
@@ -668,6 +781,10 @@ export const retireOnceJob = (id: string): void => {
 
 export const describeJob = (job: CronJob): string => {
   const next = (() => {
+    if (job.runAt != null)
+      return job.enabled
+        ? `once, at ${new Date(job.runAt).toLocaleString()}`
+        : "done (it ran once)";
     if (job.schedule == null) return "on webhook";
     try {
       return nextRun(job.schedule)?.toLocaleString() ?? "never";
@@ -679,7 +796,7 @@ export const describeJob = (job: CronJob): string => {
   const last =
     job.lastRunAt != null ? new Date(job.lastRunAt).toLocaleString() : "never";
   const triggers = [
-    job.schedule != null ? job.schedule : null,
+    job.schedule != null ? job.schedule : job.runAt != null ? "once" : null,
     job.webhookToken != null ? "webhook" : null,
   ]
     .filter((part) => part != null)

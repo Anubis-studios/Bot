@@ -212,7 +212,10 @@ import {
 } from "./platform/capabilities";
 import type { BusChannel, BusChannels } from "./rpc/event-bus";
 import { ConnectorGate } from "./services/agent-tools/connector-gate";
-import { CronScheduler } from "./services/agent-tools/cron-scheduler";
+import {
+  CronScheduler,
+  type SlotFire,
+} from "./services/agent-tools/cron-scheduler";
 import {
   createJob,
   getJob,
@@ -276,6 +279,7 @@ import {
   managedPythonEnv,
 } from "./services/agent-tools/python-env";
 import {
+  mintAttemptId,
   ROUTINE_RESULTS,
   started as startedResult,
 } from "./services/agent-tools/routine-attempts";
@@ -522,6 +526,9 @@ const SENDER_CHAT_POLICY: UnattendedPolicy = {
 type CreatedRoutine = Routine & Pick<RoutineListItem, "hosted">;
 
 const ROUTINE_CONTEXT_CAP_TOKENS = 80_000;
+
+/** Routine runs whose fire is kept for their sends; far more than run at once. */
+const ROUTINE_FIRES_KEPT = 200;
 
 /** The longest an unattended run's agent may take to start. */
 const UNATTENDED_STARTUP_TIMEOUT_MS = 90_000;
@@ -1153,6 +1160,8 @@ export class ServiceHost {
     },
     workspaceId: () => this.workspaceService.getActiveWorkspace()?.id ?? null,
     runCronJob: (jobId, trigger) => this.runRoutine(jobId, trigger ?? "manual"),
+    routineFireForSession: (sessionId) =>
+      this.routineFires.get(sessionId) ?? null,
     // A routine's run is its bot's work too: a routine made from inside one
     // belongs to the bot, and `list` shows the bot its own.
     isAppBotChat: (sessionId) => this.botService.isAppBotChat(sessionId),
@@ -1344,8 +1353,8 @@ export class ServiceHost {
   });
   private listedPlanTier = abacusPlanTier(cachedAbacusAccount());
   private readonly cronScheduler = new CronScheduler(
-    async (jobId, trigger) => {
-      await this.runRoutine(jobId, trigger);
+    async (jobId, trigger, fire) => {
+      await this.runRoutine(jobId, trigger, null, fire);
     },
     async () => (await this.connectivity.ensureFresh()) === "online",
     () =>
@@ -5355,6 +5364,17 @@ export class ServiceHost {
     }
   }
 
+  /** Each routine run's fire (routine and moment), for its sends; the latest few. */
+  private readonly routineFires = new Map<string, string>();
+
+  private noteRoutineFire(sessionId: string, fire: string): void {
+    this.routineFires.set(sessionId, fire);
+    for (const key of this.routineFires.keys()) {
+      if (this.routineFires.size <= ROUTINE_FIRES_KEPT) break;
+      this.routineFires.delete(key);
+    }
+  }
+
   /**
    * Fire a routine. Every fire is a fresh session with the routine's prompt,
    * stamped with the routine so it lists as one of its runs. A bot's routine
@@ -5363,7 +5383,9 @@ export class ServiceHost {
   async runRoutine(
     jobId: string,
     trigger: CronTrigger,
-    payload: string | null = null
+    payload: string | null = null,
+    /** The scheduled moment this run claimed, for a scheduler's fire. */
+    fire: SlotFire | null = null
   ): Promise<RoutineRunStart> {
     // A hosted routine runs on the server's side; this asks it to, now.
     if (isHostedRoutineId(jobId)) {
@@ -5374,7 +5396,7 @@ export class ServiceHost {
         return "failed";
       }
     }
-    const start = this.startRoutineRun(jobId, trigger, payload);
+    const start = this.startRoutineRun(jobId, trigger, payload, fire);
     const pending =
       this.routineRunStarts.get(jobId) ?? new Set<Promise<RoutineRunStart>>();
     pending.add(start);
@@ -5390,10 +5412,14 @@ export class ServiceHost {
   private async startRoutineRun(
     jobId: string,
     trigger: CronTrigger,
-    payload: string | null
+    payload: string | null,
+    fire: SlotFire | null = null
   ): Promise<RoutineRunStart> {
     const job = getJob(jobId);
     if (job == null) return "skipped";
+    // One id for this attempt, whichever way it ends: a scheduled fire's
+    // was claimed with its slot before this run began.
+    const attemptId = fire?.attemptId ?? mintAttemptId();
     // Signed out, with no other key: every run would fail and pause the
     // routine, three at a time, in silence.
     if (
@@ -5401,7 +5427,10 @@ export class ServiceHost {
         (key) => (key ?? "").trim().length > 0
       )
     ) {
-      recordRun(jobId, "skipped: signed out", trigger, { kind: "skipped" });
+      recordRun(jobId, "skipped: signed out", trigger, {
+        id: attemptId,
+        kind: "skipped",
+      });
       this.emitEvent({
         type: "cronjobs-updated",
         emittedAt: new Date().toISOString(),
@@ -5411,7 +5440,10 @@ export class ServiceHost {
 
     // One run at a time, or a five-minute routine whose runs take eight stacks.
     if (hasRunInFlight(this.listRoutineRuns(jobId))) {
-      recordRun(jobId, ROUTINE_RESULTS.skipped, trigger, { kind: "skipped" });
+      recordRun(jobId, ROUTINE_RESULTS.skipped, trigger, {
+        id: attemptId,
+        kind: "skipped",
+      });
       this.emitEvent({
         type: "cronjobs-updated",
         emittedAt: new Date().toISOString(),
@@ -5451,6 +5483,7 @@ export class ServiceHost {
 
     if (target == null) {
       recordRun(jobId, ROUTINE_RESULTS.noWorkspace, trigger, {
+        id: attemptId,
         kind: "no-workspace",
       });
       this.emitEvent({
@@ -5475,6 +5508,7 @@ export class ServiceHost {
       emittedAt: new Date().toISOString(),
     });
     this.updateAgentSessionLabel(target, session.id, `Routine: ${job.name}`);
+    this.noteRoutineFire(session.id, `${jobId}@${fire?.slot ?? attemptId}`);
 
     // Held to what the user confirmed it may reach; a run that cannot be held
     // does not start in any other mode.
@@ -5487,6 +5521,7 @@ export class ServiceHost {
     ) {
       this.agentSessionManagerService.setRunOutcome(session.id, "failed");
       recordRun(jobId, `${ROUTINE_RESULTS.startFailedPrefix}held`, trigger, {
+        id: attemptId,
         kind: "start-failed",
         sessionId: session.id,
       });
@@ -5515,7 +5550,7 @@ export class ServiceHost {
         jobId,
         `${ROUTINE_RESULTS.startFailedPrefix}${started.error ?? "unknown"}`,
         trigger,
-        { kind: "start-failed", sessionId: session.id }
+        { id: attemptId, kind: "start-failed", sessionId: session.id }
       );
       this.emitEvent({
         type: "cronjobs-updated",
@@ -5537,6 +5572,7 @@ export class ServiceHost {
       userText: { routineFire: true },
     });
     recordRun(jobId, startedResult(session.id), trigger, {
+      id: attemptId,
       kind: "started",
       sessionId: session.id,
     });

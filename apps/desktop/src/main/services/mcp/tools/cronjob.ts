@@ -5,11 +5,12 @@ import { billingPlanReady } from "./billing";
 import type { ToolDefinition } from "./definition";
 
 const BASE_DESCRIPTION = [
-  "Schedule the agent to run a prompt on its own: on a clock, on an incoming webhook, or both.",
+  "Schedule the agent to run a prompt on its own: on a clock, once at a moment, on an incoming webhook, or both.",
   "",
-  'Actions: "create" (prompt, and schedule and/or webhook: true; optional name), "list",',
-  '"update" (id, and any of name/schedule/prompt/enabled), "pause" (id), "resume" (id),',
-  '"remove" (id), "run" (id, to fire it now).',
+  'Actions: "create" (prompt, and schedule, run_at or in_minutes, and/or webhook: true; optional name),',
+  '"list", "update" (id, and any of name/schedule/run_at/in_minutes/prompt/enabled), "pause" (id),',
+  '"resume" (id), "remove" (id), "run" (id, to fire it now, only when the user asks: a run soon',
+  "after another, or past a few a day, is refused and left to the user's Run now).",
   "",
   "When an update changes what a routine does, change its name to match in the same call.",
   'The name is what the user sees in the Routines panel and what you read back in "list";',
@@ -23,6 +24,12 @@ const BASE_DESCRIPTION = [
   "Reach for sensible defaults: pin loose asks to weekdays and waking hours unless the",
   "routine is about the user's life rather than their work, and inherit the current minute",
   'when the user names only an hour: asked at 1:32, "daily at 2" means "32 2 * * *".',
+  "",
+  'For something that happens once ("remind me in 10 minutes", "alert me at 8:20 tomorrow"),',
+  "give in_minutes or run_at instead of a schedule: it fires once at that moment and is then done.",
+  "Never stand in for a one-time, random-time or once-within-a-window job with a frequent",
+  "schedule and a prompt that skips the extra fires: every fire is a full run that can act,",
+  "and a skip left to the prompt can fail. Pick one moment instead.",
   "",
   "A routine with a schedule also fires once the moment it is created, whatever its",
   "schedule says, so the user sees it work instead of waiting out the first gap. Tell them",
@@ -120,7 +127,17 @@ const BASE_PROPERTIES = {
   },
   schedule: {
     type: "string",
-    description: "Five-field cron expression.",
+    description: "Five-field cron expression, for a repeating routine.",
+  },
+  in_minutes: {
+    type: "number",
+    description:
+      "A one-time routine: fire once, this many minutes from now, then be done.",
+  },
+  run_at: {
+    type: "string",
+    description:
+      "A one-time routine: fire once at this moment (ISO 8601; without an offset, this computer's local time), then be done.",
   },
   webhook: {
     type: "boolean",

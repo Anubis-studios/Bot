@@ -17,7 +17,12 @@ export const createFireHandler = (
     if (event.type !== "run-started") return;
     if (seen.has(event.attemptId)) return;
     seen.add(event.attemptId);
-    if (event.trigger !== "schedule" && event.trigger !== "webhook") return;
+    if (
+      event.trigger !== "schedule" &&
+      event.trigger !== "catch-up" &&
+      event.trigger !== "webhook"
+    )
+      return;
     const routine = routines().find((r) => r.id === event.routineId);
     if (routineOwns(routine)) play(event.routineId, routine?.botId ?? null);
   };

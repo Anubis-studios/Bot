@@ -64,6 +64,7 @@ import { abacusBotHome, WORKSPACE_DIR_NAME } from "../../paths";
 import {
   createJob,
   describeJob,
+  getJob,
   listJobs,
   removeJob,
   updateJob,
@@ -100,6 +101,11 @@ import {
 } from "../agent-tools/memory-store";
 import { analyze } from "../agent-tools/model-analysis";
 import { reprintPdf } from "../agent-tools/pdf-agent";
+import {
+  agentRunRefusal,
+  fakedOneOffSchedule,
+} from "../agent-tools/routine-guards";
+import { RoutineSendLedger } from "../agent-tools/routine-send-ledger";
 import {
   listServed,
   serveDirectory,
@@ -260,11 +266,16 @@ export interface McpAgentToolsServerOptions {
   bots?: () => BotHelpBot[];
   workspacePath: () => string | null;
   workspaceId?: () => string | null;
-  /** `trigger` lets the run log tell "Run now" from the first fire at creation. */
+  /** `trigger` lets the run log tell the first fire at creation from the agent's own run. */
   runCronJob?: (
     jobId: string,
-    trigger?: "manual" | "create"
+    trigger?: "manual" | "create" | "agent"
   ) => Promise<RoutineRunStart>;
+  /**
+   * The fire a routine run's session answers (its routine and scheduled
+   * moment), or null for any other session: its sends reach each recipient once.
+   */
+  routineFireForSession?: (sessionId: string) => string | null;
   /**
    * The bot whose chat this UI session is, or null. A bot scheduling its own
    * routine gets the fires delivered back into its chat.
@@ -504,6 +515,61 @@ export interface McpAgentToolsServerOptions {
  * Not read from the platform catalog: that carries i18n keys and the main
  * process has no translator.
  */
+type Moment = { ok: true; at: number | null } | { ok: false; error: string };
+
+/** The furthest ahead a one-time routine may be set. */
+const ONE_TIME_HORIZON_MS = 366 * 24 * 60 * 60_000;
+
+/** `in_minutes` as a moment from `now`; null when not given. */
+const minutesFromNow = (value: unknown, now: number): Moment => {
+  if (value == null || value === "") return { ok: true, at: null };
+  const minutes = Number(value);
+  if (!Number.isFinite(minutes) || minutes <= 0)
+    return {
+      ok: false,
+      error: "in_minutes must be a number of minutes above 0.",
+    };
+  if (minutes * 60_000 > ONE_TIME_HORIZON_MS)
+    return { ok: false, error: "in_minutes is more than a year away." };
+  return { ok: true, at: now + Math.round(minutes * 60_000) };
+};
+
+/**
+ * The one-time moment a local create or update asks for: `in_minutes` from
+ * now, or `run_at` (ISO 8601; without an offset, this computer's local time).
+ */
+const requestedMoment = (
+  args: Record<string, unknown>,
+  now: number
+): Moment => {
+  const soon = minutesFromNow(args.in_minutes, now);
+  if (soon.ok === false || soon.at != null) return soon;
+  const text = typeof args.run_at === "string" ? args.run_at.trim() : "";
+  if (text.length === 0) return { ok: true, at: null };
+  // A date alone would be read as midnight UTC, not a moment the user named.
+  const at = /\d{1,2}:\d{2}/.test(text) ? Date.parse(text) : NaN;
+  if (!Number.isFinite(at))
+    return {
+      ok: false,
+      error: `run_at "${text}" is not a moment: give a date and time like 2026-10-20T08:20 (this computer's local time) or with an offset.`,
+    };
+  // A minute of slack: "now" said a moment ago is still now.
+  if (at < now - 60_000)
+    return {
+      ok: false,
+      error: `run_at ${new Date(at).toLocaleString()} has already passed; it is ${new Date(now).toLocaleString()} now.`,
+    };
+  if (at - now > ONE_TIME_HORIZON_MS)
+    return { ok: false, error: "run_at is more than a year away." };
+  return { ok: true, at };
+};
+
+/** What a routine says it is for, to read a schedule against. */
+const routineText = (args: Record<string, unknown>): string =>
+  [args.name, args.prompt, args.reminder_text]
+    .filter((part): part is string => typeof part === "string")
+    .join("\n");
+
 export class McpAgentToolsServer extends McpHttpServer {
   constructor(private readonly options: McpAgentToolsServerOptions) {
     // listChanged: a platform's tools appear the moment it connects, and
@@ -513,6 +579,8 @@ export class McpAgentToolsServer extends McpHttpServer {
 
   /** The loopback origins `serve` returned to each session. */
   private readonly servedOrigins = new Map<string, Set<string>>();
+
+  private readonly routineSends = new RoutineSendLedger();
 
   /** The always-on tools guarantee this. */
   hasEnabledTools(): boolean {
@@ -943,6 +1011,11 @@ export class McpAgentToolsServer extends McpHttpServer {
       }
 
       if (action === "create") {
+        const faked =
+          typeof args.schedule === "string"
+            ? fakedOneOffSchedule(args.schedule, routineText(args))
+            : null;
+        if (faked != null) return this.err(faked);
         const runner =
           requestedRunner(args) ??
           this.options.routines?.defaultRunner() ??
@@ -953,15 +1026,34 @@ export class McpAgentToolsServer extends McpHttpServer {
           (runner === "hosted" ||
             this.options.routines?.hostedOnly?.() === true) &&
           this.options.routines != null
-        )
-          return await this.createHostedRoutine(args, callerSession);
+        ) {
+          // The server reads run_at in the user's zone; minutes from now go
+          // as an exact moment.
+          const soon = minutesFromNow(args.in_minutes, Date.now());
+          if (soon.ok === false) return this.err(soon.error);
+          return await this.createHostedRoutine(
+            args.run_at == null && soon.at != null
+              ? { ...args, run_at: new Date(soon.at).toISOString() }
+              : args,
+            callerSession
+          );
+        }
 
         const schedule = typeof args.schedule === "string" ? args.schedule : "";
         const prompt = typeof args.prompt === "string" ? args.prompt : "";
         const webhook = args.webhook === true;
+        const moment = requestedMoment(args, Date.now());
+        if (moment.ok === false) return this.err(moment.error);
+        const runAt = moment.at;
 
-        if (schedule.trim().length === 0 && !webhook)
-          return this.err("A schedule or webhook: true is required.");
+        if (schedule.trim().length > 0 && runAt != null)
+          return this.err(
+            "Give a schedule for a repeating routine, or run_at / in_minutes for a one-time one, not both."
+          );
+        if (schedule.trim().length === 0 && !webhook && runAt == null)
+          return this.err(
+            "A schedule, a one-time run_at or in_minutes, or webhook: true is required."
+          );
 
         // A bot scheduling from its own chat is the maker: the routine lists
         // as its own and runs in its voice, in a fresh session like any other.
@@ -972,6 +1064,7 @@ export class McpAgentToolsServer extends McpHttpServer {
 
         const input = {
           schedule: schedule.trim().length > 0 ? schedule : null,
+          runAt,
           webhook,
           prompt,
           name: typeof args.name === "string" ? args.name : undefined,
@@ -1002,6 +1095,10 @@ export class McpAgentToolsServer extends McpHttpServer {
             ? await this.fireOnCreate(job.id)
             : null;
         const firedNow = fire === "started";
+        const once =
+          job.runAt != null
+            ? ` It runs once, at ${new Date(job.runAt).toLocaleString()}, and is then done.`
+            : "";
 
         const delivery =
           "It lives under Routines in the sidebar; each fire runs in a fresh session of its own, listed there with its outcome." +
@@ -1050,7 +1147,7 @@ export class McpAgentToolsServer extends McpHttpServer {
           (await this.options.routines?.alwaysOnNote?.()) ?? null
         );
         return this.ok(
-          `Created. ${delivery}${where}${reach}${first}${hook}${note}\n\n${describeJob(job)}`
+          `Created. ${delivery}${once}${where}${reach}${first}${hook}${note}\n\n${describeJob(job)}`
         );
       }
 
@@ -1111,10 +1208,29 @@ export class McpAgentToolsServer extends McpHttpServer {
       if (action === "update") {
         const changes: {
           schedule?: string;
+          runAt?: number;
           prompt?: string;
           enabled?: boolean;
           name?: string;
         } = {};
+        const moment = requestedMoment(args, Date.now());
+        if (moment.ok === false) return this.err(moment.error);
+        if (moment.at != null) changes.runAt = moment.at;
+        if (moment.at != null && typeof args.schedule === "string")
+          return this.err(
+            "Give a schedule for a repeating routine, or run_at / in_minutes for a one-time one, not both."
+          );
+        if (typeof args.schedule === "string") {
+          const current = listJobs().find((entry) => entry.id === id);
+          const faked = fakedOneOffSchedule(
+            args.schedule,
+            routineText({
+              name: args.name ?? current?.name,
+              prompt: args.prompt ?? current?.prompt,
+            })
+          );
+          if (faked != null) return this.err(faked);
+        }
 
         if (
           typeof args.schedule === "string" &&
@@ -1131,7 +1247,7 @@ export class McpAgentToolsServer extends McpHttpServer {
 
         if (Object.keys(changes).length === 0)
           return this.err(
-            "Nothing to update: give a schedule, a prompt, a name, or enabled."
+            "Nothing to update: give a schedule, run_at or in_minutes, a prompt, a name, or enabled."
           );
 
         const job = updateJob(id, changes);
@@ -1150,7 +1266,15 @@ export class McpAgentToolsServer extends McpHttpServer {
             "Nothing is attached that can start a scheduled run."
           );
 
-        await this.options.runCronJob(job.id);
+        const refusal = agentRunRefusal(job.runs, Date.now());
+        if (refusal != null) return this.err(refusal);
+        const start =
+          (await this.options.runCronJob(job.id, "agent")) ?? "started";
+        // What happened, never "started" for a run that did not.
+        if (start !== "started")
+          return this.err(
+            `Not started (${getJob(job.id)?.runs[0]?.result ?? start}).`
+          );
 
         return this.ok(
           job.botId != null
@@ -2112,6 +2236,31 @@ export class McpAgentToolsServer extends McpHttpServer {
     if (attachmentPath.length === 0 && message.trim().length === 0)
       return this.err("There is no message.");
 
+    // A routine's fire reaches each person once, whatever its runs decide.
+    const fire =
+      callerSession != null
+        ? (this.options.routineFireForSession?.(callerSession) ?? null)
+        : null;
+    const guard =
+      fire != null && callerSession != null
+        ? { fire, session: callerSession }
+        : null;
+    const sent = `${attachmentPath}\u0000${message}`;
+    if (guard != null) {
+      const refusal = this.routineSends.refusal(
+        guard.fire,
+        platform,
+        to,
+        guard.session,
+        sent
+      );
+      if (refusal != null) return this.err(refusal);
+    }
+    const noteSent = (): void => {
+      if (guard != null)
+        this.routineSends.record(guard.fire, platform, to, guard.session, sent);
+    };
+
     if (attachmentPath.length > 0) {
       if (messaging.sendFile == null)
         return this.err("Sending files is not wired up in this build.");
@@ -2131,6 +2280,7 @@ export class McpAgentToolsServer extends McpHttpServer {
         attachmentPath,
         message.trim().length > 0 ? message : undefined
       );
+      noteSent();
 
       return this.ok(`Sent the file to ${to} on ${platform}.`);
     }
@@ -2140,6 +2290,7 @@ export class McpAgentToolsServer extends McpHttpServer {
         ? (this.options.botIdForSession?.(callerSession) ?? undefined)
         : undefined;
     await messaging.send(platform, to, message, fromBotId);
+    noteSent();
 
     return this.ok(`Sent to ${to} on ${platform}.`);
   }

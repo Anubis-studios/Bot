@@ -15,6 +15,7 @@ import path from "path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { getJob, listJobs, recordRun } from "../agent-tools/cron-store";
 import { McpAgentToolsServer } from "./mcp-agent-tools-server";
 
 let home: string;
@@ -453,5 +454,190 @@ describe("a first fire that could not start", () => {
 
     expect(text).not.toContain("The first one is running now");
     expect(text).toContain("could not start right now");
+  });
+});
+
+describe("a one-time routine", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(2026, 9, 20, 13, 35) });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("is made from in_minutes, fires at its moment and not on creation", async () => {
+    const runner = { runCronJob: vi.fn(async () => "started" as const) };
+    const text = await call(
+      server([], runner),
+      {
+        action: "create",
+        in_minutes: 1,
+        prompt: "Remind me to stretch.",
+        name: "Stretch",
+      },
+      "bot-session"
+    );
+
+    expect(text).toContain("It runs once, at");
+    expect(runner.runCronJob).not.toHaveBeenCalled();
+    const [job] = listJobs();
+    expect(job?.schedule).toBeNull();
+    expect(job?.runAt).toBe(new Date(2026, 9, 20, 13, 36).getTime());
+  });
+
+  it("is made from run_at in this computer's local time", async () => {
+    await call(
+      server(),
+      { action: "create", run_at: "2026-10-21T08:20", prompt: "Alert me." },
+      "bot-session"
+    );
+
+    expect(listJobs()[0]?.runAt).toBe(new Date(2026, 9, 21, 8, 20).getTime());
+  });
+
+  it("refuses a moment that has passed, or one without a time", async () => {
+    const instance = server();
+    expect(
+      await call(
+        instance,
+        { action: "create", run_at: "2026-10-20T09:00", prompt: "x" },
+        "bot-session"
+      )
+    ).toContain("already passed");
+    expect(
+      await call(
+        instance,
+        { action: "create", run_at: "2026-10-21", prompt: "x" },
+        "bot-session"
+      )
+    ).toContain("is not a moment");
+    expect(listJobs()).toEqual([]);
+  });
+
+  it("refuses a reminder made of an every-minute schedule, and points to in_minutes", async () => {
+    const text = await call(
+      server(),
+      {
+        action: "create",
+        schedule: "* * * * *",
+        prompt: "Remind the user to drink water.",
+        name: "Water reminder",
+      },
+      "bot-session"
+    );
+
+    expect(text).toContain("in_minutes");
+    expect(listJobs()).toEqual([]);
+  });
+
+  it("refuses a schedule pinned to one date, which repeats yearly", async () => {
+    const text = await call(
+      server(),
+      { action: "create", schedule: "20 8 21 10 *", prompt: "Launch alert" },
+      "bot-session"
+    );
+
+    expect(text).toContain("every year");
+    expect(listJobs()).toEqual([]);
+  });
+
+  it("leaves a repeating routine's fire on creation as it is", async () => {
+    const runner = { runCronJob: vi.fn(async () => "started" as const) };
+    await call(
+      server([], runner),
+      { action: "create", schedule: "0 7 * * *", prompt: "Morning brief" },
+      "bot-session"
+    );
+
+    expect(runner.runCronJob).toHaveBeenCalledWith(
+      expect.stringMatching(/^job-/),
+      "create"
+    );
+  });
+});
+
+describe("a run the agent asks for", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(2026, 9, 13, 8, 0) });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** A runner that writes each run down, as the host does. */
+  const recording = () => ({
+    runCronJob: vi.fn(async (id: string, trigger?: string) => {
+      recordRun(id, "started session s", (trigger ?? "manual") as never, {
+        kind: "started",
+      });
+      return "started" as const;
+    }),
+  });
+
+  const make = async (instance: McpAgentToolsServer): Promise<string> => {
+    const text = await call(
+      instance,
+      {
+        action: "create",
+        schedule: "30 18 * * *",
+        prompt: "Next phase of the project plan",
+        firstRun: false,
+      },
+      "bot-session"
+    );
+    return text.match(/(job-[\w-]+)/)![1]!;
+  };
+
+  it("is filed as the agent's, and refused again within ten minutes", async () => {
+    const runner = recording();
+    const instance = server([], runner);
+    const id = await make(instance);
+
+    expect(
+      await call(instance, { action: "run", id }, "bot-session")
+    ).toContain("Started");
+    expect(runner.runCronJob).toHaveBeenLastCalledWith(id, "agent");
+    vi.setSystemTime(new Date(2026, 9, 13, 8, 5));
+    const again = await call(instance, { action: "run", id }, "bot-session");
+
+    expect(again).toContain("Not started");
+    expect(runner.runCronJob).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops at a few a day and leaves more to the user", async () => {
+    const runner = recording();
+    const instance = server([], runner);
+    const id = await make(instance);
+
+    for (const hour of [8, 9, 10]) {
+      vi.setSystemTime(new Date(2026, 9, 13, hour, 0));
+      expect(
+        await call(instance, { action: "run", id }, "bot-session")
+      ).toContain("Started");
+    }
+    vi.setSystemTime(new Date(2026, 9, 13, 11, 0));
+    const fourth = await call(instance, { action: "run", id }, "bot-session");
+
+    expect(fourth).toContain("Run now");
+    expect(runner.runCronJob).toHaveBeenCalledTimes(3);
+  });
+
+  it("says what really happened when the run did not start", async () => {
+    const instance = server([], {
+      runCronJob: vi.fn(async (id: string) => {
+        recordRun(id, "skipped: the previous run is still going", "agent", {
+          kind: "skipped",
+        });
+        return "skipped" as const;
+      }),
+    });
+    const id = await make(instance);
+
+    const text = await call(instance, { action: "run", id }, "bot-session");
+
+    expect(text).toContain("Not started");
+    expect(text).toContain("still going");
+    expect(text).not.toContain("Started");
+    expect(getJob(id)?.runs).toHaveLength(1);
   });
 });

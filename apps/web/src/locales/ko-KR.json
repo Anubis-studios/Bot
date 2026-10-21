@@ -1460,7 +1460,9 @@
       "manual": "수동",
       "create": "On creation",
       "schedule": "예약됨",
-      "webhook": "웹훅"
+      "catch-up": "보충 실행",
+      "webhook": "웹훅",
+      "agent": "에이전트가 실행"
     },
     "hosted": {
       "badge": "Runs on its own",
