@@ -126,6 +126,7 @@ export const WEB_HOST_ALLOWED = [
   "account.abacus",
   "account.vaultUrl",
   "account.upgradeUrl",
+  "account.billingPlan",
   "account.state",
   "account.skipOnboarding",
   "account.signOut",

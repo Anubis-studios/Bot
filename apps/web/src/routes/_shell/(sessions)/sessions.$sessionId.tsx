@@ -581,6 +581,15 @@ const SessionRoute = () => {
               showModeChip: true,
               model: model.model,
               onResumeOnFreePool: model.onResumeOnFreePool,
+              onNewChat: () =>
+                void navigate({
+                  to: "/sessions/new",
+                  search: {
+                    workspace: row.workspaceId,
+                    draft: openStartDraft(undefined, row.workspaceId),
+                  },
+                  transition: "nav-lateral",
+                }),
               onResumeOnModel: model.onResumeOnModel,
               availableModes: model.availableModes,
               defaultMode: row.mode ?? prefs.defaultMode,

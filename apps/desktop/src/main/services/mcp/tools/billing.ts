@@ -1,9 +1,12 @@
-import { cachedAbacusAccount, onFreePlan } from "../../providers/abacus";
 import {
   type BillingPlan,
   type BillingPlanTier,
-  fetchBillingPlan,
-} from "../../providers/abacus-upgrade";
+  creditsRenewMonthly,
+} from "@abacus-ai/contract/billing-plan";
+import { ABACUS_AGENT_ROUTINES_URL } from "@abacus-ai/contract/routines";
+
+import { cachedAbacusAccount, onFreePlan } from "../../providers/abacus";
+import { fetchBillingPlan } from "../../providers/abacus-upgrade";
 import type { ToolDefinition, ToolHost, ToolResult } from "./definition";
 
 export const credits = (value: number | null): string =>
@@ -82,6 +85,9 @@ export function appBillingResult(
   const lines = [
     `The user's plan: ${billing.current.planName}.`,
     ...creditStanding(billing),
+    ...(creditsRenewMonthly(billing)
+      ? ["Their plan's credits renew every month."]
+      : []),
   ];
   lines.push("", "The plans:");
   for (const plan of billing.plans)
@@ -113,6 +119,14 @@ export function appBillingResult(
     "features are the server's current list (models included): never add, drop or invent features, prices, discounts or links,",
     "never send them to account settings or a billing page instead of these links, and never say you changed their",
     "plan: they upgrade on the page. Do not bring plans up unasked in the middle of a task or after a complaint."
+  );
+  // A free account asking for what only a plan does (running with the
+  // computer off) is offered the plan's feature, never a flat no.
+  lines.push(
+    "",
+    billing.plans.some((plan) => plan.current && plan.plan !== "free")
+      ? `Asked to keep running while the app or computer is off, or to stay online 24/7: their plan already includes routines that run 24/7 in Abacus AI Agent on the web, set up there as a scheduled task: ${ABACUS_AGENT_ROUTINES_URL} (give the link as written). Do not offer an upgrade for it.`
+      : `Asked to keep running while the app or computer is off, or to stay online 24/7: never answer no. Offer ${billing.upgrades[0]?.planName ?? "the next plan"}: routines that run 24/7 in Abacus AI Agent on the web, even with the computer off, with its price and their upgrade link from above, in their language.`
   );
   if (billing.upgradeInMobileApp)
     lines.push(
@@ -147,16 +161,21 @@ export const withUpgradeNudge = (message: string): string =>
 export const BILLING_TOOLS: ToolDefinition[] = [
   {
     name: "billing_plan",
+    // Every chat, bot and chat app, on every plan and at zero credits: the
+    // answer is a read of the account, never something the model recalls.
     toolsets: "always",
     botAlways: true,
-    // Free accounts only: a paid account the app has read is never offered it.
-    // Before the first account read it is listed, and its answer still fits.
-    ready: billingPlanReady,
     description: [
-      "The user's Abacus AI plan and credits, every plan with its price, any first-month discount and what it gives,",
-      "and the links to upgrade or buy credits. Call it whenever they ask about their plan, credits or balance, prices,",
-      "discounts or deals, upgrading, or what a plan includes, and when they run into a plan limit or run low on",
-      "credits. Pass upgrade: true whenever they might upgrade, so the answer carries their upgrade links.",
+      "The source of truth for every question about money and limits: the user's Abacus AI plan, credits left and",
+      "when they renew, every plan with its price, any first-month discount and what it gives, the limits, and the",
+      "links to upgrade or buy credits. Call it for any question, in any wording or language, about what models or",
+      "plans cost, prices, discounts or deals, credits or balance, limits, resets or renewals, upgrading, or what a",
+      "plan includes; when they ask for something a plan gives that this app cannot do alone (keep running or run",
+      "routines while the app or computer is off, stay online 24/7); and when they run into a plan limit or run low",
+      "on credits. Pass upgrade: true whenever they",
+      "might upgrade, so the answer carries their upgrade links.",
+      "Never quote a price, discount, credit amount, limit or reset from memory: call this first, every time, and",
+      "answer only from what it returns.",
     ].join("\n"),
     inputSchema: {
       type: "object",

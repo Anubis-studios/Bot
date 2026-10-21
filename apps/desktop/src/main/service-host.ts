@@ -31,7 +31,7 @@ import {
   checkoutKey,
   type GitDiffResult,
 } from "@abacus-ai/contract/contract/checkout";
-import type { GitStateRow } from "@abacus-ai/contract/contract/rows";
+import type { GitStateRow, PrefsRow } from "@abacus-ai/contract/contract/rows";
 import type {
   TranscriptSegment,
   TurnFeedbackInput,
@@ -433,6 +433,12 @@ import {
 } from "./services/providers/abacus-host";
 import { readAccountState } from "./services/providers/account-service";
 import {
+  creditWallOf,
+  wallAfterAccountRead,
+  wallAfterError,
+  wallMoved,
+} from "./services/providers/credit-wall";
+import {
   environmentNoticeService,
   messageWithEnvironmentNotice,
   prependSystemReminder,
@@ -551,6 +557,20 @@ export class ServiceHost {
                 emittedAt: new Date().toISOString(),
               }),
           });
+    // A turn in any session (a chat, a bot, a routine with nobody watching)
+    // that ends at the credit wall stamps it, so the card is there on the
+    // next launch and every agent stops at it.
+    this.onAgentEvent((_sessionId, payload) => {
+      if (payload.type !== "event" || payload.event.type !== "error") return;
+      const prefs = this.prefs?.();
+      if (prefs == null) return;
+      const patch = wallAfterError(
+        prefs.get(),
+        payload.event.error,
+        Date.now()
+      );
+      if (patch != null) prefs.update(patch);
+    });
     // Usage counts for the daily report; the listener never throws.
     this.onAgentEvent(
       createUsageReporter(platform === "web-host" ? "web" : "desktop", {
@@ -866,6 +886,15 @@ export class ServiceHost {
 
   attachPrefs(prefs: () => Pick<PrefsStore, "get" | "update">): void {
     this.prefs = prefs;
+  }
+
+  /** A prefs write: the agents hear a credit wall that moved. */
+  prefsChanged(row: PrefsRow, previous: PrefsRow): void {
+    if (!wallMoved(row, previous)) return;
+    this.agentManagerService.broadcastCommand({
+      type: "credit_wall",
+      ...creditWallOf(row),
+    });
   }
 
   /**
@@ -1292,6 +1321,11 @@ export class ServiceHost {
       this.listedPlanTier = tier;
       this.toolAvailabilityChanged();
     }
+    // Credits back after a wall: the wall goes, and every agent hears it.
+    const prefs = this.prefs?.();
+    const patch =
+      prefs != null ? wallAfterAccountRead(prefs.get(), snapshot) : null;
+    if (patch != null) prefs?.update(patch);
   });
   private listedPlanTier = abacusPlanTier(cachedAbacusAccount());
   private readonly cronScheduler = new CronScheduler(
@@ -1925,6 +1959,13 @@ export class ServiceHost {
   /** Given callbacks, not this host, so it cannot reach further than needed. */
   private readonly messagingGatewayService = new MessagingGatewayService({
     platform: () => this.platform,
+    // The app's language, the OS's while the user has not picked one.
+    appLanguage: () => {
+      const picked = this.prefs?.().get().language;
+      return picked != null && picked !== "system"
+        ? picked
+        : Intl.DateTimeFormat().resolvedOptions().locale;
+    },
     resolveWorkspaceId: () => {
       const workspaces = this.workspaceService.getWorkspaces();
       const configured = readGatewaySettings().workspaceId;
@@ -5559,6 +5600,14 @@ export class ServiceHost {
       // Kept current afterwards by the `credit_balance` command.
       ...(credits != null
         ? { ABACUSAI_BOT_CREDITS: JSON.stringify(credits) }
+        : {}),
+      // Kept current afterwards by the `credit_wall` command.
+      ...(this.prefs != null
+        ? {
+            ABACUSAI_BOT_CREDIT_WALL: JSON.stringify(
+              creditWallOf(this.prefs().get())
+            ),
+          }
         : {}),
       // A routine's run (a bot's routine, a hosted one) may wait out a long
       // outage; a turn a person sent waits ten minutes.

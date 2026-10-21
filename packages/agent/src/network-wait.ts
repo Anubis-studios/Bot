@@ -24,11 +24,25 @@ export const NETWORK_WAIT_TURN_MS = 10 * 60_000;
 export const NETWORK_WAIT_ROUTINE_MS = 60 * 60_000;
 const NETWORK_BACKOFF_MS = [2_000, 4_000, 8_000, 16_000, 30_000];
 
+/**
+ * A connection that failed while the network answers (the Abacus API did):
+ * a few quick retries of the same call, 2s, 4s, 8s, before the turn ends on
+ * the connection card. ABACUSAI_BOT_CONNECTION_RETRY_MS overrides it (tests).
+ */
+const CONNECTION_RETRY_MS = 15_000;
+
+export function connectionRetryBudgetMs(): number {
+  const override = Number(process.env.ABACUSAI_BOT_CONNECTION_RETRY_MS);
+  return Number.isFinite(override) && override >= 0
+    ? override
+    : CONNECTION_RETRY_MS;
+}
+
 /** The error code a turn ends with when the network never came back; a routine files it apart from failures. */
 export const NETWORK_UNREACHABLE_CODE = "network_unreachable";
 
 export const NETWORK_UNREACHABLE_MESSAGE =
-  "Couldn't reach Abacus — check your connection.";
+  "Connection problem — check your internet connection, VPN, or proxy.";
 
 export const NETWORK_RESUME_TYPE = "abacusai-bot:network-resume";
 /** The failed call produced nothing: it is asked again, as it was. */

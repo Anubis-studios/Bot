@@ -61,6 +61,7 @@ const DEFAULTS: PrefsValues = {
   lastPickedWorkspaceId: null,
   recentFolders: [],
   creditsExhaustedAt: null,
+  freeLaneChosenAt: null,
   browserHomepage: null,
   showLinkPreviews: true,
   onboardingStep: null,

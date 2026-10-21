@@ -1,4 +1,5 @@
 import { AgentStatus } from "@abacus-ai/contract/agent-types";
+import type { BillingPlan } from "@abacus-ai/contract/billing-plan";
 import type { MessagingPlatformId } from "@abacus-ai/contract/messaging";
 /**
  * What a chat is told when the agent reports an error.
@@ -18,14 +19,18 @@ import type { MessagingPlatformId } from "@abacus-ai/contract/messaging";
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { channelLocale, channelWords } from "./channel-words";
 import {
   chatReplyForFailure,
   FAILURE_REPLY_WINDOW_MS,
+  type ChannelOffer,
 } from "./chat-failure-reply";
 
 const mocks = vi.hoisted(() => ({
   account: null as { plan?: string; subscription_tier?: string } | null,
   fetchUpgradeUrl: null as unknown as () => Promise<string | null>,
+  billing: null as unknown,
+  language: null as string | null,
 }));
 
 vi.mock("./messaging-config-service", async (importOriginal) => {
@@ -56,12 +61,79 @@ vi.mock("../providers/abacus", async (importOriginal) => {
 
 vi.mock("../providers/abacus-upgrade", () => ({
   fetchUpgradeUrl: () => mocks.fetchUpgradeUrl(),
+  fetchBillingPlan: async () => mocks.billing,
+  botUpgradePage: () => BOT_UPGRADE_URL,
+}));
+
+vi.mock("@abacus-ai/agent/user-language", () => ({
+  readUserLanguage: () =>
+    mocks.language == null ? null : { name: mocks.language, source: "user" },
 }));
 
 const { MessagingGatewayService } = await import("./messaging-gateway-service");
 
 const UPGRADE_URL = "https://apps.example.test/u/1";
-const PLANS_URL = "https://apps.abacus.ai/chatllm/choose-plan/";
+const BOT_UPGRADE_URL =
+  "https://apps.example.test/bot/link/upgrade?src=channel";
+const TOP_UP_URL = "https://apps.example.test/top-up";
+
+/** The plan as the platform's billing call answers it. */
+const BILLING: BillingPlan = {
+  current: {
+    planName: "Free",
+    creditsRemaining: 0,
+    creditsGranted: 2000,
+    freeTierExpiresAt: null,
+  },
+  plans: [
+    {
+      plan: "free",
+      planName: "Free",
+      priceText: "Free",
+      features: [],
+      creditsPerMonth: 2000,
+      current: true,
+    },
+    {
+      plan: "basic",
+      planName: "Basic",
+      priceText: "$10/mo",
+      firstMonthPriceCents: 700,
+      priceCents: 1000,
+      features: ["20,000 credits a month", "Top models"],
+      creditsPerMonth: 20000,
+      current: false,
+    },
+  ],
+  upgrades: [
+    {
+      plan: "basic",
+      planName: "Basic",
+      priceText: "$10/mo",
+      firstMonthPriceCents: 700,
+      priceCents: 1000,
+      features: ["20,000 credits a month", "Top models"],
+      url: null,
+    },
+  ],
+  topUpUrl: TOP_UP_URL,
+  upgradeInMobileApp: false,
+};
+
+/** The Basic offer, as the chat app hears it, in English. */
+const offerLines = (link: string) =>
+  [
+    "Basic is $7 your first month, then $10/month and gives you:",
+    "- 20,000 credits a month",
+    "- Top models",
+    `Upgrade here: ${link}`,
+  ].join("\n");
+const wallLine = (link: string) =>
+  [
+    "I've paused because your free credits are used up.",
+    "Free credits renew every month.",
+    offerLines(link),
+  ].join("\n");
 
 const FREE = { subscription_tier: "free" };
 const PAID = { subscription_tier: "basic" };
@@ -89,6 +161,8 @@ const NO_MODEL = {
 beforeEach(() => {
   mocks.account = FREE;
   mocks.fetchUpgradeUrl = async () => UPGRADE_URL;
+  mocks.billing = BILLING;
+  mocks.language = null;
 });
 
 /**
@@ -205,22 +279,22 @@ describe("the user's own chat, on the free plan", () => {
     h.fail(WALL);
     await settle();
 
-    expect(h.sent()).toEqual([
-      `I've paused because your free credits have run out. Upgrade to Basic for $7 your first month and I'll pick right back up: ${UPGRADE_URL}`,
-    ]);
+    expect(h.sent()).toEqual([wallLine(UPGRADE_URL)]);
+    // Never the raw refusal.
+    expect(h.sent()[0]).not.toMatch(/429|no remaining credits/);
   });
 
-  it("falls back to the plans page when there is no upgrade link", async () => {
+  it("falls back to the bot's upgrade page when there is no upgrade link", async () => {
     mocks.fetchUpgradeUrl = async () => null;
     const h = harness({ self: true });
     await h.inbound("write the report");
     h.fail(WALL);
     await settle();
 
-    expect(h.sent()[0]).toContain(`pick right back up: ${PLANS_URL}`);
+    expect(h.sent()[0]).toContain(`Upgrade here: ${BOT_UPGRADE_URL}`);
   });
 
-  it("falls back to the plans page when the link fetch throws", async () => {
+  it("falls back to the bot's upgrade page when the link fetch throws", async () => {
     mocks.fetchUpgradeUrl = async () => {
       throw new Error("offline");
     };
@@ -230,7 +304,20 @@ describe("the user's own chat, on the free plan", () => {
     await settle();
 
     expect(h.sent()).toHaveLength(1);
-    expect(h.sent()[0]).toContain(PLANS_URL);
+    expect(h.sent()[0]).toContain(BOT_UPGRADE_URL);
+    expect(h.sent()[0]).not.toContain("choose-plan");
+  });
+
+  it("without the billing plan, still says what stopped, with the link", async () => {
+    mocks.billing = null;
+    const h = harness({ self: true });
+    await h.inbound("write the report");
+    h.fail(WALL);
+    await settle();
+
+    expect(h.sent()).toEqual([
+      `I've paused because your free credits are used up.\nUpgrade here: ${UPGRADE_URL}`,
+    ]);
   });
 
   it.each([
@@ -247,7 +334,7 @@ describe("the user's own chat, on the free plan", () => {
       await settle();
 
       expect(h.sent()).toEqual([
-        `${lead} Use any model on AbacusAI, $7 your first month: ${UPGRADE_URL}`,
+        `${lead} Use any model on AbacusAI instead: ${UPGRADE_URL}`,
       ]);
     }
   );
@@ -259,7 +346,7 @@ describe("the user's own chat, on the free plan", () => {
     await settle();
 
     expect(h.sent()).toEqual([
-      `The free models are busy right now. Upgrade to Basic for $7 your first month to use the top models: ${UPGRADE_URL}`,
+      `The free models are busy right now.\n${offerLines(UPGRADE_URL)}`,
     ]);
   });
 });
@@ -277,7 +364,7 @@ describe("the user's own chat, on a paid plan", () => {
     await settle();
 
     expect(h.sent()).toEqual([
-      `I've paused because this month's credits are used up. Add credits to keep going: ${PLANS_URL}`,
+      `I've paused because this month's credits are used up. Add credits to keep going: ${TOP_UP_URL}`,
     ]);
     expect(mocks.fetchUpgradeUrl).not.toHaveBeenCalled();
   });
@@ -310,7 +397,7 @@ describe("the user's own chat, on a paid plan", () => {
     h.fail(POOL_OUT);
     await settle();
 
-    expect(h.sent()[0]).toContain(`top models: ${UPGRADE_URL}`);
+    expect(h.sent()[0]).toContain(`Upgrade here: ${UPGRADE_URL}`);
   });
 });
 
@@ -392,7 +479,7 @@ describe("the notice in the user's own chat", () => {
 
     expect(h.log).toEqual([
       "C1: On it",
-      `ME: I couldn't reply to Ana just now. I've paused because your free credits have run out. Upgrade to Basic for $7 your first month and I'll pick right back up: ${UPGRADE_URL}`,
+      `ME: I couldn't reply to Ana just now. ${wallLine(UPGRADE_URL)}`,
     ]);
   });
 
@@ -426,7 +513,7 @@ describe("the notice in the user's own chat", () => {
     await settle();
 
     expect(h.log).toEqual([
-      `shared me: I couldn't reply to Ana just now. DeepSeek isn't responding right now. Use any model on AbacusAI, $7 your first month: ${UPGRADE_URL}`,
+      `shared me: I couldn't reply to Ana just now. DeepSeek isn't responding right now. Use any model on AbacusAI instead: ${UPGRADE_URL}`,
     ]);
   });
 
@@ -485,7 +572,7 @@ describe("the six-hour throttle", () => {
     }
 
     expect(h.sent()).toEqual([
-      expect.stringContaining("free credits have run out"),
+      expect.stringContaining("free credits are used up"),
       expect.stringContaining("free models are busy"),
       expect.stringContaining("Something went wrong"),
       expect.stringContaining("Something went wrong"),
@@ -552,7 +639,7 @@ describe("the failure line and the end of the turn", () => {
 });
 
 describe("an upgrade link that never comes", () => {
-  it("is given up on: the plans page goes instead and the turn ends", async () => {
+  it("is given up on: the bot's upgrade page goes instead and the turn ends", async () => {
     vi.useFakeTimers();
     try {
       mocks.fetchUpgradeUrl = () => new Promise(() => {});
@@ -562,7 +649,7 @@ describe("an upgrade link that never comes", () => {
       h.idle();
       await vi.advanceTimersByTimeAsync(5_000);
 
-      expect(h.sent()).toEqual([expect.stringContaining(PLANS_URL)]);
+      expect(h.sent()).toEqual([expect.stringContaining(BOT_UPGRADE_URL)]);
       expect(h.busy()).toBe(false);
     } finally {
       vi.useRealTimers();
@@ -596,13 +683,31 @@ describe("an error that arrives after the turn ended", () => {
   });
 });
 
+const ENGLISH = await channelWords("en-US");
+const OFFER: ChannelOffer = {
+  upgradeUrl: UPGRADE_URL,
+  topUpUrl: TOP_UP_URL,
+  billing: BILLING,
+};
+const reply = (
+  error: Parameters<typeof chatReplyForFailure>[0],
+  account: "free" | "paid" | "unknown",
+  repeat = false
+) => chatReplyForFailure(error, "own", account, ENGLISH, OFFER, repeat);
+
 describe("chatReplyForFailure", () => {
   it("gives someone else's chat nothing, whatever the failure", () => {
     for (const error of [WALL, ownKey("credit"), POOL_OUT, NO_MODEL, {}])
       for (const account of ["free", "paid", "unknown"] as const)
         expect(
-          chatReplyForFailure(error, "other", account, UPGRADE_URL)
+          chatReplyForFailure(error, "other", account, ENGLISH, OFFER)
         ).toBeNull();
+  });
+
+  it("a dropped connection says so, never busy", () => {
+    expect(reply({ code: "network_unreachable" }, "free")).toBe(
+      "The connection dropped, so I couldn't finish that. Please try again in a moment."
+    );
   });
 });
 
@@ -612,23 +717,17 @@ describe("the credit wall's cause", () => {
   });
 
   it("an expired free tier is told it expired, with the Basic offer", () => {
-    expect(
-      chatReplyForFailure(wall("expired"), "own", "free", UPGRADE_URL)
-    ).toBe(
-      `I've paused because your free credits have expired. Upgrade to Basic for $7 your first month and I'll pick right back up: ${UPGRADE_URL}`
+    expect(reply(wall("expired"), "free")).toBe(
+      `I've paused because your free credits have expired.\n${offerLines(UPGRADE_URL)}`
     );
-    expect(
-      chatReplyForFailure(wall("expired"), "own", "free", UPGRADE_URL, true)
-    ).toBe(`Still paused: ${UPGRADE_URL}`);
+    expect(reply(wall("expired"), "free", true)).toBe(
+      `Still paused: ${UPGRADE_URL}`
+    );
   });
 
   it("an empty balance keeps its words", () => {
-    expect(
-      chatReplyForFailure(wall("exhausted"), "own", "free", UPGRADE_URL)
-    ).toBe(chatReplyForFailure(WALL, "own", "free", UPGRADE_URL));
-    expect(chatReplyForFailure(wall("exhausted"), "own", "paid", null)).toBe(
-      chatReplyForFailure(WALL, "own", "paid", null)
-    );
+    expect(reply(wall("exhausted"), "free")).toBe(reply(WALL, "free"));
+    expect(reply(wall("exhausted"), "paid")).toBe(reply(WALL, "paid"));
   });
 });
 
@@ -641,14 +740,72 @@ describe("a busy free pool", () => {
   };
 
   it("offers a free account Basic rather than a retry", () => {
-    expect(chatReplyForFailure(BUSY, "own", "free", UPGRADE_URL)).toBe(
-      `The free models are busy right now. Upgrade to Basic for $7 your first month to use the top models: ${UPGRADE_URL}`
+    expect(reply(BUSY, "free")).toBe(
+      `The free models are busy right now.\n${offerLines(UPGRADE_URL)}`
     );
   });
 
   it("leaves a paid account the plain line", () => {
-    expect(chatReplyForFailure(BUSY, "own", "paid", null)).toBe(
-      chatReplyForFailure({}, "own", "paid", null)
+    expect(reply(BUSY, "paid")).toBe(reply({}, "paid"));
+  });
+});
+
+describe("the chat app's own language", () => {
+  it("picks the stored language, then the app's, then English", () => {
+    expect(channelLocale("Portuguese", "en-US")).toBe("pt-BR");
+    expect(channelLocale("Turkish", null)).toBe("tr-TR");
+    expect(channelLocale("Klingon", "es-MX")).toBe("es-419");
+    expect(channelLocale(null, "fr-CA")).toBe("fr-FR");
+    expect(channelLocale("Klingon", "xx-YY")).toBe("en-US");
+    expect(channelLocale(null, null)).toBe("en-US");
+  });
+
+  it("a Portuguese user hears the wall in Portuguese, with the bot's link and the plan's price", async () => {
+    mocks.language = "Portuguese";
+    mocks.fetchUpgradeUrl = async () => null;
+    const h = harness({ self: true });
+    await h.inbound("escreva o relatório");
+    h.fail(WALL);
+    // The locale file loads on first use.
+    await vi.waitFor(() => expect(h.sent()).toHaveLength(1));
+    const line = h.sent()[0]!;
+    expect(line).toContain("Pausei porque seus créditos grátis acabaram.");
+    expect(line).toContain("Os créditos grátis renovam todo mês.");
+    expect(line).toMatch(
+      /O Basic custa US\$\s?7 no primeiro mês, depois US\$\s?10\/mês/
+    );
+    expect(line).toContain(`Faça upgrade aqui: ${BOT_UPGRADE_URL}`);
+    expect(line).not.toMatch(/\$7 your first month|I've paused/);
+  });
+
+  it("a Turkish user hears the wall in Turkish", async () => {
+    mocks.language = "Turkish";
+    const h = harness({ self: true });
+    await h.inbound("raporu yaz");
+    h.fail(WALL);
+    await vi.waitFor(() => expect(h.sent()).toHaveLength(1));
+
+    expect(h.sent()[0]).toContain(
+      "Ücretsiz kredilerin bittiği için durakladım."
+    );
+    expect(h.sent()[0]).toContain(`Buradan yükselt: ${UPGRADE_URL}`);
+  });
+
+  it("a language the app does not ship falls back to English cleanly", async () => {
+    mocks.language = "Klingon";
+    const h = harness({ self: true });
+    await h.inbound("hi");
+    h.fail(WALL);
+    await settle();
+
+    expect(h.sent()).toEqual([wallLine(UPGRADE_URL)]);
+  });
+
+  it("a key a locale lacks reads in English", async () => {
+    const words = await channelWords("tr-TR");
+    expect(words.t("outcome.channel.nope")).toBe("outcome.channel.nope");
+    expect(words.t("outcome.channel.generic")).not.toBe(
+      ENGLISH.t("outcome.channel.generic")
     );
   });
 });

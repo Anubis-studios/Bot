@@ -85,6 +85,10 @@
     "./model-path": {
       "types": "./dist/model-path.d.ts",
       "default": "./dist/model-path.js"
+    },
+    "./user-language": {
+      "types": "./dist/user-language.d.ts",
+      "default": "./dist/user-language.js"
     }
   },
   "scripts": {

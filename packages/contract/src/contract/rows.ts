@@ -158,6 +158,8 @@ export interface PrefsRow {
   /** At most 5. */
   recentFolders: string[];
   creditsExhaustedAt: number | null;
+  /** When the user chose the free models at the credit wall; see credit-wall.ts. */
+  freeLaneChosenAt?: number | null;
   browserHomepage: string | null;
   showLinkPreviews?: boolean;
   onboardingStep: string | null;

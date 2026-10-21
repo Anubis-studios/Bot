@@ -11,7 +11,7 @@ import { RouterContextProvider } from "@tanstack/react-router";
 import { act, render, type RenderResult } from "@testing-library/react";
 import type { ReactNode } from "react";
 
-import { DbProvider } from "#renderer/data/db";
+import { DbProvider, type Db } from "#renderer/data/db";
 import { clearDraft } from "#renderer/lib/continuity/composer-drafts";
 import { i18n, initI18n } from "#renderer/lib/i18n";
 import { createHarness } from "#renderer/test-support/app-harness";
@@ -29,6 +29,8 @@ import { createChatRuntime, type ChatRuntime } from "./runtime/runtime";
 
 export interface Rendered {
   view: RenderResult;
+  /** The app db the view reads, for a test that sets a pref under it. */
+  db: Db;
   /** Render another node in the same providers (same db, same runtime). */
   rerender(node: ReactNode): Promise<void>;
   cleanup(): Promise<void>;
@@ -66,6 +68,7 @@ export const renderWithDb = async (node: ReactNode): Promise<Rendered> => {
   });
   return {
     view,
+    db,
     rerender: async (next) => {
       await act(async () => {
         view.rerender(wrap(next));

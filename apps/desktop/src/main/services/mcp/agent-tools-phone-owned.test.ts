@@ -13,11 +13,11 @@ import {
   PHONE_MCP_TOOLS,
   PHONE_VAULT_TOOL_NAMES,
 } from "@abacus-ai/agent/tool-policy";
+import type { BillingPlan } from "@abacus-ai/contract/billing-plan";
 import type { ConnectorStatuses } from "@abacus-ai/contract/contracts";
 import { sessionConversationKey } from "@abacus-ai/contract/conversation-scope";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { BillingPlan } from "../providers/abacus-upgrade";
 import { McpAgentToolsServer } from "./mcp-agent-tools-server";
 import type { McpToolListing } from "./mcp-http-server";
 import { AGENT_TOOL_NAMES } from "./tools";

@@ -49,11 +49,11 @@ import {
   type AgentEvent,
   type DesktopEvent,
 } from "./protocol.js";
+import { AbacusBotSession } from "./session.js";
 import {
-  AbacusBotSession,
-  OPENLLM_POOL_EXHAUSTED_MESSAGE,
+  OPENLLM_POOL_BUSY_MESSAGE,
   OPENLLM_POOL_SHUT_MESSAGE,
-} from "./session.js";
+} from "./turn-outcome.js";
 
 let provider: FakeProvider;
 let home: string;
@@ -1206,7 +1206,7 @@ describe("OpenLLM", () => {
     // One fixed line and the cards: under the router the user never chose a
     // model, so no provider's sentence about one is shown. A free account is
     // offered the plan for a busy pool; a paid one keeps the switch.
-    expect(reported?.message).toBe(OPENLLM_POOL_EXHAUSTED_MESSAGE);
+    expect(reported?.message).toBe(OPENLLM_POOL_BUSY_MESSAGE);
     expect(reported?.message).not.toMatch(/429|upstream|https?:\/\//);
     expect(reported?.detail).toBeUndefined();
     expect(reported?.actions).toEqual([
@@ -1303,7 +1303,7 @@ describe("OpenLLM", () => {
       expect(reported[0]?.message).toBe(NETWORK_UNREACHABLE_MESSAGE);
       // Its own code: a routine files it apart from its failures.
       expect(reported[0]?.code).toBe(NETWORK_UNREACHABLE_CODE);
-      expect(reported[0]?.message).not.toBe(OPENLLM_POOL_EXHAUSTED_MESSAGE);
+      expect(reported[0]?.message).not.toBe(OPENLLM_POOL_BUSY_MESSAGE);
       expect(harness.agent("turn_complete").length).toBeGreaterThan(0);
       expect(cooldowns()).toBe("");
     });
@@ -1346,24 +1346,79 @@ describe("OpenLLM", () => {
       expect(harness.agent("error")).toEqual([]);
     });
 
-    it("treats a dropped call as the model's when the Abacus API still answers", async () => {
-      const harness = session({ mode: "yolo" });
-      provider.script((call) =>
-        call.model === "big:free" ? { drop: true } : { say: "from small" }
-      );
-      setHostConnectivity("online");
-      setReachabilityProbe(async () => true);
-      await harness.session.start();
-      await harness.session.send("hi");
-      await harness.until(() => harness.agent("turn_complete").length > 0);
+    it("retries a dropped call while the Abacus API answers, then ends on the connection card, never rotating", async () => {
+      process.env.ABACUSAI_BOT_CONNECTION_RETRY_MS = "300";
+      try {
+        const harness = session({ mode: "yolo" });
+        provider.script((call) =>
+          call.model === "big:free" ? { drop: true } : { say: "from small" }
+        );
+        setHostConnectivity("online");
+        setReachabilityProbe(async () => true);
+        await harness.session.start();
+        await harness.session.send("hi");
+        await harness.until(() => harness.agent("error").length > 0);
 
-      // The usual provider path: the failed model sits out, the next takes over.
-      expect(harness.text).toContain("from small");
-      expect(
-        harness.agent("retry").some((event) => event.waitingForConnection)
-      ).toBe(false);
-      expect(cooldowns()).toContain("big:free");
+        // The same model, asked again: a dropped connection is not a busy model.
+        expect(harness.text).not.toContain("from small");
+        expect(harness.agent("retry").length).toBeGreaterThan(0);
+        const reported = harness.agent("error").map((event) => event.error);
+        expect(reported).toHaveLength(1);
+        expect(reported[0]).toMatchObject({
+          code: NETWORK_UNREACHABLE_CODE,
+          cause: "connection",
+          message: NETWORK_UNREACHABLE_MESSAGE,
+          actions: [{ type: "retry" }],
+        });
+        expect(reported[0]?.message).not.toBe(OPENLLM_POOL_BUSY_MESSAGE);
+        expect(cooldowns()).toBe("");
+      } finally {
+        delete process.env.ABACUSAI_BOT_CONNECTION_RETRY_MS;
+      }
     });
+
+    it("a dropped call after a rate limit mid-chain ends on the connection card, not busy", async () => {
+      process.env.ABACUSAI_BOT_CONNECTION_RETRY_MS = "300";
+      try {
+        const harness = session({ mode: "yolo" });
+        provider.script((call) =>
+          call.model === "big:free"
+            ? { fail: { status: 429, message: "rate limited upstream" } }
+            : { drop: true }
+        );
+        setHostConnectivity("online");
+        setReachabilityProbe(async () => true);
+        await harness.session.start();
+        await harness.session.send("hi");
+        await harness.until(() => harness.agent("error").length > 0);
+
+        const reported = harness.agent("error").map((event) => event.error);
+        expect(reported).toHaveLength(1);
+        expect(reported[0]).toMatchObject({
+          code: NETWORK_UNREACHABLE_CODE,
+          cause: "connection",
+        });
+      } finally {
+        delete process.env.ABACUSAI_BOT_CONNECTION_RETRY_MS;
+      }
+    });
+  });
+
+  it("never ends silently: an empty reply after a failed call is reported", async () => {
+    const harness = session({ mode: "yolo" });
+    provider.script((call) =>
+      call.model === "big:free"
+        ? { fail: { status: 429, message: "rate limited upstream" } }
+        : { say: "" }
+    );
+    await harness.session.start();
+    await harness.session.send("hi");
+    await harness.until(() => harness.agent("error").length > 0);
+
+    const reported = harness.agent("error").map((event) => event.error);
+    expect(reported).toHaveLength(1);
+    expect(reported[0]?.cause).toBe("rate_limited");
+    expect(harness.agent("turn_complete").length).toBeGreaterThan(0);
   });
 
   it("says the pool is used up, not busy, when the account shut every source", async () => {

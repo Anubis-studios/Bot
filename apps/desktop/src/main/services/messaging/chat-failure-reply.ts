@@ -1,9 +1,19 @@
+import {
+  type BillingPlan,
+  creditsRenewMonthly,
+  planPrice,
+  wallOffer,
+} from "@abacus-ai/contract/billing-plan";
 import { providerDisplayName } from "@abacus-ai/contract/settings";
+
+import type { ChannelWords } from "./channel-words";
 
 /**
  * What a chat is told when a turn failed, on every platform and lane. Never
  * the raw error: provider JSON and credit-wall text reached phones, and other
  * people's chats, as the bot's reply. The pane and the log keep the real text.
+ * Every line is the app's own translation (channel-words.ts) and every price,
+ * credit and feature comes from the account's billing plan.
  */
 
 /** The user's own chat on the platform, or someone they auto-reply to. */
@@ -15,6 +25,7 @@ export type AccountKind = "free" | "paid" | "unknown";
 /** What the gateway reads off a failed turn's error event. */
 export interface TurnFailure {
   code?: string;
+  cause?: string;
   actions?: ReadonlyArray<{ type: string; provider?: string; cause?: string }>;
 }
 
@@ -27,20 +38,23 @@ export type FailureKind =
   | "own-key"
   | "free-pool-out"
   | "model-unavailable"
+  | "connection"
   | "generic";
 
-/** What a phone hears when the desktop has no model to answer with. */
-export const NO_MODEL_REPLY =
-  "The desktop app is not signed in to Abacus.AI right now. Open the app and sign in, then message me again.";
-
-const GENERIC_REPLY =
-  "Something went wrong on my side, so I couldn't finish that. Please try again in a moment.";
-
-/** The plans page, for an account the one-time upgrade link does not cover. */
-const ABACUS_PLANS_URL = "https://apps.abacus.ai/chatllm/choose-plan/";
+/** Where the chat's upgrade and top-up lines point, and what they offer. */
+export interface ChannelOffer {
+  /** The account's own upgrade link, or the bot's upgrade page. */
+  upgradeUrl: string;
+  /** Where a paid account adds credits; the upgrade link when unknown. */
+  topUpUrl: string;
+  /** The billing plan as just read; null when it could not be. */
+  billing: BillingPlan | null;
+}
 
 /** AbacusAI Agent on the web. */
 export const ABACUS_AGENT_URL = "https://apps.abacus.ai/chatllm";
+
+const NETWORK_UNREACHABLE_CODE = "network_unreachable";
 
 const ownKeyAction = (error: TurnFailure) =>
   error.actions?.find((action) => action.type === "own-key-unavailable");
@@ -52,10 +66,11 @@ export const failureKind = (error: TurnFailure): FailureKind => {
   // Before the sign-in line: a shut free pool reports model_unavailable too.
   if (types.has("free-pool-out")) return "free-pool-out";
   if (error.code === "model_unavailable") return "model-unavailable";
+  if (error.code === NETWORK_UNREACHABLE_CODE) return "connection";
   return "generic";
 };
 
-/** Whether the line for this failure could carry the one-time upgrade link. */
+/** Whether the line for this failure could carry the account's upgrade link. */
 export const wantsUpgradeUrl = (
   error: TurnFailure,
   account: AccountKind
@@ -66,14 +81,39 @@ export const wantsUpgradeUrl = (
   return kind === "free-pool-out" && account !== "paid";
 };
 
-const ownKeyLead = (error: TurnFailure): string => {
+/** The plan on offer, its price and what it gives, then the link: from billing_plan. */
+const offerLines = (
+  words: ChannelWords,
+  offer: ChannelOffer,
+  withRenewal: boolean
+): string[] => {
+  const { t, locale } = words;
+  const plan = wallOffer(offer.billing);
+  return [
+    ...(withRenewal && creditsRenewMonthly(offer.billing)
+      ? [t("outcome.channel.renews")]
+      : []),
+    ...(plan != null
+      ? [
+          t("outcome.channel.offer", {
+            plan: plan.planName,
+            price: planPrice(t, plan, locale),
+          }),
+          ...plan.features.map((feature) => `- ${feature}`),
+        ]
+      : []),
+    t("outcome.channel.link", { link: plan?.url ?? offer.upgradeUrl }),
+  ];
+};
+
+const ownKeyLead = (words: ChannelWords, error: TurnFailure): string => {
   const action = ownKeyAction(error);
   const provider = providerDisplayName(action?.provider ?? "");
   if (action?.cause === "credit")
-    return `Your ${provider} key is out of credit.`;
+    return words.t("outcome.channel.ownKeyCredit", { provider });
   if (action?.cause === "rate_limit")
-    return `Your ${provider} key hit its rate limit.`;
-  return `${provider} isn't responding right now.`;
+    return words.t("outcome.channel.ownKeyRateLimit", { provider });
+  return words.t("outcome.channel.ownKeyDown", { provider });
 };
 
 /**
@@ -86,46 +126,51 @@ export const chatReplyForFailure = (
   error: TurnFailure,
   chatKind: ChatKind,
   account: AccountKind,
-  upgradeUrl: string | null,
+  words: ChannelWords,
+  offer: ChannelOffer,
   repeat = false
 ): string | null => {
   if (chatKind === "other") return null;
-  const link = upgradeUrl ?? ABACUS_PLANS_URL;
+  const { t } = words;
+  const reminder = t("outcome.channel.repeat", { link: offer.upgradeUrl });
   switch (failureKind(error)) {
     case "upgrade-abacus": {
       // Why the credit gate refused, when the agent could tell.
-      const cause = error.actions?.find(
-        (action) => action.type === "upgrade-abacus"
-      )?.cause;
-      if (cause === "expired")
+      const expired =
+        error.actions?.find((action) => action.type === "upgrade-abacus")
+          ?.cause === "expired";
+      // An account never read is worded like a paid one: no plan to sell.
+      if (account !== "free")
         return repeat
-          ? `Still paused: ${link}`
-          : `I've paused because your free credits have expired. Upgrade to Basic for $7 your first month and I'll pick right back up: ${link}`;
-      if (account === "free")
-        return repeat
-          ? `Still paused: ${link}`
-          : `I've paused because your free credits have run out. Upgrade to Basic for $7 your first month and I'll pick right back up: ${link}`;
-      return repeat
-        ? `Still paused: ${ABACUS_PLANS_URL}`
-        : `I've paused because this month's credits are used up. Add credits to keep going: ${ABACUS_PLANS_URL}`;
+          ? t("outcome.channel.repeat", { link: offer.topUpUrl })
+          : t("outcome.channel.paidOut", { link: offer.topUpUrl });
+      if (repeat) return reminder;
+      return [
+        t(expired ? "outcome.channel.expired" : "outcome.channel.wall"),
+        ...offerLines(words, offer, !expired),
+      ].join("\n");
     }
     case "own-key":
       if (account === "free")
         return repeat
-          ? `Still paused: ${link}`
-          : `${ownKeyLead(error)} Use any model on AbacusAI, $7 your first month: ${link}`;
+          ? reminder
+          : `${ownKeyLead(words, error)} ${t("outcome.channel.ownKeyOffer", { link: offer.upgradeUrl })}`;
       return repeat
-        ? ownKeyLead(error)
-        : `${ownKeyLead(error)} Use it in AbacusAI Agent on the web: ${ABACUS_AGENT_URL}`;
+        ? ownKeyLead(words, error)
+        : `${ownKeyLead(words, error)} ${t("outcome.channel.ownKeyWeb", { link: ABACUS_AGENT_URL })}`;
     case "free-pool-out":
-      if (account === "paid") return GENERIC_REPLY;
-      return repeat
-        ? `Still paused: ${link}`
-        : `The free models are busy right now. Upgrade to Basic for $7 your first month to use the top models: ${link}`;
+      if (account === "paid") return t("outcome.channel.generic");
+      if (repeat) return reminder;
+      return [
+        t("outcome.channel.busy"),
+        ...offerLines(words, offer, false),
+      ].join("\n");
     case "model-unavailable":
-      return NO_MODEL_REPLY;
+      return t("outcome.channel.notSignedIn");
+    case "connection":
+      return t("outcome.channel.connection");
     case "generic":
-      return GENERIC_REPLY;
+      return t("outcome.channel.generic");
   }
 };
 
@@ -134,16 +179,17 @@ export const chatReplyForFailure = (
  * who went unanswered, and the same line their own chat would have had.
  */
 export const contactFailureNotice = (
+  words: ChannelWords,
   contactName: string | null,
   ownLine: string
 ): string => {
   const name =
     contactName != null && contactName.trim().length > 0
       ? contactName.trim()
-      : "someone";
-  return ownLine === GENERIC_REPLY
-    ? `I couldn't reply to ${name} just now: something went wrong on my side.`
-    : `I couldn't reply to ${name} just now. ${ownLine}`;
+      : words.t("outcome.channel.someone");
+  return ownLine === words.t("outcome.channel.generic")
+    ? words.t("outcome.channel.contactFailedGeneric", { name })
+    : `${words.t("outcome.channel.contactFailed", { name })} ${ownLine}`;
 };
 
 /** How long a chat waits before it hears the full offer again. */
@@ -161,11 +207,16 @@ export class FailureReplyThrottle {
 
   /**
    * Whether this chat already had the full line for this kind inside the
-   * window. Only offers are throttled; the sign-in and generic lines are
-   * short already and go every time.
+   * window. Only offers are throttled; the sign-in, connection and generic
+   * lines are short already and go every time.
    */
   repeat(chatKey: string, kind: FailureKind): boolean {
-    if (kind === "model-unavailable" || kind === "generic") return false;
+    if (
+      kind === "model-unavailable" ||
+      kind === "generic" ||
+      kind === "connection"
+    )
+      return false;
     return !this.claim(this.offered, `${chatKey}:${kind}`);
   }
 

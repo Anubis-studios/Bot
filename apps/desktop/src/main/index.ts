@@ -1478,6 +1478,9 @@ function installRpc(host: HostOperations): void {
     command: (command) => emitBusChannel("notch-open", command),
   });
   prefsStore.onChanged(() => notchController?.schedule());
+  prefsStore.onChanged((row, previous) =>
+    workspaceServiceHost.prefsChanged(row, previous)
+  );
   mainEventBus.listen(
     (event) => event.type === "credentials-changed",
     () => notchController?.appChanged()

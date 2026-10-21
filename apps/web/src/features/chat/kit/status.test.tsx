@@ -1,4 +1,5 @@
 import { contract } from "@abacus-ai/contract/contract";
+import { OPENLLM_ID } from "@abacus-ai/contract/models";
 /**
  * R2-T14 (§5.5): sub-agent rows, Stop = `ai.cancel` of the parent run
  * (never `handle.stop`), Open → `onOpenSubagent`. R2-T15 (§5.6): busy line
@@ -15,7 +16,7 @@ import { createMemoryTransport } from "#renderer/data/transport/memory";
 
 import * as b from "../fixtures/builders";
 import { FakeRelay } from "../fixtures/relay";
-import { hostActionsFor } from "../runtime/host-actions";
+import { hostActionsFor, inertHostActions } from "../runtime/host-actions";
 import { emptyThreadState } from "../store/thread-store";
 import { renderRelay, renderScenario } from "../testing";
 import { busyLabel } from "./status/status";
@@ -311,7 +312,7 @@ it("read-only bot chats hide retry and named model switches", async () => {
         { type: "retry" },
         {
           type: "switch-model",
-          model: "abacus/openllm",
+          model: OPENLLM_ID,
           label: "RouteLLM - Open",
         },
       ],
@@ -411,5 +412,236 @@ describe("the credit wall", () => {
     );
     expect(screen.queryByTestId("ready")).toBeNull();
     expect(screen.queryByText("What's ready")).toBeNull();
+  });
+});
+
+describe("the turn's outcome card", () => {
+  const BILLING = {
+    current: {
+      planName: "Free",
+      creditsRemaining: 0,
+      creditsGranted: 2000,
+      freeTierExpiresAt: null,
+    },
+    plans: [
+      {
+        plan: "free",
+        planName: "Free",
+        priceText: "Free",
+        features: [],
+        creditsPerMonth: 2000,
+        current: true,
+      },
+    ],
+    upgrades: [
+      {
+        plan: "basic",
+        planName: "Basic",
+        priceText: "$10/mo",
+        firstMonthPriceCents: 700,
+        priceCents: 1000,
+        features: [
+          "20,000 credits a month (10x the free tier)",
+          "Image and video generation",
+        ],
+        url: null,
+      },
+    ],
+    topUpUrl: null,
+    upgradeInMobileApp: false,
+  };
+  const failed = (error: Record<string, unknown>) => {
+    const relay = new FakeRelay();
+    relay.emitAll([
+      ...b.sessionReady(),
+      b.runStarted("r1"),
+      ...b.text("u1", "user", "fix the bug"),
+      b.runError("r1", error as never),
+    ]);
+    return relay;
+  };
+  const host = (tier: "free" | "basic", extra = {}) => ({
+    ...inertHostActions,
+    accountTier: async () => tier,
+    billingPlan: async () => BILLING,
+    configuredFreeSources: async () => ({ openrouter: true, gemini: true }),
+    ...extra,
+  });
+  const WALL = {
+    message: "You're out of Abacus.AI credits.",
+    cause: "credits_exhausted",
+    actions: [
+      { type: "upgrade-abacus", cause: "exhausted" },
+      { type: "continue-free", providers: ["openrouter", "gemini"] },
+    ],
+  };
+
+  it("a free account at the wall on auto sees the plan and an explicit free-model choice, never a silent swap", async () => {
+    const chooseFreeLane = vi.fn(async () => {});
+    const relay = failed(WALL);
+    current = await renderRelay(
+      relay,
+      "session",
+      {},
+      {},
+      host("free", { chooseFreeLane })
+    );
+
+    const card = await screen.findByText("Your free credits are used up");
+    const wall = card.closest('[data-slot="credits-card"]') as HTMLElement;
+    await within(wall).findByText("Free credits renew every month.");
+    expect(within(wall).getByText("0 of 2,000 credits left")).toBeTruthy();
+    expect(within(wall).getByRole("note").textContent).toContain(
+      "(OpenRouter, Google Gemini)"
+    );
+    expect(
+      within(wall).getByText(
+        "Upgrade to Basic — $7 your first month, then $10/month"
+      )
+    ).toBeTruthy();
+    expect(within(wall).getByText("Image and video generation")).toBeTruthy();
+    expect(
+      within(wall).getByRole("button", { name: "Upgrade to Basic" })
+    ).toBeTruthy();
+    // No model on this computer at the wall.
+    expect(within(wall).queryByRole("button", { name: /local/i })).toBeNull();
+    // Nothing ran on a free model before the choice.
+    expect(relay.stats.send).toHaveLength(0);
+
+    fireEvent.click(
+      within(wall).getByRole("button", {
+        name: "Continue with free models (lower quality)",
+      })
+    );
+    await waitFor(() => expect(relay.stats.send).toHaveLength(1));
+    expect(chooseFreeLane).toHaveBeenCalledOnce();
+    expect(relay.stats.send[0]!.forwardedProps).toMatchObject({
+      model: OPENLLM_ID,
+    });
+  });
+
+  it("a paid account at the wall is offered a top-up, not the plan", async () => {
+    current = await renderRelay(
+      failed(WALL),
+      "session",
+      {},
+      {},
+      host("basic", { canTopUpCredits: async () => true })
+    );
+    await screen.findByText("You've used this month's credits");
+    expect(await screen.findByRole("button", { name: "Top up" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Upgrade to/ })).toBeNull();
+  });
+
+  it("a dropped connection is the connection card, with its details and a retry", async () => {
+    current = await renderRelay(
+      failed({
+        message:
+          "Connection problem — check your internet connection, VPN, or proxy.",
+        code: "network_unreachable",
+        cause: "connection",
+        detail: "Connection error.",
+        actions: [{ type: "retry" }],
+      }),
+      "session"
+    );
+    await screen.findByText("Connection problem");
+    expect(
+      screen.getByText(
+        "Check your internet connection, VPN, or proxy and try again."
+      )
+    ).toBeTruthy();
+    expect(screen.getByText("View details")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
+    expect(screen.queryByText(/busy/)).toBeNull();
+  });
+
+  it("an outgrown chat offers a new chat", async () => {
+    const onNewChat = vi.fn();
+    current = await renderRelay(
+      failed({
+        message: "This conversation is too long for the free models.",
+        cause: "context_too_long",
+        actions: [{ type: "new-chat" }, { type: "switch-model" }],
+      }),
+      "session",
+      { onNewChat }
+    );
+    await screen.findByText(
+      "This conversation is too long for the model. Start a new chat, or pick a model with a larger context."
+    );
+    fireEvent.click(screen.getByRole("button", { name: "New chat" }));
+    expect(onNewChat).toHaveBeenCalledOnce();
+  });
+
+  it("names the provider whose own key hit its quota, with a way to fix it", async () => {
+    current = await renderRelay(
+      failed({
+        message: "Your Gemini key hit its quota.",
+        cause: "own_key_quota",
+        actions: [
+          { type: "switch-model" },
+          { type: "fix-key", provider: "gemini" },
+        ],
+      }),
+      "session"
+    );
+    await screen.findByText(
+      "Your Google Gemini key hit its quota. Switch to a different model, or check the key's plan."
+    );
+    expect(screen.getByText("Check the key")).toBeTruthy();
+  });
+
+  it("labels a free-lane reply with its provider while the wall stands, and drops it once credits are back", async () => {
+    const relay = new FakeRelay();
+    relay.emitAll([
+      ...b.sessionReady(),
+      b.runStarted("r1"),
+      ...b.text("u1", "user", "go on"),
+      ...b.text("a1", "assistant", "done"),
+      b.runFinished("r1", "success", {
+        metadata: {
+          abacus: {
+            turnUsage: { lane: "free", provider: "openrouter", model: "x" },
+          },
+        },
+      }),
+    ]);
+    current = await renderRelay(relay, "session");
+    await (
+      current as unknown as { db: { updatePrefs(p: object): Promise<void> } }
+    ).db.updatePrefs({
+      creditsExhaustedAt: Date.now(),
+    });
+    await screen.findByText("Free model · OpenRouter");
+    expect(screen.getByText("Upgrade for top models")).toBeTruthy();
+    await (
+      current as unknown as { db: { updatePrefs(p: object): Promise<void> } }
+    ).db.updatePrefs({
+      creditsExhaustedAt: null,
+    });
+    await waitFor(() =>
+      expect(screen.queryByText("Free model · OpenRouter")).toBeNull()
+    );
+  });
+
+  it("labels a free-lane reply in a bot chat too, where no run marker is drawn", async () => {
+    const relay = new FakeRelay();
+    relay.emitAll([
+      ...b.sessionReady(),
+      b.runStarted("r1"),
+      ...b.text("u1", "user", "go on"),
+      ...b.text("a1", "assistant", "done"),
+      b.runFinished("r1", "success", {
+        metadata: {
+          abacus: { turnUsage: { lane: "free", provider: "gemini" } },
+        },
+      }),
+    ]);
+    current = await renderRelay(relay, "bot");
+    await (
+      current as unknown as { db: { updatePrefs(p: object): Promise<void> } }
+    ).db.updatePrefs({ creditsExhaustedAt: Date.now() });
+    await screen.findByText("Free model · Google Gemini");
   });
 });

@@ -19,7 +19,7 @@
 
 /** `"account": "abacus state usage"` reads `account.abacus`, … */
 const READS: Record<string, string> = {
-  account: "abacus state upgradeUrl usage vaultUrl",
+  account: "abacus billingPlan state upgradeUrl usage vaultUrl",
   agent: "queue.get skills state",
   ai: "attention hydrate joinRun runFinished subscribe",
   auth: "abacus.shouldAutoSignIn",

@@ -1557,5 +1557,51 @@
       "bots.body"
     ],
     "sources": ["features/tour/card.tsx", "features/tour/gallery.tsx"]
+  },
+  {
+    "prefix": "outcome.cause.",
+    "values": [
+      "context_too_long",
+      "key_invalid",
+      "own_key_quota",
+      "model_unavailable",
+      "free_pool_spent",
+      "rate_limited",
+      "empty",
+      "unknown"
+    ],
+    "sources": ["features/chat/kit/status/status.tsx"]
+  },
+  {
+    "prefix": "outcome.plan.",
+    "values": ["introPrice", "monthlyPrice"],
+    "sources": ["../../../packages/contract/src/billing-plan.ts"]
+  },
+  {
+    "prefix": "outcome.channel.",
+    "values": [
+      "wall",
+      "expired",
+      "renews",
+      "offer",
+      "link",
+      "repeat",
+      "paidOut",
+      "ownKeyCredit",
+      "ownKeyRateLimit",
+      "ownKeyDown",
+      "ownKeyOffer",
+      "ownKeyWeb",
+      "busy",
+      "connection",
+      "notSignedIn",
+      "generic",
+      "contactFailed",
+      "contactFailedGeneric",
+      "someone"
+    ],
+    "sources": [
+      "../../desktop/src/main/services/messaging/chat-failure-reply.ts"
+    ]
   }
 ]

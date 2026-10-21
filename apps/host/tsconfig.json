@@ -6,7 +6,8 @@
     "tsBuildInfoFile": "../../node_modules/.tmp/host.tsbuildinfo",
     "paths": {
       "@abacus-ai/contract/*": ["../../packages/contract/src/*"],
-      "#main/*": ["../desktop/src/main/*"]
+      "#main/*": ["../desktop/src/main/*"],
+      "#locales/*": ["../web/src/locales/*"]
     }
   },
   "references": [{ "path": "../../packages/contract" }],
@@ -14,7 +15,8 @@
     "src",
     "../desktop/src/main",
     "../desktop/src/agent-host",
-    "../desktop/src/preload/*.d.ts"
+    "../desktop/src/preload/*.d.ts",
+    "../web/src/locales/*.json"
   ],
   "exclude": [
     "../desktop/src/main/index.ts",

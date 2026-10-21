@@ -1,3 +1,4 @@
+import type { BillingPlan } from "@abacus-ai/contract/billing-plan";
 import type { AbacusPlanTier } from "@abacus-ai/contract/models";
 import {
   PAID_FEATURE_TOOL,
@@ -6,7 +7,6 @@ import {
 } from "@abacus-ai/contract/toolsets";
 
 import { ABACUS_AGENT_URL } from "../../messaging/chat-failure-reply";
-import type { BillingPlan } from "../../providers/abacus-upgrade";
 import { bullets, priceLine } from "./billing";
 import type {
   HostCapabilities,

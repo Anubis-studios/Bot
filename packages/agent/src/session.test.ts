@@ -21,26 +21,26 @@ import { describe, expect, it } from "vitest";
 
 import { TurnReply } from "./forever/turn-reply.js";
 import { PendingSteers } from "./pending-steers.js";
-import {
-  AgentStatus,
-  type AgentEvent,
-  type NotificationAction,
-} from "./protocol.js";
+import { AgentStatus, type AgentEvent } from "./protocol.js";
 import { replacesBash } from "./roster.js";
 import {
   AbacusBotSession,
   capRetriesWhileRouting,
   componentsPrompt,
   reserveContextHeadroom,
-  classifyProviderFailure,
   endedOnMalformedToolCall,
   endedOnProviderError,
+  isSupersededWebTool,
+} from "./session.js";
+import {
+  classifyAttempt,
+  classifyProviderFailure,
   isProviderFailure,
+  presentFailure,
   providerDetail,
   readableFailure,
   terminalProviderMessage,
-  isSupersededWebTool,
-} from "./session.js";
+} from "./turn-outcome.js";
 
 describe("replacing bash with our own", () => {
   it("replaces it whether or not a backend is active", () => {
@@ -682,9 +682,9 @@ describe("the credit wall in the chat", () => {
     );
 
     expect(failure.summary).toBe("Your free credits have expired");
-    expect(failure.remedy).toBe(
-      "Upgrade your plan at https://apps.abacus.ai/chatllm/choose-plan/ to keep going."
-    );
+    // No plans page in the text: the card and the chat apps carry the
+    // account's own upgrade link.
+    expect(failure.remedy).toBe("Upgrade your plan to keep going.");
   });
 
   it("a provider's metric quota is a rate limit, not the Abacus wall", () => {
@@ -697,18 +697,16 @@ describe("the credit wall in the chat", () => {
 });
 
 describe("a quota on the user's own key", () => {
-  interface SessionInternals {
-    session: unknown;
-    openLlmActive: boolean;
-    errorActionsFor(raw: string): { actions?: NotificationAction[] };
-  }
-
-  const pinnedOn = (provider: string): SessionInternals => {
-    const session = new AbacusBotSession({ cwd: "/tmp", emit: () => {} });
-    const internals = session as unknown as SessionInternals;
-    internals.session = { model: { provider } };
-    return internals;
-  };
+  const pinned = (provider: string, raw: string) =>
+    presentFailure(
+      { cause: classifyAttempt(raw, provider), provider, raw },
+      {
+        routed: false,
+        freeLaneProviders: [],
+        onFreeLane: false,
+        abacusFreeModels: [],
+      }
+    ).actions ?? [];
 
   it.each([
     [
@@ -738,7 +736,7 @@ describe("a quota on the user's own key", () => {
   ])(
     "offers Abacus for %s, not the out-of-credits card",
     (_l, provider, raw, cause) => {
-      const actions = pinnedOn(provider).errorActionsFor(raw).actions ?? [];
+      const actions = pinned(provider, raw);
 
       expect(actions).toContainEqual({
         type: "own-key-unavailable",
@@ -764,29 +762,39 @@ describe("a quota on the user's own key", () => {
     );
   });
 
-  it("the router's spent free allowance offers the free-pool card", () => {
-    const router = pinnedOn("openrouter");
-    router.openLlmActive = true;
-    const actions =
-      router.errorActionsFor("429: Rate limit exceeded: free-models-per-day.")
-        .actions ?? [];
-
-    expect(actions).toContainEqual({ type: "free-pool-out", cause: "busy" });
-    expect(actions.some((action) => action.type === "upgrade-abacus")).toBe(
-      false
+  it("names the provider when the pool's own key spent its free allowance", () => {
+    const raw = "429: Rate limit exceeded: free-models-per-day.";
+    const shown = presentFailure(
+      {
+        cause: classifyAttempt(raw, "openrouter"),
+        provider: "openrouter",
+        raw,
+      },
+      {
+        routed: true,
+        freeLaneProviders: [],
+        onFreeLane: false,
+        abacusFreeModels: [],
+      }
     );
+
+    expect(shown.cause).toBe("own_key_quota");
+    expect(shown.message).toBe(
+      "Your Openrouter key hit its quota. Switch to a different model, or check the key's plan."
+    );
+    expect(shown.actions).toEqual([
+      { type: "switch-model" },
+      { type: "fix-key", provider: "openrouter" },
+    ]);
   });
 
   it("an Abacus-served turn past the free window carries the cause", () => {
-    const actions =
-      pinnedOn("abacus").errorActionsFor(
-        "429: Your free AbacusAI credits have expired, so you have no remaining credits to use the API."
-      ).actions ?? [];
+    const actions = pinned(
+      "abacus",
+      "429: Your free AbacusAI credits have expired, so you have no remaining credits to use the API."
+    );
 
-    expect(actions[0]).toMatchObject({
-      type: "upgrade-abacus",
-      cause: "expired",
-    });
+    expect(actions[0]).toEqual({ type: "upgrade-abacus", cause: "expired" });
   });
 });
 

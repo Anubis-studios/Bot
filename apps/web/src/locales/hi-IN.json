@@ -4215,5 +4215,66 @@
     "outOfCredit": "Your {{provider}} key is out of credit",
     "paidBody": "Use it in AbacusAI Agent on the web: the top models are included in your plan.",
     "rateLimited": "Your {{provider}} key hit its rate limit"
+  },
+  "outcome": {
+    "wall": {
+      "title": "Your free credits are used up",
+      "expiredTitle": "Your free credits have expired",
+      "paidTitle": "You've used this month's credits",
+      "renews": "Free credits renew every month.",
+      "balance": "{{remaining}} of {{granted}} credits left",
+      "warning": "To keep going now, the bot would switch to free models from a different provider ({{providers}}). They're much lower quality: more mistakes, can break working code, and often hit rate limits.",
+      "offer": "Upgrade to {{plan}} — {{price}}",
+      "upgradeCta": "Upgrade to {{plan}}",
+      "continueFree": "Continue with free models (lower quality)"
+    },
+    "plan": {
+      "introPrice": "{{first}} your first month, then {{monthly}}/month",
+      "monthlyPrice": "{{monthly}}/month"
+    },
+    "freeChip": "Free model · {{provider}}",
+    "freeChipAny": "another provider",
+    "freeChipUpgrade": "Upgrade for top models",
+    "connection": {
+      "title": "Connection problem",
+      "body": "Check your internet connection, VPN, or proxy and try again."
+    },
+    "cause": {
+      "context_too_long": "This conversation is too long for the model. Start a new chat, or pick a model with a larger context.",
+      "key_invalid": "{{provider}} refused the key. Check it in Settings → Models.",
+      "own_key_quota": "Your {{provider}} key hit its quota. Switch to a different model, or check the key's plan.",
+      "model_unavailable": "This model couldn't take the request. Pick a different model.",
+      "free_pool_spent": "Every free source is used up for now. Connect another free source, or pick a different model.",
+      "rate_limited": "The free models are busy right now. Try again in a few minutes, or switch to a different model.",
+      "empty": "The model returned an empty reply. Try again, or switch to a different model.",
+      "unknown": "The model couldn't finish this. Try again, or switch to a different model."
+    },
+    "action": {
+      "newChat": "New chat",
+      "fixKey": "Check the key",
+      "viewDetails": "View details",
+      "tryAgain": "Try again"
+    },
+    "channel": {
+      "wall": "I've paused because your free credits are used up.",
+      "expired": "I've paused because your free credits have expired.",
+      "renews": "Free credits renew every month.",
+      "offer": "{{plan}} is {{price}} and gives you:",
+      "link": "Upgrade here: {{link}}",
+      "repeat": "Still paused: {{link}}",
+      "paidOut": "I've paused because this month's credits are used up. Add credits to keep going: {{link}}",
+      "ownKeyCredit": "Your {{provider}} key is out of credit.",
+      "ownKeyRateLimit": "Your {{provider}} key hit its rate limit.",
+      "ownKeyDown": "{{provider}} isn't responding right now.",
+      "ownKeyOffer": "Use any model on AbacusAI instead: {{link}}",
+      "ownKeyWeb": "Use it in AbacusAI Agent on the web: {{link}}",
+      "busy": "The free models are busy right now.",
+      "connection": "The connection dropped, so I couldn't finish that. Please try again in a moment.",
+      "notSignedIn": "The desktop app is not signed in to Abacus.AI right now. Open the app and sign in, then message me again.",
+      "generic": "Something went wrong on my side, so I couldn't finish that. Please try again in a moment.",
+      "contactFailed": "I couldn't reply to {{name}} just now.",
+      "contactFailedGeneric": "I couldn't reply to {{name}} just now: something went wrong on my side.",
+      "someone": "someone"
+    }
   }
 }

@@ -1,3 +1,4 @@
+import { OPENLLM_ID } from "@abacus-ai/contract/models";
 import { afterEach, expect, it, vi } from "vitest";
 
 import type { Transport } from "#renderer/data/transport";
@@ -37,7 +38,7 @@ it("waits for the confirmed live model before permitting a dead-turn replay", as
   const state = vi
     .fn()
     .mockResolvedValueOnce({ status: "running", model: "old/model" })
-    .mockResolvedValue({ status: "running", model: "abacus/openllm" });
+    .mockResolvedValue({ status: "running", model: OPENLLM_ID });
   const transport = { client: { agent: { state } } } as unknown as Transport;
   let confirmed = false;
   const pending = confirmFreePoolModel(transport, scope).then(() => {

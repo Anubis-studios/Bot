@@ -1,6 +1,13 @@
+import type { PrefsRow } from "@abacus-ai/contract/contract/rows";
 import type { RoutineRunItem } from "@abacus-ai/contract/contracts";
 import { describe, expect, it } from "vitest";
 
+import {
+  creditWallOf,
+  wallAfterAccountRead,
+  wallAfterError,
+  wallMoved,
+} from "../providers/credit-wall";
 import {
   consecutiveFailures,
   hasRunInFlight,
@@ -135,5 +142,67 @@ describe("a run the network let down", () => {
         run("completed"),
       ])
     ).toBe(2);
+  });
+});
+
+describe("the credit wall a routine meets", () => {
+  const row = (patch: Partial<PrefsRow> = {}): PrefsRow =>
+    ({
+      id: "app",
+      creditsExhaustedAt: null,
+      freeLaneChosenAt: null,
+      ...patch,
+    }) as PrefsRow;
+  const WALL = { actions: [{ type: "upgrade-abacus", cause: "exhausted" }] };
+  const DAY = 24 * 60 * 60_000;
+
+  it("is stamped for the next launch's card whoever met it, a routine with nobody watching included", () => {
+    expect(wallAfterError(row(), WALL, 5_000)).toEqual({
+      creditsExhaustedAt: 5_000,
+      freeLaneChosenAt: null,
+    });
+    // The first refusal of the day stands; other failures stamp nothing.
+    expect(
+      wallAfterError(row({ creditsExhaustedAt: 1_000 }), WALL, 5_000)
+    ).toBeNull();
+    expect(
+      wallAfterError(row(), { actions: [{ type: "switch-model" }] }, 5_000)
+    ).toBeNull();
+    // A day on, it is a new wall, and the choice is asked for again.
+    expect(
+      wallAfterError(
+        row({ creditsExhaustedAt: 1_000, freeLaneChosenAt: 1_000 }),
+        WALL,
+        1_000 + DAY
+      )
+    ).toEqual({ creditsExhaustedAt: 1_000 + DAY, freeLaneChosenAt: null });
+  });
+
+  it("lifts once a fresh account read shows credits again", () => {
+    const wall = row({ creditsExhaustedAt: 1_000, freeLaneChosenAt: 2_000 });
+    const read = (remaining: number, at: number) => ({
+      remaining,
+      granted: 2000,
+      at,
+    });
+    expect(wallAfterAccountRead(wall, read(0, 1_000 + DAY))).toBeNull();
+    // Too soon after the wall: the platform's cached account can lag.
+    expect(wallAfterAccountRead(wall, read(500, 2_000))).toBeNull();
+    expect(wallAfterAccountRead(wall, read(500, 1_000 + 10 * 60_000))).toEqual({
+      creditsExhaustedAt: null,
+      freeLaneChosenAt: null,
+    });
+  });
+
+  it("tells every agent when it moves, and only then", () => {
+    expect(wallMoved(row({ creditsExhaustedAt: 1 }), row())).toBe(true);
+    expect(wallMoved(row({ freeLaneChosenAt: 2 }), row())).toBe(true);
+    expect(
+      wallMoved(row({ creditsExhaustedAt: 1 }), row({ creditsExhaustedAt: 1 }))
+    ).toBe(false);
+    expect(creditWallOf(row({ creditsExhaustedAt: 1 }))).toEqual({
+      exhaustedAt: 1,
+      freeLaneChosenAt: null,
+    });
   });
 });

@@ -4215,5 +4215,66 @@
     "outOfCredit": "Your {{provider}} key is out of credit",
     "paidBody": "Use it in AbacusAI Agent on the web: the top models are included in your plan.",
     "rateLimited": "Your {{provider}} key hit its rate limit"
+  },
+  "outcome": {
+    "wall": {
+      "title": "無料クレジットを使い切りました",
+      "expiredTitle": "無料クレジットの有効期限が切れました",
+      "paidTitle": "今月のクレジットを使い切りました",
+      "renews": "無料クレジットは毎月更新されます。",
+      "balance": "残り {{remaining}} / {{granted}} クレジット",
+      "warning": "このまま続けると、ボットは別のプロバイダー（{{providers}}）の無料モデルに切り替わります。品質はかなり低く、ミスが増え、動いているコードを壊すことがあり、利用制限にもよく達します。",
+      "offer": "{{plan}} にアップグレード — {{price}}",
+      "upgradeCta": "{{plan}} にアップグレード",
+      "continueFree": "無料モデルで続ける（品質は低め）"
+    },
+    "plan": {
+      "introPrice": "初月 {{first}}、以降 {{monthly}}/月",
+      "monthlyPrice": "{{monthly}}/月"
+    },
+    "freeChip": "無料モデル · {{provider}}",
+    "freeChipAny": "別のプロバイダー",
+    "freeChipUpgrade": "トップモデルにアップグレード",
+    "connection": {
+      "title": "接続の問題",
+      "body": "インターネット接続、VPN、プロキシを確認して、もう一度お試しください。"
+    },
+    "cause": {
+      "context_too_long": "この会話はモデルには長すぎます。新しいチャットを始めるか、より大きなコンテキストのモデルを選んでください。",
+      "key_invalid": "{{provider}} がキーを拒否しました。設定 → モデル で確認してください。",
+      "own_key_quota": "{{provider}} のキーが上限に達しました。別のモデルに切り替えるか、キーのプランを確認してください。",
+      "model_unavailable": "このモデルはリクエストを受け付けられませんでした。別のモデルを選んでください。",
+      "free_pool_spent": "無料のソースは今のところすべて使い切りました。別の無料ソースを接続するか、別のモデルを選んでください。",
+      "rate_limited": "無料モデルは現在混み合っています。数分後にもう一度試すか、別のモデルに切り替えてください。",
+      "empty": "モデルから空の返信が返されました。もう一度試すか、別のモデルに切り替えてください。",
+      "unknown": "モデルはこれを完了できませんでした。もう一度試すか、別のモデルに切り替えてください。"
+    },
+    "action": {
+      "newChat": "新しいチャット",
+      "fixKey": "キーを確認",
+      "viewDetails": "詳細を表示",
+      "tryAgain": "再試行"
+    },
+    "channel": {
+      "wall": "無料クレジットを使い切ったため、一時停止しました。",
+      "expired": "無料クレジットの有効期限が切れたため、一時停止しました。",
+      "renews": "無料クレジットは毎月更新されます。",
+      "offer": "{{plan}} は {{price}} で、次のものが使えます:",
+      "link": "アップグレードはこちら: {{link}}",
+      "repeat": "一時停止中です: {{link}}",
+      "paidOut": "今月のクレジットを使い切ったため、一時停止しました。続けるにはクレジットを追加してください: {{link}}",
+      "ownKeyCredit": "{{provider}} のキーの残高がなくなりました。",
+      "ownKeyRateLimit": "{{provider}} のキーが利用制限に達しました。",
+      "ownKeyDown": "{{provider}} は現在応答していません。",
+      "ownKeyOffer": "代わりに AbacusAI のモデルを使えます: {{link}}",
+      "ownKeyWeb": "Web 版 AbacusAI Agent で使えます: {{link}}",
+      "busy": "無料モデルは現在混み合っています。",
+      "connection": "接続が切れたため、完了できませんでした。少し待ってからもう一度お試しください。",
+      "notSignedIn": "デスクトップアプリが現在 Abacus.AI にサインインしていません。アプリを開いてサインインし、もう一度メッセージを送ってください。",
+      "generic": "こちらで問題が起きたため、完了できませんでした。少し待ってからもう一度お試しください。",
+      "contactFailed": "先ほど {{name}} さんに返信できませんでした。",
+      "contactFailedGeneric": "先ほど {{name}} さんに返信できませんでした: こちらで問題が起きました。",
+      "someone": "相手"
+    }
   }
 }

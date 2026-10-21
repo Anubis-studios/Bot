@@ -11,6 +11,10 @@ export type TurnUsage = {
   cacheWrite: number;
   requests: number;
   model: string | null;
+  /** The turn ran on the free models the user chose at the credit wall. */
+  lane?: "free";
+  /** The free lane's provider that answered. */
+  provider?: string;
 };
 
 type UsageLike = {

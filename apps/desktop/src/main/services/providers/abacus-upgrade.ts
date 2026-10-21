@@ -1,19 +1,36 @@
+import type { BillingPlan } from "@abacus-ai/contract/billing-plan";
+
 import { credentialFor } from "../config/settings";
 import { abacusApiCall } from "./abacus-connector-service";
+import { abacusAppHost } from "./abacus-host";
 
 /**
  * The account's own upgrade page: a one-time link the platform binds to the
  * signed-in user, live for 30 minutes (asking again while it is live returns
  * the same one). Null when the account has no upgrade offer, such as a paid
- * plan, when signed out, or when the call fails.
+ * plan, or when signed out; the bot's own upgrade page when the call fails.
  */
+
+/**
+ * The bot's own upgrade page on the app host: it signs the user in and makes
+ * their checkout itself. What every surface falls back to when no one-time
+ * link could be minted (offline, a slow proxy), never the chat product's
+ * plans page.
+ */
+export const botUpgradePage = (src: "app" | "channel"): string => {
+  const url = new URL("/bot/link/upgrade", abacusAppHost());
+  url.searchParams.set("src", src);
+  return url.toString();
+};
 
 /** Well inside the link's life, so a cached link is never a dead one. */
 const UPGRADE_URL_TTL_MS = 60_000;
 
 let cached: { key: string; url: string | null; at: number } | null = null;
 
-export const fetchUpgradeUrl = async (): Promise<string | null> => {
+export const fetchUpgradeUrl = async (
+  src: "app" | "channel" = "app"
+): Promise<string | null> => {
   const key = credentialFor("ABACUS_API_KEY");
   if (key.length === 0) return null;
   if (
@@ -26,7 +43,9 @@ export const fetchUpgradeUrl = async (): Promise<string | null> => {
     "_createAbacusbotUpgradeLink",
     "GET"
   );
-  if (!ok) return null;
+  // Offline or refused: the bot's own page, never no link at all. Not
+  // cached, so the next ask mints again once the network is back.
+  if (!ok) return botUpgradePage(src);
   const url =
     result != null && typeof result === "object"
       ? (result as Record<string, unknown>).url
@@ -36,33 +55,6 @@ export const fetchUpgradeUrl = async (): Promise<string | null> => {
   cached = { key, url: link, at: Date.now() };
   return link;
 };
-
-/** A plan the account could be on: its price, monthly credits and what it gives. */
-export interface BillingPlanTier {
-  plan: string;
-  planName: string;
-  priceText: string;
-  /** The first month's price and the monthly one, and what the first month is off (absent from older servers). */
-  firstMonthPriceCents?: number;
-  priceCents?: number;
-  percentOff?: number;
-  features: string[];
-}
-
-/** The account's plan, credits and ways up, as the platform reads them live. */
-export interface BillingPlan {
-  current: {
-    planName: string;
-    creditsRemaining: number | null;
-    creditsGranted: number | null;
-    freeTierExpiresAt: string | null;
-  };
-  plans: (BillingPlanTier & { creditsPerMonth: number; current: boolean })[];
-  /** Each with the link to it, or null when it is bought in the mobile app. */
-  upgrades: (BillingPlanTier & { url: string | null })[];
-  topUpUrl: string | null;
-  upgradeInMobileApp: boolean;
-}
 
 /**
  * The signed-in account's plan, credits and upgrade paths: with `upgrade`, a

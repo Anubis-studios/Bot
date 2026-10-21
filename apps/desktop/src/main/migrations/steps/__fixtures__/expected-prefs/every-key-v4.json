@@ -27,6 +27,7 @@
       "dismissals.routinesMissedSeenAt": "legacy",
       "dismissals.upsell": "legacy",
       "dismissals.whatsappIntroAt": "legacy",
+      "freeLaneChosenAt": "default",
       "keymap": "default",
       "language": "legacy",
       "lastPickedWorkspaceId": "legacy",
@@ -90,6 +91,7 @@
         "upsell": true,
         "whatsappIntroAt": null
       },
+      "freeLaneChosenAt": null,
       "id": "app",
       "keymap": {},
       "language": "de-DE",

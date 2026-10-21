@@ -34,10 +34,32 @@ export interface RunOutcomeRecord {
   /** The run's parent tool calls (children count inside their card). */
   steps: number;
   usage?: RunTokenUsage;
+  /** The run answered on the free models chosen at the credit wall. */
+  freeLane?: { provider: string | null };
   error?: AgentErrorPayload & { code?: string };
   /** The last transcript message at the terminal; null for an empty thread. */
   afterMessageId: string | null;
 }
+
+/**
+ * Whether a finished run answered on the free lane, read off its terminal's
+ * `metadata.abacus.turnUsage` (the agent's TurnUsage), for every place that
+ * folds terminals into outcomes.
+ */
+export const freeLaneOf = (
+  metadata: unknown
+): RunOutcomeRecord["freeLane"] | undefined => {
+  const usage = (
+    metadata as
+      | { abacus?: { turnUsage?: { lane?: unknown; provider?: unknown } } }
+      | null
+      | undefined
+  )?.abacus?.turnUsage;
+  if (usage?.lane !== "free") return undefined;
+  return {
+    provider: typeof usage.provider === "string" ? usage.provider : null,
+  };
+};
 
 /** The run in flight at the checkpoint. */
 export interface AiActiveRun {

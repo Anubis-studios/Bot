@@ -46,6 +46,8 @@ export default defineConfig({
     "src/user-text.ts",
     // How a path is spelled for the model; main and the renderer show it paths.
     "src/model-path.ts",
+    // The language the user wants replies in, for the chat apps' fixed lines.
+    "src/user-language.ts",
     // The phone reply's bubble split, for the hosted app's WhatsApp lane.
     "src/phone/phone-bubbles.ts",
     // The phone loop's zone, check-in language and due loops, for its agenda.

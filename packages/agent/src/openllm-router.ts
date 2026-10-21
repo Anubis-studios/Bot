@@ -11,6 +11,12 @@
  */
 import type { ModelRegistry } from "@earendil-works/pi-coding-agent";
 
+import {
+  creditWallActive,
+  freeLaneChosen,
+  noteCreditsBack,
+  noteCreditWall,
+} from "./credit-wall.js";
 import { type CooldownStore, fileCooldownStore } from "./openllm-cooldowns.js";
 import { classifyFailure, type NetworkEvidence } from "./openllm-failures.js";
 import {
@@ -20,6 +26,11 @@ import {
 } from "./openllm-quota.js";
 import { OpenLlmRotation, openLlmCandidates } from "./openllm.js";
 import { listModels, type ModelChoice } from "./providers.js";
+import {
+  TurnChain,
+  type FailureContext,
+  type TurnFailure,
+} from "./turn-outcome.js";
 
 /** A model as the pool names it: provider and id. */
 export interface RunningModel {
@@ -29,6 +40,9 @@ export interface RunningModel {
 
 /** What a failure moves the pool to: the next model, a wait for the network, or nothing. */
 export type RouterStep = { nextId: string } | { network: true } | null;
+
+/** The desktop's own models; see openllm.ts. */
+const LOCAL_PROVIDER = "local";
 
 export const OPENLLM_CONTINUATION_TYPE = "abacusai-bot:openllm-rotation";
 
@@ -48,6 +62,12 @@ export class OpenLlmRouter {
   private readonly failedThisTurn = new Set<string>();
 
   private readonly quota: QuotaLedger;
+
+  /** Every call this turn made and how it ended; see turn-outcome.ts. */
+  readonly chain = new TurnChain();
+
+  /** The credit refusal this router last met, for a turn the wall stops at once. */
+  private lastWall: TurnFailure | null = null;
 
   constructor(
     private readonly now: () => number = Date.now,
@@ -90,21 +110,96 @@ export class OpenLlmRouter {
   /** A new turn: the same model failing again is news again. */
   beginTurn(): void {
     this.failedThisTurn.clear();
+    this.chain.begin();
+  }
+
+  /**
+   * The models the pool may run now. At the credit wall that is Abacus alone
+   * until the user chooses the free models: nobody is moved onto a weaker
+   * model without having seen why. The free lane is the hosted free sources;
+   * a model on this computer is never part of it.
+   */
+  private candidates(registry: ModelRegistry): ModelChoice[] {
+    const all = openLlmCandidates(listModels(registry));
+    const now = this.now();
+    if (!creditWallActive(now)) return all;
+    return freeLaneChosen(now)
+      ? all.filter((choice) => choice.provider !== LOCAL_PROVIDER)
+      : all.filter((choice) => choice.provider === "abacus");
   }
 
   /** The best model not cooling down, or none when the pool is empty. */
   pick(registry: ModelRegistry): ModelChoice | undefined {
-    return this.rotation.pick(openLlmCandidates(listModels(registry)));
+    return this.rotation.pick(this.candidates(registry));
   }
 
   /** Every model the pool has is in a class the account refused: only a new source opens it. */
   poolShut(registry: ModelRegistry): boolean {
-    return this.rotation.poolShut(openLlmCandidates(listModels(registry)));
+    return this.rotation.poolShut(this.candidates(registry));
+  }
+
+  /**
+   * The hosted free sources the free lane would run on, in the pool's order:
+   * what the wall's card names, and empty when there is nothing to go on to.
+   */
+  freeLaneProviders(registry: ModelRegistry): string[] {
+    const providers = openLlmCandidates(listModels(registry))
+      .map((choice) => choice.provider)
+      .filter(
+        (provider) => provider !== "abacus" && provider !== LOCAL_PROVIDER
+      );
+    return [...new Set(providers)];
+  }
+
+  /**
+   * The credit wall stops this turn before any call: the credits are out,
+   * the free lane is not chosen, and Abacus is sitting out. The refusal it
+   * stands on, else null.
+   */
+  wallStops(registry: ModelRegistry): TurnFailure | null {
+    const now = this.now();
+    if (!creditWallActive(now) || freeLaneChosen(now)) return null;
+    if (!this.rotation.poolShut(this.candidates(registry))) return null;
+    return (
+      this.lastWall ?? {
+        cause: "credits_exhausted",
+        provider: "abacus",
+        raw: "",
+      }
+    );
+  }
+
+  /** What presentFailure needs to offer a way on; see FailureContext. */
+  failureContext(
+    registry: ModelRegistry,
+    routed: boolean,
+    provider: string | undefined
+  ): FailureContext {
+    return {
+      routed,
+      freeLaneProviders: this.freeLaneProviders(registry),
+      onFreeLane: routed && this.onFreeLane(provider),
+      abacusFreeModels: listModels(registry)
+        .filter((choice) => choice.provider === "abacus" && choice.free)
+        .map((choice) => ({ model: choice.id, label: choice.label })),
+    };
+  }
+
+  /** Whether the turn now running is on the free lane the user chose. */
+  onFreeLane(provider: string | undefined): boolean {
+    return provider !== "abacus" && freeLaneChosen(this.now());
   }
 
   /** The model answered, so it starts from a clean sheet. */
   succeeded(id: string): void {
     this.rotation.markSucceeded(id);
+    const provider = id.split("/")[0];
+    this.chain.answered(provider);
+    // Abacus answering is the credits being back.
+    if (provider === "abacus") {
+      noteCreditsBack();
+      this.lastWall = null;
+    }
   }
 
   /**
@@ -133,6 +228,12 @@ export class OpenLlmRouter {
 
     if (verdict.network === true) return { network: true };
 
+    const cause = this.chain.failed(failure, current?.provider);
+    if (cause === "credits_exhausted" || cause === "credits_expired") {
+      noteCreditWall(this.now());
+      this.lastWall = { cause, provider: current?.provider, raw: failure };
+    }
+
     if (currentId != null) {
       this.rotation.markFailed(currentId, verdict.cooldownMs);
       this.failedThisTurn.add(currentId);
@@ -142,7 +243,7 @@ export class OpenLlmRouter {
       this.rotation.markScopeFailed(verdict.scope, verdict.scopeMs);
 
     const next = this.rotation.pick(
-      openLlmCandidates(listModels(registry)),
+      this.candidates(registry),
       this.failedThisTurn
     );
 
@@ -157,7 +258,7 @@ export class OpenLlmRouter {
   soonestReady(
     registry: ModelRegistry
   ): { nextId: string; readyInMs: number } | null {
-    const candidates = openLlmCandidates(listModels(registry));
+    const candidates = this.candidates(registry);
     if (this.rotation.poolShut(candidates)) return null;
     const soonest = this.rotation.soonest(candidates);
     if (soonest == null) return null;

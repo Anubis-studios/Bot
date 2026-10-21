@@ -4215,5 +4215,66 @@
     "outOfCredit": "{{provider}} anahtarının kredisi bitti",
     "paidBody": "Web’de AbacusAI Agent’ta kullan: en iyi modeller planına dahil.",
     "rateLimited": "{{provider}} anahtarın hız sınırına ulaştı"
+  },
+  "outcome": {
+    "wall": {
+      "title": "Ücretsiz kredilerin bitti",
+      "expiredTitle": "Ücretsiz kredilerinin süresi doldu",
+      "paidTitle": "Bu ayın kredilerini kullandın",
+      "renews": "Ücretsiz krediler her ay yenilenir.",
+      "balance": "{{granted}} krediden {{remaining}} kaldı",
+      "warning": "Şimdi devam etmek için bot, başka bir sağlayıcının ({{providers}}) ücretsiz modellerine geçer. Bunlar çok daha düşük kalitededir: daha çok hata yapar, çalışan kodu bozabilir ve sık sık kullanım sınırına takılır.",
+      "offer": "{{plan}} planına geç — {{price}}",
+      "upgradeCta": "{{plan}} planına geç",
+      "continueFree": "Ücretsiz modellerle devam et (daha düşük kalite)"
+    },
+    "plan": {
+      "introPrice": "İlk ay {{first}}, sonra aylık {{monthly}}",
+      "monthlyPrice": "Aylık {{monthly}}"
+    },
+    "freeChip": "Ücretsiz model · {{provider}}",
+    "freeChipAny": "başka bir sağlayıcı",
+    "freeChipUpgrade": "En iyi modeller için yükselt",
+    "connection": {
+      "title": "Bağlantı sorunu",
+      "body": "İnternet bağlantını, VPN'ini veya proxy'ni kontrol edip tekrar dene."
+    },
+    "cause": {
+      "context_too_long": "Bu konuşma model için çok uzun. Yeni bir sohbet başlat veya daha geniş bağlamlı bir model seç.",
+      "key_invalid": "{{provider}} anahtarı reddetti. Ayarlar → Modeller bölümünden kontrol et.",
+      "own_key_quota": "{{provider}} anahtarın kotasını doldurdu. Başka bir modele geç veya anahtarın planını kontrol et.",
+      "model_unavailable": "Bu model isteği kabul edemedi. Başka bir model seç.",
+      "free_pool_spent": "Şimdilik tüm ücretsiz kaynaklar tükendi. Başka bir ücretsiz kaynak bağla veya başka bir model seç.",
+      "rate_limited": "Ücretsiz modeller şu anda yoğun. Birkaç dakika sonra tekrar dene veya başka bir modele geç.",
+      "empty": "Model boş bir yanıt döndürdü. Tekrar dene veya başka bir modele geç.",
+      "unknown": "Model bunu tamamlayamadı. Tekrar dene veya başka bir modele geç."
+    },
+    "action": {
+      "newChat": "Yeni sohbet",
+      "fixKey": "Anahtarı kontrol et",
+      "viewDetails": "Ayrıntıları göster",
+      "tryAgain": "Tekrar dene"
+    },
+    "channel": {
+      "wall": "Ücretsiz kredilerin bittiği için durakladım.",
+      "expired": "Ücretsiz kredilerinin süresi dolduğu için durakladım.",
+      "renews": "Ücretsiz krediler her ay yenilenir.",
+      "offer": "{{plan}} planı {{price}} ve sana şunları sunar:",
+      "link": "Buradan yükselt: {{link}}",
+      "repeat": "Hâlâ duraklatıldı: {{link}}",
+      "paidOut": "Bu ayın kredileri bittiği için durakladım. Devam etmek için kredi ekle: {{link}}",
+      "ownKeyCredit": "{{provider}} anahtarının bakiyesi bitti.",
+      "ownKeyRateLimit": "{{provider}} anahtarın kullanım sınırına ulaştı.",
+      "ownKeyDown": "{{provider}} şu anda yanıt vermiyor.",
+      "ownKeyOffer": "Bunun yerine AbacusAI'daki herhangi bir modeli kullan: {{link}}",
+      "ownKeyWeb": "Web'deki AbacusAI Agent'ta kullan: {{link}}",
+      "busy": "Ücretsiz modeller şu anda yoğun.",
+      "connection": "Bağlantı koptuğu için bunu bitiremedim. Lütfen birazdan tekrar dene.",
+      "notSignedIn": "Masaüstü uygulaması şu anda Abacus.AI'da oturum açmış değil. Uygulamayı açıp oturum aç, sonra bana tekrar yaz.",
+      "generic": "Benim tarafımda bir sorun oldu, bu yüzden bunu bitiremedim. Lütfen birazdan tekrar dene.",
+      "contactFailed": "Az önce {{name}} kişisine yanıt veremedim.",
+      "contactFailedGeneric": "Az önce {{name}} kişisine yanıt veremedim: benim tarafımda bir sorun oldu.",
+      "someone": "birisi"
+    }
   }
 }

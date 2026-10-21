@@ -18,6 +18,7 @@ import {
   setHostConnectivity,
 } from "../connectivity.js";
 import { setHostCreditBalance } from "../credit-balance.js";
+import { setHostCreditWall } from "../credit-wall.js";
 import { tagEvent } from "../event-meta.js";
 import {
   AgentStatus,
@@ -294,6 +295,11 @@ export class HostCore {
 
       case "credit_balance":
         setHostCreditBalance(command);
+
+        return;
+
+      case "credit_wall":
+        setHostCreditWall(command);
 
         return;
 

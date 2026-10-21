@@ -13,6 +13,9 @@ export const accountRouter = impl.account.router({
   upgradeUrl: impl.account.upgradeUrl.handler(({ context }) =>
     context.deps.host.getUpgradeUrl()
   ),
+  billingPlan: impl.account.billingPlan.handler(({ context }) =>
+    context.deps.host.getBillingPlan()
+  ),
   state: impl.account.state.handler(({ context }) =>
     context.deps.app.account.get()
   ),

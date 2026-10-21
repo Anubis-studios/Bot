@@ -1,3 +1,4 @@
+import { freeLaneOf } from "@abacus-ai/contract/contract/ai-thread";
 /**
  * The thread store's reducer (spec 02 §4.2), pure. `applyEvent` runs in the
  * dispatcher just before a chunk is yielded to the client ("pre-apply");
@@ -488,6 +489,7 @@ export const recordTerminal = (
     message?: string;
     metadata?: { abacus?: { error?: Loose } };
   };
+  const freeLane = freeLaneOf(typed.metadata);
   const kind: RunOutcomeRecord["kind"] =
     event.type === "RUN_ERROR"
       ? "error"
@@ -505,6 +507,7 @@ export const recordTerminal = (
     ...(Array.isArray(typed.usage) && typed.usage[0] != null
       ? { usage: typed.usage[0] }
       : {}),
+    ...(freeLane != null ? { freeLane } : {}),
     ...(kind === "error"
       ? {
           error: {

@@ -46,7 +46,10 @@ import {
   sendReferralEmailInvites,
   sendReferralWhatsappInvites,
 } from "./services/providers/abacus-referral-service";
-import { fetchUpgradeUrl } from "./services/providers/abacus-upgrade";
+import {
+  fetchBillingPlan,
+  fetchUpgradeUrl,
+} from "./services/providers/abacus-upgrade";
 import {
   adoptWebAccount,
   signOut as clearLocalAccount,
@@ -448,6 +451,7 @@ export const createHostOperations = (
     getUsageSnapshot: () => getUsageSnapshot(),
     getVaultManageUrl: () => serviceHost.vaultManageUrl(),
     getUpgradeUrl: () => fetchUpgradeUrl(),
+    getBillingPlan: () => fetchBillingPlan(false),
     readSettings: () => readSettings(),
     readPromptHistory: (scope: string) => readPromptHistory(scope),
     addPromptToHistory: (scope: string, prompt: string) =>

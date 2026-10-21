@@ -96,7 +96,7 @@ export const useSessionComposerModel = (
   return {
     onResumeOnFreePool: async () => {
       if (!row) return;
-      await setSessionModel(db, transport.client, row, "abacus/openllm");
+      await setSessionModel(db, transport.client, row, OPENLLM_ID);
       if (row.status === "running")
         await confirmFreePoolModel(transport, {
           workspaceId: row.workspaceId,

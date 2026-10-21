@@ -2,6 +2,7 @@ import { type } from "@orpc/contract";
 import * as v from "valibot";
 
 import type { AccountState } from "../account";
+import type { BillingPlan } from "../billing-plan";
 import type { AbacusAccountInfo, UsageSnapshot } from "../contracts";
 import { mutation, query } from "./base";
 import { NoInput } from "./ids";
@@ -16,6 +17,11 @@ export const account = {
   vaultUrl: query.input(NoInput).output(type<string | null>()),
   /** The account's own one-time upgrade page; null without an upgrade offer (or signed out). */
   upgradeUrl: query.input(NoInput).output(type<string | null>()),
+  /**
+   * The account's plan, credits and upgrades as the platform reads them now,
+   * for the credit wall's card; null signed out or when the call fails.
+   */
+  billingPlan: query.input(NoInput).output(type<BillingPlan | null>()),
   /** The optional local account (name and email). */
   state: query.input(NoInput).output(type<AccountState>()),
   skipOnboarding: mutation.input(NoInput).output(type<AccountState>()),

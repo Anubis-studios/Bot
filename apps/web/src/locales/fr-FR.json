@@ -4215,5 +4215,66 @@
     "outOfCredit": "Your {{provider}} key is out of credit",
     "paidBody": "Use it in AbacusAI Agent on the web: the top models are included in your plan.",
     "rateLimited": "Your {{provider}} key hit its rate limit"
+  },
+  "outcome": {
+    "wall": {
+      "title": "Vos crédits gratuits sont épuisés",
+      "expiredTitle": "Vos crédits gratuits ont expiré",
+      "paidTitle": "Vous avez utilisé les crédits de ce mois-ci",
+      "renews": "Les crédits gratuits se renouvellent chaque mois.",
+      "balance": "Il vous reste {{remaining}} crédits sur {{granted}}",
+      "warning": "Pour continuer maintenant, le bot passerait à des modèles gratuits d'un autre fournisseur ({{providers}}). Ils sont de bien moindre qualité : plus d'erreurs, ils peuvent casser du code qui fonctionne et atteignent souvent leurs limites d'utilisation.",
+      "offer": "Passez à {{plan}} — {{price}}",
+      "upgradeCta": "Passer à {{plan}}",
+      "continueFree": "Continuer avec les modèles gratuits (qualité moindre)"
+    },
+    "plan": {
+      "introPrice": "{{first}} le premier mois, puis {{monthly}}/mois",
+      "monthlyPrice": "{{monthly}}/mois"
+    },
+    "freeChip": "Modèle gratuit · {{provider}}",
+    "freeChipAny": "un autre fournisseur",
+    "freeChipUpgrade": "Passer aux meilleurs modèles",
+    "connection": {
+      "title": "Problème de connexion",
+      "body": "Vérifiez votre connexion internet, votre VPN ou votre proxy, puis réessayez."
+    },
+    "cause": {
+      "context_too_long": "Cette conversation est trop longue pour le modèle. Commencez une nouvelle discussion ou choisissez un modèle avec un contexte plus grand.",
+      "key_invalid": "{{provider}} a refusé la clé. Vérifiez-la dans Paramètres → Modèles.",
+      "own_key_quota": "Votre clé {{provider}} a atteint son quota. Passez à un autre modèle ou vérifiez l'offre de la clé.",
+      "model_unavailable": "Ce modèle n'a pas pu accepter la demande. Choisissez un autre modèle.",
+      "free_pool_spent": "Toutes les sources gratuites sont épuisées pour le moment. Connectez une autre source gratuite ou choisissez un autre modèle.",
+      "rate_limited": "Les modèles gratuits sont occupés en ce moment. Réessayez dans quelques minutes ou passez à un autre modèle.",
+      "empty": "Le modèle a renvoyé une réponse vide. Réessayez ou passez à un autre modèle.",
+      "unknown": "Le modèle n'a pas pu terminer. Réessayez ou passez à un autre modèle."
+    },
+    "action": {
+      "newChat": "Nouvelle discussion",
+      "fixKey": "Vérifier la clé",
+      "viewDetails": "Voir les détails",
+      "tryAgain": "Réessayer"
+    },
+    "channel": {
+      "wall": "Je me suis mis en pause car vos crédits gratuits sont épuisés.",
+      "expired": "Je me suis mis en pause car vos crédits gratuits ont expiré.",
+      "renews": "Les crédits gratuits se renouvellent chaque mois.",
+      "offer": "{{plan}} coûte {{price}} et vous offre :",
+      "link": "Passez à l'offre supérieure ici : {{link}}",
+      "repeat": "Toujours en pause : {{link}}",
+      "paidOut": "Je me suis mis en pause car les crédits de ce mois-ci sont épuisés. Ajoutez des crédits pour continuer : {{link}}",
+      "ownKeyCredit": "Votre clé {{provider}} n'a plus de crédit.",
+      "ownKeyRateLimit": "Votre clé {{provider}} a atteint sa limite d'utilisation.",
+      "ownKeyDown": "{{provider}} ne répond pas en ce moment.",
+      "ownKeyOffer": "Utilisez plutôt n'importe quel modèle sur AbacusAI : {{link}}",
+      "ownKeyWeb": "Utilisez-la dans AbacusAI Agent sur le web : {{link}}",
+      "busy": "Les modèles gratuits sont occupés en ce moment.",
+      "connection": "La connexion a été coupée, je n'ai donc pas pu terminer. Réessayez dans un instant.",
+      "notSignedIn": "L'application de bureau n'est pas connectée à Abacus.AI pour le moment. Ouvrez l'application, connectez-vous, puis écrivez-moi à nouveau.",
+      "generic": "Un problème est survenu de mon côté, je n'ai donc pas pu terminer. Réessayez dans un instant.",
+      "contactFailed": "Je n'ai pas pu répondre à {{name}} tout à l'heure.",
+      "contactFailedGeneric": "Je n'ai pas pu répondre à {{name}} tout à l'heure : un problème est survenu de mon côté.",
+      "someone": "quelqu'un"
+    }
   }
 }

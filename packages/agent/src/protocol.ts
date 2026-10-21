@@ -79,12 +79,16 @@ export interface NotificationAction {
   /** `switch-model` with a target: the card offers this model by name. */
   model?: string;
   label?: string;
-  /** `own-key-unavailable`: the provider id whose key failed. */
+  /** `own-key-unavailable` and `fix-key`: the provider id whose key failed. */
   provider?: string;
+  /** `continue-free`: the free sources the turn would go on with, in order. */
+  providers?: string[];
   /**
    * `own-key-unavailable`: credit, rate_limit, down or network.
    * `upgrade-abacus`: exhausted or expired (absent reads as exhausted).
    * `free-pool-out`: busy when the free models are only rate-limited.
+   * `continue-free` (keep going on the free models at the credit wall),
+   * `new-chat`, `fix-key` and `retry` carry nothing else.
    */
   cause?: string;
 }
@@ -204,6 +208,10 @@ export type AgentEvent =
         cacheWrite: number;
         requests: number;
         model: string | null;
+        /** The turn ran on the free models the user chose at the credit wall. */
+        lane?: "free";
+        /** The free lane's provider that answered. */
+        provider?: string;
       };
     }
   // Brackets around a delegated sub-agent's work: text between them belongs to
@@ -260,6 +268,8 @@ export type AgentEvent =
          * the provider actually sent.
          */
         detail?: string;
+        /** Why the turn did not finish: a FailureCause (turn-outcome.ts). */
+        cause?: string;
         /**
          * `upgrade-abacus` renders the upgrade card instead of the error;
          * `own-key-unavailable` the Abacus offer for a user's own key.
@@ -519,6 +529,12 @@ export type DesktopCommand =
   | { type: "connectivity"; state: string; resumed?: boolean }
   /** The Abacus balance as the desktop last read it; see credit-balance.ts. */
   | { type: "credit_balance"; remaining: number; granted: number; at: number }
+  /** The account's credit wall as the desktop holds it; see credit-wall.ts. */
+  | {
+      type: "credit_wall";
+      exhaustedAt: number | null;
+      freeLaneChosenAt: number | null;
+    }
   /**
    * Reconnect every MCP server. With `requestId`, the agent answers
    * `mcp_refreshed` (or `mcp_refresh_failed`) carrying it once done.

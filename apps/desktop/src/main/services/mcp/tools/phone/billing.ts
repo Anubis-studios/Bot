@@ -1,7 +1,6 @@
-import {
-  type BillingPlan,
-  fetchBillingPlan,
-} from "../../../providers/abacus-upgrade";
+import type { BillingPlan } from "@abacus-ai/contract/billing-plan";
+
+import { fetchBillingPlan } from "../../../providers/abacus-upgrade";
 import { bullets, credits, creditStanding, priceLine } from "../billing";
 import type { ToolHost, ToolResult } from "../definition";
 import type { PhoneToolDefinition } from "./definition";

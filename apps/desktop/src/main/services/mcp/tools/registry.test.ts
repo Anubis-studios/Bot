@@ -141,3 +141,166 @@ describe("the Capabilities registry", () => {
     expect(orphaned).toEqual([]);
   });
 });
+
+describe("billing_plan grounds every answer about plans and credits", () => {
+  it("is served in every chat, bot and chat app, on every plan, and owns those questions", () => {
+    const billing = agentTool("billing_plan");
+    expect(billing).toMatchObject({ toolsets: "always", botAlways: true });
+    // No plan gate: a paid account, and one at zero credits, gets it too.
+    expect(billing?.ready).toBeUndefined();
+    expect(billing?.description).toMatch(
+      /what models or\nplans cost, prices, discounts or deals, credits or balance, limits, resets or renewals/
+    );
+    expect(billing?.description).toMatch(
+      /Never quote a price, discount, credit amount, limit or reset from memory/
+    );
+  });
+});
+
+describe("billing_plan's answer", () => {
+  it("states the plan, the credits left, the renewal, the next plan's price and features, and the link", async () => {
+    const { appBillingResult } = await import("./billing");
+    const result = appBillingResult(
+      {
+        ok: (text: string) => ({ content: [{ type: "text", text }] }),
+      } as never,
+      {
+        current: {
+          planName: "Free",
+          creditsRemaining: 0,
+          creditsGranted: 2000,
+          freeTierExpiresAt: null,
+        },
+        plans: [
+          {
+            plan: "free",
+            planName: "Free",
+            priceText: "Free",
+            features: [],
+            creditsPerMonth: 2000,
+            current: true,
+          },
+          {
+            plan: "basic",
+            planName: "Basic",
+            priceText: "$10/mo",
+            firstMonthPriceCents: 700,
+            priceCents: 1000,
+            features: ["Image and video generation"],
+            creditsPerMonth: 20000,
+            current: false,
+          },
+        ],
+        upgrades: [
+          {
+            plan: "basic",
+            planName: "Basic",
+            priceText: "$10/mo",
+            firstMonthPriceCents: 700,
+            priceCents: 1000,
+            features: ["Image and video generation"],
+            url: "https://example.test/upgrade",
+          },
+        ],
+        topUpUrl: null,
+        upgradeInMobileApp: false,
+      }
+    ) as unknown as { content: Array<{ text: string }> };
+    const text = result.content[0]!.text;
+    expect(text).toContain("The user's plan: Free.");
+    expect(text).toContain("Credits left: 0 of 2,000 this month.");
+    expect(text).toContain("Their plan's credits renew every month.");
+    expect(text).toContain(
+      "Basic: $7 for the first month (30% off the usual $10/mo), then $10/mo, link: https://example.test/upgrade"
+    );
+    expect(text).toContain("  - Image and video generation");
+  });
+});
+
+describe("billing_plan for what only a plan does", () => {
+  const plan = (current: "free" | "basic") => ({
+    current: {
+      planName: current === "free" ? "Free" : "Basic",
+      creditsRemaining: 100,
+      creditsGranted: 2000,
+      freeTierExpiresAt: null,
+    },
+    plans: [
+      {
+        plan: "free",
+        planName: "Free",
+        priceText: "Free",
+        features: [],
+        creditsPerMonth: 2000,
+        current: current === "free",
+      },
+      {
+        plan: "basic",
+        planName: "Basic",
+        priceText: "$10/mo",
+        firstMonthPriceCents: 700,
+        priceCents: 1000,
+        features: [
+          "Routines that run 24/7 in Abacus AI Agent on the web, even with your computer off",
+        ],
+        creditsPerMonth: 20000,
+        current: current === "basic",
+      },
+    ],
+    upgrades:
+      current === "free"
+        ? [
+            {
+              plan: "basic",
+              planName: "Basic",
+              priceText: "$10/mo",
+              firstMonthPriceCents: 700,
+              priceCents: 1000,
+              features: [
+                "Routines that run 24/7 in Abacus AI Agent on the web, even with your computer off",
+              ],
+              url: "https://example.test/upgrade",
+            },
+          ]
+        : [],
+    topUpUrl: null,
+    upgradeInMobileApp: false,
+  });
+  const answer = async (current: "free" | "basic") => {
+    const { appBillingResult } = await import("./billing");
+    const result = appBillingResult(
+      {
+        ok: (text: string) => ({ content: [{ type: "text", text }] }),
+      } as never,
+      plan(current)
+    ) as unknown as { content: Array<{ text: string }> };
+    return result.content[0]!.text;
+  };
+
+  it("owns 'keep running with the computer off' in its description", () => {
+    expect(agentTool("billing_plan")?.description).toMatch(
+      /keep running or run\nroutines while the app or computer is off, stay online 24\/7/
+    );
+  });
+
+  it("a free account asking to keep running with the PC off is offered the always-on routines, priced and linked, never a no", async () => {
+    const text = await answer("free");
+    expect(text).toContain(
+      "Asked to keep running while the app or computer is off, or to stay online 24/7: never answer no. Offer Basic"
+    );
+    expect(text).toContain(
+      "  - Routines that run 24/7 in Abacus AI Agent on the web, even with your computer off"
+    );
+    expect(text).toContain("$7 for the first month");
+    expect(text).toContain("link: https://example.test/upgrade");
+  });
+
+  it("a Basic account is pointed at its own 24/7 routines in Abacus AI Agent, with no upsell", async () => {
+    const text = await answer("basic");
+    expect(text).toContain(
+      "their plan already includes routines that run 24/7 in Abacus AI Agent on the web"
+    );
+    expect(text).toContain("Do not offer an upgrade for it.");
+    expect(text).not.toContain("never answer no. Offer");
+  });
+});

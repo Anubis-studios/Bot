@@ -6,6 +6,7 @@
   "exports": {
     "./account": "./src/account.ts",
     "./agent-types": "./src/agent-types.ts",
+    "./billing-plan": "./src/billing-plan.ts",
     "./bots": "./src/bots.ts",
     "./conflict": "./src/conflict.ts",
     "./contracts": "./src/contracts.ts",

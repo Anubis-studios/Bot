@@ -4215,5 +4215,66 @@
     "outOfCredit": "Your {{provider}} key is out of credit",
     "paidBody": "Use it in AbacusAI Agent on the web: the top models are included in your plan.",
     "rateLimited": "Your {{provider}} key hit its rate limit"
+  },
+  "outcome": {
+    "wall": {
+      "title": "Kredit gratis kamu sudah habis",
+      "expiredTitle": "Kredit gratis kamu sudah kedaluwarsa",
+      "paidTitle": "Kredit bulan ini sudah kamu pakai",
+      "renews": "Kredit gratis diperbarui setiap bulan.",
+      "balance": "Tersisa {{remaining}} dari {{granted}} kredit",
+      "warning": "Untuk lanjut sekarang, bot akan beralih ke model gratis dari penyedia lain ({{providers}}). Kualitasnya jauh lebih rendah: lebih banyak kesalahan, bisa merusak kode yang sudah berjalan, dan sering terkena batas penggunaan.",
+      "offer": "Upgrade ke {{plan}} — {{price}}",
+      "upgradeCta": "Upgrade ke {{plan}}",
+      "continueFree": "Lanjut dengan model gratis (kualitas lebih rendah)"
+    },
+    "plan": {
+      "introPrice": "{{first}} untuk bulan pertama, lalu {{monthly}}/bulan",
+      "monthlyPrice": "{{monthly}}/bulan"
+    },
+    "freeChip": "Model gratis · {{provider}}",
+    "freeChipAny": "penyedia lain",
+    "freeChipUpgrade": "Upgrade untuk model terbaik",
+    "connection": {
+      "title": "Masalah koneksi",
+      "body": "Periksa koneksi internet, VPN, atau proxy kamu, lalu coba lagi."
+    },
+    "cause": {
+      "context_too_long": "Percakapan ini terlalu panjang untuk model ini. Mulai chat baru, atau pilih model dengan konteks lebih besar.",
+      "key_invalid": "{{provider}} menolak kuncinya. Periksa di Pengaturan → Model.",
+      "own_key_quota": "Kunci {{provider}} kamu sudah mencapai kuotanya. Beralih ke model lain, atau periksa paket kunci tersebut.",
+      "model_unavailable": "Model ini tidak bisa menerima permintaan. Pilih model lain.",
+      "free_pool_spent": "Semua sumber gratis sudah habis untuk saat ini. Hubungkan sumber gratis lain, atau pilih model lain.",
+      "rate_limited": "Model gratis sedang sibuk. Coba lagi dalam beberapa menit, atau beralih ke model lain.",
+      "empty": "Model mengembalikan balasan kosong. Coba lagi, atau beralih ke model lain.",
+      "unknown": "Model tidak bisa menyelesaikan ini. Coba lagi, atau beralih ke model lain."
+    },
+    "action": {
+      "newChat": "Chat baru",
+      "fixKey": "Periksa kunci",
+      "viewDetails": "Lihat detail",
+      "tryAgain": "Coba lagi"
+    },
+    "channel": {
+      "wall": "Aku berhenti sementara karena kredit gratis kamu sudah habis.",
+      "expired": "Aku berhenti sementara karena kredit gratis kamu sudah kedaluwarsa.",
+      "renews": "Kredit gratis diperbarui setiap bulan.",
+      "offer": "{{plan}} seharga {{price}} dan memberimu:",
+      "link": "Upgrade di sini: {{link}}",
+      "repeat": "Masih berhenti: {{link}}",
+      "paidOut": "Aku berhenti sementara karena kredit bulan ini sudah habis. Tambahkan kredit untuk lanjut: {{link}}",
+      "ownKeyCredit": "Kunci {{provider}} kamu sudah kehabisan saldo.",
+      "ownKeyRateLimit": "Kunci {{provider}} kamu sudah mencapai batas penggunaan.",
+      "ownKeyDown": "{{provider}} sedang tidak merespons.",
+      "ownKeyOffer": "Pakai model apa saja di AbacusAI: {{link}}",
+      "ownKeyWeb": "Pakai di AbacusAI Agent di web: {{link}}",
+      "busy": "Model gratis sedang sibuk.",
+      "connection": "Koneksinya terputus, jadi aku tidak bisa menyelesaikannya. Coba lagi sebentar lagi.",
+      "notSignedIn": "Aplikasi desktop sedang tidak masuk ke Abacus.AI. Buka aplikasinya dan masuk, lalu kirim pesan lagi.",
+      "generic": "Ada yang salah di sisiku, jadi aku tidak bisa menyelesaikannya. Coba lagi sebentar lagi.",
+      "contactFailed": "Aku tidak bisa membalas {{name}} barusan.",
+      "contactFailedGeneric": "Aku tidak bisa membalas {{name}} barusan: ada yang salah di sisiku.",
+      "someone": "seseorang"
+    }
   }
 }

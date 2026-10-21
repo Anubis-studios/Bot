@@ -4215,5 +4215,66 @@
     "outOfCredit": "Your {{provider}} key is out of credit",
     "paidBody": "Use it in AbacusAI Agent on the web: the top models are included in your plan.",
     "rateLimited": "Your {{provider}} key hit its rate limit"
+  },
+  "outcome": {
+    "wall": {
+      "title": "Deine kostenlosen Credits sind aufgebraucht",
+      "expiredTitle": "Deine kostenlosen Credits sind abgelaufen",
+      "paidTitle": "Du hast die Credits dieses Monats verbraucht",
+      "renews": "Kostenlose Credits erneuern sich jeden Monat.",
+      "balance": "Noch {{remaining}} von {{granted}} Credits",
+      "warning": "Um jetzt weiterzumachen, würde der Bot zu kostenlosen Modellen eines anderen Anbieters wechseln ({{providers}}). Sie sind deutlich schwächer: mehr Fehler, sie können funktionierenden Code kaputt machen und stoßen oft an Ratenlimits.",
+      "offer": "Upgrade auf {{plan}} — {{price}}",
+      "upgradeCta": "Upgrade auf {{plan}}",
+      "continueFree": "Mit kostenlosen Modellen weitermachen (geringere Qualität)"
+    },
+    "plan": {
+      "introPrice": "{{first}} im ersten Monat, danach {{monthly}}/Monat",
+      "monthlyPrice": "{{monthly}}/Monat"
+    },
+    "freeChip": "Kostenloses Modell · {{provider}}",
+    "freeChipAny": "anderer Anbieter",
+    "freeChipUpgrade": "Upgrade für Top-Modelle",
+    "connection": {
+      "title": "Verbindungsproblem",
+      "body": "Prüfe deine Internetverbindung, dein VPN oder deinen Proxy und versuche es erneut."
+    },
+    "cause": {
+      "context_too_long": "Diese Unterhaltung ist zu lang für das Modell. Starte einen neuen Chat oder wähle ein Modell mit größerem Kontext.",
+      "key_invalid": "{{provider}} hat den Schlüssel abgelehnt. Prüfe ihn unter Einstellungen → Modelle.",
+      "own_key_quota": "Dein {{provider}}-Schlüssel hat sein Kontingent erreicht. Wechsle zu einem anderen Modell oder prüfe den Tarif des Schlüssels.",
+      "model_unavailable": "Dieses Modell konnte die Anfrage nicht annehmen. Wähle ein anderes Modell.",
+      "free_pool_spent": "Alle kostenlosen Quellen sind vorerst aufgebraucht. Verbinde eine weitere kostenlose Quelle oder wähle ein anderes Modell.",
+      "rate_limited": "Die kostenlosen Modelle sind gerade ausgelastet. Versuche es in ein paar Minuten erneut oder wechsle zu einem anderen Modell.",
+      "empty": "Das Modell hat eine leere Antwort geliefert. Versuche es erneut oder wechsle zu einem anderen Modell.",
+      "unknown": "Das Modell konnte das nicht abschließen. Versuche es erneut oder wechsle zu einem anderen Modell."
+    },
+    "action": {
+      "newChat": "Neuer Chat",
+      "fixKey": "Schlüssel prüfen",
+      "viewDetails": "Details anzeigen",
+      "tryAgain": "Erneut versuchen"
+    },
+    "channel": {
+      "wall": "Ich habe pausiert, weil deine kostenlosen Credits aufgebraucht sind.",
+      "expired": "Ich habe pausiert, weil deine kostenlosen Credits abgelaufen sind.",
+      "renews": "Kostenlose Credits erneuern sich jeden Monat.",
+      "offer": "{{plan}} kostet {{price}} und bietet dir:",
+      "link": "Hier upgraden: {{link}}",
+      "repeat": "Weiterhin pausiert: {{link}}",
+      "paidOut": "Ich habe pausiert, weil die Credits dieses Monats aufgebraucht sind. Füge Credits hinzu, um weiterzumachen: {{link}}",
+      "ownKeyCredit": "Dein {{provider}}-Schlüssel hat kein Guthaben mehr.",
+      "ownKeyRateLimit": "Dein {{provider}}-Schlüssel hat sein Ratenlimit erreicht.",
+      "ownKeyDown": "{{provider}} antwortet gerade nicht.",
+      "ownKeyOffer": "Nutze stattdessen jedes Modell auf AbacusAI: {{link}}",
+      "ownKeyWeb": "Nutze ihn in AbacusAI Agent im Web: {{link}}",
+      "busy": "Die kostenlosen Modelle sind gerade ausgelastet.",
+      "connection": "Die Verbindung ist abgebrochen, daher konnte ich das nicht abschließen. Bitte versuche es gleich noch einmal.",
+      "notSignedIn": "Die Desktop-App ist gerade nicht bei Abacus.AI angemeldet. Öffne die App, melde dich an und schreib mir dann erneut.",
+      "generic": "Bei mir ist etwas schiefgelaufen, daher konnte ich das nicht abschließen. Bitte versuche es gleich noch einmal.",
+      "contactFailed": "Ich konnte {{name}} gerade nicht antworten.",
+      "contactFailedGeneric": "Ich konnte {{name}} gerade nicht antworten: Bei mir ist etwas schiefgelaufen.",
+      "someone": "jemandem"
+    }
   }
 }
