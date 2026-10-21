@@ -279,18 +279,21 @@ describe("billing_plan for what only a plan does", () => {
     return result.content[0]!.text;
   };
 
-  it("owns 'keep working with the computer off' in its description, WhatsApp auto-replies included", () => {
+  it("owns 'keep working with the computer off' (WhatsApp, Telegram, Discord) and video analysis in its description", () => {
     const description = agentTool("billing_plan")?.description;
     expect(typeof description).toBe("string");
     expect(String(description).replace(/\n/g, " ")).toContain(
-      "anything that should keep working while the app or computer is off: WhatsApp auto-replies, routines, reminders, monitoring, staying online 24/7"
+      "anything that should keep working while the app or computer is off: WhatsApp, Telegram or Discord auto-replies, routines, reminders, monitoring, staying online 24/7"
+    );
+    expect(String(description).replace(/\n/g, " ")).toContain(
+      "when they ask to analyse a video (a reel, a Short, a YouTube or TikTok link, a video file)"
     );
   });
 
   it("a free account asking whether its WhatsApp auto-reply or routines can keep working with the PC off is offered personal agents on the web, priced and linked, never a no", async () => {
     const text = await answer("free");
     expect(text).toContain(
-      "Asked for anything to keep working while the app or computer is off (WhatsApp auto-replies, routines, reminders, monitoring) or to stay online 24/7: never answer no or impossible. Offer Basic: personal agents in Abacus AI Agent on the web that run 24/7 with the computer off"
+      "Asked for anything to keep working while the app or computer is off (WhatsApp, Telegram or Discord auto-replies, routines, reminders, monitoring) or to stay online 24/7: never answer no or impossible. Offer Basic: personal agents in Abacus AI Agent on the web that run 24/7 with the computer off and do everything this bot does, WhatsApp, Telegram and Discord auto-replies and every routine included."
     );
     expect(text).toContain(
       "  - Routines that run 24/7 in Abacus AI Agent on the web, even with your computer off"
@@ -299,7 +302,7 @@ describe("billing_plan for what only a plan does", () => {
     expect(text).toContain("link: https://example.test/upgrade");
   });
 
-  it("a Basic account is pointed at its own 24/7 routines in Abacus AI Agent, with no upsell", async () => {
+  it("a Basic account asking whether its Telegram or Discord auto-replies keep going with the PC off is pointed at its own 24/7 agents in Abacus AI Agent, with no upsell", async () => {
     const text = await answer("basic");
     expect(text).toContain(
       "their plan already includes personal agents in Abacus AI Agent on the web that run 24/7 with the computer off"

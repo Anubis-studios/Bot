@@ -288,6 +288,12 @@ describe("the paid-plan capabilities", () => {
         inApp: true,
         toolsets: ["tts"],
       },
+      {
+        feature: "video",
+        name: "video analysis",
+        inApp: true,
+        toolsets: ["video"],
+      },
     ]);
   });
 });

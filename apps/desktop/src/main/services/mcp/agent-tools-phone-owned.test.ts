@@ -524,10 +524,15 @@ describe("paid-plan capabilities", () => {
     expect(names).not.toContain("image_generate");
     const tool = tools.find((entry) => entry.name === "paid_feature");
     expect(tool?.description).toMatch(
-      /video generation, image generation, and text to speech/i
+      /video generation, image generation, text to speech, and video analysis/i
     );
     expect(tool?.description).toMatch(/Never tell the user you cannot/);
-    expect(featureEnum(tool)).toEqual(["video_gen", "image_gen", "tts"]);
+    expect(featureEnum(tool)).toEqual([
+      "video_gen",
+      "image_gen",
+      "tts",
+      "video",
+    ]);
   });
 
   it("answers a free account's video ask with Basic, its price and the card, never a refusal", async () => {
@@ -542,6 +547,20 @@ describe("paid-plan capabilities", () => {
     expect(text).toMatch(/Upgrade card under your reply/);
     expect(text).not.toContain("https://upgrade.example/basic");
     expect(text).toMatch(/Never say you cannot do it/);
+  });
+
+  it("answers a free account's 'what's in this reel?' with Basic's video analysis, priced, never 'I can only read the title'", async () => {
+    mediaKeys.set("ABACUS_API_KEY", "key");
+    billingPlan.mockResolvedValue(BASIC_FIRST_MONTH);
+    const tools = listed(planServer("free"));
+    expect(tools.map((tool) => tool.name)).not.toContain("video_analyze");
+    const { text, isError } = await callOn(planServer("free"), "video");
+    expect(isError).toBe(false);
+    expect(text).toMatch(/Video analysis is not on this account's free plan/);
+    expect(text).toMatch(/Basic, \$7 for the first month \(30% off/);
+    expect(text).toMatch(/Never say you cannot do it/);
+    // Served here on a paid plan: no "on the web only" line.
+    expect(text).not.toMatch(/not in this app/);
   });
 
   it("gives the upgrade link where no card can show: a bot answering in a chat app", async () => {
@@ -561,7 +580,7 @@ describe("paid-plan capabilities", () => {
     const tools = listed(planServer("free", ["video_gen"]));
     expect(tools.map((tool) => tool.name)).toContain("video_generate");
     const tool = tools.find((entry) => entry.name === "paid_feature");
-    expect(featureEnum(tool)).toEqual(["image_gen", "tts"]);
+    expect(featureEnum(tool)).toEqual(["image_gen", "tts", "video"]);
   });
 
   it("gives a paid account the real image and speech tools, and no offer for them", () => {

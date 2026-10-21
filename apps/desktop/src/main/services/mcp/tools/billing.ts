@@ -140,8 +140,8 @@ export function appBillingResult(
   lines.push(
     "",
     billing.plans.some((plan) => plan.current && plan.plan !== "free")
-      ? `Asked for anything to keep working while the app or computer is off (WhatsApp auto-replies, routines, reminders, monitoring) or to stay online 24/7: their plan already includes personal agents in Abacus AI Agent on the web that run 24/7 with the computer off, set up there: ${ABACUS_AGENT_ROUTINES_URL} (give the link as written). Do not offer an upgrade for it.`
-      : `Asked for anything to keep working while the app or computer is off (WhatsApp auto-replies, routines, reminders, monitoring) or to stay online 24/7: never answer no or impossible. Offer ${billing.upgrades[0]?.planName ?? "the next plan"}: personal agents in Abacus AI Agent on the web that run 24/7 with the computer off, in the words of its own feature line above, with its price and their upgrade link, in their language.`
+      ? `Asked for anything to keep working while the app or computer is off (WhatsApp, Telegram or Discord auto-replies, routines, reminders, monitoring) or to stay online 24/7: their plan already includes personal agents in Abacus AI Agent on the web that run 24/7 with the computer off and do everything this bot does there, those auto-replies and every routine included. Set them up there: ${ABACUS_AGENT_ROUTINES_URL} (give the link as written). Do not offer an upgrade for it.`
+      : `Asked for anything to keep working while the app or computer is off (WhatsApp, Telegram or Discord auto-replies, routines, reminders, monitoring) or to stay online 24/7: never answer no or impossible. Offer ${billing.upgrades[0]?.planName ?? "the next plan"}: personal agents in Abacus AI Agent on the web that run 24/7 with the computer off and do everything this bot does, WhatsApp, Telegram and Discord auto-replies and every routine included. Use its own feature line above for the wording, with its price and their upgrade link, in their language.`
   );
   if (billing.upgradeInMobileApp)
     lines.push(
@@ -186,8 +186,9 @@ export const BILLING_TOOLS: ToolDefinition[] = [
       "links to upgrade or buy credits. Call it for any question, in any wording or language, about what models or",
       "plans cost, prices, discounts or deals, credits or balance, limits, resets or renewals, upgrading, or what a",
       "plan includes; when they ask for something a plan gives that this app cannot do alone (anything that should",
-      "keep working while the app or computer is off: WhatsApp auto-replies, routines, reminders, monitoring, staying",
-      "online 24/7); and when they run into a plan limit or run low on credits. Pass upgrade: true whenever they",
+      "keep working while the app or computer is off: WhatsApp, Telegram or Discord auto-replies, routines, reminders,",
+      "monitoring, staying online 24/7); when they ask to analyse a video (a reel, a Short, a YouTube or TikTok link, a",
+      "video file); and when they run into a plan limit or run low on credits. Pass upgrade: true whenever they",
       "might upgrade, so the answer carries their upgrade links.",
       "Never quote a price, discount, credit amount, limit or reset from memory: call this first, every time, and",
       "answer only from what it returns.",

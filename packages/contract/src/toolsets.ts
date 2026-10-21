@@ -415,6 +415,8 @@ export const TOOLSETS: Toolset[] = [
     delivery: "mcp-agent-tools",
     tools: [tool("video_analyze")],
     defaultEnabled: false,
+    // Watching a reel, a Short or a forwarded video: a paid-plan model's.
+    paidPlan: { feature: "video", name: "video analysis", inApp: true },
   },
   {
     id: "video_gen",
