@@ -52,18 +52,6 @@
     }
   },
   {
-    "file": "llama-cpp-LICENSE",
-    "asset": "llama.cpp b11102 (llama-server, the runtime local models are served by; spawned as a separate process, never linked)",
-    "source": "https://github.com/ggml-org/llama.cpp/blob/b11102/LICENSE",
-    "license": "MIT",
-    "version": "b11102",
-    "name": "llama.cpp server",
-    "pin": {
-      "file": "apps/desktop/scripts/download-llama-server.js",
-      "constant": "VERSION"
-    }
-  },
-  {
     "file": "wa-js-LICENSE",
     "asset": "wa-js 4.6.0",
     "source": "https://github.com/wppconnect-team/wa-js/blob/v4.6.0/LICENSE",

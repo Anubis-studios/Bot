@@ -158,7 +158,6 @@ export const useSessionComposerModel = (
           defaultGroup: t("sessions.model.default"),
           appDefault: t("sessions.model.appDefault"),
           favorites: t("sessions.model.favorites"),
-          localProvider: t("sessions.model.local"),
           connectOpenRouter: t("sessions.model.connectOpenRouter"),
           connectGoogleAi: t("sessions.model.connectGoogleAi"),
           tierFree: t("sessions.model.free"),

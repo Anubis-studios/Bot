@@ -8,7 +8,6 @@ export { createChatRuntime, type ChatRuntime } from "./runtime/runtime";
 export { ChatView } from "./kit/view";
 
 export { PermissionList } from "./kit/permissions/permission-list";
-export { adoptDraftModel } from "#renderer/lib/continuity/composer-drafts";
 
 /**
  * The fixture player, for the dev fixture build only: a dynamic import, so

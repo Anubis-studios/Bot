@@ -11,7 +11,6 @@ import { filesRouter } from "./procedures/files";
 import { gitRouter } from "./procedures/git";
 import { impl } from "./procedures/impl";
 import { linksRouter } from "./procedures/links";
-import { localModelsRouter } from "./procedures/local-models";
 import { mcpRouter } from "./procedures/mcp";
 import { memoryRouter } from "./procedures/memory";
 import { messagingRouter } from "./procedures/messaging";
@@ -47,7 +46,6 @@ const routes: {
   settings: typeof settingsRouter;
   models: typeof modelsRouter;
   links: typeof linksRouter;
-  localModels: typeof localModelsRouter;
   account: typeof accountRouter;
   auth: typeof authRouter;
   referrals: typeof referralsRouter;
@@ -76,7 +74,6 @@ const routes: {
   notch: notchRouter,
   settings: settingsRouter,
   models: modelsRouter,
-  localModels: localModelsRouter,
   links: linksRouter,
   account: accountRouter,
   auth: authRouter,

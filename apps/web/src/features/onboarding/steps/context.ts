@@ -1,5 +1,4 @@
 import type { TFunction } from "i18next";
-import type { ReactNode } from "react";
 
 import type { Transport } from "#renderer/data/transport";
 import type { OnboardingStepId } from "#renderer/lib/navigation/areas";
@@ -23,8 +22,6 @@ export interface OnboardingPageProps {
     options?: { keepFirstBot?: boolean }
   ): Promise<void>;
   createFirstBot(id: string): Promise<FirstBotResult>;
-  /** The platform's local-model row (Electron only). */
-  localModel?: ReactNode;
   connect?(id: string): Promise<unknown>;
 }
 

@@ -16,7 +16,6 @@ import { devices } from "./devices";
 import { files } from "./files";
 import { git } from "./git";
 import { links } from "./links";
-import { localModels } from "./local-models";
 import { mcp } from "./mcp";
 import { memory } from "./memory";
 import { messaging } from "./messaging";
@@ -46,7 +45,6 @@ export const contract = {
   notch,
   settings,
   models,
-  localModels,
   links,
   account,
   auth,

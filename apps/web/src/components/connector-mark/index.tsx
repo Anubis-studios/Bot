@@ -575,8 +575,8 @@ export const markForPlatform = (platformId: string): ConnectorMarkId | null =>
   PLATFORM_MARKS[platformId] ?? null;
 
 /**
- * Every provider the app names (`PROVIDER_KEY_FIELDS`, pi's catalog, the
- * local runtime and the Abacus twins) → its mark; connector-mark.test.tsx
+ * Every provider the app names (`PROVIDER_KEY_FIELDS`, pi's catalog and the
+ * Abacus twins) → its mark; connector-mark.test.tsx
  * holds the list to it.
  */
 const PROVIDER_MARKS: Record<string, ConnectorMarkId> = {
@@ -598,7 +598,6 @@ const PROVIDER_MARKS: Record<string, ConnectorMarkId> = {
   moonshot: "moonshot",
   kimi: "moonshot",
   xai: "xai",
-  local: "local",
   ollama: "local",
   baseten: "baseten",
   fireworks: "fireworks",

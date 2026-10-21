@@ -53,7 +53,6 @@ export const useBotModelBinding = (
       defaultGroup: t("bots.model.default"),
       appDefault: t("bots.form.modelDefault"),
       favorites: t("bots.model.favorites"),
-      localProvider: t("bots.model.local"),
       connectOpenRouter: t("bots.model.connectOpenRouter"),
       connectSource: (provider) =>
         t("onboarding.setupKeyDialogTitle", { provider }),

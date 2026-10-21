@@ -13,7 +13,6 @@ import { AgentMode } from "@abacus-ai/contract/agent-types";
 import {
   AlertCircle,
   CalendarClock,
-  Cpu,
   KeyRound,
   Shield,
   Star,
@@ -58,7 +57,6 @@ import {
   ComboboxItem,
   ComboboxLabel,
   ComboboxList,
-  ComboboxSeparator,
   ComboboxTrigger,
 } from "#renderer/ui/combobox";
 import { Command, CommandItem, CommandList } from "#renderer/ui/command";
@@ -277,17 +275,15 @@ type ModelRow =
       group: ModelGroup;
       item: ModelGroup["items"][number];
     }
-  | { kind: "connect"; key: string; group: ModelGroup }
-  | { kind: "local"; key: string };
+  | { kind: "connect"; key: string; group: ModelGroup };
 
-/** The rail's views: the favourites (with App default), a provider, this machine. */
-type Rail = "favorites" | "local" | { provider: string };
+/** The rail's views: the favourites (with App default) or a provider. */
+type Rail = "favorites" | { provider: string };
 
 const isFavorites = (group: ModelGroup): boolean =>
   group.id === "favorites" || group.id === "favourites";
 
 const matches = (row: ModelRow, query: string): boolean => {
-  if (row.kind === "local") return false;
   if (row.kind === "connect") return false;
   const q = query.toLowerCase();
   return (
@@ -302,8 +298,7 @@ const matches = (row: ModelRow, query: string): boolean => {
 const rowsFor = (
   binding: ModelChipBinding,
   rail: Rail,
-  query: string,
-  local: boolean
+  query: string
 ): {
   rows: ModelRow[];
   sections: Array<{ group: ModelGroup; rows: ModelRow[] }>;
@@ -334,13 +329,12 @@ const rowsFor = (
     if (rail === "favorites") {
       for (const group of binding.groups)
         if (isFavorites(group)) sections.push({ group, rows: itemRows(group) });
-    } else if (rail !== "local") {
+    } else {
       const group = binding.groups.find((g) => g.id === rail.provider);
       if (group != null) sections.push({ group, rows: itemRows(group) });
     }
   }
   const rows = sections.flatMap((section) => section.rows);
-  if (local && query === "") rows.push({ kind: "local", key: "local" });
   return { rows, sections };
 };
 
@@ -353,10 +347,8 @@ export const ModelChip = ({
   ref,
   compact = false,
   onOpenChange,
-  onUseLocalModel,
 }: {
   ref?: Ref<ModelChipHandle>;
-  onUseLocalModel?(): void;
   onOpenChange?(open: boolean): void;
   binding: ModelChipBinding;
   compact?: boolean;
@@ -435,7 +427,7 @@ export const ModelChip = ({
         : { provider: providers[0]!.id });
   const q = query.trim();
   const { rows, sections } = open
-    ? rowsFor(binding, rail, q, onUseLocalModel != null)
+    ? rowsFor(binding, rail, q)
     : { rows: [], sections: [] };
   const selected =
     rows.find(
@@ -454,8 +446,7 @@ export const ModelChip = ({
     if (row == null) return;
     if (row.kind === "item")
       binding.onChange(row.item.id === "" ? null : row.item.id);
-    else if (row.kind === "connect") row.group.connect!.onSelect();
-    else onUseLocalModel?.();
+    else row.group.connect!.onSelect();
     change(false);
   };
   const chooseRail = (next: Rail) => {
@@ -474,11 +465,9 @@ export const ModelChip = ({
   );
   const provider = compact ? null : (chosenProvider?.label ?? null);
   const current =
-    rail === "local"
+    typeof rail === "string"
       ? null
-      : typeof rail === "string"
-        ? null
-        : (binding.groups.find((g) => g.id === rail.provider) ?? null);
+      : (binding.groups.find((g) => g.id === rail.provider) ?? null);
   // A provider with nothing to run and a connect action: the not-connected card.
   const notConnected =
     q === "" &&
@@ -553,11 +542,7 @@ export const ModelChip = ({
       onValueChange={pick}
       itemToStringValue={(row) => row.key}
       itemToStringLabel={(row) =>
-        row.kind === "item"
-          ? row.item.label
-          : row.kind === "connect"
-            ? row.group.connect!.label
-            : t("localModels.useLocal")
+        row.kind === "item" ? row.item.label : row.group.connect!.label
       }
       isItemEqualToValue={(a, b) => a.key === b.key}
       inputValue={query}
@@ -633,15 +618,6 @@ export const ModelChip = ({
               <ConnectorMark id={markOf(group)} size={16} />
             </RailButton>
           ))}
-          {onUseLocalModel != null ? (
-            <RailButton
-              label={t("chat.composer.onThisMachine")}
-              selected={rail === "local"}
-              onClick={() => chooseRail("local")}
-            >
-              <Cpu aria-hidden className="size-3.5" />
-            </RailButton>
-          ) : null}
         </div>
         <div className="flex min-w-0 flex-1 flex-col">
           <ComboboxInput
@@ -720,7 +696,7 @@ export const ModelChip = ({
                             </span>
                           ) : null}
                         </>
-                      ) : row.kind === "connect" ? (
+                      ) : (
                         <>
                           <KeyRound
                             aria-hidden
@@ -730,7 +706,7 @@ export const ModelChip = ({
                             {row.group.connect!.label}
                           </span>
                         </>
-                      ) : null}
+                      )}
                     </ComboboxItem>
                   ))}
                 </ComboboxGroup>
@@ -741,32 +717,6 @@ export const ModelChip = ({
                 <p className="text-muted-foreground px-2 py-3 text-center">
                   {t("chat.composer.noFavorites")}
                 </p>
-              ) : null}
-              {onUseLocalModel != null && q === "" ? (
-                <ComboboxGroup
-                  items={rows.filter((row) => row.kind === "local")}
-                  className="flex flex-col gap-0.5"
-                >
-                  {rail === "local" ? (
-                    <ComboboxLabel className="px-2 py-1 text-xs">
-                      {t("chat.composer.onThisMachine")}
-                    </ComboboxLabel>
-                  ) : (
-                    <ComboboxSeparator className="mx-1 my-1" />
-                  )}
-                  <ComboboxItem
-                    value={rows.find((row) => row.kind === "local")!}
-                    className={ROW_CLASS}
-                  >
-                    <Cpu
-                      aria-hidden
-                      className="text-muted-foreground size-3.5"
-                    />
-                    <span className="min-w-0 flex-1 truncate">
-                      {t("localModels.useLocal")}
-                    </span>
-                  </ComboboxItem>
-                </ComboboxGroup>
               ) : null}
               <ComboboxEmpty>{t("chat.composer.noModels")}</ComboboxEmpty>
             </ComboboxList>

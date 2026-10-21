@@ -92,7 +92,7 @@ export const assertBrowserImport = (resolved: string): void => {
   if (
     /^#(?:main|preload)(?:\/|$)/.test(id) ||
     /\/apps\/desktop\/src\/(?:main|preload)\//.test(id) ||
-    /\/src\/(?:features\/(?:notch\/|sessions\/(?:device|browser)\/|onboarding\/steps\/local-models\.|settings\/(?:updates|companion)\.|shell\/native-presenter\.)|platform\/[^/]*\.electron\.|data\/transport\/message-port\.|lib\/window-chrome\/|components\/(?:device|browser-surface)\/)/.test(
+    /\/src\/(?:features\/(?:notch\/|sessions\/(?:device|browser)\/|settings\/(?:updates|companion)\.|shell\/native-presenter\.)|platform\/[^/]*\.electron\.|data\/transport\/message-port\.|lib\/window-chrome\/|components\/(?:device|browser-surface)\/)/.test(
       id
     )
   )

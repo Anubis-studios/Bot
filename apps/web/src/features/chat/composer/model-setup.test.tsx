@@ -59,7 +59,6 @@ const setup = (extra: Partial<ModelSetupBinding> = {}): ModelSetupBinding => ({
     { id: "anthropic", label: "Anthropic", connected: false, connect: false },
     { id: "gemini", label: "Google AI", connected: false, connect: false },
   ],
-  localAvailable: false,
   connect: vi.fn(async () => true),
   save: vi.fn(async () => {}),
   retry: vi.fn(async () => {}),
@@ -82,7 +81,7 @@ const open = async () => {
 
 describe("model setup in the composer", () => {
   it("names the unset chip and offers the setup paths in order", async () => {
-    const state = setup({ localAvailable: true });
+    const state = setup();
     const rendered = await renderWithDb(<ModelChip binding={binding(state)} />);
     cleanup = rendered.cleanup;
     await open();
@@ -93,7 +92,6 @@ describe("model setup in the composer", () => {
       "OpenAIAdd key",
       "AnthropicAdd key",
       "Google AIAdd key",
-      "On this machineDownload",
       "All model settings",
     ]);
     fireEvent.click(rows[1]!);

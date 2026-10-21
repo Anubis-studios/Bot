@@ -93,7 +93,6 @@ describe("provider setup actions", () => {
       expect(
         view.result.current.providers.find((p) => p.id === "abacus")?.connect
       ).toBe(true);
-      expect(view.result.current.localAvailable).toBe(false);
     }
   );
 

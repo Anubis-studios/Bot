@@ -13,7 +13,6 @@ import type {
   SessionConversationRef,
 } from "./conversation-scope";
 import type { BackendId, BackendStatus } from "./exec-backends";
-import type { LocalModelProgress } from "./local-models";
 import type { TerminalShellId } from "./terminal-shells";
 import type { WhisperDownloadProgress } from "./voice";
 
@@ -715,17 +714,9 @@ export type IpcEvent =
     } & IpcEventBase)
   // A sign-out stashed every session or a sign-in restored a stash; no
   // per-session event can say so.
-  | ({ type: "sessions-reloaded" } & IpcEventBase)
-  // A local model download moved on; the last event of a download says how it ended.
-  | ({
-      type: "local-model-progress";
-      progress: LocalModelProgress;
-    } & IpcEventBase);
+  | ({ type: "sessions-reloaded" } & IpcEventBase);
 
 /** The key itself never leaves main. */
-export type LocalModelInstallOutcome =
-  | { ok: true; model: string }
-  | { ok: false; error: string };
 export type OpenRouterAuthOutcome =
   | { ok: true }
   | { ok: false; error: string; cancelled?: boolean };

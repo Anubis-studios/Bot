@@ -1,5 +1,4 @@
 import { EXEC_BACKENDS } from "@abacus-ai/contract/exec-backends";
-import { LOCAL_MODEL_CATALOG } from "@abacus-ai/contract/local-models";
 import { PROVIDER_KEY_FIELDS } from "@abacus-ai/contract/settings";
 
 import { APP_ACTIONS } from "#renderer/lib/keyboard/actions";
@@ -153,7 +152,6 @@ export const SETTINGS_INDEX: readonly SettingEntry[] = [
     labelKey: "",
     label: p.label,
   })),
-  { id: "localModels", page: "models", labelKey: "phase5.onThisMachine" },
   {
     id: "terminalShell",
     page: "environment",
@@ -171,12 +169,6 @@ export const SETTINGS_INDEX: readonly SettingEntry[] = [
     id: `invite-${channel}`,
     page: "account" as const,
     labelKey: `phase5.inviteChannels.${channel}`,
-  })),
-  ...LOCAL_MODEL_CATALOG.map((m) => ({
-    id: `local-${m.id}`,
-    page: "models" as const,
-    labelKey: "",
-    label: m.label,
   })),
   ...APP_ACTIONS.filter((a) => a.terminalDefault?.windows !== undefined).map(
     (a) => ({
@@ -212,7 +204,7 @@ export const settingsIndexFor = (
         (!["browser", "devices"].includes(entry.page) &&
           (entry.page !== "about" ||
             ["openSourceLicenses", "appLicense"].includes(entry.id)) &&
-          !/^(notch|local-|localModels|launchAtLogin|showInNotch|density|translucency|tour|key-notch|invite-whatsapp)/.test(
+          !/^(notch|launchAtLogin|showInNotch|density|translucency|tour|key-notch|invite-whatsapp)/.test(
             entry.id
           ))) &&
       (uiOS !== "mac" || !entry.id.endsWith("@terminal")) &&

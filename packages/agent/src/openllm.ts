@@ -203,9 +203,6 @@ export function accountWideFailure(
   return null;
 }
 
-/** The custom provider the desktop registers its own local models under. */
-const LOCAL_PROVIDER = "local";
-
 /**
  * Abacus's CHAT router, never pooled: above 5000 tokens of context it
  * short-circuits to a Flash model, which an agent passes on its system prompt
@@ -259,8 +256,7 @@ const inPool = (choice: ModelChoice): boolean => {
     );
   }
 
-  if (choice.provider === "gemini" || choice.provider === LOCAL_PROVIDER)
-    return true;
+  if (choice.provider === "gemini") return true;
 
   // The rest pool the models their row in free-sources.ts lists.
   return listedModelRank(choice.provider, choice.modelId) !== -1;

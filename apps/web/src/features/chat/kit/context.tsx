@@ -79,8 +79,6 @@ export interface ComposerConfig {
   mentions?: MentionSource;
   /** Query-backed disk skills, used until a nonempty live list arrives. */
   skillsBaseline?: readonly SkillMetadata[];
-  /** The route supplies the session or start-draft adoption target. */
-  onUseLocalModel?(): void;
   /** Apply the free router before replaying a dead turn. */
   onResumeOnFreePool?(): Promise<void>;
   /** Move the chat onto `model` before replaying a dead turn on it. */

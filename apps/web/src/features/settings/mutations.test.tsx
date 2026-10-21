@@ -8,16 +8,12 @@ import type {
   DeviceStatus,
   ExecBackendState,
 } from "@abacus-ai/contract/contracts";
-import {
-  LOCAL_MODEL_CATALOG,
-  type LocalModelState,
-} from "@abacus-ai/contract/local-models";
 import { implement } from "@orpc/server";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
 import enUS from "#locales/en-US.json";
-import { defaultSeed, renderApp } from "#renderer/test-support/app-harness";
+import { renderApp } from "#renderer/test-support/app-harness";
 
 const os = implement(contract);
 let app: Awaited<ReturnType<typeof renderApp>> | undefined;
@@ -44,12 +40,6 @@ const gate = () => {
 
 const row = (id: string) =>
   within(document.querySelector<HTMLElement>(`[data-setting-id="${id}"]`)!);
-const findRow = async (id: string) => {
-  await waitFor(() =>
-    expect(document.querySelector(`[data-setting-id="${id}"]`)).not.toBeNull()
-  );
-  return row(id);
-};
 
 it("an execution backend switches at once, cannot be sent twice, and a refusal puts the previous one back", async () => {
   let state: ExecBackendState = {
@@ -184,64 +174,6 @@ it("installing Maestro is sent once and refetches the device status", async () =
   expect(reads.mock.calls.length).toBeGreaterThanOrEqual(2);
 });
 
-it("a local model install is sent once, refetches its state and invalidates the cached catalog", async () => {
-  const model = LOCAL_MODEL_CATALOG[0]!;
-  const state: LocalModelState = {
-    runtimeAvailable: true,
-    totalMemoryBytes: 16 * 1024 ** 3,
-    recommendedId: model.id,
-    catalog: [model],
-    installedIds: [],
-    download: null,
-    servingId: null,
-  };
-  const reads = vi.fn(() => state);
-  const lists = vi.fn(() => []);
-  const answer = gate();
-  const install = vi.fn(async () => {
-    await answer.wait();
-    state.installedIds = [model.id];
-    return { ok: true as const, model: `local/${model.id}` };
-  });
-  app = await renderApp("/settings/models?provider=local", {
-    procedures: {
-      localModels: {
-        state: os.localModels.state.handler(reads),
-        install: os.localModels.install.handler(install),
-      },
-      models: { list: os.models.list.handler(lists) },
-    },
-  });
-  app.router.options.context!.queryClient.setQueryData(
-    app.transport.orpc.models.list.queryKey({ input: {} }),
-    []
-  );
-  const button = await (
-    await findRow(`local-${model.id}`)
-  ).findByRole("button", {
-    name: enUS.phase5.download,
-  });
-  fireEvent.click(button);
-  await waitFor(() => expect(button.hasAttribute("disabled")).toBe(true));
-  fireEvent.click(button);
-  await waitFor(() => expect(answer.pending()).toBe(1));
-  const stateReads = reads.mock.calls.length;
-  answer.settle(true);
-  expect(
-    await row(`local-${model.id}`).findByText(enUS.phase5.installed)
-  ).not.toBeNull();
-  expect(install).toHaveBeenCalledTimes(1);
-  expect(reads.mock.calls.length).toBeGreaterThan(stateReads);
-  // No incidental sidebar observer: refresh this cached catalog when a picker next opens.
-  await waitFor(() =>
-    expect(
-      app!.router.options.context!.queryClient.getQueryState(
-        app!.transport.orpc.models.list.queryKey({ input: {} })
-      )?.isInvalidated
-    ).toBe(true)
-  );
-});
-
 it("saving logs is sent once while the save dialog is open", async () => {
   const answer = gate();
   const save = vi.fn(async () => {
@@ -263,79 +195,4 @@ it("saving logs is sent once while the save dialog is open", async () => {
   answer.settle(true);
   await waitFor(() => expect(button.hasAttribute("disabled")).toBe(false));
   expect(save).toHaveBeenCalledTimes(1);
-});
-
-const localModel = () => {
-  const model = LOCAL_MODEL_CATALOG[0]!;
-  const state: LocalModelState = {
-    runtimeAvailable: true,
-    totalMemoryBytes: 16 * 1024 ** 3,
-    recommendedId: model.id,
-    catalog: [model],
-    installedIds: [],
-    download: null,
-    servingId: null,
-  };
-  const answer = gate();
-  const procedures = {
-    localModels: {
-      state: os.localModels.state.handler(() => state),
-      install: os.localModels.install.handler(async () => {
-        await answer.wait();
-        state.installedIds = [model.id];
-        return { ok: true as const, model: `local/${model.id}` };
-      }),
-    },
-  };
-  return { model, answer, procedures };
-};
-
-it("install-and-use stays pending through the adoption, and a failed adoption shows inline", async () => {
-  const { model, answer, procedures } = localModel();
-  app = await renderApp("/settings/models?provider=local&for=session:gone", {
-    procedures,
-  });
-  app.router.options.context!.queryClient.setQueryData(
-    app.transport.orpc.models.list.queryKey({ input: {} }),
-    []
-  );
-  const button = await (
-    await findRow(`local-${model.id}`)
-  ).findByRole("button", { name: enUS.phase5.installUse });
-  fireEvent.click(button);
-  await waitFor(() => expect(answer.pending()).toBe(1));
-  answer.settle(true);
-  // The target thread is gone: adopting it fails, on the page.
-  expect((await screen.findByRole("alert")).textContent).toBe(
-    enUS.phase5.threadGone
-  );
-});
-
-it("an install answered after leaving its target adopts nothing", async () => {
-  const { model, answer, procedures } = localModel();
-  const seed = defaultSeed();
-  const session = seed.sessions!.find((s) => !s.owner && !s.routineId)!;
-  app = await renderApp(
-    `/settings/models?provider=local&for=session:${session.id}`,
-    { seed, procedures }
-  );
-  fireEvent.click(
-    await (
-      await findRow(`local-${model.id}`)
-    ).findByRole("button", { name: enUS.phase5.installUse })
-  );
-  await waitFor(() => expect(answer.pending()).toBe(1));
-  await app.router.navigate({
-    to: "/settings/models",
-    search: { provider: "local" },
-  });
-  answer.settle(true);
-  expect(
-    await (await findRow(`local-${model.id}`)).findByText(enUS.phase5.installed)
-  ).not.toBeNull();
-  expect(app.collections.sessions.get(session.id)?.model).not.toBe(
-    `local/${model.id}`
-  );
-  expect(app.router.state.location.pathname).toBe("/settings/models");
-  expect(screen.queryByRole("alert")).toBeNull();
 });

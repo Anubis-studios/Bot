@@ -59,7 +59,7 @@ export interface ModelChoice {
   label: string;
   /** True when the model bills at zero cost (OpenRouter's `:free` tier). */
   free: boolean;
-  /** Input price in dollars per million tokens; 0 for free and local models. */
+  /** Input price in dollars per million tokens; 0 for free models. */
   inputCost: number;
   reasoning: boolean;
   contextWindow: number;
@@ -605,7 +605,7 @@ export function listModels(registry: ModelRegistry): ModelChoice[] {
   return registry.getAvailable().map(toChoice);
 }
 
-/** The zero-cost slice of the catalog: OpenRouter's free tier plus local. */
+/** The zero-cost slice of the catalog: OpenRouter's free tier and the like. */
 export function listFreeModels(registry: ModelRegistry): ModelChoice[] {
   return listModels(registry).filter((model) => model.free);
 }

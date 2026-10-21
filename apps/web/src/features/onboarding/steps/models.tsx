@@ -1,6 +1,6 @@
 /**
  * `models` (canvas OnboardModels): "Hook up your AI", the provider rows,
- * the platform's local-model row, "Existing subscriptions · Connect later ·
+ * "Existing subscriptions · Connect later ·
  * Paste a key" and Continue (always enabled: a user may finish with nothing).
  */
 import type { Ref } from "react";
@@ -105,7 +105,6 @@ export const ModelsStep = ({
             )}
           </div>
         ))}
-        {props.localModel}
       </div>
       <div className="onboarding-existing mt-4 max-w-[640px]">
         <span className="min-w-0 flex-1">

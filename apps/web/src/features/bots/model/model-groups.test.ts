@@ -20,7 +20,6 @@ const labels: BotModelLabels = {
   defaultGroup: "Default",
   appDefault: "App default",
   favorites: "Favorites",
-  localProvider: "On this machine",
   connectOpenRouter: "Connect OpenRouter",
   connectGoogleAi: "Connect Google AI Studio",
   tierFree: "Free",
@@ -52,7 +51,6 @@ const catalog: ModelAvailability[] = [
   model("gemini/flash", "gemini", { label: "Gemini Flash" }),
   model("openrouter/x", "openrouter", { label: "X", tier: "free" }),
   model("anthropic/opus", "anthropic", { label: "Opus", configured: false }),
-  model("local/llama", "local", { label: "Llama", tier: "local" }),
 ];
 
 const groups = (patch: Partial<Parameters<typeof botModelGroups>[0]> = {}) =>
@@ -85,15 +83,11 @@ describe("botModelGroups", () => {
       "openrouter",
       "gemini",
       "deepseek",
-      "local",
       "zai",
     ]);
     expect(
       groups().flatMap((group) => group.items.map((i) => i.id))
     ).not.toContain("anthropic/opus");
-    expect(groups().find((group) => group.id === "local")?.label).toBe(
-      "On this machine"
-    );
     expect(groups().find((group) => group.id === "gemini")?.label).toBe(
       "Google Gemini (AI Studio)"
     );
@@ -155,7 +149,7 @@ describe("botModelGroups", () => {
       "deepseek/deepseek-v4-flash",
     ]);
     expect(ids("abacus.ai")).toEqual(["openllm/auto", "abacus/route-llm"]);
-    expect(modelSearchText(catalog[2]!, "x")).toContain("z.ai");
+    expect(modelSearchText(catalog[2]!)).toContain("z.ai");
   });
 });
 

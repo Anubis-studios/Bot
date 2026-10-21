@@ -44,7 +44,7 @@ const refuse = (procedure: string) => () => {
   throw unsupported(procedure);
 };
 
-/** Native sign-in, login items and local models have no web-host form. */
+/** Native sign-in and login items have no web-host form. */
 const nodeHostPlatform: HostPlatformOperations = {
   webAuth: createWebAuth,
   startAbacusAuth: refuse("auth.abacus.start"),
@@ -56,12 +56,6 @@ const nodeHostPlatform: HostPlatformOperations = {
   registerLoginItem: () => {},
   relaunch: () => shutdown(75),
   requestMicrophoneAccess: async () => true,
-  localModels: {
-    state: refuse("localModels.state"),
-    install: refuse("localModels.install"),
-    cancelInstall: () => {},
-    remove: refuse("localModels.remove"),
-  },
 };
 
 const IDLE_UPDATE = {

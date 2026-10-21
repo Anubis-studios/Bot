@@ -1,11 +1,10 @@
-import { localModelReference } from "@abacus-ai/contract/local-models";
 import {
   PROVIDER_KEY_FIELDS,
   isPlausibleApiKey,
   type ProviderKeyField,
 } from "@abacus-ai/contract/settings";
 import { revalidateLogic } from "@tanstack/react-form";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useSearch } from "@tanstack/react-router";
 import { ChevronRightIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -27,7 +26,6 @@ import {
   StatePill,
 } from "#renderer/components/form-kit/page";
 import { usePrefs, useUpdatePrefs } from "#renderer/data/db/prefs";
-import { followNotices } from "#renderer/data/queries/notices";
 import { useMutation } from "#renderer/data/query-client";
 import { useAppNavigate } from "#renderer/lib/navigation/use-app-navigate";
 import { IS_ELECTRON } from "#renderer/lib/platform";
@@ -53,110 +51,24 @@ import { Field, FieldLabel, FieldError } from "#renderer/ui/field";
 import { Input } from "#renderer/ui/input";
 
 import { creditMarkState } from "./credits";
-export const ModelsPage = ({
-  adoptModel,
-}: {
-  adoptModel?: (target: string, model: string) => Promise<void>;
-}) => {
+export const ModelsPage = () => {
   const { t } = useTranslation();
   const { transport } = useAppContext();
-  const cache = useQueryClient();
   const navigate = useAppNavigate();
   const prefs = usePrefs();
   const update = useUpdatePrefs();
-  const search = useSearch({ strict: false }) as {
-    provider?: string;
-    for?: string;
-  };
+  const search = useSearch({ strict: false }) as { provider?: string };
   const keys = useQuery(
     transport.orpc.settings.keys.listProviders.queryOptions({ input: {} })
   );
   const account = useCreditsAccount();
-  const state = useQuery(
-    transport.orpc.localModels.state.queryOptions({
-      input: {},
-      enabled: IS_ELECTRON,
-    })
-  );
   const [q, setQ] = useState("");
-  const [error, setError] = useState<string | null>(null);
   const now = useNow();
   const mark = creditMarkState(
     account.data,
     prefs.creditsExhaustedAt,
     now,
     false
-  );
-  useEffect(() => {
-    if (!IS_ELECTRON) return;
-    const abort = new AbortController();
-    void followNotices(
-      transport,
-      ({ signal }) => transport.client.localModels.progress({}, { signal }),
-      (progress) => {
-        cache.setQueryData(
-          transport.orpc.localModels.state.queryKey({ input: {} }),
-          (old) => (old ? { ...old, download: progress } : old)
-        );
-        if (["ready", "failed", "cancelled"].includes(progress.phase)) {
-          void cache.invalidateQueries({
-            queryKey: transport.orpc.localModels.state.queryKey({ input: {} }),
-          });
-          void cache.invalidateQueries({
-            queryKey: transport.orpc.models.list.queryKey(),
-          });
-        }
-      },
-      abort.signal
-    );
-    return () => abort.abort();
-  }, [transport, cache]);
-  useEffect(() => {
-    if (search.provider === "local") {
-      const el = document.querySelector<HTMLElement>(
-        '[data-setting-id="localModels"]'
-      );
-      el?.scrollIntoView({ block: "center" });
-      el?.querySelector<HTMLElement>("button")?.focus();
-    }
-  }, [search.provider, state.data?.runtimeAvailable]);
-  const adopt = async (id: string) => {
-    if (search.for && adoptModel)
-      await adoptModel(search.for, localModelReference(id));
-  };
-  const stateKey = transport.orpc.localModels.state.queryKey({ input: {} });
-  // The `for` target the page adopts for now. An install answers once the
-  // download ends; one started for another target adopts nothing.
-  const target = useRef(search.for);
-  useEffect(() => {
-    target.current = search.for;
-  }, [search.for]);
-  const install = useMutation({
-    ...transport.orpc.localModels.install.mutationOptions(),
-    onMutate: () => {
-      setError(null);
-      return { target: target.current };
-    },
-    // Awaited by the mutation: it stays pending through the refetches
-    // and the adoption, and a failed adoption is its error.
-    onSuccess: async (result, { modelId }, started) => {
-      const current = started.target === target.current;
-      if (!result.ok) {
-        if (current && result.error !== "cancelled") setError(result.error);
-        return;
-      }
-      await cache.invalidateQueries({ queryKey: stateKey });
-      await cache.invalidateQueries({
-        queryKey: transport.orpc.models.list.queryKey(),
-      });
-      if (current && started.target === target.current) await adopt(modelId);
-    },
-    onError: (e) => setError(errorText(e)),
-  });
-  const removeModel = useMutation(
-    transport.orpc.localModels.remove.mutationOptions({
-      meta: { invalidates: [stateKey] },
-    })
   );
   const fields = PROVIDER_KEY_FIELDS.filter((p) => p.kind === "model").toSorted(
     (a, b) => Number(!!b.featured) - Number(!!a.featured)
@@ -227,20 +139,6 @@ export const ModelsPage = ({
               >
                 {t("phase5.connectFree")}
               </Button>
-              {IS_ELECTRON && (
-                <Button
-                  variant="secondary"
-                  onClick={() =>
-                    void navigate({
-                      to: "/settings/models",
-                      search: (old) => ({ ...old, provider: "local" }),
-                      transition: "none",
-                    })
-                  }
-                >
-                  {t("phase5.useLocal")}
-                </Button>
-              )}
               <Button
                 variant="ghost"
                 onClick={() => void update({ creditsExhaustedAt: null })}
@@ -282,109 +180,8 @@ export const ModelsPage = ({
             </GroupCard>
           </CollapsibleContent>
         </Collapsible>
-        {IS_ELECTRON && state.data?.runtimeAvailable && (
-          <section data-setting-id="localModels">
-            <GroupCard title={t("phase5.onThisMachine")}>
-              <p className="p-3 text-xs">
-                {t("phase5.memoryAvailable", {
-                  memory: Math.round(state.data.totalMemoryBytes / 1024 ** 3),
-                })}
-              </p>
-              {state.data.catalog.map((model) => {
-                const installed = state.data!.installedIds.includes(model.id);
-                const progress =
-                  state.data!.download?.modelId === model.id
-                    ? state.data!.download
-                    : null;
-                const downloading =
-                  progress?.phase === "downloading" ||
-                  progress?.phase === "verifying";
-                return (
-                  <SettingRow
-                    id={`local-${model.id}`}
-                    key={model.id}
-                    title={model.label}
-                    detail={[
-                      model.id === state.data!.recommendedId
-                        ? t("phase5.recommended")
-                        : "",
-                      `${(model.sizeBytes / 1024 ** 3).toFixed(1)} GB`,
-                      model.minMemoryBytes > state.data!.totalMemoryBytes
-                        ? t("phase5.tightMemory")
-                        : "",
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  >
-                    {installed ? (
-                      <>
-                        <StatePill>{t("phase5.installed")}</StatePill>
-                        {search.for && (
-                          <Button
-                            disabled={!adoptModel}
-                            size="sm"
-                            onClick={() =>
-                              void adopt(model.id).catch((e) =>
-                                setError(errorText(e))
-                              )
-                            }
-                          >
-                            {t("phase5.useModel", { model: model.label })}
-                          </Button>
-                        )}
-                        <ConfirmAction
-                          title={t("phase5.removeModel", {
-                            model: model.label,
-                          })}
-                          description={t("phase5.downloadAgain")}
-                          label={t("phase5.remove")}
-                          onConfirm={() =>
-                            removeModel.mutateAsync({ modelId: model.id })
-                          }
-                        />
-                      </>
-                    ) : downloading ? (
-                      <>
-                        <span role="status" className="text-xs">
-                          {progress.phase === "verifying"
-                            ? t("phase5.verifying")
-                            : `${Math.round((progress.receivedBytes / Math.max(1, progress.totalBytes)) * 100)}%`}
-                        </span>
-                        <Button
-                          size="sm"
-                          onClick={() =>
-                            void transport.client.localModels.cancelInstall({})
-                          }
-                        >
-                          {t("phase5.stop")}
-                        </Button>
-                      </>
-                    ) : (
-                      <Button
-                        size="sm"
-                        disabled={
-                          install.isPending ||
-                          ["downloading", "verifying"].includes(
-                            state.data!.download?.phase ?? ""
-                          )
-                        }
-                        onClick={() => install.mutate({ modelId: model.id })}
-                      >
-                        {t(
-                          search.for ? "phase5.installUse" : "phase5.download"
-                        )}
-                      </Button>
-                    )}
-                  </SettingRow>
-                );
-              })}
-            </GroupCard>
-          </section>
-        )}
-        {error && <PageNote error>{error}</PageNote>}
       </AreaPage>
       {search.provider &&
-        search.provider !== "local" &&
         fields.find((f) => f.provider === search.provider) && (
           <ProviderDialog
             key={search.provider}

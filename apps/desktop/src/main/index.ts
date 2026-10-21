@@ -54,10 +54,7 @@ import { composeHost } from "./compose-host";
 import { installCrashGuard } from "./crash-guard";
 import { isSafeExternalUrl } from "./external-links";
 import type { HostOperations } from "./handler";
-import {
-  disposeLocalModels,
-  electronHostPlatform,
-} from "./host-operations/electron";
+import { electronHostPlatform } from "./host-operations/electron";
 import { followMainAgentBusy } from "./keep-awake";
 import { decideLocalOpen } from "./local-open-guard";
 import { restoreLegacyFiles } from "./migrations/restore-legacy";
@@ -1917,9 +1914,6 @@ app.on("before-quit", (event) => {
   } catch (error) {
     console.warn("[experience] cleanup failed", error);
   }
-  // The loaded model is gigabytes of memory; the server does not outlive the app.
-  disposeLocalModels();
-
   // Quit must wait for this (bounded below): the SIGKILL escalation runs on
   // an unref'd timer, and returning synchronously would let a wedged agent
   // survive quit.

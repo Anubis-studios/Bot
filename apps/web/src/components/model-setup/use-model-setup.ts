@@ -27,12 +27,6 @@ export const useModelSetup = ({
   const keys = useQuery(
     transport.orpc.settings.keys.listProviders.queryOptions({ input: {} })
   );
-  const local = useQuery(
-    transport.orpc.localModels.state.queryOptions({
-      input: {},
-      enabled: IS_ELECTRON,
-    })
-  );
   const refresh = async (choose = false) => {
     const catalog = await transport.client.models.list({ refresh: true });
     await credentialsChanged();
@@ -68,7 +62,6 @@ export const useModelSetup = ({
           ]
         : [];
     }),
-    localAvailable: IS_ELECTRON && local.data?.runtimeAvailable === true,
     connect: async (provider) => {
       const result =
         provider === "abacus"

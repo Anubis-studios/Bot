@@ -13,7 +13,6 @@ import {
 import {
   PROVIDER_ENV_VARS,
   type AbacusBotSettings,
-  type CustomProviderEntry,
 } from "@abacus-ai/contract/settings";
 import {
   DEFAULT_TERMINAL_SHELL,
@@ -101,50 +100,6 @@ export const storedKeyProviders = (): string[] => {
   return Object.entries(PROVIDER_ENV_VARS)
     .filter(([, envVar]) => (apiKeys[envVar] ?? "").trim().length > 0)
     .map(([provider]) => provider);
-};
-
-/** Custom providers as a list, whichever shape the hand-edited file holds. */
-const customProviderList = (
-  settings: AbacusBotSettings
-): CustomProviderEntry[] => {
-  const raw: unknown = settings.customProviders;
-  if (Array.isArray(raw)) return raw as CustomProviderEntry[];
-  // An object keyed by id is how some configs were written by hand.
-  if (raw != null && typeof raw === "object") {
-    return Object.entries(
-      raw as Record<string, Omit<CustomProviderEntry, "id">>
-    ).map(([id, entry]) => ({ ...entry, id }));
-  }
-  return [];
-};
-
-/** Write or replace the entry with this id; the others are kept as they were. */
-export const upsertCustomProvider = (
-  provider: CustomProviderEntry
-): AbacusBotSettings => {
-  const settings = readSettings();
-  const others = customProviderList(settings).filter(
-    (entry) => entry.id !== provider.id
-  );
-
-  return writeSettings({
-    ...settings,
-    customProviders: [...others, provider],
-  });
-};
-
-export const removeCustomProvider = (id: string): AbacusBotSettings => {
-  const settings = readSettings();
-  const list = customProviderList(settings);
-  if (!list.some((entry) => entry.id === id)) return settings;
-  const rest = list.filter((entry) => entry.id !== id);
-  const { customProviders: _dropped, ...withoutProviders } = settings;
-
-  return writeSettings(
-    rest.length > 0
-      ? { ...withoutProviders, customProviders: rest }
-      : withoutProviders
-  );
 };
 
 export const setDefaultModel = (modelId: string): AbacusBotSettings => {

@@ -297,11 +297,9 @@ describe("R2-T25 composer", () => {
   it("the model picker: a provider rail with marks, search on top, dense rows with the chosen one checked, keyboard navigable", async () => {
     const onChange = vi.fn();
     const connect = vi.fn();
-    const useLocal = vi.fn();
     const configure = vi.fn();
     current = await renderWithDb(
       <ModelChip
-        onUseLocalModel={useLocal}
         binding={{
           value: "route-llm",
           onConfigureProviders: configure,
@@ -350,7 +348,7 @@ describe("R2-T25 composer", () => {
       '[data-slot="chat-model-panel"]'
     ) as HTMLElement;
     expect(content.className).toContain("w-[min(360px");
-    // The rail: favourites, each provider with its mark, this machine.
+    // The rail: favourites, then each provider with its mark.
     const rail = [
       ...content.querySelectorAll<HTMLElement>(
         '[data-slot="chat-model-rail-item"]'
@@ -360,10 +358,8 @@ describe("R2-T25 composer", () => {
       "Favourites",
       "Abacus.AI",
       "OpenRouter",
-      "On this machine",
     ]);
-    // It opens on the chosen model's provider, that row checked, the
-    // local-model row at the foot of every view.
+    // It opens on the chosen model's provider, that row checked.
     expect(rail[1]!.getAttribute("aria-selected")).toBe("true");
     expect(
       [...content.querySelectorAll('[data-slot="combobox-label"]')].map(
@@ -376,7 +372,6 @@ describe("R2-T25 composer", () => {
         .filter((option) => option.dataset.checked === "true")
         .map((option) => option.textContent)
     ).toEqual(["RouteLLM"]);
-    expect(within(panel).getByText("Use a local model")).toBeTruthy();
     // Keyboard from the search field: the arrow keys move, Enter picks.
     const search = screen.getByRole("combobox", { name: "Models" });
     fireEvent.keyDown(search, { key: "ArrowDown" });

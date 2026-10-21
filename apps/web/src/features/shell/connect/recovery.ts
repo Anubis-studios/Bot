@@ -26,7 +26,6 @@ export const MISSED_NOTICE_FAMILIES: ReadonlySet<string> = new Set([
   "connectors",
   "devices",
   "files",
-  "localModels",
   "mcp",
   "memory",
   "messaging",

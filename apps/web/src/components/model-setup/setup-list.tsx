@@ -1,5 +1,5 @@
 import { isPlausibleApiKey } from "@abacus-ai/contract/settings";
-import { Cpu, Settings2 } from "lucide-react";
+import { Settings2 } from "lucide-react";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -131,21 +131,6 @@ export const ModelSetupPopover = ({
                 <p className="text-muted-foreground px-2 py-1.5">
                   {t("chat.modelSetup.noAvailable")}
                 </p>
-              ) : null}
-              {setup.localAvailable ? (
-                <CommandItem
-                  value="local"
-                  className="h-8 rounded-lg px-2 py-1 text-[13px]"
-                  onSelect={() => setup.settings("local")}
-                >
-                  <Cpu aria-hidden />
-                  <span className="min-w-0 flex-1 truncate">
-                    {t("chat.composer.onThisMachine")}
-                  </span>
-                  <span className="text-muted-foreground text-xs">
-                    {t("phase5.download")}
-                  </span>
-                </CommandItem>
               ) : null}
               <CommandItem
                 value="settings"

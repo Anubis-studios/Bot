@@ -24,11 +24,6 @@ const ctx = (signedIn: boolean) => {
     cancelSignIn: vi.fn(async () => {}),
     complete: vi.fn(async () => {}),
     createFirstBot: vi.fn(),
-    localModel: (
-      <div className="onboarding-row" data-slot="local-model-row">
-        local
-      </div>
-    ),
   } as StepContext["props"];
   const context: StepContext = {
     props,
@@ -61,10 +56,8 @@ describe("ModelsStep", () => {
       "true",
       "false",
       "false",
-      null,
     ]);
     expect(rows[0]!.textContent).toContain("Connected");
-    expect(rows[3]!.getAttribute("data-slot")).toBe("local-model-row");
     expect(screen.getByRole("heading").textContent).toBe("Hook up your AI");
     fireEvent.click(screen.getByRole("button", { name: "Connect" }));
     await vi.waitFor(() => expect(refresh).toHaveBeenCalled());
@@ -87,7 +80,6 @@ describe("ModelsStep", () => {
       "false",
       "true",
       "true",
-      null,
     ]);
     // Signed out: Abacus's Connect starts a sign-in attempt from this row.
     fireEvent.click(screen.getByRole("button", { name: "Connect" }));

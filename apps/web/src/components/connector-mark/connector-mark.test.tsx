@@ -3,7 +3,6 @@
  * glyph on the same neutral tile; platform/provider mapping; geometry.
  */
 import { CONNECTORS } from "@abacus-ai/connectors/registry";
-import { LOCAL_PROVIDER_ID } from "@abacus-ai/contract/local-models";
 import { PROVIDER_KEY_FIELDS } from "@abacus-ai/contract/settings";
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
@@ -17,7 +16,6 @@ import {
 
 /** Providers the catalog or the agent name beyond the key fields. */
 const OTHER_PROVIDERS = [
-  LOCAL_PROVIDER_ID,
   "openllm",
   "routellm",
   "openai-codex",

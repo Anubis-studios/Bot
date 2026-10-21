@@ -5,26 +5,15 @@ Abacus.AI account starts with 2,000 credits and a selection of free models.
 OpenRouter and Google AI Studio add other free model options. Provider quotas,
 catalogs, and free-tier limits can change.
 
-You can also connect paid provider keys, subscriptions, cloud platforms, model
-gateways, or a local model. AbacusAI Bot does not proxy every request through an
+You can also connect paid provider keys, subscriptions, cloud platforms or model
+gateways. AbacusAI Bot does not proxy every request through an
 AbacusAI Bot service.
 
 Open Settings, then Models, to paste a provider key or use a supported sign-in
 flow. The page lists the providers available in the installed version and links
 to each provider's key page. The app supports direct providers, model gateways,
-AWS Bedrock, Google Vertex, Azure OpenAI, and OpenAI-compatible local endpoints
-such as llama.cpp and vLLM.
-
-## Local models
-
-Settings, then Models, has an "On this machine" section: the app can download
-a model (a Qwen build in GGUF form, pinned by checksum) into
-`~/.abacusai-bot/models` and run it with the bundled llama.cpp server. It
-appears in the model picker under "On this machine" and joins RouteLLM - Open
-as its last resort, after Abacus.AI, Google AI Studio and OpenRouter. The
-recommendation follows the machine's memory. A local model needs no account,
-key or quota; it is slower than the cloud, and the server is stopped after
-fifteen idle minutes so the memory comes back.
+AWS Bedrock, Google Vertex, Azure OpenAI, and OpenAI-compatible endpoints such
+as vLLM.
 
 ## Key precedence
 
@@ -65,7 +54,6 @@ eligible models available through your keys, tried in this order:
 | NVIDIA | Kimi, GLM, DeepSeek and Nemotron models served free on build.nvidia.com |
 | Cerebras | GPT-OSS 120B and Qwen 3.8 (free trial) |
 | Groq | GPT-OSS and Qwen. The free tier allows 8K tokens a minute, less than one agent request, so this helps only on a paid Groq plan |
-| On this machine | Local models, last |
 
 Every pooled model takes tool calls. On the free plan the model picker offers
 a "Connect" row for each source not yet connected, and the out-of-credits card

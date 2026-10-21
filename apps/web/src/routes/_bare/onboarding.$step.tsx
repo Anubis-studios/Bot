@@ -11,7 +11,6 @@ import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import * as v from "valibot";
 
-import { OnboardingLocalModels } from "#platform/local-models";
 import { createBotFromTemplate } from "#renderer/features/bots/data/bot-actions";
 import { MessagingPlatformDialog } from "#renderer/features/library/messaging";
 import { OnboardingStepPage } from "#renderer/features/onboarding";
@@ -238,12 +237,6 @@ const OnboardingRoute = () => {
         }
         createFirstBot={create}
         connect={connect}
-        localModel={
-          <OnboardingLocalModels
-            transport={transport}
-            saved={() => queryClient.invalidateQueries()}
-          />
-        }
       />
       {pairing && step === "connectors" && (
         <MessagingPlatformDialog
@@ -362,14 +355,6 @@ export const Route = createFileRoute("/_bare/onboarding/$step")({
           )
         ),
       ]);
-    // A local runtime is optional and may be down: warm it without holding the
-    // step (the query's default retries back off for ~7s) and let the pane
-    // present its unavailable state.
-    if (params.step === "models")
-      void context.queryClient.prefetchQuery({
-        ...context.transport.orpc.localModels.state.queryOptions({ input: {} }),
-        retry: false,
-      });
     // A network read: the step shows at once, its tiles waiting on it.
     if (params.step === "connectors")
       void warm(

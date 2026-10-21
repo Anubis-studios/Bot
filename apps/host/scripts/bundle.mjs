@@ -95,9 +95,7 @@ try {
   await cp(join(root, "apps/desktop/resources"), join(host, "resources"), {
     recursive: true,
     dereference: true,
-    filter: (source) =>
-      !source.includes("/vendor/llama") &&
-      !source.endsWith("/scrcpy-server.jar"),
+    filter: (source) => !source.endsWith("/scrcpy-server.jar"),
   });
   await cp(join(root, "packages/agent/dist"), join(host, "resources/agent"), {
     recursive: true,

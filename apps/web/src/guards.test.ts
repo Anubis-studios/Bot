@@ -114,7 +114,6 @@ const FOCUSED_ENTRYPOINTS: Record<string, readonly string[]> = {
     "gate",
     "machine",
     "pairing-banner",
-    "steps/local-models",
     "steps/provider-key",
     "store",
     "whatsapp",

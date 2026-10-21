@@ -25,6 +25,7 @@ import {
 } from "./progress-window";
 import { runMigrations, type RunMigrationsResult } from "./runner";
 import { MIGRATION_STEPS } from "./steps";
+import { deleteLocalModelFiles } from "./steps/007-retire-local-models";
 import {
   isMigrationWriteBlocked,
   setMigrationWriteBlocks,
@@ -83,6 +84,9 @@ export const runStartupMigrations = async (
       log: (message) => console.log(`[migrations] ${message}`),
     });
     setMigrationWriteBlocks(result);
+    deleteLocalModelFiles(abacusBotHome(), (message) =>
+      console.log(`[migrations] ${message}`)
+    );
     for (const attempt of result.unresolved)
       console.error(
         `[migrations] unresolved commit in ${attempt.staging}; writes to ${

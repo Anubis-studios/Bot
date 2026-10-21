@@ -74,7 +74,6 @@ describe("delivery classes (A-T9)", () => {
       "messaging.events": "coalescing",
       "bots.events": "coalescing",
       "memory.events": "coalescing",
-      "localModels.progress": "coalescing",
       "voice.whisper.progress": "coalescing",
       "files.events": "coalescing",
       // Spec 04 §26.4 b: one yield; the rows are gitState's.

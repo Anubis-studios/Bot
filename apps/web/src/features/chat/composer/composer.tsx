@@ -988,7 +988,6 @@ export const ThreadComposer = () => {
         binding={config.model}
         ref={modelChip}
         compact={narrow}
-        onUseLocalModel={config.onUseLocalModel}
         onOpenChange={(open) => setModelMenu(threadId, open)}
       />
     ) : null;

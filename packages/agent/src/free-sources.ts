@@ -22,7 +22,7 @@ export interface FreeSource {
   /**
    * The models pooled, best first. Absent: membership is decided by a rule
    * in openllm.ts (Abacus's catalog flag, OpenRouter's `:free` suffix, every
-   * Gemini or local model).
+   * Gemini model).
    */
   models?: readonly string[];
   limits?: WindowLimits;
@@ -36,7 +36,7 @@ export interface FreeSource {
  * OpenRouter's free models), then the rest. Mistral and NVIDIA carry strong
  * models with room for a whole agent turn; Cerebras is a short trial; Groq's
  * free tier allows 8K tokens a minute, under one agent request, so it only
- * helps a paid key. Local is the floor.
+ * helps a paid key.
  */
 export const FREE_SOURCES: readonly FreeSource[] = [
   { provider: "abacus" },
@@ -81,7 +81,6 @@ export const FREE_SOURCES: readonly FreeSource[] = [
     models: ["openai/gpt-oss-120b", "qwen/qwen3.8-27b", "openai/gpt-oss-20b"],
     limits: { rpm: 30, rpd: 1_000, tpm: 8_000, tpd: 200_000 },
   },
-  { provider: "local" },
 ];
 
 const BY_PROVIDER = new Map(

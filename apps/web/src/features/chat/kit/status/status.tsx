@@ -448,14 +448,6 @@ export const ErrorCard = ({
                         })}
                       </Button>
                     ))}
-                {composer.onUseLocalModel && (
-                  <Button
-                    variant="secondary"
-                    onClick={composer.onUseLocalModel}
-                  >
-                    {t("localModels.useLocal")}
-                  </Button>
-                )}
               </>
             ) : undefined
           }

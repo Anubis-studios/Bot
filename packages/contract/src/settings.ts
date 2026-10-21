@@ -24,10 +24,7 @@ export interface AbacusBotSettings {
   defaultModel?: string;
   /** Provider credentials, keyed by environment-variable name. */
   apiKeys?: Record<string, string>;
-  /**
-   * Custom OpenAI-compatible endpoints. The user's own entries are never
-   * rewritten; the app owns exactly one, `local`, for the models it serves.
-   */
+  /** Custom OpenAI-compatible endpoints, the user's own; never rewritten. */
   customProviders?: CustomProviderEntry[];
   /**
    * Keyed by the ids in `shared/toolsets.ts`. Only explicitly toggled groups

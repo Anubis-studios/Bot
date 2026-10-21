@@ -8,7 +8,6 @@ import type {
   AbacusAccountInfo,
   AbacusAuthOutcome,
   AbacusSignOutResult,
-  LocalModelInstallOutcome,
   OpenRouterAuthOutcome,
 } from "@abacus-ai/contract/contracts";
 import {
@@ -81,12 +80,6 @@ export interface HostPlatformOperations {
   registerLoginItem: () => void;
   relaunch: () => void;
   requestMicrophoneAccess: () => Promise<any>;
-  localModels: {
-    state: () => any;
-    install: (modelId: string) => Promise<LocalModelInstallOutcome>;
-    cancelInstall: () => void;
-    remove: (modelId: string) => void;
-  };
 }
 
 /**
@@ -476,7 +469,6 @@ export const createHostOperations = (
       ),
     requestMicrophoneAccess: () => requestMicrophoneAccess(),
     adoptAbacusCredential,
-    localModels: platform.localModels,
   };
 };
 

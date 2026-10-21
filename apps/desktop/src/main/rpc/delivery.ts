@@ -35,7 +35,6 @@ export const DELIVERY = {
   "messaging.events": "coalescing",
   "bots.events": "coalescing",
   "memory.events": "coalescing",
-  "localModels.progress": "coalescing",
   "voice.whisper.progress": "coalescing",
   "files.events": "coalescing",
   // One "watching" yield; the rows themselves are the gitState table's.

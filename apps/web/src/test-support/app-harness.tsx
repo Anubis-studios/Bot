@@ -270,17 +270,6 @@ const shellRouter = (
       }),
       abacus: os.account.abacus.handler(() => null),
     },
-    localModels: {
-      state: os.localModels.state.handler(() => ({
-        runtimeAvailable: false,
-        totalMemoryBytes: 0,
-        recommendedId: "qwen3.5-4b",
-        catalog: [],
-        installedIds: [],
-        download: null,
-        servingId: null,
-      })),
-    },
     workspaces: {
       checkPath: os.workspaces.checkPath.handler(({ input }) => ({
         workspaceId: input.workspaceId,

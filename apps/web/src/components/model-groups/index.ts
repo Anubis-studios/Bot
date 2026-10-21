@@ -13,7 +13,6 @@ import {
   FREE_POOL_PROVIDERS,
   type FreePoolProvider,
 } from "@abacus-ai/contract/free-pool";
-import { LOCAL_PROVIDER_ID } from "@abacus-ai/contract/local-models";
 import {
   resolveConfiguredModel,
   type ModelAvailability,
@@ -40,8 +39,6 @@ export interface BotModelLabels {
   appDefault: string;
   /** "Favorites" */
   favorites: string;
-  /** "On this machine" (the local provider's group). */
-  localProvider: string;
   connectOpenRouter: string;
   connectGoogleAi: string;
   connectSource?: (provider: FreeProvider) => string;
@@ -58,8 +55,7 @@ const PROVIDER_LABELS = new Map(
 const modelProviderGroup = (provider: string): string =>
   provider === "openllm" || provider === "abacus" ? "abacus" : provider;
 
-const modelProviderLabel = (provider: string, localLabel: string): string => {
-  if (provider === LOCAL_PROVIDER_ID) return localLabel;
+const modelProviderLabel = (provider: string): string => {
   if (provider === "abacus") return "Abacus.AI";
   return (
     PROVIDER_LABELS.get(provider) ??
@@ -78,22 +74,14 @@ const PINNED_PROVIDERS: Record<string, number> = {
   gemini: 2,
 };
 
-const byProvider =
-  (localLabel: string) =>
-  (left: string, right: string): number =>
-    (PINNED_PROVIDERS[left] ?? 9) - (PINNED_PROVIDERS[right] ?? 9) ||
-    modelProviderLabel(left, localLabel).localeCompare(
-      modelProviderLabel(right, localLabel)
-    );
+const byProvider = (left: string, right: string): number =>
+  (PINNED_PROVIDERS[left] ?? 9) - (PINNED_PROVIDERS[right] ?? 9) ||
+  modelProviderLabel(left).localeCompare(modelProviderLabel(right));
 
 /** What the old picker's search matched: label, id, provider name, note. */
-export const modelSearchText = (
-  model: ModelAvailability,
-  localLabel: string
-): string =>
+export const modelSearchText = (model: ModelAvailability): string =>
   `${model.label} ${model.id} ${modelProviderLabel(
-    modelProviderGroup(model.provider),
-    localLabel
+    modelProviderGroup(model.provider)
   )} ${model.note ?? ""}`.toLowerCase();
 
 /** The label of the model `resolveConfiguredModel` picks, or null. */
@@ -114,7 +102,7 @@ export const effectiveModelLabel = (
 
 /**
  * The model a chat will run when it comes from another provider (not Abacus,
- * not RouteLLM, not a model on this computer): its label, its provider's name
+ * not RouteLLM): its label, its provider's name
  * and whether it is free. Null otherwise.
  */
 export const otherProviderModel = (
@@ -128,15 +116,11 @@ export const otherProviderModel = (
     catalog,
   });
   const model = catalog.find((item) => item.id === id);
-  if (
-    model == null ||
-    modelProviderGroup(model.provider) === "abacus" ||
-    model.provider === LOCAL_PROVIDER_ID
-  )
+  if (model == null || modelProviderGroup(model.provider) === "abacus")
     return null;
   return {
     label: model.label,
-    provider: modelProviderLabel(model.provider, model.provider),
+    provider: modelProviderLabel(model.provider),
     free: model.tier === "free",
   };
 };
@@ -178,8 +162,7 @@ export const botModelGroups = (input: BotModelGroupsInput): BotModelGroup[] => {
   const runnable = input.models.filter((model) => model.configured);
   const catalogIndex = new Map(runnable.map((model, i) => [model.id, i]));
   const matches = (model: ModelAvailability): boolean =>
-    query === "" ||
-    modelSearchText(model, labels.localProvider).includes(query);
+    query === "" || modelSearchText(model).includes(query);
   const item = (model: ModelAvailability) => {
     const tier =
       model.tier === "free"
@@ -230,7 +213,7 @@ export const botModelGroups = (input: BotModelGroupsInput): BotModelGroup[] => {
       ...runnable.map((model) => modelProviderGroup(model.provider)),
       ...(query === "" ? connectable : []),
     ]),
-  ].toSorted(byProvider(labels.localProvider));
+  ].toSorted(byProvider);
 
   for (const provider of providerIds) {
     const members = runnable
@@ -261,14 +244,14 @@ export const botModelGroups = (input: BotModelGroupsInput): BotModelGroup[] => {
                 : provider === "gemini"
                   ? labels.connectGoogleAi
                   : (labels.connectSource?.(provider as FreeProvider) ??
-                    modelProviderLabel(provider, labels.localProvider)),
+                    modelProviderLabel(provider)),
             onSelect: () => input.onConnect(provider as FreeProvider),
           }
         : undefined;
     if (members.length === 0 && connect == null) continue;
     groups.push({
       id: provider,
-      label: modelProviderLabel(provider, labels.localProvider),
+      label: modelProviderLabel(provider),
       items: members.map(item),
       ...(connect != null ? { connect } : {}),
     });

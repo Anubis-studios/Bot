@@ -2,7 +2,6 @@ import { app } from "electron";
 
 import type { HostPlatformOperations } from "../handler";
 import { registerLoginItem } from "../login-item";
-import { LocalModelService } from "../services/local-models/local-model-service";
 import {
   cancelAbacusAuth,
   startAbacusAuth,
@@ -15,11 +14,6 @@ import {
 import { clearSignInSession } from "../services/providers/sign-in-session";
 import { requestMicrophoneAccess } from "../services/voice/microphone";
 
-let localModels: LocalModelService | null = null;
-export const disposeLocalModels = (): void => {
-  localModels?.dispose();
-  localModels = null;
-};
 export const electronHostPlatform: HostPlatformOperations = {
   startAbacusAuth,
   startOpenRouterAuth,
@@ -32,21 +26,5 @@ export const electronHostPlatform: HostPlatformOperations = {
   relaunch: () => {
     app.relaunch();
     app.quit();
-  },
-  localModels: {
-    state: () => localModels?.state(),
-    install: (id) =>
-      localModels == null
-        ? Promise.resolve({
-            ok: false,
-            error: "local models are not available",
-          })
-        : localModels.install(id),
-    cancelInstall: () => {
-      localModels?.cancelInstall();
-    },
-    remove: (id) => {
-      localModels?.remove(id);
-    },
   },
 };

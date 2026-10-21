@@ -6,7 +6,6 @@ export const WEB_HOST_DENIED = [
   "window",
   "notch",
   "devices",
-  "localModels",
   "update",
   "browser",
   "system.dialog",

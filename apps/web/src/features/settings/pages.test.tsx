@@ -541,28 +541,6 @@ it("keeps Account usable when the referral service is unavailable", async () => 
   expect(screen.queryByText(enUS.errors.genericTitle)).toBeNull();
 });
 
-it("opens model setup when the optional local runtime is unavailable", async () => {
-  app = await renderApp("/onboarding/models", {
-    signedIn: true,
-    procedures: {
-      localModels: {
-        state: os.localModels.state.handler(() => {
-          throw new Error("The local model runtime is not up");
-        }),
-      },
-    },
-  });
-  expect(
-    await screen.findByRole("heading", {
-      name: `${enUS.onboarding.setupTitleLead} ${enUS.onboarding.setupTitleAccent}`,
-    })
-  ).not.toBeNull();
-  expect(
-    screen.getByRole("button", { name: enUS.onboarding.setupDoneCta })
-  ).not.toBeNull();
-  expect(screen.queryByText(enUS.errors.genericTitle)).toBeNull();
-});
-
 it("App language applies as soon as it is picked, without a restart", async () => {
   // The old Language page's link lands on the row in General.
   app = await renderApp("/settings/language");

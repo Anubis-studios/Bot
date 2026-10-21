@@ -119,8 +119,3 @@ export const restoreDraft = (
 ): void => {
   if (draftRevision(threadId) === revision) updateDraft(threadId, () => saved);
 };
-
-/** Adopt a model using the key carried by `for=draft:<key>`. */
-export const adoptDraftModel = (key: string, model: string | null): void => {
-  updateDraft(key, (draft) => ({ ...draft, model }));
-};
