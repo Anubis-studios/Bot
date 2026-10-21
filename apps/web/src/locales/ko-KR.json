@@ -562,6 +562,7 @@
       "browser_snapshot": "페이지를 상호작용 요소 목록으로 읽습니다.",
       "browser_tabs": "브라우저 탭을 나열하고 전환하고 닫습니다.",
       "browser_task": "Hand a whole web task to a browser sub-agent and get back the answer.",
+      "checkpoint_diff": "Show what earlier turns changed on disk, from their checkpoints.",
       "code_map": "Index the functions and classes in a file or folder.",
       "connect_connector": "Ask the user to attach a service, such as Gmail or Slack, so its tools become available.",
       "cronjob": "Create, list, pause, or run scheduled tasks.",
@@ -606,6 +607,7 @@
       "read_telegram_messages": "요청 시 최근 Telegram 메시지를 읽습니다.",
       "read_whatsapp_messages": "요청 시 최근 WhatsApp 메시지를 읽습니다.",
       "run_tests": "Run the project's tests and report what passed and failed.",
+      "restore_checkpoint": "Put files back as they were before an earlier turn changed them.",
       "send_discord_message": "Discord으로 메시지를 보냅니다.",
       "send_telegram_message": "Telegram으로 메시지를 보냅니다.",
       "send_to_whatsapp": "AbacusAI Bot 번호에서 내 WhatsApp으로 메시지를 보냅니다.",
@@ -1716,6 +1718,30 @@
       "undoAll": "Undo all",
       "summary": "{{count}} files changed",
       "review": "Review changes"
+    },
+    "checkpoints": {
+      "summary_one": "Changed {{count}} file",
+      "summary_other": "Changed {{count}} files",
+      "restore": "Restore to before this turn",
+      "restoreFile": "Restore this file",
+      "undoRestore": "Undo restore",
+      "busy": "Wait for the agent to finish this turn",
+      "binary": "binary",
+      "noCopy": "no copy kept",
+      "partial": "Some folders were too large to keep whole; files past the limit are not covered.",
+      "failed": "Could not restore. Try again once the agent has finished.",
+      "restored_one": "Restored {{count}} file.",
+      "restored_other": "Restored {{count}} files.",
+      "unrestorable_one": "{{count}} file was too large to keep a copy of.",
+      "unrestorable_other": "{{count}} files were too large to keep a copy of.",
+      "conflicts_one": "{{count}} file changed after this turn and was left as it is.",
+      "conflicts_other": "{{count}} files changed after this turn and were left as they are.",
+      "force": "Restore anyway",
+      "kind": {
+        "modified": "Edited",
+        "created": "Added",
+        "deleted": "Deleted"
+      }
     },
     "missing": {
       "worktree": "The worktree folder is missing.",

@@ -60,6 +60,8 @@ const ALLOWED = new Set([
   // The language the user wants replies in: node's fs and path, and the
   // config leaf (node's fs, os and path); its detection call is plain fetch.
   "@abacus-ai/agent/user-language",
+  // Turn checkpoints: node's crypto, fs, os and path, and the atomic-file leaf.
+  "@abacus-ai/agent/checkpoint-store",
 ]);
 
 const MAIN_DIR = resolve(import.meta.dirname);

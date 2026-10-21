@@ -55,6 +55,14 @@ const expectedFailures: Record<string, { code: string; message: string }> = {
     code: "NOT_FOUND",
     message: "No workspace fixture",
   },
+  "checkpoints.diff": {
+    code: "NOT_FOUND",
+    message: "No checkpoint 1",
+  },
+  "checkpoints.restore": {
+    code: "NOT_FOUND",
+    message: "No checkpoint 1",
+  },
   "git.checkoutStatus": {
     code: "NOT_FOUND",
     message: "No workspace fixture",

@@ -45,6 +45,11 @@ function toolGuidelinesPrompt(edit: EditTool): string {
     "Use write only for new files or complete rewrites",
     ...(edit === "ours"
       ? [
+          "When the user says something broke or asks to undo, use checkpoint_diff and restore_checkpoint first: every turn's file changes are kept, so never rebuild a file from memory",
+        ]
+      : []),
+    ...(edit === "ours"
+      ? [
           ...EDIT_GUIDELINES,
           ...BATCH_EDIT_GUIDELINES,
           ...EDIT_SHARED_GUIDELINES,

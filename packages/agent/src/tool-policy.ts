@@ -231,6 +231,8 @@ export const UNATTENDED_EXCLUDED_TOOLS: Readonly<Record<string, string>> = {
   notebook_edit: NO_CODE,
   delete: NO_CODE,
   run_tests: NO_CODE,
+  restore_checkpoint: NO_CODE,
+  checkpoint_diff: "an unattended run changes no files, so has no checkpoints",
   pdf: NO_CODE,
   deck_export_pdf: NO_CODE,
   fetch_background_output: "no background process exists without the shell",

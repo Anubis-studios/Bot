@@ -171,6 +171,8 @@ const MUTATING_TOOLS = new Set([
   "notebook_edit",
   "ast_edit",
   "run_tests",
+  // Writes back files an earlier turn changed, wherever they were.
+  "restore_checkpoint",
   // A URL is an outbound channel, so plan mode refuses it and it never
   // auto-allows. See gateWebFetch.
   "web_fetch",
@@ -400,6 +402,11 @@ export function gateToolCall(tool: ToolRequest, options: GateOptions): Gate {
       return gateWrite(tool, options);
     case "bash":
       return gateBash(tool, options);
+    // An undo of the agent's own edits: an edit, as far as acceptEdits goes.
+    case "restore_checkpoint":
+      return options.mode === AgentMode.AcceptEdits
+        ? { kind: "allow" }
+        : { kind: "ask", request: buildGenericRequest(tool) };
     case "serve":
       return gateServe(tool, options);
     case "web_fetch":

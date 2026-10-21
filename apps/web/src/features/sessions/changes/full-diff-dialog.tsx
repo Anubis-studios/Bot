@@ -26,6 +26,7 @@ export const FullDiffDialog = ({
   scope = "unstaged",
   source,
   toolKey,
+  seq,
   mode = "unified",
   resolveTool,
   onClose,
@@ -36,8 +37,10 @@ export const FullDiffDialog = ({
   root: string;
   path: string;
   scope?: "staged" | "unstaged";
-  source: "git" | "tool";
+  source: "git" | "tool" | "checkpoint";
   toolKey?: string;
+  /** The checkpointed turn, for `source: "checkpoint"`. */
+  seq?: number;
   mode?: "unified" | "split";
   resolveTool: () => Promise<
     | { state: "ready"; original: string; final: string }
@@ -61,9 +64,24 @@ export const FullDiffDialog = ({
       scope,
       source,
       toolKey,
+      seq,
       fingerprint,
     ],
     queryFn: async () => {
+      if (source === "checkpoint") {
+        if (seq == null) return { kind: "unavailable" };
+        const [diff] = await transport.client.checkpoints.diff({
+          sessionId,
+          seq,
+          path,
+        });
+        return diff == null || diff.omitted
+          ? { kind: "unavailable" }
+          : {
+              kind: "patch",
+              patch: createPatch(path, diff.before ?? "", diff.after ?? ""),
+            };
+      }
       if (source === "tool") {
         const tool = await resolveTool();
         return tool.state === "ready"
@@ -103,9 +121,11 @@ export const FullDiffDialog = ({
                 ? "common.loading"
                 : "sessions.changes.unavailable"
             )}
-            <Button variant="secondary" onClick={onGit}>
-              {t("sessions.changes.gitFallback")}
-            </Button>
+            {source !== "checkpoint" && (
+              <Button variant="secondary" onClick={onGit}>
+                {t("sessions.changes.gitFallback")}
+              </Button>
+            )}
           </div>
         )}
       </DialogContent>
