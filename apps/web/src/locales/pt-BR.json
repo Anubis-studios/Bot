@@ -4241,7 +4241,7 @@
     },
     "cause": {
       "context_too_long": "Esta conversa ficou longa demais para o modelo. Comece um novo chat ou escolha um modelo com contexto maior.",
-      "key_invalid": "{{provider}} recusou a chave. Confira em Configurações → Modelos.",
+      "key_invalid": "Sua chave do {{provider}} foi recusada: ela é inválida ou expirou.",
       "own_key_quota": "Sua chave do {{provider}} atingiu a cota. Mude para outro modelo ou confira o plano da chave.",
       "model_unavailable": "Este modelo não conseguiu aceitar o pedido. Escolha outro modelo.",
       "free_pool_spent": "Todas as fontes gratuitas se esgotaram por enquanto. Conecte outra fonte gratuita ou escolha outro modelo.",
@@ -4253,7 +4253,8 @@
       "newChat": "Novo chat",
       "fixKey": "Conferir a chave",
       "viewDetails": "Ver detalhes",
-      "tryAgain": "Tentar de novo"
+      "tryAgain": "Tentar de novo",
+      "switchToAbacus": "Mudar para o Abacus (RouteLLM - Open)"
     },
     "channel": {
       "wall": "Pausei porque seus créditos grátis acabaram.",
@@ -4266,6 +4267,7 @@
       "ownKeyCredit": "Sua chave do {{provider}} ficou sem saldo.",
       "ownKeyRateLimit": "Sua chave do {{provider}} atingiu o limite de uso.",
       "ownKeyDown": "O {{provider}} não está respondendo agora.",
+      "ownKeyRejected": "Sua chave do {{provider}} foi recusada: ela é inválida ou expirou. Corrija no app, em Configurações → Modelos.",
       "ownKeyOffer": "Use qualquer modelo no AbacusAI: {{link}}",
       "ownKeyWeb": "Use no AbacusAI Agent na web: {{link}}",
       "busy": "Os modelos gratuitos estão ocupados agora.",

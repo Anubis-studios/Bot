@@ -1378,6 +1378,7 @@ export class ForeverEngine {
                 freeLaneProviders: [],
                 onFreeLane: false,
                 abacusFreeModels: [],
+                abacus: null,
               }
         ),
       },

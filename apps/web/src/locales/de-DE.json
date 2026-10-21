@@ -4241,7 +4241,7 @@
     },
     "cause": {
       "context_too_long": "Diese Unterhaltung ist zu lang für das Modell. Starte einen neuen Chat oder wähle ein Modell mit größerem Kontext.",
-      "key_invalid": "{{provider}} hat den Schlüssel abgelehnt. Prüfe ihn unter Einstellungen → Modelle.",
+      "key_invalid": "Dein {{provider}}-Schlüssel wurde abgelehnt – er ist ungültig oder abgelaufen.",
       "own_key_quota": "Dein {{provider}}-Schlüssel hat sein Kontingent erreicht. Wechsle zu einem anderen Modell oder prüfe den Tarif des Schlüssels.",
       "model_unavailable": "Dieses Modell konnte die Anfrage nicht annehmen. Wähle ein anderes Modell.",
       "free_pool_spent": "Alle kostenlosen Quellen sind vorerst aufgebraucht. Verbinde eine weitere kostenlose Quelle oder wähle ein anderes Modell.",
@@ -4253,7 +4253,8 @@
       "newChat": "Neuer Chat",
       "fixKey": "Schlüssel prüfen",
       "viewDetails": "Details anzeigen",
-      "tryAgain": "Erneut versuchen"
+      "tryAgain": "Erneut versuchen",
+      "switchToAbacus": "Zu Abacus wechseln (RouteLLM - Open)"
     },
     "channel": {
       "wall": "Ich habe pausiert, weil deine kostenlosen Credits aufgebraucht sind.",
@@ -4266,6 +4267,7 @@
       "ownKeyCredit": "Dein {{provider}}-Schlüssel hat kein Guthaben mehr.",
       "ownKeyRateLimit": "Dein {{provider}}-Schlüssel hat sein Ratenlimit erreicht.",
       "ownKeyDown": "{{provider}} antwortet gerade nicht.",
+      "ownKeyRejected": "Dein {{provider}}-Schlüssel wurde abgelehnt – er ist ungültig oder abgelaufen. Korrigiere ihn in der App unter Einstellungen → Modelle.",
       "ownKeyOffer": "Nutze stattdessen jedes Modell auf AbacusAI: {{link}}",
       "ownKeyWeb": "Nutze ihn in AbacusAI Agent im Web: {{link}}",
       "busy": "Die kostenlosen Modelle sind gerade ausgelastet.",

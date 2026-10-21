@@ -4241,7 +4241,7 @@
     },
     "cause": {
       "context_too_long": "Percakapan ini terlalu panjang untuk model ini. Mulai chat baru, atau pilih model dengan konteks lebih besar.",
-      "key_invalid": "{{provider}} menolak kuncinya. Periksa di Pengaturan → Model.",
+      "key_invalid": "Kunci {{provider}} kamu ditolak — tidak valid atau sudah kedaluwarsa.",
       "own_key_quota": "Kunci {{provider}} kamu sudah mencapai kuotanya. Beralih ke model lain, atau periksa paket kunci tersebut.",
       "model_unavailable": "Model ini tidak bisa menerima permintaan. Pilih model lain.",
       "free_pool_spent": "Semua sumber gratis sudah habis untuk saat ini. Hubungkan sumber gratis lain, atau pilih model lain.",
@@ -4253,7 +4253,8 @@
       "newChat": "Chat baru",
       "fixKey": "Periksa kunci",
       "viewDetails": "Lihat detail",
-      "tryAgain": "Coba lagi"
+      "tryAgain": "Coba lagi",
+      "switchToAbacus": "Beralih ke Abacus (RouteLLM - Open)"
     },
     "channel": {
       "wall": "Aku berhenti sementara karena kredit gratis kamu sudah habis.",
@@ -4266,6 +4267,7 @@
       "ownKeyCredit": "Kunci {{provider}} kamu sudah kehabisan saldo.",
       "ownKeyRateLimit": "Kunci {{provider}} kamu sudah mencapai batas penggunaan.",
       "ownKeyDown": "{{provider}} sedang tidak merespons.",
+      "ownKeyRejected": "Kunci {{provider}} kamu ditolak — tidak valid atau sudah kedaluwarsa. Perbaiki di aplikasi, di Pengaturan → Model.",
       "ownKeyOffer": "Pakai model apa saja di AbacusAI: {{link}}",
       "ownKeyWeb": "Pakai di AbacusAI Agent di web: {{link}}",
       "busy": "Model gratis sedang sibuk.",

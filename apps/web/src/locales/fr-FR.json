@@ -4241,7 +4241,7 @@
     },
     "cause": {
       "context_too_long": "Cette conversation est trop longue pour le modèle. Commencez une nouvelle discussion ou choisissez un modèle avec un contexte plus grand.",
-      "key_invalid": "{{provider}} a refusé la clé. Vérifiez-la dans Paramètres → Modèles.",
+      "key_invalid": "Votre clé {{provider}} a été refusée : elle est invalide ou a expiré.",
       "own_key_quota": "Votre clé {{provider}} a atteint son quota. Passez à un autre modèle ou vérifiez l'offre de la clé.",
       "model_unavailable": "Ce modèle n'a pas pu accepter la demande. Choisissez un autre modèle.",
       "free_pool_spent": "Toutes les sources gratuites sont épuisées pour le moment. Connectez une autre source gratuite ou choisissez un autre modèle.",
@@ -4253,7 +4253,8 @@
       "newChat": "Nouvelle discussion",
       "fixKey": "Vérifier la clé",
       "viewDetails": "Voir les détails",
-      "tryAgain": "Réessayer"
+      "tryAgain": "Réessayer",
+      "switchToAbacus": "Passer à Abacus (RouteLLM - Open)"
     },
     "channel": {
       "wall": "Je me suis mis en pause car vos crédits gratuits sont épuisés.",
@@ -4266,6 +4267,7 @@
       "ownKeyCredit": "Votre clé {{provider}} n'a plus de crédit.",
       "ownKeyRateLimit": "Votre clé {{provider}} a atteint sa limite d'utilisation.",
       "ownKeyDown": "{{provider}} ne répond pas en ce moment.",
+      "ownKeyRejected": "Votre clé {{provider}} a été refusée : elle est invalide ou a expiré. Corrigez-la dans l'application, dans Paramètres → Modèles.",
       "ownKeyOffer": "Utilisez plutôt n'importe quel modèle sur AbacusAI : {{link}}",
       "ownKeyWeb": "Utilisez-la dans AbacusAI Agent sur le web : {{link}}",
       "busy": "Les modèles gratuits sont occupés en ce moment.",

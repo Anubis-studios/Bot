@@ -1590,6 +1590,7 @@
       "ownKeyCredit",
       "ownKeyRateLimit",
       "ownKeyDown",
+      "ownKeyRejected",
       "ownKeyOffer",
       "ownKeyWeb",
       "busy",

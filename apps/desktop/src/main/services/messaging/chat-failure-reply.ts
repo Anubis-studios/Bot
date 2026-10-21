@@ -36,6 +36,7 @@ export interface TurnFailure {
 export type FailureKind =
   | "upgrade-abacus"
   | "own-key"
+  | "key-rejected"
   | "free-pool-out"
   | "model-unavailable"
   | "connection"
@@ -56,12 +57,16 @@ export const ABACUS_AGENT_URL = "https://apps.abacus.ai/chatllm";
 
 const NETWORK_UNREACHABLE_CODE = "network_unreachable";
 
+/** Whose own key failed: the own-key offer, or the key to fix. */
 const ownKeyAction = (error: TurnFailure) =>
-  error.actions?.find((action) => action.type === "own-key-unavailable");
+  error.actions?.find((action) => action.type === "own-key-unavailable") ??
+  error.actions?.find((action) => action.type === "fix-key");
 
 export const failureKind = (error: TurnFailure): FailureKind => {
   const types = new Set(error.actions?.map((action) => action.type));
   if (types.has("upgrade-abacus")) return "upgrade-abacus";
+  if (error.cause === "key_invalid" && types.has("fix-key"))
+    return "key-rejected";
   if (ownKeyAction(error)?.provider != null) return "own-key";
   // Before the sign-in line: a shut free pool reports model_unavailable too.
   if (types.has("free-pool-out")) return "free-pool-out";
@@ -109,7 +114,7 @@ const offerLines = (
 const ownKeyLead = (words: ChannelWords, error: TurnFailure): string => {
   const action = ownKeyAction(error);
   const provider = providerDisplayName(action?.provider ?? "");
-  if (action?.cause === "credit")
+  if (action?.cause === "credit" || error.cause === "own_key_quota")
     return words.t("outcome.channel.ownKeyCredit", { provider });
   if (action?.cause === "rate_limit")
     return words.t("outcome.channel.ownKeyRateLimit", { provider });
@@ -158,6 +163,10 @@ export const chatReplyForFailure = (
       return repeat
         ? ownKeyLead(words, error)
         : `${ownKeyLead(words, error)} ${t("outcome.channel.ownKeyWeb", { link: ABACUS_AGENT_URL })}`;
+    case "key-rejected":
+      return t("outcome.channel.ownKeyRejected", {
+        provider: providerDisplayName(ownKeyAction(error)?.provider ?? ""),
+      });
     case "free-pool-out":
       if (account === "paid") return t("outcome.channel.generic");
       if (repeat) return reminder;
@@ -214,7 +223,8 @@ export class FailureReplyThrottle {
     if (
       kind === "model-unavailable" ||
       kind === "generic" ||
-      kind === "connection"
+      kind === "connection" ||
+      kind === "key-rejected"
     )
       return false;
     return !this.claim(this.offered, `${chatKey}:${kind}`);

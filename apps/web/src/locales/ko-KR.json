@@ -4241,7 +4241,7 @@
     },
     "cause": {
       "context_too_long": "이 대화는 모델이 처리하기에 너무 길어요. 새 채팅을 시작하거나 더 큰 컨텍스트를 지원하는 모델을 선택하세요.",
-      "key_invalid": "{{provider}}에서 키를 거부했어요. 설정 → 모델에서 확인하세요.",
+      "key_invalid": "{{provider}} 키가 거부되었어요. 유효하지 않거나 만료되었어요.",
       "own_key_quota": "{{provider}} 키가 할당량에 도달했어요. 다른 모델로 전환하거나 키의 요금제를 확인하세요.",
       "model_unavailable": "이 모델은 요청을 받을 수 없었어요. 다른 모델을 선택하세요.",
       "free_pool_spent": "현재 모든 무료 소스를 다 사용했어요. 다른 무료 소스를 연결하거나 다른 모델을 선택하세요.",
@@ -4253,7 +4253,8 @@
       "newChat": "새 채팅",
       "fixKey": "키 확인",
       "viewDetails": "자세히 보기",
-      "tryAgain": "다시 시도"
+      "tryAgain": "다시 시도",
+      "switchToAbacus": "Abacus로 전환 (RouteLLM - Open)"
     },
     "channel": {
       "wall": "무료 크레딧을 모두 사용해서 잠시 멈췄어요.",
@@ -4266,6 +4267,7 @@
       "ownKeyCredit": "{{provider}} 키의 잔액이 없어요.",
       "ownKeyRateLimit": "{{provider}} 키가 사용 한도에 도달했어요.",
       "ownKeyDown": "{{provider}}이(가) 지금 응답하지 않아요.",
+      "ownKeyRejected": "{{provider}} 키가 거부되었어요. 유효하지 않거나 만료되었어요. 앱의 설정 → 모델에서 수정하세요.",
       "ownKeyOffer": "대신 AbacusAI에서 어떤 모델이든 사용하세요: {{link}}",
       "ownKeyWeb": "웹의 AbacusAI Agent에서 사용하세요: {{link}}",
       "busy": "무료 모델이 지금 혼잡해요.",

@@ -232,6 +232,12 @@ export interface FailureContext {
   onFreeLane: boolean;
   /** Abacus's own $0 models, offered by name on a pinned Abacus model. */
   abacusFreeModels: ReadonlyArray<{ model: string; label: string }>;
+  /**
+   * Where the account's Abacus credits stand, for a turn whose own key
+   * failed: some left (the turn can move to Abacus), used up (the plan is
+   * the way on), or no Abacus account here at all.
+   */
+  abacus: "credits" | "out" | null;
 }
 
 /** The error a failed turn ends with, as the desktop receives it. */
@@ -243,10 +249,21 @@ export interface FailurePayload {
   actions?: NotificationAction[];
 }
 
+const PROVIDER_NAMES: Record<string, string> = {
+  openai: "OpenAI",
+  anthropic: "Anthropic",
+  gemini: "Google Gemini",
+  openrouter: "OpenRouter",
+  deepseek: "DeepSeek",
+  xai: "xAI",
+  nvidia: "NVIDIA",
+};
+
 const providerName = (provider: string | undefined): string =>
   provider == null || provider.length === 0
     ? "The provider"
-    : provider.charAt(0).toUpperCase() + provider.slice(1);
+    : (PROVIDER_NAMES[provider] ??
+      provider.charAt(0).toUpperCase() + provider.slice(1));
 
 /**
  * The English words for a cause on the free pool. The app and the chat apps
@@ -264,7 +281,7 @@ const routedMessage = (failure: TurnFailure): string => {
     case "context_too_long":
       return "This conversation is too long for the free models. Start a new chat, or pick a model with a larger context.";
     case "key_invalid":
-      return `${providerName(failure.provider)} refused its key. Check it in Settings → Models.`;
+      return `Your ${providerName(failure.provider)} key was rejected — it's invalid or expired.`;
     case "own_key_quota":
       return `Your ${providerName(failure.provider)} key hit its quota. Switch to a different model, or check the key's plan.`;
     case "model_unavailable":
@@ -326,25 +343,20 @@ const failureActions = (
     case "context_too_long":
       return [{ type: "new-chat" }, { type: "switch-model" }];
     case "key_invalid":
-      return [
-        ...(ownKey(provider) ? [{ type: "fix-key", provider }] : []),
-        { type: "switch-model" },
-      ];
     case "own_key_quota":
-      return [
-        // A pinned key's own card, with the Abacus offer for a free account.
-        ...(!context.routed && ownKey(provider)
-          ? [
-              {
-                type: "own-key-unavailable",
-                provider,
-                cause: ownKeyFailureCause(failure.raw, provider) ?? "credit",
-              },
-            ]
-          : []),
-        { type: "switch-model" },
-        ...(ownKey(provider) ? [{ type: "fix-key", provider }] : []),
-      ];
+      if (!ownKey(provider)) return [{ type: "switch-model" }];
+      // The user's own key, picked by hand: fix it, or go on with Abacus
+      // (credits left), or the plan (credits used up). Never a silent move.
+      if (!context.routed && context.abacus != null)
+        return [
+          { type: "fix-key", provider },
+          context.abacus === "credits"
+            ? { type: "switch-to-abacus" }
+            : { type: "upgrade-abacus", cause: "exhausted" },
+        ];
+      return failure.cause === "key_invalid"
+        ? [{ type: "fix-key", provider }, { type: "switch-model" }]
+        : [{ type: "switch-model" }, { type: "fix-key", provider }];
     case "free_pool_spent":
       return [{ type: "free-pool-out" }];
     case "rate_limited": {
@@ -399,7 +411,12 @@ export function presentFailure(
     ? failureActions({ ...failure, cause: "credits_exhausted" }, context)
     : failureActions(failure, context);
   const connection = failure.cause === "connection";
-  const pooledLine = context.routed || connection || failure.cause === "empty";
+  // A pinned key that was refused or ran dry says whose key, not the status.
+  const ownKeyLine =
+    (failure.cause === "key_invalid" || failure.cause === "own_key_quota") &&
+    ownKey(failure.provider);
+  const pooledLine =
+    context.routed || connection || ownKeyLine || failure.cause === "empty";
   const message = pooledLine
     ? routedMessage(failure)
     : isProviderFailure(failure.raw)

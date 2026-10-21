@@ -696,8 +696,12 @@ describe("the credit wall in the chat", () => {
   });
 });
 
-describe("a quota on the user's own key", () => {
-  const pinned = (provider: string, raw: string) =>
+describe("the user's own key, refused or spent", () => {
+  const pinned = (
+    provider: string,
+    raw: string,
+    abacus: "credits" | "out" | null
+  ) =>
     presentFailure(
       { cause: classifyAttempt(raw, provider), provider, raw },
       {
@@ -705,52 +709,69 @@ describe("a quota on the user's own key", () => {
         freeLaneProviders: [],
         onFreeLane: false,
         abacusFreeModels: [],
+        abacus,
       }
-    ).actions ?? [];
+    );
+  const GEMINI_QUOTA =
+    '429: {"error":{"code":429,"message":"Quota exceeded for metric: generate_content_free_tier_requests","status":"RESOURCE_EXHAUSTED"}}';
+
+  it("an invalid OpenAI key with Abacus credits left names the key and offers to switch to Abacus", () => {
+    const shown = pinned("openai", "401 Incorrect API key provided", "credits");
+    expect(shown).toMatchObject({
+      cause: "key_invalid",
+      message: "Your OpenAI key was rejected — it's invalid or expired.",
+      actions: [
+        { type: "fix-key", provider: "openai" },
+        { type: "switch-to-abacus" },
+      ],
+    });
+    expect(shown.message).not.toMatch(/401|Incorrect API key/);
+  });
+
+  it("an invalid key with the Abacus credits used up offers the plan instead", () => {
+    expect(
+      pinned("openai", "401 Incorrect API key provided", "out").actions
+    ).toEqual([
+      { type: "fix-key", provider: "openai" },
+      { type: "upgrade-abacus", cause: "exhausted" },
+    ]);
+  });
 
   it.each([
-    [
-      "a Studio key's metric quota",
-      "gemini",
-      '429: {"error":{"code":429,"message":"Quota exceeded for metric: generate_content_free_tier_requests","status":"RESOURCE_EXHAUSTED"}}',
-      "rate_limit",
-    ],
+    ["a Studio key's metric quota", "gemini", GEMINI_QUOTA],
     [
       "a bare JSON 429 with no status up front",
       "gemini",
-      '{"error":{"code":429,"message":"Quota exceeded for metric: generate_content_free_tier_requests","status":"RESOURCE_EXHAUSTED"}}',
-      "rate_limit",
-    ],
-    [
-      "a metric quota with no status",
-      "gemini",
-      "Quota exceeded for metric: generate_content_free_tier_requests",
-      "rate_limit",
+      GEMINI_QUOTA.replace(/^429: /, ""),
     ],
     [
       "another provider's credit limit",
       "xai",
       "429: You hit the credit limit for this key.",
-      "credit",
     ],
   ])(
-    "offers Abacus for %s, not the out-of-credits card",
-    (_l, provider, raw, cause) => {
-      const actions = pinned(provider, raw);
-
-      expect(actions).toContainEqual({
-        type: "own-key-unavailable",
-        provider,
-        cause,
-      });
-      expect(actions.some((action) => action.type === "upgrade-abacus")).toBe(
-        false
-      );
+    "%s takes the same choice, and is never the Abacus wall's words",
+    (_l, provider, raw) => {
+      const shown = pinned(provider, raw, "credits");
+      expect(shown.cause).toBe("own_key_quota");
+      expect(shown.actions).toEqual([
+        { type: "fix-key", provider },
+        { type: "switch-to-abacus" },
+      ]);
       expect(classifyProviderFailure(raw).summary).not.toBe(
         "You're out of credits"
       );
     }
   );
+
+  it("without an Abacus account, a refused key keeps the fix and a model switch", () => {
+    expect(
+      pinned("openai", "401 Incorrect API key provided", null).actions
+    ).toEqual([
+      { type: "fix-key", provider: "openai" },
+      { type: "switch-model" },
+    ]);
+  });
 
   it("reads the status out of a bare JSON body", () => {
     const raw =
@@ -775,12 +796,13 @@ describe("a quota on the user's own key", () => {
         freeLaneProviders: [],
         onFreeLane: false,
         abacusFreeModels: [],
+        abacus: "credits",
       }
     );
 
     expect(shown.cause).toBe("own_key_quota");
     expect(shown.message).toBe(
-      "Your Openrouter key hit its quota. Switch to a different model, or check the key's plan."
+      "Your OpenRouter key hit its quota. Switch to a different model, or check the key's plan."
     );
     expect(shown.actions).toEqual([
       { type: "switch-model" },
@@ -789,10 +811,12 @@ describe("a quota on the user's own key", () => {
   });
 
   it("an Abacus-served turn past the free window carries the cause", () => {
-    const actions = pinned(
-      "abacus",
-      "429: Your free AbacusAI credits have expired, so you have no remaining credits to use the API."
-    );
+    const actions =
+      pinned(
+        "abacus",
+        "429: Your free AbacusAI credits have expired, so you have no remaining credits to use the API.",
+        "out"
+      ).actions ?? [];
 
     expect(actions[0]).toEqual({ type: "upgrade-abacus", cause: "expired" });
   });

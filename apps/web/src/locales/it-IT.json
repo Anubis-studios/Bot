@@ -4241,7 +4241,7 @@
     },
     "cause": {
       "context_too_long": "Questa conversazione è troppo lunga per il modello. Inizia una nuova chat o scegli un modello con un contesto più ampio.",
-      "key_invalid": "{{provider}} ha rifiutato la chiave. Controllala in Impostazioni → Modelli.",
+      "key_invalid": "La tua chiave {{provider}} è stata rifiutata: non è valida o è scaduta.",
       "own_key_quota": "La tua chiave {{provider}} ha raggiunto la quota. Passa a un altro modello o controlla il piano della chiave.",
       "model_unavailable": "Questo modello non ha potuto accettare la richiesta. Scegli un altro modello.",
       "free_pool_spent": "Tutte le fonti gratuite sono esaurite per ora. Collega un'altra fonte gratuita o scegli un altro modello.",
@@ -4253,7 +4253,8 @@
       "newChat": "Nuova chat",
       "fixKey": "Controlla la chiave",
       "viewDetails": "Vedi dettagli",
-      "tryAgain": "Riprova"
+      "tryAgain": "Riprova",
+      "switchToAbacus": "Passa ad Abacus (RouteLLM - Open)"
     },
     "channel": {
       "wall": "Mi sono fermato perché hai esaurito i crediti gratuiti.",
@@ -4266,6 +4267,7 @@
       "ownKeyCredit": "La tua chiave {{provider}} ha esaurito il credito.",
       "ownKeyRateLimit": "La tua chiave {{provider}} ha raggiunto il limite di utilizzo.",
       "ownKeyDown": "{{provider}} non risponde in questo momento.",
+      "ownKeyRejected": "La tua chiave {{provider}} è stata rifiutata: non è valida o è scaduta. Correggila nell'app, in Impostazioni → Modelli.",
       "ownKeyOffer": "Usa invece qualsiasi modello su AbacusAI: {{link}}",
       "ownKeyWeb": "Usala in AbacusAI Agent sul web: {{link}}",
       "busy": "I modelli gratuiti sono occupati in questo momento.",

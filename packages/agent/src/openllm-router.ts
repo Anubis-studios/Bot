@@ -11,6 +11,7 @@
  */
 import type { ModelRegistry } from "@earendil-works/pi-coding-agent";
 
+import { hostCreditBalance } from "./credit-balance.js";
 import {
   creditWallActive,
   freeLaneChosen,
@@ -182,6 +183,13 @@ export class OpenLlmRouter {
       abacusFreeModels: listModels(registry)
         .filter((choice) => choice.provider === "abacus" && choice.free)
         .map((choice) => ({ model: choice.id, label: choice.label })),
+      abacus: !listModels(registry).some(
+        (choice) => choice.provider === "abacus"
+      )
+        ? null
+        : creditWallActive(this.now()) || hostCreditBalance()?.remaining === 0
+          ? "out"
+          : "credits",
     };
   }
 

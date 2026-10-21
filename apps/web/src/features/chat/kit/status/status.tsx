@@ -556,6 +556,16 @@ export const ErrorCard = ({
                         })}
                       </Button>
                     ))}
+                {actions.some((action) => action.type === "fix-key") && (
+                  <Button
+                    nativeButton={false}
+                    variant="secondary"
+                    data-action="fix-key"
+                    render={<AppLink to="/settings/models" />}
+                  >
+                    {t("outcome.action.fixKey")}
+                  </Button>
+                )}
               </>
             ) : undefined
           }
@@ -586,6 +596,32 @@ export const ErrorCard = ({
                 onClick={composer.onNewChat}
               >
                 {t("outcome.action.newChat")}
+              </Button>,
+            ]
+          : [];
+      case "switch-to-abacus":
+        return latest && canReply
+          ? [
+              <Button
+                key={index}
+                variant="secondary"
+                data-action="switch-to-abacus"
+                onClick={() =>
+                  void (async () => {
+                    await composer.onResumeOnFreePool?.();
+                    await session.retry(
+                      {
+                        model: OPENLLM_ID,
+                        ...(composer.fixedMode
+                          ? { mode: composer.fixedMode }
+                          : {}),
+                      },
+                      t("workspace.retryMessage")
+                    );
+                  })().catch(() => {})
+                }
+              >
+                {t("outcome.action.switchToAbacus")}
               </Button>,
             ]
           : [];

@@ -483,6 +483,7 @@ describe("one cause per turn, read from the whole chain of calls", () => {
     freeLaneProviders: ["openrouter", "gemini"],
     onFreeLane: false,
     abacusFreeModels: [],
+    abacus: null,
   };
 
   // Each from a real turn's log: what the call said, and what it means.
@@ -635,6 +636,7 @@ describe("one cause per turn, read from the whole chain of calls", () => {
         freeLaneProviders: ["gemini"],
         onFreeLane: false,
         abacusFreeModels: [{ model: "abacus/free-1", label: "Free One" }],
+        abacus: "out",
       }
     );
     expect(shown.actions).toEqual([

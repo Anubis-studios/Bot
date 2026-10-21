@@ -592,6 +592,71 @@ describe("the turn's outcome card", () => {
     expect(screen.getByText("Check the key")).toBeTruthy();
   });
 
+  it("a rejected own OpenAI key with Abacus credits left names the key and switches the turn to Abacus on one tap", async () => {
+    const relay = failed({
+      message: "Your OpenAI key was rejected — it's invalid or expired.",
+      cause: "key_invalid",
+      actions: [
+        { type: "fix-key", provider: "openai" },
+        { type: "switch-to-abacus" },
+      ],
+    });
+    current = await renderRelay(relay, "session");
+    await screen.findByText(
+      "Your OpenAI key was rejected — it's invalid or expired."
+    );
+    expect(screen.getByText("Check the key")).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Switch to Abacus (RouteLLM - Open)" })
+    );
+    await waitFor(() => expect(relay.stats.send).toHaveLength(1));
+    expect(relay.stats.send[0]!.forwardedProps).toMatchObject({
+      model: OPENLLM_ID,
+    });
+  });
+
+  it("a rejected own key with the Abacus credits used up shows the upgrade card, with the key fix beside it", async () => {
+    current = await renderRelay(
+      failed({
+        message: "Your OpenAI key was rejected — it's invalid or expired.",
+        cause: "key_invalid",
+        actions: [
+          { type: "fix-key", provider: "openai" },
+          { type: "upgrade-abacus", cause: "exhausted" },
+        ],
+      }),
+      "session",
+      {},
+      {},
+      host("free")
+    );
+    await screen.findByText("Your free credits are used up");
+    expect(
+      await screen.findByRole("button", { name: "Upgrade to Basic" })
+    ).toBeTruthy();
+    expect(screen.getByText("Check the key")).toBeTruthy();
+    expect(screen.queryByText(/Switch to Abacus/)).toBeNull();
+  });
+
+  it("a paid account out of credits with a rejected key is offered a top-up", async () => {
+    current = await renderRelay(
+      failed({
+        message: "Your OpenAI key was rejected — it's invalid or expired.",
+        cause: "key_invalid",
+        actions: [
+          { type: "fix-key", provider: "openai" },
+          { type: "upgrade-abacus", cause: "exhausted" },
+        ],
+      }),
+      "session",
+      {},
+      {},
+      host("basic", { canTopUpCredits: async () => true })
+    );
+    expect(await screen.findByRole("button", { name: "Top up" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Upgrade to/ })).toBeNull();
+  });
+
   it("labels a free-lane reply with its provider while the wall stands, and drops it once credits are back", async () => {
     const relay = new FakeRelay();
     relay.emitAll([

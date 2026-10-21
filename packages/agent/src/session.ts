@@ -1465,6 +1465,7 @@ export class AbacusBotSession {
                 freeLaneProviders: [],
                 onFreeLane: false,
                 abacusFreeModels: [],
+                abacus: null,
               }
         ),
       },

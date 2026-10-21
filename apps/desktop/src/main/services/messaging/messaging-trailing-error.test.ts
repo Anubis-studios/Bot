@@ -704,6 +704,23 @@ describe("chatReplyForFailure", () => {
         ).toBeNull();
   });
 
+  it("a refused own key names whose key, with where to fix it, never the raw error", () => {
+    expect(
+      reply(
+        {
+          cause: "key_invalid",
+          actions: [
+            { type: "fix-key", provider: "openai" },
+            { type: "switch-to-abacus" },
+          ],
+        },
+        "free"
+      )
+    ).toBe(
+      "Your OpenAI key was rejected — it's invalid or expired. Fix it in the app under Settings → Models."
+    );
+  });
+
   it("a dropped connection says so, never busy", () => {
     expect(reply({ code: "network_unreachable" }, "free")).toBe(
       "The connection dropped, so I couldn't finish that. Please try again in a moment."

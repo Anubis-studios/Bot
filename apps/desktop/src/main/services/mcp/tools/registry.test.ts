@@ -283,7 +283,7 @@ describe("billing_plan for what only a plan does", () => {
     const description = agentTool("billing_plan")?.description;
     expect(typeof description).toBe("string");
     expect(String(description).replace(/\n/g, " ")).toContain(
-      "anything that should keep working while the app or computer is off: WhatsApp, Telegram or Discord auto-replies, routines, reminders, monitoring, staying online 24/7"
+      "whenever they ask whether anything keeps working while the app or computer is off (WhatsApp, Telegram or Discord auto-replies, routines, reminders, monitoring, staying online 24/7), which a plan answers and is never impossible"
     );
     expect(String(description).replace(/\n/g, " ")).toContain(
       "when they ask to analyse a video (a reel, a Short, a YouTube or TikTok link, a video file)"
@@ -372,5 +372,68 @@ describe("billing_plan on what Basic gives this app", () => {
       "Their plan's credits renew every month: 2,000 a month. Never call them a one-time grant."
     );
     expect(text).not.toMatch(/tasks? per month/i);
+  });
+});
+
+describe("billing_plan on the phone", () => {
+  it("is called for 'keeps working with the computer off' and relays every feature line as written", async () => {
+    const { PHONE_BILLING_TOOLS, phoneBillingResult } =
+      await import("./phone/billing");
+    const description = String(PHONE_BILLING_TOOLS[0]?.description).replace(
+      /\n/g,
+      " "
+    );
+    expect(description).toContain(
+      "whenever they ask whether something keeps working while their app or computer is off (WhatsApp, Telegram or Discord auto-replies, routines, reminders)"
+    );
+    expect(description).toContain("with every feature line as written");
+    expect(description).toContain("Never answer these from memory.");
+
+    const line =
+      "Personal agents in Abacus AI Agent on the web that run 24/7, even with your computer off: WhatsApp, Discord and Telegram auto-replies, all your routines, and everything your bot does";
+    const result = phoneBillingResult(
+      {
+        ok: (text: string) => ({ content: [{ type: "text", text }] }),
+      } as never,
+      {
+        current: {
+          planName: "Free",
+          creditsRemaining: 0,
+          creditsGranted: 2000,
+          freeTierExpiresAt: null,
+        },
+        plans: [
+          {
+            plan: "free",
+            planName: "Free",
+            priceText: "Free",
+            features: [],
+            creditsPerMonth: 2000,
+            current: true,
+          },
+        ],
+        upgrades: [
+          {
+            plan: "basic",
+            planName: "Basic",
+            priceText: "$10/mo",
+            firstMonthPriceCents: 700,
+            priceCents: 1000,
+            features: [line],
+            url: "https://example.test/upgrade",
+          },
+        ],
+        topUpUrl: null,
+        upgradeInMobileApp: false,
+      }
+    ) as unknown as { content: Array<{ text: string }> };
+    const text = result.content[0]!.text;
+    // The server's line, whole, marked as the web's.
+    expect(text).toContain(`  - ${line} [in Abacus AI Agent on the web`);
+    expect(text).toContain("every feature line as written");
+    expect(text).toContain("never answer no or impossible");
+    expect(text).toContain(
+      "Their plan's credits renew every month: 2,000 a month."
+    );
   });
 });

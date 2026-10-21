@@ -4241,7 +4241,7 @@
     },
     "cause": {
       "context_too_long": "This conversation is too long for the model. Start a new chat, or pick a model with a larger context.",
-      "key_invalid": "{{provider}} refused the key. Check it in Settings → Models.",
+      "key_invalid": "Your {{provider}} key was rejected — it's invalid or expired.",
       "own_key_quota": "Your {{provider}} key hit its quota. Switch to a different model, or check the key's plan.",
       "model_unavailable": "This model couldn't take the request. Pick a different model.",
       "free_pool_spent": "Every free source is used up for now. Connect another free source, or pick a different model.",
@@ -4253,7 +4253,8 @@
       "newChat": "New chat",
       "fixKey": "Check the key",
       "viewDetails": "View details",
-      "tryAgain": "Try again"
+      "tryAgain": "Try again",
+      "switchToAbacus": "Switch to Abacus (RouteLLM - Open)"
     },
     "channel": {
       "wall": "I've paused because your free credits are used up.",
@@ -4266,6 +4267,7 @@
       "ownKeyCredit": "Your {{provider}} key is out of credit.",
       "ownKeyRateLimit": "Your {{provider}} key hit its rate limit.",
       "ownKeyDown": "{{provider}} isn't responding right now.",
+      "ownKeyRejected": "Your {{provider}} key was rejected — it's invalid or expired. Fix it in the app under Settings → Models.",
       "ownKeyOffer": "Use any model on AbacusAI instead: {{link}}",
       "ownKeyWeb": "Use it in AbacusAI Agent on the web: {{link}}",
       "busy": "The free models are busy right now.",

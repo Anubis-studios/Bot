@@ -4241,7 +4241,7 @@
     },
     "cause": {
       "context_too_long": "Bu konuşma model için çok uzun. Yeni bir sohbet başlat veya daha geniş bağlamlı bir model seç.",
-      "key_invalid": "{{provider}} anahtarı reddetti. Ayarlar → Modeller bölümünden kontrol et.",
+      "key_invalid": "{{provider}} anahtarın reddedildi: geçersiz ya da süresi dolmuş.",
       "own_key_quota": "{{provider}} anahtarın kotasını doldurdu. Başka bir modele geç veya anahtarın planını kontrol et.",
       "model_unavailable": "Bu model isteği kabul edemedi. Başka bir model seç.",
       "free_pool_spent": "Şimdilik tüm ücretsiz kaynaklar tükendi. Başka bir ücretsiz kaynak bağla veya başka bir model seç.",
@@ -4253,7 +4253,8 @@
       "newChat": "Yeni sohbet",
       "fixKey": "Anahtarı kontrol et",
       "viewDetails": "Ayrıntıları göster",
-      "tryAgain": "Tekrar dene"
+      "tryAgain": "Tekrar dene",
+      "switchToAbacus": "Abacus'a geç (RouteLLM - Open)"
     },
     "channel": {
       "wall": "Ücretsiz kredilerin bittiği için durakladım.",
@@ -4266,6 +4267,7 @@
       "ownKeyCredit": "{{provider}} anahtarının bakiyesi bitti.",
       "ownKeyRateLimit": "{{provider}} anahtarın kullanım sınırına ulaştı.",
       "ownKeyDown": "{{provider}} şu anda yanıt vermiyor.",
+      "ownKeyRejected": "{{provider}} anahtarın reddedildi: geçersiz ya da süresi dolmuş. Uygulamada Ayarlar → Modeller bölümünden düzelt.",
       "ownKeyOffer": "Bunun yerine AbacusAI'daki herhangi bir modeli kullan: {{link}}",
       "ownKeyWeb": "Web'deki AbacusAI Agent'ta kullan: {{link}}",
       "busy": "Ücretsiz modeller şu anda yoğun.",
