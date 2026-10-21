@@ -3045,7 +3045,11 @@
     },
     "paidFeature": {
       "title": "{{feature}} termasuk dalam Basic",
-      "webTitle": "{{feature}} termasuk dalam Basic, di Abacus AI Agent di web"
+      "webTitle": "{{feature}} termasuk dalam Basic, di Abacus AI Agent di web",
+      "webBody": "Basic mencakup membuat dan mengedit gambar dan video, serta membuat audio, di web dalam Abacus AI Agent.",
+      "agentTitle": "{{feature}} ada di Abacus AI Agent di web",
+      "agentBody": "Paket Anda mencakup membuat dan mengedit gambar dan video, serta membuat audio, di web dalam Abacus AI Agent. Permintaan Anda sudah terisi di sana; lampirkan gambar apa pun yang ingin Anda edit.",
+      "openAgent": "Buka di Abacus AI Agent"
     }
   },
   "notch": {

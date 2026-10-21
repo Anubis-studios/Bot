@@ -96,7 +96,8 @@ export const planFacts = (billing: BillingPlan): string[] => [
         `Their plan's credits renew every month: ${credits(billing.plans.find((plan) => plan.current)?.creditsPerMonth ?? null)} a month. Never call them a one-time grant.`,
       ]
     : []),
-  "In this app, bots, chats and routines have no task or project cap: a plan gives them its monthly credits, its models and, where listed, image and video generation. Items marked as on the web are Abacus AI Agent's, not limits here.",
+  "In this app, bots, chats and routines have no task or project cap: a plan gives them its monthly credits and its models. Items marked as on the web are Abacus AI Agent's, not limits here.",
+  "On a plan, creating and editing images, making videos and making speech or audio happen in Abacus AI Agent on the web; this app makes them only with a provider key of the user's own.",
 ];
 
 /**

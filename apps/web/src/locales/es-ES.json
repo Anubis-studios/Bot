@@ -3045,7 +3045,11 @@
     },
     "paidFeature": {
       "title": "{{feature}} está incluida en Basic",
-      "webTitle": "{{feature}} está incluida en Basic, en Abacus AI Agent en la web"
+      "webTitle": "{{feature}} está incluida en Basic, en Abacus AI Agent en la web",
+      "webBody": "Basic incluye crear y editar imágenes y vídeos, y generar audio, en la web en Abacus AI Agent.",
+      "agentTitle": "{{feature}} está en Abacus AI Agent en la web",
+      "agentBody": "Tu plan incluye crear y editar imágenes y vídeos, y generar audio, en la web en Abacus AI Agent. Tu petición ya está escrita allí; adjunta allí cualquier imagen que quieras editar.",
+      "openAgent": "Abrir en Abacus AI Agent"
     }
   },
   "notch": {

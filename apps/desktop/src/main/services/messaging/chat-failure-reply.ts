@@ -53,7 +53,7 @@ export interface ChannelOffer {
 }
 
 /** AbacusAI Agent on the web. */
-export const ABACUS_AGENT_URL = "https://apps.abacus.ai/chatllm";
+const ABACUS_AGENT_URL = "https://apps.abacus.ai/chatllm";
 
 const NETWORK_UNREACHABLE_CODE = "network_unreachable";
 

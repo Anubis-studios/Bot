@@ -503,11 +503,12 @@ describe("paid-plan capabilities", () => {
   const callOn = async (
     server: McpAgentToolsServer,
     feature: string,
-    session = "ui-session"
+    session = "ui-session",
+    prompt?: string
   ) => {
     const result = (await server.executeTool(
       "paid_feature",
-      { feature },
+      { feature, ...(prompt != null ? { prompt } : {}) },
       session
     )) as { content: Array<{ text?: string }>; isError?: boolean };
     return {
@@ -515,6 +516,16 @@ describe("paid-plan capabilities", () => {
       isError: result.isError === true,
     };
   };
+
+  const names = (server: McpAgentToolsServer, session?: string) =>
+    listed(server, session).map((tool) => tool.name);
+
+  const offer = (server: McpAgentToolsServer, session?: string) =>
+    featureEnum(
+      listed(server, session).find((tool) => tool.name === "paid_feature")
+    );
+
+  const FOX = "https://apps.abacus.ai/chatllm/agent?prompt=a+fox+in+the+snow";
 
   it("tells a free account's model that video, image and speech come with the paid plans", () => {
     mediaKeys.set("ABACUS_API_KEY", "key");
@@ -524,9 +535,10 @@ describe("paid-plan capabilities", () => {
     expect(names).not.toContain("image_generate");
     const tool = tools.find((entry) => entry.name === "paid_feature");
     expect(tool?.description).toMatch(
-      /video generation, image generation, text to speech, and video analysis/i
+      /video generation, image generation and editing, speech and audio generation, and video analysis/i
     );
     expect(tool?.description).toMatch(/Never tell the user you cannot/);
+    expect(tool?.description).toMatch(/Canva, Hugging Face/);
     expect(featureEnum(tool)).toEqual([
       "video_gen",
       "image_gen",
@@ -535,7 +547,7 @@ describe("paid-plan capabilities", () => {
     ]);
   });
 
-  it("answers a free account's video ask with Basic, its price and the card, never a refusal", async () => {
+  it("answers a free account's video ask with Basic, its price and the card, never a refusal or a detour", async () => {
     mediaKeys.set("ABACUS_API_KEY", "key");
     billingPlan.mockResolvedValue(BASIC_FIRST_MONTH);
     const { text, isError } = await callOn(planServer("free"), "video_gen");
@@ -543,10 +555,14 @@ describe("paid-plan capabilities", () => {
     expect(billingPlan).toHaveBeenCalledWith(false);
     expect(text).toMatch(/Basic, \$7 for the first month \(30% off/);
     expect(text).toContain("Image and video generation");
-    expect(text).toMatch(/Abacus AI Agent on the web, not in this app/);
+    expect(text).toMatch(
+      /Basic includes video generation on the web in Abacus AI Agent, not in this app/
+    );
     expect(text).toMatch(/Upgrade card under your reply/);
     expect(text).not.toContain("https://upgrade.example/basic");
     expect(text).toMatch(/Never say you cannot do it/);
+    expect(text).toMatch(/no Canva, Hugging Face or other connector/);
+    expect(text).toMatch(/ffmpeg, Blender, Python/);
   });
 
   it("answers a free account's 'what's in this reel?' with Basic's video analysis, priced, never 'I can only read the title'", async () => {
@@ -572,7 +588,12 @@ describe("paid-plan capabilities", () => {
     );
     expect(billingPlan).toHaveBeenCalledWith(true);
     expect(text).toContain("Their upgrade link: https://upgrade.example/basic");
-    expect(text).toMatch(/in this app once they upgrade/);
+    expect(text).toMatch(
+      /image generation and editing on the web in Abacus AI Agent/
+    );
+    expect(text).toMatch(/attach it there/);
+    // A chat app has no Settings to point at.
+    expect(text).not.toMatch(/Settings, API keys/);
   });
 
   it("leaves a free account the real tool when it has one: a toggle on and a provider to run it", () => {
@@ -583,58 +604,126 @@ describe("paid-plan capabilities", () => {
     expect(featureEnum(tool)).toEqual(["image_gen", "tts", "video"]);
   });
 
-  it("gives a paid account the real image and speech tools, and no offer for them", () => {
+  it("makes no media on the Abacus key alone, on any plan", () => {
     mediaKeys.set("ABACUS_API_KEY", "key");
-    const tools = listed(planServer("basic", ["image_gen", "tts"]));
-    const names = tools.map((tool) => tool.name);
-    expect(names).toEqual(
-      expect.arrayContaining(["image_generate", "text_to_speech"])
-    );
-    const tool = tools.find((entry) => entry.name === "paid_feature");
-    expect(featureEnum(tool)).toEqual(["video_gen"]);
+    for (const tier of ["free", "basic"] as const) {
+      const server = planServer(tier, ["image_gen", "tts", "video_gen"]);
+      expect(names(server)).not.toContain("image_generate");
+      expect(names(server)).not.toContain("text_to_speech");
+      expect(offer(server)).toEqual(
+        expect.arrayContaining(["video_gen", "image_gen", "tts"])
+      );
+    }
   });
 
-  it("points a paid account without a video provider to the web, with no upgrade", async () => {
+  it("keeps the user's own keys making media in the app, on any plan", () => {
+    mediaKeys.set("OPENAI_API_KEY", "key");
+    mediaKeys.set("BFL_API_KEY", "key");
+    const server = planServer("basic", ["image_gen", "tts", "video_gen"]);
+    expect(names(server)).toEqual(
+      expect.arrayContaining([
+        "image_generate",
+        "text_to_speech",
+        "video_generate",
+      ])
+    );
+    expect(names(server)).not.toContain("paid_feature");
+    expect(
+      offer(planServer("free", ["image_gen", "tts", "video_gen"]))
+    ).toEqual(["video"]);
+  });
+
+  it("sends a paid account to Abacus AI Agent with the Open card, never an upgrade", async () => {
     mediaKeys.set("ABACUS_API_KEY", "key");
+    const server = planServer("basic", ["image_gen", "tts"]);
+    expect(offer(server)).toEqual(["video_gen", "image_gen", "tts"]);
     const { text } = await callOn(
-      planServer("basic", ["image_gen", "tts"]),
-      "video_gen"
+      server,
+      "image_gen",
+      "ui-session",
+      "a fox in the snow"
     );
     expect(billingPlan).not.toHaveBeenCalled();
-    expect(text).toMatch(/^Their plan includes video generation/);
-    expect(text).toMatch(/Abacus AI Agent on the web/);
+    expect(text).toMatch(/^Their plan includes image generation and editing/);
+    expect(text).toMatch(/Open in Abacus AI Agent card under your reply/);
+    expect(text).toMatch(/give no link/);
+    expect(text).not.toContain("https://");
+    expect(text).toMatch(/Do not offer an upgrade/);
+    expect(text).toMatch(/attach it there/);
+    expect(text).toMatch(/no Canva, Hugging Face/);
+  });
+
+  it("gives a paid account's chat app the web link with the request filled in", async () => {
+    const { text } = await callOn(
+      planServer("basic", ["todo"], { bot: true }),
+      "video_gen",
+      "ui-session",
+      "a fox in the snow"
+    );
+    expect(text).toContain(
+      `Their link, which opens Abacus AI Agent with their request filled in: ${FOX}`
+    );
     expect(text).toMatch(/Never say you cannot do it/);
   });
 
   it("offers nothing while the plan is unread, nor to a paid account with every capability", () => {
-    mediaKeys.set("ABACUS_API_KEY", "key");
+    mediaKeys.set("OPENAI_API_KEY", "key");
     mediaKeys.set("BFL_API_KEY", "key");
+    expect(names(planServer("unknown"))).not.toContain("paid_feature");
     expect(
-      listed(planServer("unknown")).map((tool) => tool.name)
-    ).not.toContain("paid_feature");
-    expect(
-      listed(planServer("basic", ["image_gen", "tts", "video_gen"])).map(
-        (tool) => tool.name
-      )
+      names(planServer("basic", ["image_gen", "tts", "video_gen"]))
     ).not.toContain("paid_feature");
   });
 
-  it("never reaches the phone or a routine nobody is watching", async () => {
-    mediaKeys.set("ABACUS_API_KEY", "key");
-    const server = planServer("free");
-    expect(listed(server, PHONE).map((tool) => tool.name)).not.toContain(
-      "paid_feature"
+  it("answers on the phone in its own words, with the link, whatever keys the computer has", async () => {
+    mediaKeys.set("OPENAI_API_KEY", "key");
+    billingPlan.mockResolvedValue(BASIC_FIRST_MONTH);
+    const free = planServer("free", ["image_gen"]);
+    const tool = listed(free, PHONE).find(
+      (entry) => entry.name === "paid_feature"
     );
+    expect(tool?.description).toMatch(/one short WhatsApp message/);
+    expect(featureEnum(tool)).toEqual(["video_gen", "image_gen", "tts"]);
+    expect(names(free, PHONE)).not.toContain("image_generate");
+    const upgrade = await callOn(free, "image_gen", PHONE);
+    expect(billingPlan).toHaveBeenCalledWith(true);
+    expect(upgrade.text).toContain(
+      "Their upgrade link: https://upgrade.example/basic"
+    );
+    expect(upgrade.text).not.toMatch(/Settings|card/);
+    const paid = await callOn(
+      planServer("basic", ["image_gen"]),
+      "image_gen",
+      PHONE,
+      "a fox in the snow"
+    );
+    expect(paid.text).toContain(FOX);
     expect(
-      listed(server, "routine-run").map((tool) => tool.name)
+      listed(planServer("unknown"), PHONE).map((t) => t.name)
     ).not.toContain("paid_feature");
-    expect(await callOn(server, "video_gen", PHONE)).toEqual({
-      text: "Unknown tool: paid_feature",
-      isError: true,
+  });
+
+  it("answers a routine nobody is watching with a link, never a minted one", async () => {
+    billingPlan.mockResolvedValue({
+      ...BASIC_FIRST_MONTH,
+      upgrades: [{ ...BASIC_FIRST_MONTH.upgrades[0], url: null }],
     });
-    expect((await callOn(server, "video_gen", "routine-run")).isError).toBe(
-      true
+    const free = planServer("free");
+    expect(names(free, "routine-run")).toContain("paid_feature");
+    const upgrade = await callOn(free, "video_gen", "routine-run");
+    expect(upgrade.isError).toBe(false);
+    expect(billingPlan).toHaveBeenCalledWith(false);
+    expect(upgrade.text).toMatch(
+      /Their upgrade link: https:\/\/\S+\/bot\/link\/upgrade\?src=app/
     );
-    expect(billingPlan).not.toHaveBeenCalled();
+    // A routine gets no media tools, so its own keys never list them there.
+    mediaKeys.set("OPENAI_API_KEY", "key");
+    const paid = await callOn(
+      planServer("basic", ["image_gen"]),
+      "image_gen",
+      "routine-run",
+      "a fox in the snow"
+    );
+    expect(paid.text).toContain(FOX);
   });
 });

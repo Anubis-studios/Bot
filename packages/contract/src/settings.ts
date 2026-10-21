@@ -155,7 +155,7 @@ export const PROVIDER_KEY_FIELDS: ProviderKeyField[] = [
     // the loopback handshake only abacus-auth-service.ts can mint and refuses
     // without it. Connecting is what the Connect button beside it is for.
     signupUrl: "https://abacus.ai/app/profile/apikey",
-    hint: "Hosted models, web search, image generation, and speech generation",
+    hint: "Hosted models and web search",
   },
   {
     provider: "deepseek",

@@ -5,6 +5,7 @@
  * transcript. In `shared/` because the renderer draws the panel from it and the
  * main process turns disabled groups into `excludeTools`; they must agree.
  */
+import { ABACUS_AGENT_ROUTINES_URL } from "./routines";
 
 /** `planned` means nothing implements it yet; it is not "needs setup". */
 export type ToolsetStatus = "ready" | "planned";
@@ -58,7 +59,7 @@ export interface Toolset {
   /**
    * A capability the paid plans include. On a paid plan it is on by default
    * where `inApp` (the plan itself serves it here); on the free plan, or where
-   * this app cannot serve it, the agent is told it exists and where to get it.
+   * the plan serves it only on the web, the agent is told where to get it.
    */
   paidPlan?: PaidPlanCapability;
 }
@@ -68,11 +69,26 @@ export interface PaidPlanCapability {
   feature: string;
   /** What the model calls it. */
   name: string;
+  /** False: the plan makes it in Abacus AI Agent on the web; here only on the user's own provider key. */
   inApp: boolean;
 }
 
 /** The tool that tells the agent about a paid-plan capability this account lacks. */
 export const PAID_FEATURE_TOOL = "paid_feature";
+
+/** Long enough for any request, short enough for every browser and chat app. */
+const WEB_PROMPT_MAX = 1500;
+
+/**
+ * Abacus AI Agent on the web with the user's request in its composer: its
+ * `prompt` parameter fills the box and never sends.
+ */
+export const abacusAgentPromptUrl = (prompt?: string | null): string => {
+  const url = new URL(ABACUS_AGENT_ROUTINES_URL);
+  const text = prompt?.trim().slice(0, WEB_PROMPT_MAX) ?? "";
+  if (text.length > 0) url.searchParams.set("prompt", text);
+  return url.toString();
+};
 
 const tool = (name: string): ToolsetTool => ({ name, descriptionKey: name });
 
@@ -271,7 +287,11 @@ export const TOOLSETS: Toolset[] = [
     delivery: "mcp-agent-tools",
     tools: [tool("image_generate")],
     defaultEnabled: false,
-    paidPlan: { feature: "image_gen", name: "image generation", inApp: true },
+    paidPlan: {
+      feature: "image_gen",
+      name: "image generation and editing",
+      inApp: false,
+    },
   },
   {
     id: "deliverables",
@@ -406,7 +426,11 @@ export const TOOLSETS: Toolset[] = [
     delivery: "mcp-agent-tools",
     tools: [tool("text_to_speech")],
     defaultEnabled: false,
-    paidPlan: { feature: "tts", name: "text to speech", inApp: true },
+    paidPlan: {
+      feature: "tts",
+      name: "speech and audio generation",
+      inApp: false,
+    },
   },
   {
     id: "video",

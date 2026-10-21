@@ -1,11 +1,12 @@
 /**
- * Generating images, speech and video. Providers are detected from configured
- * keys, never picked by the user; everything returns a file path, never base64
- * (see generated-files.ts). Video takes minutes, so submit returns a job id
- * and a separate poll tool collects the result.
+ * Generating images, speech and video on the user's own provider keys only:
+ * the Abacus plan makes media in Abacus AI Agent on the web (paid_feature).
+ * Providers are detected from configured keys, never picked by the user;
+ * everything returns a file path, never base64 (see generated-files.ts). Video
+ * takes minutes, so submit returns a job id and a separate poll tool collects
+ * the result.
  */
 import { credentialFor } from "../config/settings";
-import { abacusRoutellmV1 } from "../providers/abacus-host";
 import { downloadGenerated, writeGenerated } from "./generated-files";
 
 // Environment first, then Settings → API keys. This runs in the main process,
@@ -17,9 +18,9 @@ const anyKey = (...names: string[]): boolean =>
 
 /** A provider for each kind is configured, so its tools can be listed. */
 export const imageGenerationReady = (): boolean =>
-  anyKey("ABACUS_API_KEY", "OPENAI_API_KEY", "FAL_KEY");
+  anyKey("OPENAI_API_KEY", "FAL_KEY");
 export const speechGenerationReady = (): boolean =>
-  anyKey("ABACUS_API_KEY", "OPENAI_API_KEY", "ELEVENLABS_API_KEY");
+  anyKey("OPENAI_API_KEY", "ELEVENLABS_API_KEY");
 export const videoGenerationReady = (): boolean =>
   anyKey("BFL_API_KEY", "FAL_KEY");
 
@@ -97,70 +98,6 @@ const postJson = async (
     )
   ).json();
 
-// ── Abacus.AI (RouteLLM API) ───────────────────────────────────────────────
-//
-// One ABACUS_API_KEY covers image and speech through chat/completions with
-// `modalities`; results arrive base64 in message.images / message.audios.
-
-const abacusChat = async (
-  payload: Record<string, unknown>,
-  timeoutMs: number
-): Promise<{
-  choices?: Array<{
-    message?: {
-      images?: Array<{ image_url?: { url?: string } }>;
-      audios?: Array<{ data?: string; format?: string }>;
-    };
-  }>;
-}> =>
-  (await postJson(
-    `${abacusRoutellmV1()}/chat/completions`,
-    { Authorization: `Bearer ${env("ABACUS_API_KEY")}` },
-    payload,
-    timeoutMs
-  )) as {
-    choices?: Array<{
-      message?: {
-        images?: Array<{ image_url?: { url?: string } }>;
-        audios?: Array<{ data?: string; format?: string }>;
-      };
-    }>;
-  };
-
-// Extensions come from a fixed allowlist, never the provider's MIME subtype:
-// the path is handed to the UI, where a click opens it.
-const IMAGE_EXTS: Record<string, string> = {
-  "image/png": "png",
-  "image/jpeg": "jpg",
-  "image/webp": "webp",
-  "image/gif": "gif",
-};
-// Refused rather than buffered, so a hostile response cannot OOM the main process.
-const MAX_MEDIA_BYTES = 64 * 1024 * 1024;
-
-const dataUrlToFile = async (
-  kind: string,
-  dataUrl: string
-): Promise<string> => {
-  const match = /^data:([a-z]+\/[a-z0-9.+-]+);base64,(.+)$/i.exec(dataUrl);
-
-  if (match == null) {
-    // Claw-style keys get a plain CDN URL here instead of a data URL.
-    if (/^https:\/\//i.test(dataUrl))
-      return await downloadGenerated(kind, "png", dataUrl);
-
-    throw new Error("The provider returned an unrecognized media payload.");
-  }
-
-  // 4 base64 chars = 3 bytes; bound the decode before allocating.
-  if (match[2].length > (MAX_MEDIA_BYTES / 3) * 4)
-    throw new Error("The provider returned an oversized media payload.");
-
-  const ext = IMAGE_EXTS[match[1].toLowerCase()] ?? "png";
-
-  return writeGenerated(kind, ext, Buffer.from(match[2], "base64"));
-};
-
 // ── Images ─────────────────────────────────────────────────────────────────
 
 export const generateImage = async (
@@ -170,25 +107,6 @@ export const generateImage = async (
   await firstConfigured(
     "image",
     [
-      {
-        id: "abacus",
-        configured: env("ABACUS_API_KEY").length > 0,
-        run: async () => {
-          const body = await abacusChat(
-            {
-              model: env("ABACUSAI_BOT_ABACUS_IMAGE_MODEL") || "nano_banana",
-              messages: [{ role: "user", content: prompt }],
-              modalities: ["image"],
-            },
-            300_000
-          );
-          const url = body.choices?.[0]?.message?.images?.[0]?.image_url?.url;
-
-          if (url == null) throw new Error("The provider returned no image.");
-
-          return await dataUrlToFile("image", url);
-        },
-      },
       {
         id: "openai",
         configured: env("OPENAI_API_KEY").length > 0,
@@ -254,7 +172,7 @@ export const generateImage = async (
         },
       },
     ],
-    "The user can connect Abacus.AI (ABACUS_API_KEY) or add OPENAI_API_KEY or FAL_KEY in Settings → API keys (or the environment). Tell the user image generation is unavailable until then."
+    "The user can add OPENAI_API_KEY or FAL_KEY in Settings → API keys (or the environment). Tell the user image generation is unavailable until then."
   );
 
 // ── Speech ─────────────────────────────────────────────────────────────────
@@ -266,49 +184,6 @@ export const generateSpeech = async (
   await firstConfigured(
     "speech",
     [
-      {
-        id: "abacus",
-        configured: env("ABACUS_API_KEY").length > 0,
-        run: async () => {
-          // Gemini TTS accepts the OpenAI voice aliases too, so `voice` passes through.
-          const body = await abacusChat(
-            {
-              model:
-                env("ABACUSAI_BOT_ABACUS_TTS_MODEL") ||
-                "gemini-2.5-flash-preview-tts",
-              messages: [{ role: "user", content: text }],
-              modalities: ["audio"],
-              audio: { voice: voice ?? "alloy" },
-            },
-            300_000
-          );
-          const audio = body.choices?.[0]?.message?.audios?.[0];
-
-          if (audio?.data == null)
-            throw new Error("The provider returned no audio.");
-          if (audio.data.length > (MAX_MEDIA_BYTES / 3) * 4)
-            throw new Error(
-              "The provider returned an oversized audio payload."
-            );
-
-          // Extension from a fixed allowlist, never the provider's format.
-          const format = (audio.format ?? "wav").toLowerCase();
-          const ext =
-            format === "mpeg" || format === "mp3"
-              ? "mp3"
-              : format === "pcm" || format === "wav"
-                ? "wav"
-                : format === "ogg" || format === "opus"
-                  ? "ogg"
-                  : "wav";
-
-          return writeGenerated(
-            "speech",
-            ext,
-            Buffer.from(audio.data, "base64")
-          );
-        },
-      },
       {
         id: "openai",
         configured: env("OPENAI_API_KEY").length > 0,
@@ -365,7 +240,7 @@ export const generateSpeech = async (
         },
       },
     ],
-    "The user can connect Abacus.AI (ABACUS_API_KEY) or add OPENAI_API_KEY or ELEVENLABS_API_KEY in Settings → API keys (or the environment). Tell the user speech generation is unavailable until then."
+    "The user can add OPENAI_API_KEY or ELEVENLABS_API_KEY in Settings → API keys (or the environment). Tell the user speech generation is unavailable until then."
   );
 
 // ── Video ──────────────────────────────────────────────────────────────────

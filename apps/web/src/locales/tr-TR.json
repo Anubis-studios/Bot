@@ -3045,7 +3045,11 @@
     },
     "paidFeature": {
       "title": "{{feature}} Basic'e dahildir",
-      "webTitle": "{{feature}} Basic'e dahildir, web'deki Abacus AI Agent'ta"
+      "webTitle": "{{feature}} Basic'e dahildir, web'deki Abacus AI Agent'ta",
+      "webBody": "Basic, web'de Abacus AI Agent'ta görsel ve video oluşturmayı ve düzenlemeyi, ayrıca ses oluşturmayı içerir.",
+      "agentTitle": "{{feature}} web'de Abacus AI Agent'ta",
+      "agentBody": "Planınız, web'de Abacus AI Agent'ta görsel ve video oluşturmayı ve düzenlemeyi, ayrıca ses oluşturmayı içerir. İsteğiniz orada hazır; düzenlemek istediğiniz görseli orada ekleyin.",
+      "openAgent": "Abacus AI Agent'ta aç"
     }
   },
   "notch": {
