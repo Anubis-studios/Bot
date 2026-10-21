@@ -36,7 +36,10 @@ const DYING_SCRIPT =
 
 let workspace: string | null = null;
 
-const service = (script = IDLE_SCRIPT): AgentManagerService => {
+const service = (
+  script = IDLE_SCRIPT,
+  managedPython: { envDir: string; binDir: string } | null = null
+): AgentManagerService => {
   workspace = fs.mkdtempSync(path.join(os.tmpdir(), "cli-manager-"));
 
   return new AgentManagerService({
@@ -48,6 +51,7 @@ const service = (script = IDLE_SCRIPT): AgentManagerService => {
     }),
     resolveAuthEnv: () => ({}),
     resolveAdditionalConfigEnv: async () => ({}),
+    resolveManagedPython: async () => managedPython,
     emitStateUpdated: () => {},
     emitNdjson: () => {},
     emitSystemReady: () => {},
@@ -186,6 +190,42 @@ describe("the agent's environment", () => {
       await manager.dispose();
       fs.rmSync(vendor.dir, { recursive: true, force: true });
       vendor.dir = "";
+    }
+  }, 15_000);
+});
+
+describe("the app's own Python", () => {
+  it("goes first on PATH, and is named, when the machine has no usable Python", async () => {
+    const python = {
+      envDir: path.join(os.tmpdir(), "app-python"),
+      binDir: path.join(os.tmpdir(), "app-python", "bin"),
+    };
+    const manager = service(
+      "require('fs').writeFileSync('env.json', JSON.stringify({ path: process.env.PATH," +
+        " env: process.env.ABACUSAI_BOT_PYTHON_ENV }));" +
+        IDLE_SCRIPT,
+      python
+    );
+
+    try {
+      const started = await manager.startSession({
+        workspaceId: "workspace-1",
+        sessionId: "session-1",
+        startupTimeoutMs: 30_000,
+      });
+      expect(started.success).toBe(true);
+
+      const seen = await vi.waitFor(
+        () =>
+          JSON.parse(
+            fs.readFileSync(path.join(workspace!, "env.json"), "utf8")
+          ) as { path: string; env: string },
+        { timeout: 10_000 }
+      );
+      expect(seen.path.split(path.delimiter)[0]).toBe(python.binDir);
+      expect(seen.env).toBe(python.envDir);
+    } finally {
+      await manager.dispose();
     }
   }, 15_000);
 });

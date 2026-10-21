@@ -14,7 +14,7 @@ import * as path from "node:path";
 
 import { childProcessEnv } from "../child-env.js";
 import { mergePath } from "../merge-path.js";
-import { posixShell } from "../posix-shell.js";
+import { managedPythonBin, posixShell } from "../posix-shell.js";
 
 // Re-exported where it has always been imported from; it lives in its own
 // module now because an entry point that must not reach pi needs it too.
@@ -301,12 +301,19 @@ export function loginEnvironment(): NodeJS.ProcessEnv {
 
     // This process's environment wins: a keychain-resolved API key must not be
     // replaced by a stale one from a profile. PATH is merged rather than
-    // replaced, since the desktop's own PATH repair must survive the dump.
+    // replaced, since the desktop's own PATH repair must survive the dump; the
+    // app's own Python stays ahead of an older one the profile names.
     resolved = childProcessEnv(
       shell,
       process.env,
       shell.PATH != null
-        ? { PATH: mergePath(shell.PATH, process.env.PATH) ?? shell.PATH }
+        ? {
+            PATH:
+              mergePath(
+                managedPythonBin() ?? undefined,
+                mergePath(shell.PATH, process.env.PATH)
+              ) ?? shell.PATH,
+          }
         : undefined
     );
   } catch {

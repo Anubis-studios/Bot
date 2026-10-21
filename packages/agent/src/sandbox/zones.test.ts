@@ -69,6 +69,19 @@ describe("tool homes", () => {
     }
   });
 
+  it("lets pip write to the app's own Python environment", () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "zones-home-"));
+    try {
+      const env = path.join(home, ".abacusai-bot", "shell-python");
+      fs.mkdirSync(env, { recursive: true });
+      expect(existingToolHomes(home, { ABACUSAI_BOT_PYTHON_ENV: env })).toEqual(
+        [canonicalize(env)]
+      );
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+
   it("honours XDG cache and data homes when set", () => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), "zones-home-"));
     try {

@@ -19,6 +19,7 @@ import {
 
 import { sponsoredRunActive } from "../abacus-endpoint.js";
 import { Allowances } from "../allowances.js";
+import { PYTHON_SETUP_TIMEOUT_MS, setPythonProvisioner } from "../backends.js";
 import { notifyConversationQueueCleared } from "../background-processes.js";
 import { basePrompt } from "../base-prompt.js";
 import { BotOutputSanitizer, tidyBotText } from "../bot/bot-output.js";
@@ -55,6 +56,7 @@ import toolCallRepair from "../extensions/tool-call-repair.js";
 import toolTimeouts from "../extensions/tool-timeouts.js";
 import { githubPrompt } from "../github-prompt.js";
 import { refreshGithubToken } from "../github-token.js";
+import { HostServiceClient } from "../host-services.js";
 import type { InternalAgentEvent } from "../internal-events.js";
 import {
   connectMcpServers,
@@ -96,7 +98,7 @@ import {
   repairEscapedPaths,
 } from "../permissions.js";
 import { personaPrompt, readPersona } from "../persona.js";
-import { windowsShellPrompt } from "../posix-shell.js";
+import { managedPythonPrompt, windowsShellPrompt } from "../posix-shell.js";
 import {
   AgentMode,
   AgentStatus,
@@ -298,6 +300,16 @@ export class ForeverEngine {
     (name) => TOOL_NAME_ALIASES[name] ?? name
   );
   private readonly toolInputs = new Map<string, Record<string, unknown>>();
+  /** The desktop's services; the bot uses only the Python setup. */
+  private readonly hostServices = new HostServiceClient(
+    (requestId, service, payload) =>
+      this.options.emit({
+        type: "host_service_request",
+        requestId,
+        service,
+        payload,
+      })
+  );
   private readonly heartbeat = new ToolHeartbeat((event) =>
     this.options.emit(event)
   );
@@ -344,6 +356,10 @@ export class ForeverEngine {
     setCurrentMode(this.mode);
     setUnattendedPolicy(
       this.mode === AgentMode.Unattended ? (options.unattended ?? null) : null
+    );
+    // A bot's shell asks the desktop for the app's Python, as a chat's does.
+    setPythonProvisioner(() =>
+      this.hostServices.request("python_env", {}, PYTHON_SETUP_TIMEOUT_MS)
     );
   }
 
@@ -394,6 +410,7 @@ export class ForeverEngine {
         REPLY_LANGUAGE_PROMPT,
         githubPrompt(),
         windowsShellPrompt(),
+        managedPythonPrompt(),
       ].filter((part): part is string => part != null),
       appendSystemPromptOverride: (base: string[]): string[] => {
         const persona = personaPrompt();
@@ -1737,15 +1754,16 @@ export class ForeverEngine {
   }
 
   settleHostService(
-    _requestId: string,
-    _ok: boolean,
-    _result: unknown,
-    _error: string | undefined
+    requestId: string,
+    ok: boolean,
+    result: unknown,
+    error: string | undefined
   ): void {
-    // The bot loop registers no host-service-backed tools.
+    this.hostServices.settle(requestId, ok, result, error);
   }
 
   dispose(): void {
+    this.hostServices.failAll("Interrupted.");
     this.mcp.retire?.();
     for (const client of this.mcp.clients) client.close();
 

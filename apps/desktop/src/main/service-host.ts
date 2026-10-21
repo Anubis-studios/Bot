@@ -272,6 +272,10 @@ import {
   PendingWaits,
 } from "./services/agent-tools/pending-waits";
 import {
+  ensureShellPython,
+  managedPythonEnv,
+} from "./services/agent-tools/python-env";
+import {
   ROUTINE_RESULTS,
   started as startedResult,
 } from "./services/agent-tools/routine-attempts";
@@ -2193,6 +2197,7 @@ export class ServiceHost {
       ...(await this.buildAdditionalConfigEnv("code", sessionId)),
     }),
     resolveUnattended: (sessionId: string) => this.heldPolicy(sessionId),
+    resolveManagedPython: () => managedPythonEnv(),
     emitStateUpdated: (workspaceId, sessionId, state) => {
       if (state.status === "starting" || state.pid == null)
         this.modelSwitches.invalidate(sessionId);
@@ -2554,6 +2559,9 @@ export class ServiceHost {
         // The read itself broadcasts the snapshot to every agent.
         await fetchAbacusAccount(true);
         return creditSnapshot();
+      case "python_env":
+        await ensureShellPython();
+        return null;
       default:
         throw new Error(`Unknown host service: ${String(service)}`);
     }

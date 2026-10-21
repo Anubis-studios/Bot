@@ -10,6 +10,7 @@ import * as fs from "node:fs";
 
 import {
   createBashToolDefinition,
+  createLocalBashOperations,
   type BashOperations,
 } from "@earendil-works/pi-coding-agent";
 
@@ -18,6 +19,7 @@ import { childProcessEnv } from "./child-env.js";
 import { currentMode } from "./current-mode.js";
 import { modelPath } from "./model-path.js";
 import {
+  managedPythonEnv,
   posixShell,
   posixShellEnv,
   posixShellOperations,
@@ -447,6 +449,81 @@ export function hiddenStoreNote(
   );
 }
 
+/** A command that runs python or pip, as a command word rather than a path. */
+const RUNS_PYTHON = /(?:^|[\s;&|(`])(?:python3?|pip3?)(?=$|[\s;&|)`])/;
+
+/** How this process asks the desktop to set up the app's Python. */
+let pythonProvisioner: (() => Promise<unknown>) | null = null;
+/** That setup, shared by every command; cleared on failure so a later one retries. */
+let pythonReady: Promise<unknown> | null = null;
+
+/** Registered by the session that owns the host channel; null where there is none. */
+export function setPythonProvisioner(
+  provision: (() => Promise<unknown>) | null
+): void {
+  pythonProvisioner = provision;
+  pythonReady = null;
+}
+
+/** First-time setup downloads Python and packages; a slow line needs minutes. */
+export const PYTHON_SETUP_TIMEOUT_MS = 15 * 60_000;
+
+/** Only when setup outlasts this does the command say it is waiting. */
+const PYTHON_NOTICE_MS = 1_000;
+
+/**
+ * Commands that run python or pip wait for the app's own Python first, and
+ * say so in their output while it is set up; every other command runs as is.
+ */
+export function withManagedPython(operations: BashOperations): BashOperations {
+  return {
+    exec: async (command, cwd, options) => {
+      const provision = pythonProvisioner;
+      if (provision != null && RUNS_PYTHON.test(command)) {
+        const ready = (pythonReady ??= provision());
+        ready.catch(() => {
+          if (pythonReady === ready) pythonReady = null;
+        });
+        const say = (line: string): void =>
+          options.onData(Buffer.from(`[python] ${line}\n`));
+        const started = Date.now();
+        let noticed = false;
+        const notice = setTimeout(() => {
+          noticed = true;
+          say(
+            "Setting up Python for the first time; this can take a minute or two."
+          );
+        }, PYTHON_NOTICE_MS);
+        // A stopped command stops waiting; the setup itself carries on.
+        let onAbort: (() => void) | undefined;
+        const aborted = new Promise<never>((_, reject) => {
+          onAbort = () => reject(new Error("aborted"));
+          if (options.signal?.aborted) onAbort();
+          else
+            options.signal?.addEventListener("abort", onAbort, { once: true });
+        });
+        try {
+          await Promise.race([ready, aborted]);
+          if (noticed)
+            say(
+              `Python is ready (${Math.round((Date.now() - started) / 1000)}s).`
+            );
+        } catch (error) {
+          if (options.signal?.aborted) throw error;
+          // The command still runs: its own failure says the rest.
+          say(error instanceof Error ? error.message : String(error));
+        } finally {
+          clearTimeout(notice);
+          if (onAbort != null)
+            options.signal?.removeEventListener("abort", onAbort);
+        }
+      }
+
+      return operations.exec(command, cwd, options);
+    },
+  };
+}
+
 /**
  * Operations for the selected backend, or null to use pi's own local shell,
  * which handles shell resolution and platform differences better than a
@@ -479,6 +556,14 @@ export function backendOperations(
   // paths.
   if (backend !== "local") return null;
 
+  const local = localOperations(approvals);
+  if (managedPythonEnv() == null) return local;
+
+  return withManagedPython(local ?? createLocalBashOperations());
+}
+
+/** The local backend's operations, or null for pi's own shell. */
+function localOperations(approvals?: SandboxApprovals): BashOperations | null {
   // No kernel backend, or none that can run here (a Windows without the
   // vendored runner): the shell there is the bundled POSIX one, sandbox
   // setting or not: it is a shell, not a confinement, and null without its

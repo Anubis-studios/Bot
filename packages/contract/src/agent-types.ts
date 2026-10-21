@@ -570,7 +570,9 @@ export type HostService =
   | "deck_slots"
   | "render_deck"
   /** Re-read the Abacus account; answers with its credit snapshot or null. */
-  | "credit_balance";
+  | "credit_balance"
+  /** Set up the app's own Python environment if it is not there yet. */
+  | "python_env";
 
 /** Events sent from ndjson IPC host to main process (stdout). */
 export type DesktopEvent =

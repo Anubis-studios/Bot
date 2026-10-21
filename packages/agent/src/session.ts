@@ -17,7 +17,11 @@ import {
 import { sponsoredRunActive } from "./abacus-endpoint.js";
 import { Allowances } from "./allowances.js";
 import { allowedPathsFromEnv } from "./allowed-paths.js";
-import { backendOperations } from "./backends.js";
+import {
+  backendOperations,
+  PYTHON_SETUP_TIMEOUT_MS,
+  setPythonProvisioner,
+} from "./backends.js";
 import { notifyConversationQueueCleared } from "./background-processes.js";
 import { basePrompt } from "./base-prompt.js";
 /**
@@ -116,7 +120,7 @@ import {
   repairEscapedPaths,
 } from "./permissions.js";
 import { personaPrompt, readPersona } from "./persona.js";
-import { windowsShellPrompt } from "./posix-shell.js";
+import { managedPythonPrompt, windowsShellPrompt } from "./posix-shell.js";
 import {
   AgentMode,
   AgentStatus,
@@ -871,6 +875,13 @@ export class AbacusBotSession {
         ? () => this.hostServices.request("credit_balance", {})
         : null
     );
+    // The desktop owns the app's Python; a shell command that needs it asks.
+    setPythonProvisioner(
+      hostServices
+        ? () =>
+            this.hostServices.request("python_env", {}, PYTHON_SETUP_TIMEOUT_MS)
+        : null
+    );
     const toolNames = new Set([
       ...componentToolNames(hostServices),
       ...this.mcp.tools.map((tool) => tool.name),
@@ -921,6 +932,7 @@ export class AbacusBotSession {
         displayPrompt(),
         // Null everywhere the tool is a real bash.
         windowsShellPrompt(),
+        managedPythonPrompt(),
         planModePrompt(toolNames),
         githubPrompt(),
         serviceRoutingPrompt(),

@@ -36,7 +36,11 @@ export class HostServiceClient {
    * Runs `service` on the host. Rejects rather than throwing synchronously, so
    * a host that cannot render is a failed tool result, not a torn-down turn.
    */
-  async request(service: HostService, payload: unknown): Promise<unknown> {
+  async request(
+    service: HostService,
+    payload: unknown,
+    timeoutMs: number = REQUEST_TIMEOUT_MS
+  ): Promise<unknown> {
     const requestId = `host-${++this.counter}`;
 
     const promise = new Promise<unknown>((resolve, reject) => {
@@ -44,10 +48,10 @@ export class HostServiceClient {
         this.pending.delete(requestId);
         reject(
           new Error(
-            `The host did not answer ${service} within ${REQUEST_TIMEOUT_MS / 1000}s.`
+            `The host did not answer ${service} within ${timeoutMs / 1000}s.`
           )
         );
-      }, REQUEST_TIMEOUT_MS);
+      }, timeoutMs);
 
       // A pending host request must never be the reason the process stays up.
       timer.unref?.();

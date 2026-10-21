@@ -10,6 +10,7 @@ import * as path from "node:path";
 
 import { createLocalBashOperations } from "@earendil-works/pi-coding-agent";
 
+import { MANAGED_PYTHON_ENV } from "./child-env.js";
 import { modelPath } from "./model-path.js";
 import {
   posixShell,
@@ -187,6 +188,48 @@ export const WINDOWS_TOOLCHAIN: readonly string[] = [
   "pwsh",
 ];
 
+/**
+ * The app's own Python environment, which the desktop names (and puts first on
+ * PATH) when the machine has no usable Python; null otherwise.
+ */
+export function managedPythonEnv(
+  env: NodeJS.ProcessEnv = process.env
+): string | null {
+  const dir = (env[MANAGED_PYTHON_ENV] ?? "").trim();
+
+  return dir.length > 0 ? dir : null;
+}
+
+/** That environment's executables directory, or null. */
+export function managedPythonBin(
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform
+): string | null {
+  const dir = managedPythonEnv(env);
+  if (dir == null) return null;
+
+  return path.join(dir, platform === "win32" ? "Scripts" : "bin");
+}
+
+/** What the model is told when Python is the app's own, or null when it is the system's. */
+export function managedPythonPrompt(
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform
+): string | null {
+  if (managedPythonEnv(env) == null) return null;
+  const commands =
+    platform === "win32"
+      ? "`python` and `pip`"
+      : "`python3`, `python` and `pip`";
+
+  return [
+    "# Python",
+    `${commands} run this app's own Python 3 environment; the machine has no usable Python of its own.`,
+    "The first command that uses it sets it up, which can take a minute or two. `pip install`",
+    "adds packages to it, so install what a task needs (python-docx, openpyxl, pandas) and use it.",
+  ].join("\n");
+}
+
 /** What ash finds on PATH without an extension. */
 const COMMAND_EXTENSIONS = [".exe", ".com", ".cmd", ".bat"];
 
@@ -238,13 +281,16 @@ export function windowsToolchain(
   probe: ToolchainProbe = defaultProbe
 ): { present: string[]; missing: string[] } {
   const pathValue = posixShellEnv(env, shell).PATH ?? "";
+  // Set up on first use, so it may not be on disk yet.
+  const managed = managedPythonEnv(env) != null ? ["python", "pip"] : [];
   const present: string[] = [];
   const missing: string[] = [];
   for (const name of WINDOWS_TOOLCHAIN) {
     const file = probe.find(name, pathValue);
     const usable =
-      file != null &&
-      (!/[\\/]WindowsApps[\\/]/i.test(file) || probe.runs(file));
+      managed.includes(name) ||
+      (file != null &&
+        (!/[\\/]WindowsApps[\\/]/i.test(file) || probe.runs(file)));
     (usable ? present : missing).push(name);
   }
 

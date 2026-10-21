@@ -10,6 +10,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
+import { MANAGED_PYTHON_ENV } from "../child-env.js";
 import { canonicalize } from "./policy.js";
 import { isWithin } from "./secrets.js";
 
@@ -83,7 +84,8 @@ export function existingToolHomes(
 ): string[] {
   const candidates = [
     ...TOOL_HOMES.map((entry) => path.join(home, entry)),
-    ...["XDG_CACHE_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME"]
+    // The app's own Python environment, where `pip install` puts packages.
+    ...["XDG_CACHE_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", MANAGED_PYTHON_ENV]
       .map((name) => (env[name] ?? "").trim())
       .filter((value) => value.length > 0 && path.isAbsolute(value)),
   ];

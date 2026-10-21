@@ -7,9 +7,14 @@
  * without any: `img` was not on the list, so every picture was dropped
  * silently. No warning to the user, nothing for the agent to react to.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { sanitizeHtml } from "./pdf-agent";
+import { runPdfScript, sanitizeHtml } from "./pdf-agent";
+
+const python = vi.hoisted(() => ({ ensurePython: vi.fn() }));
+vi.mock("./python-env", () => python);
+// The repository's own resources directory, as in development.
+vi.mock("electron", () => ({ app: { isPackaged: false } }));
 
 describe("images in a printed document", () => {
   it("keeps a local file image, which is what the agent produces", () => {
@@ -84,5 +89,25 @@ describe("what an image may not do", () => {
     expect(out).not.toContain("script");
     expect(out).not.toContain("onerror");
     expect(out).not.toContain("javascript:");
+  });
+});
+
+describe("the Python the reading and editing actions run on", () => {
+  it("asks for each action's libraries and passes a setup failure to the model as is", async () => {
+    const reason =
+      "Could not set up Python: the download did not get through. Check the internet connection (or the proxy) and try again.";
+    python.ensurePython.mockRejectedValue(new Error(reason));
+
+    expect(await runPdfScript(["read", "/tmp/a.pdf"])).toEqual({
+      ok: false,
+      error: reason,
+    });
+    await runPdfScript(["tables", "/tmp/a.pdf"]);
+    await runPdfScript(["stamp", "/tmp/a.pdf", "/tmp/b.pdf"]);
+    expect(python.ensurePython.mock.calls).toEqual([
+      [["pypdf"]],
+      [["pypdf", "pdfplumber"]],
+      [["pypdf", "reportlab"]],
+    ]);
   });
 });

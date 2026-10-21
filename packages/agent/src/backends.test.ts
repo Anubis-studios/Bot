@@ -23,6 +23,8 @@ import {
   deadline,
   hiddenStoreNote,
   selectedBackend,
+  setPythonProvisioner,
+  withManagedPython,
 } from "./backends.js";
 import { budgetSecondsFor } from "./extensions/tool-timeouts.js";
 import { posixShell } from "./posix-shell.js";
@@ -259,5 +261,126 @@ describe("the note on a failed command that hit a hidden store", () => {
 
   it("is silent when the output mentions no store", () => {
     expect(hiddenStoreNote("npm ERR! 404", ["/home/dev/.netrc"])).toBeNull();
+  });
+});
+
+describe("the app's own Python", () => {
+  /** Operations that record what ran and print nothing. */
+  const recorder = () => {
+    const ran: string[] = [];
+    return {
+      ran,
+      operations: {
+        exec: async (command: string) => {
+          ran.push(command);
+          return { exitCode: 0 };
+        },
+      },
+    };
+  };
+  const run = async (
+    operations: ReturnType<typeof withManagedPython>,
+    command: string,
+    signal?: AbortSignal
+  ): Promise<string> => {
+    let output = "";
+    await operations.exec(command, "/", {
+      onData: (data: Buffer) => {
+        output += data.toString();
+      },
+      ...(signal != null ? { signal } : {}),
+    });
+    return output;
+  };
+
+  afterEach(() => {
+    setPythonProvisioner(null);
+    vi.useRealTimers();
+  });
+
+  it("is set up once, before the first command that runs python or pip", async () => {
+    const provision = vi.fn(async () => null);
+    setPythonProvisioner(provision);
+    const { ran, operations } = recorder();
+    const shell = withManagedPython(operations);
+
+    await run(shell, "ls -la && echo done");
+    expect(provision).not.toHaveBeenCalled();
+
+    await Promise.all([
+      run(shell, "python3 make_doc.py"),
+      run(shell, "cd out; pip install python-docx"),
+      run(shell, "echo x | python -c 'import sys'"),
+    ]);
+    expect(provision).toHaveBeenCalledOnce();
+    // A path to another interpreter is not this one.
+    await run(shell, "./.venv/bin/python app.py");
+    expect(ran).toHaveLength(5);
+  });
+
+  it("says it is waiting while the setup takes time, then that it is ready", async () => {
+    vi.useFakeTimers();
+    let finish = (): void => {};
+    setPythonProvisioner(
+      () => new Promise((resolve) => (finish = () => resolve(null)))
+    );
+    const { ran, operations } = recorder();
+
+    const output = run(withManagedPython(operations), "python3 -V");
+    await vi.advanceTimersByTimeAsync(1_500);
+    expect(ran).toEqual([]);
+    finish();
+
+    const text = await output;
+    expect(text).toContain("[python] Setting up Python for the first time");
+    expect(text).toMatch(/\[python\] Python is ready \(\d+s\)/);
+    expect(ran).toEqual(["python3 -V"]);
+  });
+
+  it("reports a failed setup, still runs the command, and retries next time", async () => {
+    const provision = vi
+      .fn<() => Promise<unknown>>()
+      .mockRejectedValueOnce(
+        new Error("Could not set up Python: the disk is full.")
+      )
+      .mockResolvedValue(null);
+    setPythonProvisioner(provision);
+    const { ran, operations } = recorder();
+    const shell = withManagedPython(operations);
+
+    expect(await run(shell, "python3 -V")).toContain(
+      "[python] Could not set up Python: the disk is full."
+    );
+    expect(ran).toEqual(["python3 -V"]);
+
+    expect(await run(shell, "python3 -V")).toBe("");
+    expect(provision).toHaveBeenCalledTimes(2);
+  });
+
+  it("stops waiting when the command is stopped", async () => {
+    setPythonProvisioner(() => new Promise(() => {}));
+    const { ran, operations } = recorder();
+    const controller = new AbortController();
+
+    const output = run(
+      withManagedPython(operations),
+      "pip -V",
+      controller.signal
+    );
+    controller.abort();
+
+    await expect(output).rejects.toThrow("aborted");
+    expect(ran).toEqual([]);
+  });
+
+  it("wraps the local backend only when the desktop named the environment", () => {
+    const previous = process.env.ABACUSAI_BOT_PYTHON_ENV;
+    try {
+      process.env.ABACUSAI_BOT_PYTHON_ENV = path.join(os.tmpdir(), "py-env");
+      expect(backendOperations()).not.toBeNull();
+    } finally {
+      if (previous == null) delete process.env.ABACUSAI_BOT_PYTHON_ENV;
+      else process.env.ABACUSAI_BOT_PYTHON_ENV = previous;
+    }
   });
 });
