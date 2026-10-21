@@ -268,6 +268,56 @@ export class ScriptedSession {
     waiter(decision);
   }
 
+  /** A turn the session started itself, as pi does for a background job's notice. */
+  private ownRun: Promise<void> | null = null;
+
+  /**
+   * Starts a turn no `send` owns, as pi does when a background job finishes
+   * while the host is idle. It runs `script` with the same api a sent turn
+   * gets, and the session reports it as running until the script returns.
+   */
+  startOwnTurn(script: TurnScript): void {
+    const generation = this.generation;
+    const live = (): boolean => generation === this.generation;
+    const run = async (): Promise<void> => {
+      this.agent({ type: "status_changed", status: AgentStatus.Streaming });
+      await script({
+        text: "",
+        index: 0,
+        agent: (event, meta) => {
+          if (live()) this.agent(event, meta);
+        },
+        emit: (event) => {
+          if (live()) this.init.emit(event);
+        },
+        internal: (event) => {
+          if (live()) this.init.emitInternal(event);
+        },
+        ask: () => Promise.resolve("stopped"),
+        expire: () => undefined,
+        settled: () => undefined,
+        aborted: () => !live(),
+        gate: (name) => this.gate(name),
+      });
+      if (live()) {
+        this.agent({ type: "turn_complete" });
+        this.agent({ type: "status_changed", status: AgentStatus.Idle });
+      }
+    };
+
+    this.ownRun = run().finally(() => {
+      this.ownRun = null;
+    });
+  }
+
+  isRunning(): boolean {
+    return this.ownRun != null;
+  }
+
+  async whenIdle(): Promise<void> {
+    while (this.ownRun != null) await this.ownRun;
+  }
+
   async steer(message: string, messageId?: string): Promise<void> {
     this.steered.push(message);
     this.steeredIds.push(messageId);

@@ -52,7 +52,11 @@ export default function (pi: ExtensionAPI) {
   let awaitingTurn = false;
   let busy = false;
 
-  const flush = (): void => {
+  /**
+   * Hands the notices over: as a turn of their own, or, when a prompt is
+   * already starting one, riding along with it.
+   */
+  const flush = (delivery: "own-turn" | "with-prompt"): void => {
     // Not mid-turn, and not while an earlier handover is unaccounted for, or
     // the same finished build gets announced twice.
     if (pending.length === 0 || busy || awaitingTurn) return;
@@ -67,7 +71,9 @@ export default function (pi: ExtensionAPI) {
         content: pending.map((notice) => notice.text).join("\n\n"),
         display: true,
       },
-      { deliverAs: "followUp", triggerTurn: true }
+      delivery === "with-prompt"
+        ? { deliverAs: "nextTurn" }
+        : { deliverAs: "followUp", triggerTurn: true }
     );
   };
 
@@ -87,7 +93,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.on("agent_settled", async () => {
     busy = false;
-    flush();
+    flush("own-turn");
   });
 
   // A Stop empties the queue: the handover is gone, the notices are not, so
@@ -98,9 +104,11 @@ export default function (pi: ExtensionAPI) {
     awaitingTurn = false;
   });
 
-  // Recovery after a Stop: the user typing is the first safe moment.
+  // Recovery after a Stop: the user typing is the first safe moment. The
+  // prompt is about to start a turn, so the notices join it: a turn of their
+  // own started here would have pi refuse the user's message as busy.
   pi.on("input", async () => {
-    flush();
+    flush("with-prompt");
   });
 
   const unsubscribe = onBackgroundJobSettled((job) => {
@@ -131,7 +139,7 @@ export default function (pi: ExtensionAPI) {
       ].join("\n"),
     });
 
-    flush();
+    flush("own-turn");
   });
 
   // Nothing this process started should outlive it: a stray server keeps its

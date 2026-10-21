@@ -667,6 +667,16 @@ export class ForeverEngine {
 
     await this.refreshStandingPrompt();
     await this.startTurnOnBestPoolModel();
+    // The sponsored window closing (or opening) changes the headers the
+    // Abacus provider was registered with; a run must not carry the marker
+    // past its deadline, nor miss it.
+    if (this.sponsoredAtRegistration !== sponsoredRunActive())
+      await this.refreshProviderRegistrations();
+
+    // A run pi started on its own while this turn was being prepared (a
+    // finished background job's notice) ends first: pi refuses a prompt over
+    // it. Nothing below waits on anything but microtasks before the prompt.
+    await session.waitForIdle();
 
     this.interrupted = false;
     this.malformedContinuations = 0;
@@ -680,11 +690,6 @@ export class ForeverEngine {
     this.networkWait.reset();
     this.busyWait.reset();
     this.networkFailureReported = false;
-    // The sponsored window closing (or opening) changes the headers the
-    // Abacus provider was registered with; a run must not carry the marker
-    // past its deadline, nor miss it.
-    if (this.sponsoredAtRegistration !== sponsoredRunActive())
-      await this.refreshProviderRegistrations();
     this.stallRecoveriesThisTurn = 0;
     this.pendingStall = null;
     this.stallFailureReported = false;
@@ -1441,6 +1446,19 @@ export class ForeverEngine {
       actions.push({ type: "switch-model" });
     }
     return actions.length > 0 ? { actions } : {};
+  }
+
+  /**
+   * Whether pi has a run going, including one it started itself (a finished
+   * background job's notice) that no `send` owns.
+   */
+  isRunning(): boolean {
+    return this.session?.isStreaming === true;
+  }
+
+  /** Resolves once pi has no run going, after any run its settling started. */
+  async whenIdle(): Promise<void> {
+    await this.session?.waitForIdle();
   }
 
   /**

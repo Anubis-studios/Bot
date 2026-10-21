@@ -1307,6 +1307,16 @@ export class AbacusBotSession {
     // Only the user's own words name their language; a routine's prompt does not.
     if (this.mode !== AgentMode.Unattended)
       void learnUserLanguage(text, (process.env.ABACUS_API_KEY ?? "").trim());
+    // The sponsored window closing (or opening) changes the headers the
+    // Abacus provider was registered with; a run must not carry the marker
+    // past its deadline, nor miss it.
+    if (this.sponsoredAtRegistration !== sponsoredRunActive())
+      await this.refreshProviderRegistrations();
+
+    // A run pi started on its own while this turn was being prepared (a
+    // finished background job's notice) ends first: pi refuses a prompt over
+    // it. Nothing is awaited between here and the prompt.
+    await session.waitForIdle();
 
     // Per turn: the same provider failing next turn is news again.
     this.retriedCalls = 0;
@@ -1320,11 +1330,6 @@ export class AbacusBotSession {
     this.networkWait.reset();
     this.busyWait.reset();
     this.networkFailureReported = false;
-    // The sponsored window closing (or opening) changes the headers the
-    // Abacus provider was registered with; a run must not carry the marker
-    // past its deadline, nor miss it.
-    if (this.sponsoredAtRegistration !== sponsoredRunActive())
-      await this.refreshProviderRegistrations();
     this.languageRepairsThisTurn = 0;
     this.pendingLanguageRepair = null;
     this.mcpTools.atTurnStart();
@@ -2237,6 +2242,19 @@ export class AbacusBotSession {
       type: "status_changed",
       status: AgentStatus.Idle,
     });
+  }
+
+  /**
+   * Whether pi has a run going, including one it started itself (a finished
+   * background job's notice, a test-suite follow-up) that no `send` owns.
+   */
+  isRunning(): boolean {
+    return this.session?.isStreaming === true;
+  }
+
+  /** Resolves once pi has no run going, after any run its settling started. */
+  async whenIdle(): Promise<void> {
+    await this.session?.waitForIdle();
   }
 
   /**

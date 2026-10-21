@@ -215,20 +215,7 @@ export class HostCore {
       // Ordering is still safe: `runTurn` serializes prompts through `busy`.
       // Nothing about the parsed value is read here: a line such as `null`
       // must fail inside the handler, where the catch below reports it.
-      const pending = dispatch(command).catch((error: unknown) => {
-        this.emit({
-          type: "event",
-          event: tagEvent(
-            { type: "error", error: { message: describe(error) } },
-            this.wasAttributed(error)
-              ? { origin: "turn", attributed: true }
-              : { origin: "host" }
-          ),
-        });
-      });
-
-      this.inFlight.add(pending);
-      void pending.finally(() => this.inFlight.delete(pending));
+      this.track(dispatch(command));
     }
 
     // stdin closed. Disposing mid-turn aborts the provider request, and for
@@ -237,6 +224,24 @@ export class HostCore {
     // for, so those waits end and the process can exit.
     markHostGone();
     await Promise.allSettled(this.inFlight);
+  }
+
+  /** A command or turn left running: its failure is reported, and EOF waits for it. */
+  private track(work: Promise<void>): void {
+    const pending = work.catch((error: unknown) => {
+      this.emit({
+        type: "event",
+        event: tagEvent(
+          { type: "error", error: { message: describe(error) } },
+          this.wasAttributed(error)
+            ? { origin: "turn", attributed: true }
+            : { origin: "host" }
+        ),
+      });
+    });
+
+    this.inFlight.add(pending);
+    void pending.finally(() => this.inFlight.delete(pending));
   }
 
   async shutdown(): Promise<void> {
@@ -356,7 +361,7 @@ export class HostCore {
       case "dequeue": {
         // Mid-turn, shifting here and letting runTurn re-push would move the
         // entry to the back; the running turn's drain loop delivers it in order.
-        if (this.busy) {
+        if (this.turnInProgress()) {
           return;
         }
 
@@ -557,7 +562,7 @@ export class HostCore {
       messageId?: string;
     } = {}
   ): Promise<void> {
-    if (this.busy) {
+    if (this.turnInProgress()) {
       await this.admit(message, options.userText, options.messageId);
 
       return;
@@ -566,6 +571,26 @@ export class HostCore {
     this.busy = true;
 
     await this.runHeld(message, source, options);
+  }
+
+  /**
+   * Whether input now joins a running turn rather than starting one. A run
+   * pi started on its own (a finished background job's notice, a test-suite
+   * follow-up) is one too, though no send owns it: it is taken over here, so
+   * what arrives during it is steered like any mid-turn message, and what is
+   * left when it ends runs next. Prompting over it is what pi refuses with
+   * "Agent is already processing".
+   */
+  turnInProgress(): boolean {
+    if (this.busy) return true;
+    if (!this.session.isRunning()) return false;
+
+    this.busy = true;
+    const turn = this.turn;
+
+    this.track(this.drainAfter(turn).finally(() => this.release(turn)));
+
+    return true;
   }
 
   /**
@@ -596,42 +621,56 @@ export class HostCore {
           }),
         options.messageId
       );
+      await this.drainAfter(turn);
+    } finally {
+      this.release(turn);
+    }
+  }
+
+  /**
+   * The rest of a turn once its send returned: pi going idle, then what the
+   * steers could not deliver (a message parked behind an unanswered prompt,
+   * or one sent as the turn ended), each as its own turn, in order. A run pi
+   * starts as one settles (a finished background job's notice) is waited
+   * out as part of the turn, so input during it is steered, never refused.
+   */
+  private async drainAfter(turn: number): Promise<void> {
+    for (;;) {
+      await this.session.whenIdle();
+
+      if (this.turn !== turn) return;
+
+      const next = this.queue.shift();
+
+      if (next === undefined) return;
 
       // pi may still hold the leftovers as steers and would inject them on
       // top of the send below, so its copy goes first.
-      if (this.turn === turn && this.queue.length > 0) {
-        this.session.dropSteers();
-      }
-
-      while (this.turn === turn && this.queue.length > 0) {
-        const next = this.queue.shift();
-
-        if (next === undefined) {
-          break;
-        }
-
-        this.emitQueue(next.message);
-        const echoed = this.echoed.delete(next.id);
-        if (!echoed) this.emitDequeued(next);
-        await this.sendOwned(
-          next.message,
-          this.hooks.beginTurn?.("drain", next.message, {
-            dequeued: true,
-            echoed,
-            userText: next.userText,
-          }),
-          next.messageId
-        );
-      }
-    } finally {
-      if (this.turn === turn) {
-        this.busy = false;
-        this.emit({
-          type: "event",
-          event: { type: "status_changed", status: AgentStatus.Idle },
-        });
-      }
+      this.session.dropSteers();
+      this.emitQueue(next.message);
+      const echoed = this.echoed.delete(next.id);
+      if (!echoed) this.emitDequeued(next);
+      await this.sendOwned(
+        next.message,
+        this.hooks.beginTurn?.("drain", next.message, {
+          dequeued: true,
+          echoed,
+          userText: next.userText,
+        }),
+        next.messageId
+      );
     }
+  }
+
+  /** The turn is over, unless a Stop or reset superseded it and owns `busy` now. */
+  private release(turn: number): void {
+    if (this.turn !== turn) return;
+
+    this.busy = false;
+    this.emit({
+      type: "event",
+      event: { type: "status_changed", status: AgentStatus.Idle },
+    });
   }
 
   /** One `session.send`, owned by `token` from start to settle. */

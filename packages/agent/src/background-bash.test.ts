@@ -277,6 +277,9 @@ describe("surviving a stop", () => {
 
     expect(pi.messages).toHaveLength(2);
     expect(String(pi.messages[1]?.content)).toContain("survived");
+    // With the prompt that is starting, not a turn of its own: pi would
+    // refuse the user's message as busy over a turn started here.
+    expect(pi.messages[1]?.options).toEqual({ deliverAs: "nextTurn" });
   });
 
   it("does not repeat itself for a user message that never stopped anything", async () => {

@@ -499,8 +499,9 @@ export class AguiHost {
       return;
     }
 
-    // Busy (the two-window race): today's send-while-busy, and no run opens.
-    if (this.core.busy) {
+    // Busy (the two-window race, or a run pi started itself): today's
+    // send-while-busy, and no run opens.
+    if (this.core.turnInProgress()) {
       const { entry, steered } = this.core.admitNow(text, newest?.userText);
 
       this.ack(runId, "queued", {

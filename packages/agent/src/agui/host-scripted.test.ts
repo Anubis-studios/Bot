@@ -987,3 +987,50 @@ it("answers a refresh asked for by id once it is done, or failed", async () => {
     await s.close();
   }
 });
+
+describe("a turn the session started itself", () => {
+  // pi starts a turn of its own when a background job finishes while nothing
+  // is running; a message prompted over it was refused as "already processing".
+  const queued = (s: Scripted) =>
+    s
+      .custom<{ runId: string; status: string }>("run.ack")
+      .filter((ack) => ack.status === "queued")
+      .map((ack) => ack.runId);
+
+  it("queues what is sent during it, then runs what it did not take, in order", async () => {
+    const s = await scripted(async () => undefined);
+
+    s.session.startOwnTurn(async (api) => {
+      api.agent({ type: "text_delta", content: "The build finished." });
+      await api.gate("woken");
+    });
+    s.send(run("a", "first"));
+    s.send(run("b", "second"));
+    await s.waitFor(() => queued(s).length === 2, "both queued");
+
+    // Steered into the running turn, nothing prompted over it.
+    expect(queued(s)).toEqual(["a", "b"]);
+    expect(s.session.steered).toEqual(["first", "second"]);
+    expect(s.session.sent).toEqual([]);
+
+    // It ended without taking them: each runs as its own turn, in order.
+    s.session.open("woken");
+    await s.waitFor(() => s.session.sent.length === 2, "both ran");
+    expect(s.session.sent).toEqual(["first", "second"]);
+    expect(s.session.maxInFlight).toBe(1);
+    await s.close();
+  });
+
+  it("starts the next turn for a message sent once it is over", async () => {
+    const s = await scripted(async () => undefined);
+
+    s.session.startOwnTurn(async () => undefined);
+    await s.session.whenIdle();
+    s.send(run("late", "and now this"));
+    await s.waitFor(() => s.session.sent.length === 1, "ran");
+
+    expect(queued(s)).toEqual([]);
+    expect(s.session.sent).toEqual(["and now this"]);
+    await s.close();
+  });
+});
