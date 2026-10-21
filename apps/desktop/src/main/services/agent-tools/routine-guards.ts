@@ -155,26 +155,17 @@ export const agentRunRefusal = (
   return null;
 };
 
-/** A request for a nudge, in the languages the app ships. */
-const REMINDER_WORDS =
-  /\b(remind|reminder|alarm|nudge)|recordatorio|recu[eé]rda|lembr|rappel|erinner|hat[ıi]rlat|ingatk|pengingat|ricord|promemoria|リマインド|思い出させ|알림|리마인/iu;
-
 /**
- * Why a schedule stands in for something that should happen once, or null.
- * One date pinned (day and month) repeats yearly; every minute, for a
- * reminder, repeats a reminder every minute. Both want a one-time moment.
+ * Why a schedule is refused, or null: one that fires every minute is a full
+ * agent run each minute, and a one-time reminder made of it repeats forever.
  */
-export const fakedOneOffSchedule = (
-  schedule: string,
-  text: string
-): string | null => {
-  const [minute, hour, day, month, weekday] = schedule.trim().split(/\s+/);
-  if (/^\d+$/.test(day ?? "") && /^\d+$/.test(month ?? ""))
-    return `"${schedule.trim()}" names one date, so it repeats on that day every year. For something that happens once, give run_at (or in_minutes) instead of a schedule: it fires once and is then done.`;
+export const everyMinuteSchedule = (schedule: string): string | null => {
+  const fields = schedule.trim().split(/\s+/);
   const everyMinute =
-    (minute === "*" || minute === "*/1") &&
-    [hour, day, month, weekday].every((field) => field === "*");
-  if (everyMinute && REMINDER_WORDS.test(text))
-    return `"${schedule.trim()}" fires every minute, for as long as it exists, so a reminder made of it repeats every minute. For a one-time reminder give in_minutes (or run_at) instead of a schedule: it fires once and is then done.`;
-  return null;
+    fields.length === 5 &&
+    (fields[0] === "*" || fields[0] === "*/1") &&
+    fields.slice(1).every((field) => field === "*");
+  return everyMinute
+    ? `"${schedule.trim()}" fires every minute, for as long as it exists. For a one-time reminder or alert, give in_minutes or run_at instead of a schedule: it fires once and is then done. For a repeating check, pick every 5 minutes or slower.`
+    : null;
 };

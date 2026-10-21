@@ -166,6 +166,37 @@ describe("cronjob, hosted", () => {
     });
   });
 
+  it("holds a hosted routine to the local rules for one-time moments", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-10-20T08:00Z") });
+    try {
+      const { call, create } = harness({ defaultRunner: "hosted" });
+      expect(
+        await call({ action: "create", prompt: "x", schedule: "* * * * *" })
+      ).toContain("in_minutes");
+      expect(
+        await call({
+          action: "create",
+          prompt: "x",
+          run_at: "2026-10-20T17:00",
+          in_minutes: 5,
+        })
+      ).toContain("not both");
+      expect(create).not.toHaveBeenCalled();
+
+      await call({
+        action: "create",
+        reminder_text: "Stretch",
+        in_minutes: 10,
+      });
+      expect(create.mock.calls[0]![1]).toEqual({
+        byAgent: true,
+        runAtText: "2026-10-20T08:10:00.000Z",
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("keeps the webhook on a scheduled routine", async () => {
     const { call, create } = harness({ defaultRunner: "hosted" });
     await call({

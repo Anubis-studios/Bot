@@ -10,7 +10,7 @@ import {
 } from "../providers/credit-wall";
 import {
   consecutiveFailures,
-  fakedOneOffSchedule,
+  everyMinuteSchedule,
   hasRunInFlight,
   NetworkWaitClock,
   ranOutOfAbacusCredits,
@@ -208,24 +208,15 @@ describe("the credit wall a routine meets", () => {
   });
 });
 
-describe("a schedule standing in for a one-time moment", () => {
-  it("is a date pinned by day and month", () => {
-    expect(fakedOneOffSchedule("20 8 14 10 *", "Launch alert")).toContain(
-      "every year"
-    );
-    expect(fakedOneOffSchedule("0 9 1 * *", "Monthly report")).toBeNull();
+describe("a schedule that fires every minute", () => {
+  it("is refused, pointing a one-time ask to in_minutes or run_at", () => {
+    expect(everyMinuteSchedule("* * * * *")).toContain("in_minutes");
+    expect(everyMinuteSchedule(" */1 * * * * ")).not.toBeNull();
   });
 
-  it("is an every-minute reminder, but not an every-minute check", () => {
-    expect(fakedOneOffSchedule("* * * * *", "Remind me in 1 minute")).toContain(
-      "in_minutes"
-    );
-    expect(fakedOneOffSchedule("*/1 * * * *", "Recordatorio: agua")).not.toBe(
-      null
-    );
-    expect(
-      fakedOneOffSchedule("* * * * *", "Check the build queue")
-    ).toBeNull();
-    expect(fakedOneOffSchedule("*/5 * * * *", "Remind me to stand")).toBeNull();
+  it("leaves slower and yearly schedules alone", () => {
+    expect(everyMinuteSchedule("*/5 * * * *")).toBeNull();
+    expect(everyMinuteSchedule("* 9 * * *")).toBeNull();
+    expect(everyMinuteSchedule("0 9 14 2 *")).toBeNull();
   });
 });

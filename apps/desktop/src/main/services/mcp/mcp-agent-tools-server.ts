@@ -103,7 +103,7 @@ import { analyze } from "../agent-tools/model-analysis";
 import { reprintPdf } from "../agent-tools/pdf-agent";
 import {
   agentRunRefusal,
-  fakedOneOffSchedule,
+  everyMinuteSchedule,
 } from "../agent-tools/routine-guards";
 import { RoutineSendLedger } from "../agent-tools/routine-send-ledger";
 import {
@@ -511,10 +511,6 @@ export interface McpAgentToolsServerOptions {
   };
 }
 
-/**
- * Not read from the platform catalog: that carries i18n keys and the main
- * process has no translator.
- */
 type Moment = { ok: true; at: number | null } | { ok: false; error: string };
 
 /** The furthest ahead a one-time routine may be set. */
@@ -542,6 +538,7 @@ const requestedMoment = (
   args: Record<string, unknown>,
   now: number
 ): Moment => {
+  if (bothMoments(args)) return { ok: false, error: BOTH_MOMENTS };
   const soon = minutesFromNow(args.in_minutes, now);
   if (soon.ok === false || soon.at != null) return soon;
   const text = typeof args.run_at === "string" ? args.run_at.trim() : "";
@@ -564,12 +561,42 @@ const requestedMoment = (
   return { ok: true, at };
 };
 
-/** What a routine says it is for, to read a schedule against. */
-const routineText = (args: Record<string, unknown>): string =>
-  [args.name, args.prompt, args.reminder_text]
-    .filter((part): part is string => typeof part === "string")
-    .join("\n");
+const given = (value: unknown): boolean =>
+  value != null && !(typeof value === "string" && value.trim() === "");
 
+/** Both ways of naming a one-time moment: refused on every runner, never one picked. */
+const bothMoments = (args: Record<string, unknown>): boolean =>
+  given(args.run_at) && given(args.in_minutes);
+
+const BOTH_MOMENTS =
+  "Give run_at or in_minutes for a one-time routine, not both.";
+
+/**
+ * A hosted routine's args with `in_minutes` turned into an exact `run_at`:
+ * the server reads run_at in the user's zone, and has no minutes field.
+ */
+const withMinutesAsRunAt = (
+  args: Record<string, unknown>,
+  now: number
+):
+  | { ok: true; args: Record<string, unknown> }
+  | { ok: false; error: string } => {
+  if (bothMoments(args)) return { ok: false, error: BOTH_MOMENTS };
+  const soon = minutesFromNow(args.in_minutes, now);
+  if (soon.ok === false) return soon;
+  return {
+    ok: true,
+    args:
+      soon.at != null
+        ? { ...args, run_at: new Date(soon.at).toISOString() }
+        : args,
+  };
+};
+
+/**
+ * Not read from the platform catalog: that carries i18n keys and the main
+ * process has no translator.
+ */
 export class McpAgentToolsServer extends McpHttpServer {
   constructor(private readonly options: McpAgentToolsServerOptions) {
     // listChanged: a platform's tools appear the moment it connects, and
@@ -972,6 +999,16 @@ export class McpAgentToolsServer extends McpHttpServer {
         "Routines are set up by the user, not from a chat with someone else."
       );
 
+    // The same rules for a local routine and a hosted one.
+    if (action === "create" || action === "update") {
+      if (bothMoments(args)) return this.err(BOTH_MOMENTS);
+      const everyMinute =
+        typeof args.schedule === "string"
+          ? everyMinuteSchedule(args.schedule)
+          : null;
+      if (everyMinute != null) return this.err(everyMinute);
+    }
+
     try {
       if (action === "list") {
         const jobs = listJobs();
@@ -1011,11 +1048,6 @@ export class McpAgentToolsServer extends McpHttpServer {
       }
 
       if (action === "create") {
-        const faked =
-          typeof args.schedule === "string"
-            ? fakedOneOffSchedule(args.schedule, routineText(args))
-            : null;
-        if (faked != null) return this.err(faked);
         const runner =
           requestedRunner(args) ??
           this.options.routines?.defaultRunner() ??
@@ -1027,16 +1059,9 @@ export class McpAgentToolsServer extends McpHttpServer {
             this.options.routines?.hostedOnly?.() === true) &&
           this.options.routines != null
         ) {
-          // The server reads run_at in the user's zone; minutes from now go
-          // as an exact moment.
-          const soon = minutesFromNow(args.in_minutes, Date.now());
-          if (soon.ok === false) return this.err(soon.error);
-          return await this.createHostedRoutine(
-            args.run_at == null && soon.at != null
-              ? { ...args, run_at: new Date(soon.at).toISOString() }
-              : args,
-            callerSession
-          );
+          const hosted = withMinutesAsRunAt(args, Date.now());
+          if (hosted.ok === false) return this.err(hosted.error);
+          return await this.createHostedRoutine(hosted.args, callerSession);
         }
 
         const schedule = typeof args.schedule === "string" ? args.schedule : "";
@@ -1220,17 +1245,6 @@ export class McpAgentToolsServer extends McpHttpServer {
           return this.err(
             "Give a schedule for a repeating routine, or run_at / in_minutes for a one-time one, not both."
           );
-        if (typeof args.schedule === "string") {
-          const current = listJobs().find((entry) => entry.id === id);
-          const faked = fakedOneOffSchedule(
-            args.schedule,
-            routineText({
-              name: args.name ?? current?.name,
-              prompt: args.prompt ?? current?.prompt,
-            })
-          );
-          if (faked != null) return this.err(faked);
-        }
 
         if (
           typeof args.schedule === "string" &&
@@ -1384,10 +1398,13 @@ export class McpAgentToolsServer extends McpHttpServer {
         );
       }
       if (action === "update") {
+        const moment = withMinutesAsRunAt(args, Date.now());
+        if (moment.ok === false) return this.err(moment.error);
         // The user's words for a moment go as written.
+        const when = moment.args.run_at;
         const runAt =
-          typeof args.run_at === "string" && args.run_at.trim().length > 0
-            ? args.run_at.trim()
+          typeof when === "string" && when.trim().length > 0
+            ? when.trim()
             : null;
         const sources = requestedSources(args);
         const reads = requestedReads(args);

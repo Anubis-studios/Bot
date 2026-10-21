@@ -430,9 +430,12 @@ export const updateJob = (
     updated.schedule = null;
     if (changes.enabled == null) updated.enabled = true;
   }
-  // Fires the old schedule had, or none, are not this one's to miss.
+  // Fires the old schedule had, or none, are not this one's to miss, and
+  // a moment it fired says nothing about the new one's.
   if (updated.schedule !== jobs[index].schedule)
     updated.scheduledAt = Date.now();
+  if (updated.schedule !== jobs[index].schedule || rest.runAt != null)
+    updated.firedSlot = null;
   if (rest.name != null)
     updated.name = rest.name.trim() || deriveName(updated.prompt);
 
@@ -514,9 +517,20 @@ export const minuteOf = (at: number): number => {
   return minute.getTime();
 };
 
-/** Whether the scheduled moment `slot` has already been fired. */
-const slotFired = (job: CronJob, slot: number): boolean =>
-  job.firedSlot != null && slot <= job.firedSlot.at;
+/** A claim this far past `now` came from a clock that ran ahead: ignored. */
+const FIRED_SLOT_CLOCK_SLACK_MS = 5 * 60_000;
+
+/** The moment last fired, as `now` can believe it; null for none. */
+const firedSlotAt = (job: CronJob, now: number): number | null =>
+  job.firedSlot != null && job.firedSlot.at <= now + FIRED_SLOT_CLOCK_SLACK_MS
+    ? job.firedSlot.at
+    : null;
+
+/** Whether the scheduled moment `slot` has already been fired, as of `now`. */
+const slotFired = (job: CronJob, slot: number, now: number): boolean => {
+  const fired = firedSlotAt(job, now);
+  return fired != null && slot <= fired;
+};
 
 /**
  * Claims the scheduled moment `slot` for one attempt, written before the
@@ -530,7 +544,7 @@ export const claimSlot = (
 ): boolean => {
   const jobs = readForWrite();
   const index = jobs.findIndex((job) => job.id === id);
-  if (index < 0 || slotFired(jobs[index], slot)) return false;
+  if (index < 0 || slotFired(jobs[index], slot, Date.now())) return false;
   jobs[index] = { ...jobs[index], firedSlot: { at: slot, attemptId } };
   write(jobs);
   return true;
@@ -660,7 +674,7 @@ export const slotFor = (job: CronJob, at: Date): number =>
 export const dueJobs = (at: Date = new Date()): CronJob[] =>
   read().filter((job) => {
     if (!job.enabled) return false;
-    if (slotFired(job, slotFor(job, at))) return false;
+    if (slotFired(job, slotFor(job, at), at.getTime())) return false;
     // Once: due from its moment until fired, so a slept-through fire happens.
     if (job.runAt != null) return job.runAt <= at.getTime();
     if (job.schedule == null) return false;
@@ -678,11 +692,11 @@ export const dueJobs = (at: Date = new Date()): CronJob[] =>
  * run (fire-on-create included), fired slot, hold, resume, schedule change
  * or creation.
  */
-const accountedSince = (job: CronJob): number =>
+const accountedSince = (job: CronJob, now: number): number =>
   Math.max(
     job.createdAt,
     job.lastRunAt ?? 0,
-    job.firedSlot?.at ?? 0,
+    firedSlotAt(job, now) ?? 0,
     job.heldSince ?? 0,
     job.resumedAt ?? 0,
     job.scheduledAt ?? 0
@@ -759,7 +773,10 @@ export const missedJobs = (from: Date | null, to: Date): MissedJob[] => {
   return read().flatMap((job) => {
     if (!job.enabled || job.runAt != null || job.schedule == null) return [];
     try {
-      const since = Math.max(accountedSince(job), from?.getTime() ?? 0);
+      const since = Math.max(
+        accountedSince(job, to.getTime()),
+        from?.getTime() ?? 0
+      );
       const { count, latest } = firesBetween(
         parseCron(job.schedule),
         since,

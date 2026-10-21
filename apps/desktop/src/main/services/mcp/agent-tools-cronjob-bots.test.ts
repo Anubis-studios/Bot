@@ -208,7 +208,7 @@ describe("the first fire of a new routine", () => {
       server([], { runCronJob: runner.runCronJob }),
       {
         action: "create",
-        schedule: "*/1 * * * *",
+        schedule: "*/5 * * * *",
         prompt: "Tell a joke.",
         name: "Joke",
       },
@@ -514,7 +514,7 @@ describe("a one-time routine", () => {
     expect(listJobs()).toEqual([]);
   });
 
-  it("refuses a reminder made of an every-minute schedule, and points to in_minutes", async () => {
+  it("refuses an every-minute schedule, and points to in_minutes", async () => {
     const text = await call(
       server(),
       {
@@ -530,14 +530,29 @@ describe("a one-time routine", () => {
     expect(listJobs()).toEqual([]);
   });
 
-  it("refuses a schedule pinned to one date, which repeats yearly", async () => {
-    const text = await call(
+  it("keeps a yearly routine pinned to one date", async () => {
+    await call(
       server(),
-      { action: "create", schedule: "20 8 21 10 *", prompt: "Launch alert" },
+      { action: "create", schedule: "0 9 14 2 *", prompt: "Anniversary note" },
       "bot-session"
     );
 
-    expect(text).toContain("every year");
+    expect(listJobs()[0]?.schedule).toBe("0 9 14 2 *");
+  });
+
+  it("refuses run_at and in_minutes together rather than picking one", async () => {
+    const text = await call(
+      server(),
+      {
+        action: "create",
+        run_at: "2026-10-21T08:20",
+        in_minutes: 5,
+        prompt: "x",
+      },
+      "bot-session"
+    );
+
+    expect(text).toContain("not both");
     expect(listJobs()).toEqual([]);
   });
 

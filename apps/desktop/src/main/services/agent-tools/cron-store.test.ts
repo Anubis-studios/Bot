@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setMigrationWriteBlocks } from "../../migrations/write-block";
 import { CronScheduler } from "./cron-scheduler";
 import {
+  claimSlot,
   createJob,
   onCronStoreWrite,
   onRoutineRunStarted,
@@ -885,5 +886,37 @@ describe("each scheduled moment", () => {
     vi.setSystemTime(new Date(2026, 9, 13, 9, 10));
     await launch().cron.tick(new Date(2026, 9, 13, 9, 10));
     expect(fires).toHaveLength(1);
+  });
+});
+
+describe("a fired moment from a clock that ran ahead", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(2026, 9, 13, 8, 0) });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("is ignored, so the routine still fires once the clock is right", async () => {
+    const job = createJob({ schedule: "0 9 * * *", prompt: "x" });
+    // Claimed while the clock read a week ahead.
+    claimSlot(job.id, new Date(2026, 9, 20, 9, 0).getTime(), "attempt-ahead");
+    vi.setSystemTime(new Date(2026, 9, 13, 9, 0, 5));
+
+    expect(
+      dueJobs(new Date(2026, 9, 13, 9, 0, 5)).map((due) => due.id)
+    ).toEqual([job.id]);
+  });
+
+  it("is dropped when the schedule or one-time moment changes", () => {
+    const job = createJob({ schedule: "0 9 * * *", prompt: "x" });
+    claimSlot(job.id, new Date(2026, 9, 13, 9, 0).getTime(), "attempt-1");
+
+    expect(updateJob(job.id, { schedule: "0 10 * * *" }).firedSlot).toBeNull();
+    claimSlot(job.id, new Date(2026, 9, 13, 10, 0).getTime(), "attempt-2");
+    expect(
+      updateJob(job.id, { runAt: new Date(2026, 9, 14, 9, 0).getTime() })
+        .firedSlot
+    ).toBeNull();
   });
 });
