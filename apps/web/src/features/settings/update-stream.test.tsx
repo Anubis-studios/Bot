@@ -34,6 +34,7 @@ const status = (version: string): UpdateStatus => ({
   installStalled: false,
   criticalUpdate: false,
   failedPhase: null,
+  manualInstall: null,
 });
 
 type Open = (signal: AbortSignal) => AsyncGenerator<UpdateStatus>;

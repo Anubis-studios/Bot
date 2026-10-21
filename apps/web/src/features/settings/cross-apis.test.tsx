@@ -45,6 +45,7 @@ const idle = {
   installStalled: false,
   criticalUpdate: false,
   failedPhase: null,
+  manualInstall: null,
 };
 it("the update action persists in the global end slot across route actions", async () => {
   const install = vi.fn(async () => {});

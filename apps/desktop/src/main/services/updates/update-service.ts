@@ -2,7 +2,10 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 
 // electron-updater is CommonJS; a named value import fails at load under ESM.
-import electronUpdater, { type UpdateInfo } from "electron-updater";
+import electronUpdater, {
+  type UpdateDownloadedEvent,
+  type UpdateInfo,
+} from "electron-updater";
 
 const { autoUpdater } = electronUpdater;
 import type {
@@ -16,6 +19,13 @@ import { emitBusChannel } from "#main/rpc/emit";
 import { markQuitting, clearQuitting } from "../../app-quit-state";
 import { isNotchWindow } from "../../notch/registry";
 import { isTestBuild } from "../providers/abacus-host";
+import {
+  type DebInstallResult,
+  graphicalElevation,
+  installDebWithPkexec,
+  isDebPackage,
+  manualInstallCommand,
+} from "./deb-install";
 import { markRelaunchHidden, clearRelaunchHidden } from "./relaunch-hidden";
 
 // Static CDN feed: one YAML naming immutable per-version artifacts. The feed
@@ -91,6 +101,7 @@ const initialStatus = (): UpdateStatus => ({
   installStalled: false,
   criticalUpdate: false,
   failedPhase: null,
+  manualInstall: null,
 });
 
 /**
@@ -121,6 +132,12 @@ export class UpdateService {
   private withdrawnDownloads = new Set<string>();
   private installRequest: Promise<{ success: boolean; error?: string }> | null =
     null;
+
+  // A .deb installs as root, behind a password prompt: never on an automatic
+  // path, and a version whose install failed is left to the user.
+  private readonly debPackage = isDebPackage();
+  private downloadedFile: string | null = null;
+  private failedDebInstalls = new Set<string>();
 
   constructor(private readonly deps: UpdateServiceDeps = {}) {
     this.setupAutoUpdater();
@@ -234,7 +251,7 @@ export class UpdateService {
       this.emitStatusUpdate();
     });
 
-    autoUpdater.on("update-downloaded", (info: UpdateInfo) => {
+    autoUpdater.on("update-downloaded", (info: UpdateDownloadedEvent) => {
       if (this.withdrawnDownloads.has(info.version)) return;
       console.log(`[UpdateService] ${info.version} downloaded, pill is up`);
       this.transferToken = null;
@@ -243,7 +260,9 @@ export class UpdateService {
       this.status.downloaded = true;
       this.status.updateInfo = { version: info.version };
       this.downloadedVersion = info.version;
+      this.downloadedFile = info.downloadedFile;
       this.setUpdaterHasPendingBuild(true);
+      this.refreshManualInstall();
       this.emitStatusUpdate();
       this.startAutoRestartPoll();
     });
@@ -257,8 +276,33 @@ export class UpdateService {
     // A stale progress sample would render as a live download.
     this.status.progress = null;
     this.downloadedVersion = null;
+    this.downloadedFile = null;
+    this.status.manualInstall = null;
     this.stopAutoRestartPoll();
     this.setUpdaterHasPendingBuild(false);
+  }
+
+  /**
+   * A downloaded .deb the app cannot install (no graphical prompt, or its
+   * install already failed) becomes the manual-install state.
+   */
+  private refreshManualInstall(): void {
+    const version = this.downloadedVersion;
+    const file = this.downloadedFile;
+    const manual =
+      this.debPackage &&
+      this.status.downloaded &&
+      version != null &&
+      file != null &&
+      (this.failedDebInstalls.has(version) || graphicalElevation() == null);
+    this.status.manualInstall = manual
+      ? { command: manualInstallCommand(file), packagePath: file }
+      : null;
+    if (manual) {
+      console.log(
+        `[UpdateService] ${version} needs a manual install (${this.failedDebInstalls.has(version) ? "its install failed" : "no graphical password prompt"}): ${this.status.manualInstall?.command}`
+      );
+    }
   }
 
   /**
@@ -277,7 +321,8 @@ export class UpdateService {
   // Wait for a moment when a restart destroys nothing and take it silently;
   // the pill stays as the manual path.
   private startAutoRestartPoll(): void {
-    if (this.autoRestartTimer != null) return;
+    // A password prompt is not silent: a .deb waits for a click.
+    if (this.autoRestartTimer != null || this.debPackage) return;
 
     this.autoRestartTimer = setInterval(
       () => this.tryAutoRestart(),
@@ -433,7 +478,10 @@ export class UpdateService {
   }
 
   installUpdate(options?: {
-    /** Windows: run the NSIS installer with no UI. The auto path sets this. */
+    /**
+     * An automatic install (idle restart, quit): Windows runs the NSIS
+     * installer with no UI, and a .deb, which needs a password, is refused.
+     */
     silent?: boolean;
     /** macOS: the window was hidden at restart, so come back hidden. */
     relaunchHidden?: boolean;
@@ -460,6 +508,15 @@ export class UpdateService {
       if (this.status.installing) {
         return { success: true };
       }
+      // Not a failure: the build stays on disk for the user's click.
+      if (this.debPackage && (options?.silent || this.status.manualInstall)) {
+        return {
+          success: false,
+          error: options?.silent
+            ? "This update installs with your password, from the update button"
+            : "Install this update from a terminal",
+        };
+      }
       const version = this.downloadedVersion;
       const offer = await this.checkFeed(true);
       if (
@@ -476,6 +533,9 @@ export class UpdateService {
       }
       this.status.installing = true;
       this.emitStatusUpdate();
+
+      if (this.debPackage && version != null)
+        return await this.installDeb(version);
 
       // Declare quit intent before handing off: Squirrel.Mac only closes the
       // windows, and the macOS 'close' handler hides unless a quit is underway.
@@ -507,6 +567,42 @@ export class UpdateService {
       this.emitStatusUpdate();
       return { success: false, error: errorMessage };
     }
+  }
+
+  /**
+   * The .deb goes in through pkexec's dialog while the app runs. A failure
+   * (dismissed, wrong password, dpkg error) is final for that version: the
+   * user gets the terminal command, and nothing retries it or quits the app.
+   */
+  private async installDeb(
+    version: string
+  ): Promise<{ success: boolean; error?: string }> {
+    const pkexec = graphicalElevation();
+    const file = this.downloadedFile;
+    this.stopPeriodicChecks();
+    const result: DebInstallResult =
+      pkexec != null && file != null
+        ? await installDebWithPkexec(pkexec, file)
+        : { ok: false, detail: "no graphical password prompt" };
+    if (result.ok === false) {
+      console.warn(
+        `[UpdateService] ${version} install failed (${result.detail}), not trying it again`
+      );
+      this.failedDebInstalls.add(version);
+      this.status.installing = false;
+      this.refreshManualInstall();
+      this.emitStatusUpdate();
+      // A newer release can still supersede the failed one.
+      if (app.isPackaged) this.startPeriodicChecks();
+      return { success: false, error: "Install this update from a terminal" };
+    }
+    // Installed on disk; the relaunch starts the new version.
+    console.log(`[UpdateService] ${version} installed, relaunching`);
+    markQuitting();
+    app.relaunch();
+    app.quit();
+    this.startQuitWatchdog();
+    return { success: true };
   }
 
   // Backstop for an install that never quits: the installer applies on exit,

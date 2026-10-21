@@ -3475,6 +3475,7 @@
       "loading": "Reading update status…",
       "stalled": "自動的に再起動できませんでした。アップデートを完了するには、アプリを終了してから再度開いてください。",
       "installFailed": "Couldn't install the update",
+      "manualInstall": "アップデートの準備完了 — 手動でインストールしてください",
       "installing": "Restarting…",
       "checking": "確認中…",
       "downloading": "アップデートをダウンロード中… {{percent}}%",
@@ -3482,6 +3483,12 @@
       "downloadFailed": "Update download failed",
       "checkFailed": "Couldn't check for updates. Offline?",
       "latest": "You’re on the latest version"
+    },
+    "manualInstall": {
+      "pill": "アップデートをインストール",
+      "detail": "このバージョンは管理者としてインストールする必要がありますが、この環境ではアプリから実行できません。ターミナルで次のコマンドを実行してから、アプリを開き直してください:",
+      "copy": "コマンドをコピー",
+      "openFolder": "フォルダを開く"
     },
     "backendBlockers": {
       "unimplemented": "AbacusAI Bot can't run commands here yet.",

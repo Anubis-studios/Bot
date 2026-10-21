@@ -5,7 +5,12 @@ import { useTranslation } from "react-i18next";
 import { AppLink } from "#renderer/lib/navigation/app-link";
 import { Button } from "#renderer/ui/button";
 
-import { UpdatePillButton, updateVisible, useUpdateStatus } from "./updates";
+import {
+  ManualInstallSteps,
+  UpdatePillButton,
+  updateVisible,
+  useUpdateStatus,
+} from "./updates";
 
 import "./update-notice.css";
 
@@ -22,9 +27,15 @@ export const UpdateNotice = ({
   const [dismissedVersion, setDismissedVersion] = useState<string | null>(null);
   const version = update.status?.updateInfo?.version ?? "";
   const ready = update.phase === "downloaded";
+  const manual =
+    update.phase === "manualInstall" ? update.status?.manualInstall : null;
+  // A critical update's manual install stays up.
+  const dismissible =
+    placement === "page" &&
+    (ready || (manual != null && !update.status?.criticalUpdate));
   if (
     !updateVisible(update.status, update.phase) ||
-    (placement === "page" && ready && dismissedVersion === version)
+    (dismissible && dismissedVersion === version)
   )
     return null;
   const percent = Math.max(
@@ -54,14 +65,20 @@ export const UpdateNotice = ({
                 {t("updateBanner.subtitle")}
               </p>
             )}
-            {(update.installError || update.status?.error) && (
-              <p
-                className="text-muted-foreground text-xs break-words"
-                role="alert"
-              >
-                {update.installError ?? update.status?.error}
-              </p>
+            {manual != null && (
+              <div className="mt-1">
+                <ManualInstallSteps manual={manual} />
+              </div>
             )}
+            {manual == null &&
+              (update.installError || update.status?.error) && (
+                <p
+                  className="text-muted-foreground text-xs break-words"
+                  role="alert"
+                >
+                  {update.installError ?? update.status?.error}
+                </p>
+              )}
           </div>
           {placement === "page" && ready && (
             <Button
@@ -85,7 +102,7 @@ export const UpdateNotice = ({
               onCheck={update.check}
             />
           )}
-          {placement === "page" && ready && (
+          {dismissible && (
             <Button
               variant="ghost"
               size="icon"

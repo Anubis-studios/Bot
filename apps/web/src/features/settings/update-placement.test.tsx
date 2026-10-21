@@ -18,6 +18,7 @@ const ready: UpdateStatus = {
   installStalled: false,
   criticalUpdate: false,
   failedPhase: null,
+  manualInstall: null,
 };
 
 it("offers an update on a new bot page without a rail icon and disables actions while installing", async () => {

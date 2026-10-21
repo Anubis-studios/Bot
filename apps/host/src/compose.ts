@@ -76,6 +76,7 @@ const IDLE_UPDATE = {
   installStalled: false,
   criticalUpdate: false,
   failedPhase: null,
+  manualInstall: null,
 };
 
 export const composeNodeHost = async () => {

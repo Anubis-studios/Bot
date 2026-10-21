@@ -18,6 +18,7 @@ const status: UpdateStatus = {
   installStalled: false,
   criticalUpdate: false,
   failedPhase: null,
+  manualInstall: null,
 };
 it("R5-T27 public pill hides idle, critical and stalled; ready relaunches and failed download retries", async () => {
   await initI18n();
@@ -47,5 +48,45 @@ it("R5-T27 public pill hides idle, critical and stalled; ready relaunches and fa
   fireEvent.click(screen.getByRole("button"));
   expect(check).toHaveBeenCalledTimes(1);
   update({ downloading: true });
+  expect(screen.getByRole("button").hasAttribute("disabled")).toBe(true);
+});
+it("a manual .deb install pill leads to the steps and is inert without them", async () => {
+  await initI18n();
+  const manual = vi.fn();
+  const ready = {
+    ...status,
+    downloaded: true,
+    manualInstall: {
+      command: "sudo apt install /tmp/b.deb",
+      packagePath: "/tmp/b.deb",
+    },
+  };
+  const props = { onInstall: vi.fn(), onCheck: vi.fn() };
+  const view = render(
+    <I18nextProvider i18n={i18n}>
+      <UpdatePillButton {...props} status={ready} onManualInstall={manual} />
+    </I18nextProvider>
+  );
+  const pill = screen.getByRole("button", { name: "Install update" });
+  fireEvent.click(pill);
+  expect(manual).toHaveBeenCalledTimes(1);
+  expect(props.onInstall).not.toHaveBeenCalled();
+  // A rejected click does not turn it into Try again.
+  view.rerender(
+    <I18nextProvider i18n={i18n}>
+      <UpdatePillButton
+        {...props}
+        status={ready}
+        installError="refused"
+        onManualInstall={manual}
+      />
+    </I18nextProvider>
+  );
+  expect(screen.getByRole("button", { name: "Install update" })).not.toBeNull();
+  view.rerender(
+    <I18nextProvider i18n={i18n}>
+      <UpdatePillButton {...props} status={ready} />
+    </I18nextProvider>
+  );
   expect(screen.getByRole("button").hasAttribute("disabled")).toBe(true);
 });

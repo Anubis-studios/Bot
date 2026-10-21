@@ -42,6 +42,7 @@ it("the real RPC link sends flow headers and JSON acknowledgements only for cons
     installStalled: false,
     criticalUpdate: false,
     failedPhase: null,
+    manualInstall: null,
   };
   const router = {
     update: {
@@ -175,6 +176,7 @@ it("acknowledges each event on the socket that delivered it, across a replacemen
     installStalled: false,
     criticalUpdate: false,
     failedPhase: null,
+    manualInstall: null,
   };
   const router = {
     update: {

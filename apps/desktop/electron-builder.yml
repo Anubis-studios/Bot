@@ -164,6 +164,13 @@ appImage:
   artifactName: ${productName}-${version}-${arch}.${ext}
 deb:
   artifactName: ${productName}-${version}-${arch}.${ext}
+  # pkexec is the graphical password prompt the updater installs a new .deb
+  # through (sudo has no prompt without a terminal). A user who installs with
+  # apt gets it, so later updates install from the app. libappindicator3-1 is
+  # electron-builder's default, which this list replaces.
+  recommends:
+    - libappindicator3-1
+    - pkexec | policykit-1
 
 # The updater reads this same prefix (see main/updates/UpdateService.ts). CI runs
 # `--publish never`: electron-builder only generates the latest*.yml feed files,

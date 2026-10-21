@@ -56,6 +56,7 @@ export const IDLE_UPDATE_STATUS: UpdateStatus = {
   installStalled: false,
   criticalUpdate: false,
   failedPhase: null,
+  manualInstall: null,
 };
 
 export interface FakeDepsOverrides {

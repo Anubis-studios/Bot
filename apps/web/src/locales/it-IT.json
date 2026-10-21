@@ -3475,6 +3475,7 @@
       "loading": "Reading update status…",
       "stalled": "Riavvio automatico non riuscito: chiudi l'app e riaprila per completare l'aggiornamento.",
       "installFailed": "Couldn't install the update",
+      "manualInstall": "Aggiornamento pronto: installalo manualmente",
       "installing": "Restarting…",
       "checking": "Ricerca in corso…",
       "downloading": "Download aggiornamento… {{percent}}%",
@@ -3482,6 +3483,12 @@
       "downloadFailed": "Update download failed",
       "checkFailed": "Couldn't check for updates. Offline?",
       "latest": "You’re on the latest version"
+    },
+    "manualInstall": {
+      "pill": "Installa aggiornamento",
+      "detail": "Questa versione si installa come amministratore, cosa che l’app qui non può fare. Esegui questo comando in un terminale, poi riapri l’app:",
+      "copy": "Copia comando",
+      "openFolder": "Apri cartella"
     },
     "backendBlockers": {
       "unimplemented": "AbacusAI Bot can't run commands here yet.",

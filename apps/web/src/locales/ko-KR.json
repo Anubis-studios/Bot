@@ -3475,6 +3475,7 @@
       "loading": "Reading update status…",
       "stalled": "자동으로 다시 시작하지 못했습니다. 업데이트를 완료하려면 앱을 종료한 후 다시 여세요.",
       "installFailed": "Couldn't install the update",
+      "manualInstall": "업데이트 준비 완료 — 직접 설치하세요",
       "installing": "Restarting…",
       "checking": "확인 중…",
       "downloading": "업데이트 다운로드 중… {{percent}}%",
@@ -3482,6 +3483,12 @@
       "downloadFailed": "Update download failed",
       "checkFailed": "Couldn't check for updates. Offline?",
       "latest": "You’re on the latest version"
+    },
+    "manualInstall": {
+      "pill": "업데이트 설치",
+      "detail": "이 버전은 관리자 권한으로 설치해야 하는데, 이 환경에서는 앱이 설치할 수 없습니다. 터미널에서 이 명령을 실행한 다음 앱을 다시 여세요:",
+      "copy": "명령 복사",
+      "openFolder": "폴더 열기"
     },
     "backendBlockers": {
       "unimplemented": "AbacusAI Bot can't run commands here yet.",

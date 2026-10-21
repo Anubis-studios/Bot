@@ -3475,6 +3475,7 @@
       "loading": "Güncelleme durumu okunuyor…",
       "stalled": "Otomatik olarak yeniden başlatılamadı. Güncellemeyi bitirmek için uygulamadan çıkıp tekrar aç.",
       "installFailed": "Güncelleme yüklenemedi",
+      "manualInstall": "Güncelleme hazır — elle yükleyin",
       "installing": "Yeniden başlatılıyor…",
       "checking": "Kontrol ediliyor…",
       "downloading": "Güncelleme indiriliyor… %{{percent}}",
@@ -3482,6 +3483,12 @@
       "downloadFailed": "Güncelleme indirilemedi",
       "checkFailed": "Güncellemeler kontrol edilemedi. Çevrimdışı mısın?",
       "latest": "En son sürümü kullanıyorsun"
+    },
+    "manualInstall": {
+      "pill": "Güncellemeyi yükle",
+      "detail": "Bu sürüm yönetici olarak yüklenir ve uygulama bunu burada yapamaz. Bu komutu bir terminalde çalıştırın, ardından uygulamayı yeniden açın:",
+      "copy": "Komutu kopyala",
+      "openFolder": "Klasörü aç"
     },
     "backendBlockers": {
       "unimplemented": "AbacusAI Bot burada henüz komut çalıştıramıyor.",

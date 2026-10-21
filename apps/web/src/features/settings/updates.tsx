@@ -1,4 +1,7 @@
-import type { UpdateStatus } from "@abacus-ai/contract/update";
+import type {
+  UpdateManualInstall,
+  UpdateStatus,
+} from "@abacus-ai/contract/update";
 import {
   useIsMutating,
   useQuery,
@@ -19,6 +22,7 @@ import { useMutation } from "#renderer/data/query-client";
 import type { Transport } from "#renderer/data/transport";
 import { getLogDump } from "#renderer/lib/log-ring";
 import { AppLink } from "#renderer/lib/navigation/app-link";
+import { useAppNavigate } from "#renderer/lib/navigation/use-app-navigate";
 import { showInfo } from "#renderer/lib/toast";
 import { useAppContext, errorText } from "#renderer/lib/use-app-context";
 import {
@@ -39,6 +43,7 @@ export const updatePhase = (
   if (!status) return "loading";
   if (status.installStalled) return "stalled";
   if (status.installing) return "installing";
+  if (status.manualInstall) return "manualInstall";
   if (status.error && status.failedPhase === "install") return "installFailed";
   if (clicked || status.installing) return "installing";
   if (status.checking) return "checking";
@@ -108,6 +113,65 @@ const presented = (status: UpdateStatus | undefined) =>
     ? { ...status, error: null, failedPhase: null, installStalled: false }
     : status;
 
+/** A rejected click is an install failure, unless the answer is a manual install. */
+const phaseWith = (
+  status: UpdateStatus | undefined,
+  clicked: boolean,
+  installError: string | null
+) =>
+  installError && !status?.manualInstall
+    ? "installFailed"
+    : updatePhase(status, clicked);
+
+/**
+ * A downloaded .deb the app cannot install: the terminal command, a copy
+ * button and the package's folder.
+ */
+export const ManualInstallSteps = ({
+  manual,
+}: {
+  manual: UpdateManualInstall;
+}) => {
+  const { t } = useTranslation();
+  const { transport } = useAppContext();
+  return (
+    <div data-slot="update-manual-install" className="flex flex-col gap-2">
+      <p className="text-muted-foreground text-xs">
+        {t("phase5.manualInstall.detail")}
+      </p>
+      <code className="bg-muted rounded-md px-2 py-1 font-mono text-xs break-all select-all">
+        {manual.command}
+      </code>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          size="sm"
+          onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(manual.command);
+              showInfo(t("phase5.copied"));
+            } catch {
+              // The command stays on screen, selectable.
+            }
+          }}
+        >
+          {t("phase5.manualInstall.copy")}
+        </Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() =>
+            void transport.client.system.showItemInFolder({
+              path: manual.packagePath,
+            })
+          }
+        >
+          {t("phase5.manualInstall.openFolder")}
+        </Button>
+      </div>
+    </div>
+  );
+};
+
 export const useUpdateStatus = () => {
   const { transport, queryClient } = useAppContext();
   const live = updateStatusQuery(transport);
@@ -124,7 +188,9 @@ export const useUpdateStatus = () => {
     if (
       incoming != null &&
       (!incoming.installing || incoming.installStalled) &&
-      (incoming.failedPhase === "install" || incoming.installStalled)
+      (incoming.failedPhase === "install" ||
+        incoming.installStalled ||
+        incoming.manualInstall != null)
     ) {
       setClicked(false);
       setInstallError(null);
@@ -159,9 +225,7 @@ export const useUpdateStatus = () => {
     clicked: clicked || installing,
     install: () => install.mutate({}),
     installError,
-    phase: installError
-      ? "installFailed"
-      : updatePhase(status, clicked || installing),
+    phase: phaseWith(status, clicked || installing, installError),
     check: () => check.mutate({}),
   };
 };
@@ -216,7 +280,11 @@ export const AboutPage = () => {
             version: update.status?.updateInfo?.version,
             percent: Math.round(update.status?.progress?.percent ?? 0),
           })}
-          detail={update.installError ?? update.status?.error ?? undefined}
+          detail={
+            update.phase === "manualInstall"
+              ? undefined
+              : (update.installError ?? update.status?.error ?? undefined)
+          }
         >
           {["downloaded", "installFailed"].includes(update.phase) && (
             <Button size="sm" onClick={() => update.install()}>
@@ -233,6 +301,11 @@ export const AboutPage = () => {
             </Button>
           )}
         </SettingRow>
+        {update.phase === "manualInstall" && update.status?.manualInstall && (
+          <div data-setting-id="manualInstall" className="ui-row">
+            <ManualInstallSteps manual={update.status.manualInstall} />
+          </div>
+        )}
         <SettingRow id="logs" title={t("phase5.logs")}>
           <Button
             size="sm"
@@ -267,10 +340,12 @@ export const CriticalUpdateDialog = () => {
   const { t } = useTranslation();
   const update = useUpdateStatus();
   const [remaining, setRemaining] = useState(300);
+  // A manual install cannot be forced; the pill and notice carry it instead.
   const open =
     !!update.status?.criticalUpdate &&
     !!update.status.downloaded &&
-    !update.status.installStalled;
+    !update.status.installStalled &&
+    !update.status.manualInstall;
   const paused =
     !!update.status?.error ||
     !!update.installError ||
@@ -347,9 +422,20 @@ export const updateVisible = (
   phase: string
 ) =>
   !!status &&
-  !status.criticalUpdate &&
+  (!status.criticalUpdate || status.manualInstall != null) &&
   !status.installStalled &&
   !["loading", "latest", "checking", "checkFailed"].includes(phase);
+
+const pillLabel = (phase: string) =>
+  phase === "downloadFailed"
+    ? "phase5.retry"
+    : phase === "installFailed"
+      ? "phase5.tryAgain"
+      : phase === "downloaded"
+        ? "phase5.relaunch"
+        : phase === "manualInstall"
+          ? "phase5.manualInstall.pill"
+          : `phase5.updates.${phase}`;
 
 /** Public shell-end-slot consumer; shell owns placement and compact overflow. */
 
@@ -359,6 +445,7 @@ export const UpdatePillButton = ({
   installError = null,
   onInstall,
   onCheck,
+  onManualInstall,
   compact = false,
   showFailureLabel = true,
 }: {
@@ -367,26 +454,23 @@ export const UpdatePillButton = ({
   installError?: string | null;
   onInstall(): void;
   onCheck(): void;
+  /** Where the manual-install steps are; without it that pill is inert. */
+  onManualInstall?(): void;
   compact?: boolean;
   showFailureLabel?: boolean;
 }) => {
   const { t } = useTranslation();
-  const phase = installError ? "installFailed" : updatePhase(status, clicked);
+  const phase = phaseWith(status, clicked, installError);
   if (!status || !updateVisible(status, phase)) return null;
   const retry = phase === "downloadFailed";
   const install = phase === "downloaded" || phase === "installFailed";
-  const label = retry
-    ? "phase5.retry"
-    : install
-      ? phase === "installFailed"
-        ? "phase5.tryAgain"
-        : "phase5.relaunch"
-      : `phase5.updates.${phase}`;
+  const manual = phase === "manualInstall" && onManualInstall != null;
+  const label = pillLabel(phase);
   return (
     <Button
       size="sm"
       variant="secondary"
-      disabled={!retry && !install}
+      disabled={!retry && !install && !manual}
       className={
         compact
           ? "titlebar-nodrag my-1 h-11 w-12 shrink-0 flex-col gap-0.5 rounded-xl px-1 text-[10px]"
@@ -405,17 +489,22 @@ export const UpdatePillButton = ({
             ? t("phase5.updates.downloaded", {
                 version: status.updateInfo?.version,
               })
-            : undefined
+            : manual
+              ? t("phase5.updates.manualInstall")
+              : undefined
       }
       onClick={() => {
         if (retry) onCheck();
         else if (install) onInstall();
+        else if (manual) onManualInstall();
       }}
     >
       {compact ? (
         <>
           <RefreshCw
-            className={install || retry ? "size-4" : "size-4 animate-spin"}
+            className={
+              install || retry || manual ? "size-4" : "size-4 animate-spin"
+            }
             aria-hidden
           />
           <span className="max-w-full truncate">
@@ -438,17 +527,16 @@ export const UpdatePillButton = ({
 export const useUpdatePillAction = () => {
   const { t } = useTranslation();
   const update = useUpdateStatus();
+  const navigate = useAppNavigate();
   const phase = update.phase;
   const visible = updateVisible(update.status, phase);
   const retry = phase === "downloadFailed";
   const install = phase === "downloaded" || phase === "installFailed";
-  const label = retry
-    ? "phase5.retry"
-    : install
-      ? phase === "installFailed"
-        ? "phase5.tryAgain"
-        : "phase5.relaunch"
-      : `phase5.updates.${phase}`;
+  const manual = phase === "manualInstall";
+  const showManualInstall = () => {
+    void navigate({ to: "/settings/about" });
+  };
+  const label = pillLabel(phase);
   return visible
     ? [
         {
@@ -463,11 +551,13 @@ export const useUpdatePillAction = () => {
               installError={update.installError}
               onInstall={update.install}
               onCheck={update.check}
+              onManualInstall={showManualInstall}
             />
           ),
           onSelect: () => {
             if (retry) update.check();
             else if (install) update.install();
+            else if (manual) showManualInstall();
           },
         },
       ]

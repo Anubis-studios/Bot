@@ -28,4 +28,17 @@ export interface UpdateStatus {
    * clears both. The legacy renderer ignores it.
    */
   failedPhase: UpdateFailedPhase | null;
+  /**
+   * Linux .deb: the downloaded update has to be installed from a terminal,
+   * because the app has no password prompt or its install already failed.
+   * The app does not try that version again by itself.
+   */
+  manualInstall: UpdateManualInstall | null;
+}
+
+export interface UpdateManualInstall {
+  /** The command to run, the package path shell-quoted. */
+  command: string;
+  /** The downloaded package, for "Open folder". */
+  packagePath: string;
 }

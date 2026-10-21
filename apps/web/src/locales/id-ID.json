@@ -3475,6 +3475,7 @@
       "loading": "Reading update status…",
       "stalled": "Tidak dapat memulai ulang secara otomatis. Tutup aplikasi lalu buka kembali untuk menyelesaikan pembaruan.",
       "installFailed": "Couldn't install the update",
+      "manualInstall": "Pembaruan siap — instal secara manual",
       "installing": "Restarting…",
       "checking": "Memeriksa…",
       "downloading": "Mengunduh pembaruan… {{percent}}%",
@@ -3482,6 +3483,12 @@
       "downloadFailed": "Update download failed",
       "checkFailed": "Couldn't check for updates. Offline?",
       "latest": "You’re on the latest version"
+    },
+    "manualInstall": {
+      "pill": "Instal pembaruan",
+      "detail": "Versi ini diinstal sebagai administrator, yang tidak dapat dilakukan aplikasi di sini. Jalankan perintah ini di terminal, lalu buka kembali aplikasinya:",
+      "copy": "Salin perintah",
+      "openFolder": "Buka folder"
     },
     "backendBlockers": {
       "unimplemented": "AbacusAI Bot can't run commands here yet.",

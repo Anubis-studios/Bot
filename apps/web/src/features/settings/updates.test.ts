@@ -14,6 +14,7 @@ const idle = {
   installStalled: false,
   criticalUpdate: false,
   failedPhase: null,
+  manualInstall: null,
 } as UpdateStatus;
 describe("update recovery", () => {
   it("R5-T27 install failure outranks downloaded and clicked", () => {
@@ -39,5 +40,32 @@ describe("update recovery", () => {
         installStalled: true,
       })
     ).toBe("stalled");
+  });
+  it("a manual .deb install outranks downloaded, clicked and an install error", () => {
+    const manualInstall = {
+      command: "sudo apt install /tmp/b.deb",
+      packagePath: "/tmp/b.deb",
+    };
+    expect(
+      updatePhase(
+        {
+          ...idle,
+          downloaded: true,
+          error: "fail",
+          failedPhase: "install",
+          manualInstall,
+        },
+        true
+      )
+    ).toBe("manualInstall");
+    // An install in flight still reads as installing.
+    expect(
+      updatePhase({
+        ...idle,
+        downloaded: true,
+        installing: true,
+        manualInstall,
+      })
+    ).toBe("installing");
   });
 });

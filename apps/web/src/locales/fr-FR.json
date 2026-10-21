@@ -3475,6 +3475,7 @@
       "loading": "Reading update status…",
       "stalled": "Redémarrage automatique impossible. Quittez l'application et rouvrez-la pour terminer la mise à jour.",
       "installFailed": "Couldn't install the update",
+      "manualInstall": "Mise à jour prête — à installer manuellement",
       "installing": "Restarting…",
       "checking": "Recherche…",
       "downloading": "Téléchargement de la mise à jour… {{percent}} %",
@@ -3482,6 +3483,12 @@
       "downloadFailed": "Update download failed",
       "checkFailed": "Couldn't check for updates. Offline?",
       "latest": "You’re on the latest version"
+    },
+    "manualInstall": {
+      "pill": "Installer la mise à jour",
+      "detail": "Cette version s’installe en tant qu’administrateur, ce que l’application ne peut pas faire ici. Exécutez cette commande dans un terminal, puis rouvrez l’application :",
+      "copy": "Copier la commande",
+      "openFolder": "Ouvrir le dossier"
     },
     "backendBlockers": {
       "unimplemented": "AbacusAI Bot can't run commands here yet.",

@@ -37,6 +37,7 @@ const idle: UpdateStatus = {
   installStalled: false,
   criticalUpdate: false,
   failedPhase: null,
+  manualInstall: null,
 };
 it.each(["basic", "pro"])(
   "account top-up opens the correct %s purchase destination",
@@ -407,6 +408,114 @@ it("the quit watchdog event replaces the critical dialog with a stalled banner",
   ).not.toHaveLength(0);
 });
 
+const manualInstall = {
+  command: "sudo apt install /home/u/.cache/updater/pending/bot.deb",
+  packagePath: "/home/u/.cache/updater/pending/bot.deb",
+};
+it("a .deb the app cannot install shows the terminal command, copies it and opens its folder, with no countdown", async () => {
+  const writeText = vi.fn(async () => undefined);
+  Object.defineProperty(navigator, "clipboard", {
+    configurable: true,
+    value: { writeText },
+  });
+  const revealed: string[] = [];
+  const install = vi.fn(async () => undefined);
+  try {
+    app = await renderApp("/settings/about", {
+      procedures: {
+        update: {
+          // Critical too: a manual install cannot be forced by a countdown.
+          events: servedStatus({
+            ...idle,
+            downloaded: true,
+            criticalUpdate: true,
+            updateInfo: { version: "1.0.90" },
+            manualInstall,
+          }),
+          install: os.update.install.handler(install),
+        },
+        system: {
+          showItemInFolder: os.system.showItemInFolder.handler(({ input }) => {
+            revealed.push(input.path);
+          }),
+        },
+      },
+    });
+    const steps = within(
+      await waitFor(() => {
+        const block = document.querySelector<HTMLElement>(
+          '[data-setting-id="manualInstall"]'
+        );
+        expect(block).not.toBeNull();
+        return block!;
+      })
+    );
+    expect(
+      screen.getAllByText(enUS.phase5.updates.manualInstall).length
+    ).toBeGreaterThan(0);
+    expect(steps.getByText(manualInstall.command)).not.toBeNull();
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: enUS.phase5.relaunch })
+    ).toBeNull();
+
+    fireEvent.click(
+      steps.getByRole("button", { name: enUS.phase5.manualInstall.copy })
+    );
+    await waitFor(() =>
+      expect(writeText).toHaveBeenCalledWith(manualInstall.command)
+    );
+    fireEvent.click(
+      steps.getByRole("button", {
+        name: enUS.phase5.manualInstall.openFolder,
+      })
+    );
+    await waitFor(() => expect(revealed).toEqual([manualInstall.packagePath]));
+    expect(install).not.toHaveBeenCalled();
+  } finally {
+    delete (navigator as { clipboard?: unknown }).clipboard;
+  }
+});
+it("a failed .deb install turns into the manual steps, not Try again", async () => {
+  let push!: (status: UpdateStatus) => void;
+  const next = new Promise<UpdateStatus>((resolve) => {
+    push = resolve;
+  });
+  const ready = {
+    ...idle,
+    downloaded: true,
+    updateInfo: { version: "1.0.90" },
+  };
+  app = await renderApp("/settings/about", {
+    procedures: {
+      update: {
+        events: os.update.events.handler(async function* ({ signal }) {
+          yield ready;
+          yield await next;
+          await new Promise<void>((resolve) =>
+            signal?.addEventListener("abort", () => resolve(), { once: true })
+          );
+        }),
+        install: os.update.install.handler(async () => {
+          push({ ...ready, manualInstall });
+          throw new Error("Install this update from a terminal");
+        }),
+      },
+    },
+  });
+  await screen.findByRole("heading", { name: "About" });
+  const row = within(
+    document.querySelector<HTMLElement>('[data-setting-id="updates"]')!
+  );
+  fireEvent.click(
+    await row.findByRole("button", { name: enUS.phase5.relaunch })
+  );
+  expect(await screen.findByText(manualInstall.command)).not.toBeNull();
+  await waitFor(() =>
+    expect(row.queryByRole("button", { name: "Try again" })).toBeNull()
+  );
+  expect(screen.queryByText("Install this update from a terminal")).toBeNull();
+});
 it("keeps Account usable when the referral service is unavailable", async () => {
   app = await renderApp("/settings/account", {
     procedures: {
