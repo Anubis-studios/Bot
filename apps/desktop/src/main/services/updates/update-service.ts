@@ -192,7 +192,10 @@ export class UpdateService {
       info: () => {},
       debug: () => {},
       warn: (msg) => console.warn(`[UpdateService] ${msg}`),
-      error: (msg) => console.error(`[UpdateService] ${msg}`),
+      // Its Linux command probes log a blank stderr for every miss.
+      error: (msg) => {
+        if (String(msg).trim() !== "") console.error(`[UpdateService] ${msg}`);
+      },
     };
 
     autoUpdater.on("checking-for-update", () => {
