@@ -84,6 +84,7 @@ import {
 } from "../agent-tools/integrations";
 import {
   generateImage,
+  type TextCheck,
   generateSpeech,
   pollVideo,
   submitVideo,
@@ -231,6 +232,17 @@ const isToolEnabled = (definition: ListedTool, enabled: Set<string>): boolean =>
  * not interpolation: it escapes what the renderer decodes back and handles
  * Windows paths, where a raw `C:` parses as the URL's authority.
  */
+/** Pictures one image_generate call may edit or follow. */
+const MAX_IMAGE_INPUTS = 4;
+
+/** What the model is told about the text the image had to show. */
+const textCheckNote = (check: TextCheck): string =>
+  check.status === "matched"
+    ? "Text check: the image reads exactly as asked."
+    : check.status === "mismatch"
+      ? `Text check failed twice: the image reads "${check.read.replace(/\s+/g, " ")}". Do not present it as correct. Show it, say in the user's language what is off, and offer to try again.`
+      : "Text check skipped: no vision provider is configured. Do not claim the text is right; ask the user to check it.";
+
 const fileUrl = (absolutePath: string): string =>
   pathToFileURL(absolutePath).href;
 
@@ -1341,7 +1353,22 @@ export class McpAgentToolsServer extends McpHttpServer {
     if (prompt.length === 0) return this.err("A prompt is required.");
 
     const size = typeof args.size === "string" ? args.size : undefined;
-    const file = await generateImage(prompt, size);
+    const text = typeof args.text === "string" ? args.text : undefined;
+    const images = (Array.isArray(args.images) ? args.images : [])
+      .map((source) => String(source).trim())
+      .filter((source) => source.length > 0)
+      .map((source) =>
+        /^https?:\/\//i.test(source) ? source : this.resolveOutputPath(source)
+      );
+    if (images.length > MAX_IMAGE_INPUTS)
+      return this.err(`Pass at most ${MAX_IMAGE_INPUTS} images.`);
+
+    const { file, check } = await generateImage({
+      prompt,
+      size,
+      images,
+      ...(text != null ? { text } : {}),
+    });
 
     // Hand back markdown that renders inline, so showing the image is the
     // easy path rather than "here is the file".
@@ -1351,7 +1378,13 @@ export class McpAgentToolsServer extends McpHttpServer {
       .slice(0, 80);
 
     return this.ok(
-      `Saved to ${modelPath(file)}\n\nShow it to the user with: ![${alt}](${fileUrl(file)})\n${artifactPathLine(file)}`
+      [
+        `Saved to ${modelPath(file)}`,
+        ...(check != null ? ["", textCheckNote(check)] : []),
+        "",
+        `Show it to the user with: ![${alt}](${fileUrl(file)})`,
+        artifactPathLine(file),
+      ].join("\n")
     );
   }
 

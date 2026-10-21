@@ -4,9 +4,18 @@
  * (see generated-files.ts). Video takes minutes, so submit returns a job id
  * and a separate poll tool collects the result.
  */
+import fs from "fs";
+
+import { modelPath } from "@abacus-ai/agent/model-path";
+
 import { credentialFor } from "../config/settings";
 import { abacusRoutellmV1 } from "../providers/abacus-host";
-import { downloadGenerated, writeGenerated } from "./generated-files";
+import {
+  downloadGenerated,
+  readAsBase64,
+  writeGenerated,
+} from "./generated-files";
+import { analyze } from "./model-analysis";
 
 // Environment first, then Settings → API keys. This runs in the main process,
 // where a Finder launch means an empty environment (see credentialFor).
@@ -163,22 +172,106 @@ const dataUrlToFile = async (
 
 // ── Images ─────────────────────────────────────────────────────────────────
 
-export const generateImage = async (
+interface ImageRequest {
+  prompt: string;
+  size?: string;
+  /** Pictures to edit or follow: local paths or public https URLs. */
+  images: string[];
+  /** The exact words the image must show, one line per line of the design. */
+  text?: string;
+}
+
+/** Per input picture; a phone photo is a few MB. */
+const MAX_INPUT_IMAGE_BYTES = 20 * 1024 * 1024;
+const INPUT_IMAGE_TYPES = new Set(Object.keys(IMAGE_EXTS));
+
+const textLines = (text: string): string[] =>
+  text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+
+/** The words written into the request, so no rewording can drop or reorder them. */
+const withText = (prompt: string, text: string | undefined): string =>
+  text == null || textLines(text).length === 0
+    ? prompt
+    : [
+        prompt,
+        "",
+        "The image must show exactly this text, top to bottom, spelled exactly as written, and no other text:",
+        ...textLines(text).map((line, index) => `${index + 1}. ${line}`),
+      ].join("\n");
+
+const comparable = (text: string): string =>
+  text
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+
+/** The image's text, as read back, has the requested words in the requested order. */
+const readsAsAsked = (expected: string, read: string): boolean =>
+  comparable(textLines(expected).join(" ")) ===
+  comparable(textLines(read).join(" "));
+
+const READ_TEXT_PROMPT =
+  "Transcribe every piece of text visible in this image exactly as it is spelled, top to bottom, one line per visual line. Reply with the text only, nothing else.";
+
+const asDataUrl = async (source: string): Promise<string> => {
+  if (!/^https?:\/\//i.test(source)) {
+    const size = fs.statSync(source, { throwIfNoEntry: false })?.size;
+    if (size == null) throw new Error(`No such file: ${modelPath(source)}`);
+    if (size > MAX_INPUT_IMAGE_BYTES)
+      throw new Error(`${modelPath(source)} is over 20 MB.`);
+  }
+  const { base64, mediaType } = await readAsBase64(source);
+  if (!INPUT_IMAGE_TYPES.has(mediaType))
+    throw new Error(
+      `${modelPath(source)} is not a PNG, JPEG, WebP or GIF image.`
+    );
+  if (base64.length > (MAX_INPUT_IMAGE_BYTES / 3) * 4)
+    throw new Error(`${modelPath(source)} is over 20 MB.`);
+
+  return `data:${mediaType};base64,${base64}`;
+};
+
+const generateOnce = async (
   prompt: string,
-  size?: string
-): Promise<string> =>
-  await firstConfigured(
+  size: string | undefined,
+  images: string[]
+): Promise<string> => {
+  // Only the Abacus route takes pictures to edit; the others would ignore them
+  // and return an unrelated image as a success.
+  const textOnly = images.length === 0;
+
+  return await firstConfigured(
     "image",
     [
       {
         id: "abacus",
         configured: env("ABACUS_API_KEY").length > 0,
         run: async () => {
+          const inputs = await Promise.all(images.map(asDataUrl));
           const body = await abacusChat(
             {
               model: env("ABACUSAI_BOT_ABACUS_IMAGE_MODEL") || "nano_banana",
-              messages: [{ role: "user", content: prompt }],
+              messages: [
+                {
+                  role: "user",
+                  content: textOnly
+                    ? prompt
+                    : [
+                        { type: "text", text: prompt },
+                        ...inputs.map((url) => ({
+                          type: "image_url",
+                          image_url: { url },
+                        })),
+                      ],
+                },
+              ],
               modalities: ["image"],
+              // The agent already wrote the prompt; a second rewrite can reword the text it must show.
+              image_config: { rewrite_prompt: false },
             },
             300_000
           );
@@ -191,7 +284,7 @@ export const generateImage = async (
       },
       {
         id: "openai",
-        configured: env("OPENAI_API_KEY").length > 0,
+        configured: textOnly && env("OPENAI_API_KEY").length > 0,
         run: async () => {
           const body = (await postJson(
             "https://api.openai.com/v1/images/generations",
@@ -220,7 +313,7 @@ export const generateImage = async (
       },
       {
         id: "fal",
-        configured: env("FAL_KEY").length > 0,
+        configured: textOnly && env("FAL_KEY").length > 0,
         run: async () => {
           // FAL takes size enums or {width,height}, not the "1024x1024" string.
           const requested = (size ?? "square_hd").trim();
@@ -254,8 +347,49 @@ export const generateImage = async (
         },
       },
     ],
-    "The user can connect Abacus.AI (ABACUS_API_KEY) or add OPENAI_API_KEY or FAL_KEY in Settings → API keys (or the environment). Tell the user image generation is unavailable until then."
+    textOnly
+      ? "The user can connect Abacus.AI (ABACUS_API_KEY) or add OPENAI_API_KEY or FAL_KEY in Settings → API keys (or the environment). Tell the user image generation is unavailable until then."
+      : "Editing a picture needs the Abacus.AI connection (ABACUS_API_KEY). Tell the user image editing is unavailable until they connect it."
   );
+};
+
+/** How the requested text came out, when the request named any. */
+export type TextCheck =
+  | { status: "matched" }
+  | { status: "mismatch"; read: string }
+  | { status: "unchecked" };
+
+/** Attempts per request when the text reads back wrong; each one is billed. */
+const TEXT_ATTEMPTS = 2;
+
+/**
+ * Generate or edit an image. With `text`, the result is read back and
+ * regenerated once when its words or their order are not as asked.
+ */
+export const generateImage = async (
+  request: ImageRequest
+): Promise<{ file: string; check: TextCheck | null }> => {
+  const prompt = withText(request.prompt, request.text);
+  const expected = request.text;
+
+  if (expected == null || textLines(expected).length === 0)
+    return {
+      file: await generateOnce(prompt, request.size, request.images),
+      check: null,
+    };
+
+  let last: { file: string; check: TextCheck } | null = null;
+  for (let attempt = 0; attempt < TEXT_ATTEMPTS; attempt += 1) {
+    const file = await generateOnce(prompt, request.size, request.images);
+    const { provider, answer } = await analyze(file, READ_TEXT_PROMPT, "image");
+    if (provider == null) return { file, check: { status: "unchecked" } };
+    if (readsAsAsked(expected, answer))
+      return { file, check: { status: "matched" } };
+    last = { file, check: { status: "mismatch", read: answer.trim() } };
+  }
+
+  return last as { file: string; check: TextCheck };
+};
 
 // ── Speech ─────────────────────────────────────────────────────────────────
 

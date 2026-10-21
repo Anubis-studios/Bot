@@ -49,12 +49,27 @@ export const MEDIA_TOOLS: ToolDefinition[] = [
     name: "image_generate",
     toolsets: ["image_gen"],
     ready: imageGenerationReady,
-    description:
-      "Generate an image from a prompt. Returns the path to the saved file, which you should show to the user as a markdown image so it renders in the chat. Never link to an image on a third-party site instead of generating one.",
+    description: [
+      "Generate an image, or edit one: pass the picture to change (an attachment, a file, an earlier result) in images, and say in prompt what to change.",
+      "This is the tool for making or changing a picture. Use a connected app (a design or model-hosting service) only when the user asks for that service by name, and never re-create a picture from a description when you can pass it.",
+      "Returns the path to the saved file and markdown that shows it in the chat: show it that way. Never link to an image on a third-party site instead.",
+    ].join(" "),
     inputSchema: {
       type: "object",
       properties: {
         prompt: { type: "string" },
+        images: {
+          type: "array",
+          items: { type: "string" },
+          maxItems: 4,
+          description:
+            "Pictures to edit or follow, as file paths or https URLs. The first is the one to change.",
+        },
+        text: {
+          type: "string",
+          description:
+            "Every word the image must show, exactly as the user wants it, one line per line of the design, top to bottom. The image is checked against it and regenerated once if it reads differently. When the user's words leave the text or its order open to more than one reading, ask which they mean first.",
+        },
         size: {
           type: "string",
           description: 'Provider-specific, e.g. "1024x1024".',

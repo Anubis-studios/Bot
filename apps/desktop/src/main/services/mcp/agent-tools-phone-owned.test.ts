@@ -5,6 +5,7 @@
  * else reaches it, listed or called. The app's listing is untouched.
  */
 import fs from "fs";
+import os from "os";
 import path from "path";
 
 import { WHATSAPP_CHANNEL } from "@abacus-ai/agent/channel";
@@ -15,7 +16,7 @@ import {
 } from "@abacus-ai/agent/tool-policy";
 import type { ConnectorStatuses } from "@abacus-ai/contract/contracts";
 import { sessionConversationKey } from "@abacus-ai/contract/conversation-scope";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { BillingPlan } from "../providers/abacus-upgrade";
 import { McpAgentToolsServer } from "./mcp-agent-tools-server";
@@ -80,6 +81,9 @@ const MEDIA_KEYS = [
   "FAL_KEY",
   "ELEVENLABS_API_KEY",
   "BFL_API_KEY",
+  "ANTHROPIC_API_KEY",
+  "OPENROUTER_API_KEY",
+  "GEMINI_API_KEY",
 ];
 vi.mock("../config/settings", async (original) => {
   const actual = await original<typeof import("../config/settings")>();
@@ -617,5 +621,126 @@ describe("paid-plan capabilities", () => {
       true
     );
     expect(billingPlan).not.toHaveBeenCalled();
+  });
+
+  describe("a paid account's image_generate", () => {
+    const PNG =
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+    let home: string;
+    let requests: Array<Record<string, unknown>>;
+
+    /** RouteLLM: an image for a generation request, the next reading for a vision one. */
+    const routellm = (readings: string[]) => {
+      requests = [];
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (_url: string, init: { body: string }) => {
+          const body = JSON.parse(init.body) as Record<string, unknown>;
+          requests.push(body);
+          const message =
+            body.modalities != null
+              ? {
+                  images: [
+                    { image_url: { url: `data:image/png;base64,${PNG}` } },
+                  ],
+                }
+              : { content: readings.shift() ?? "" };
+          return new Response(JSON.stringify({ choices: [{ message }] }));
+        })
+      );
+    };
+
+    const generate = async (args: Record<string, unknown>) => {
+      const result = (await planServer("pro" as never, [
+        "image_gen",
+      ]).executeTool("image_generate", args, "ui-session")) as {
+        content: Array<{ text?: string }>;
+        isError?: boolean;
+      };
+      return {
+        text: result.content.map((part) => part.text ?? "").join("\n"),
+        isError: result.isError === true,
+      };
+    };
+
+    const generations = () =>
+      requests.filter((body) => body.modalities != null);
+
+    beforeEach(() => {
+      home = fs.mkdtempSync(path.join(os.tmpdir(), "image-gen-"));
+      vi.stubEnv("ABACUSAI_BOT_HOME", home);
+      mediaKeys.set("ABACUS_API_KEY", "key");
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+      fs.rmSync(home, { recursive: true, force: true });
+    });
+
+    it("edits the user's own picture with their exact words, read back before it is shown", async () => {
+      const logo = path.join(home, "logo.png");
+      fs.writeFileSync(logo, Buffer.from(PNG, "base64"));
+      routellm(["LINE TWO\nLINE ONE", "Line one\nline two"]);
+
+      const { text, isError } = await generate({
+        prompt: "Swap the two lines, same style.",
+        images: [logo],
+        text: "LINE ONE\nLINE TWO",
+      });
+
+      expect(isError).toBe(false);
+      expect(generations()).toHaveLength(2);
+      const [request] = generations() as Array<{
+        messages: Array<{ content: Array<Record<string, unknown>> }>;
+        image_config: unknown;
+      }>;
+      expect(request.image_config).toEqual({ rewrite_prompt: false });
+      const [prompt, picture] = request.messages[0].content;
+      expect(prompt.text).toContain("1. LINE ONE\n2. LINE TWO");
+      expect(picture).toEqual({
+        type: "image_url",
+        image_url: { url: `data:image/png;base64,${PNG}` },
+      });
+      expect(text).toContain("the image reads exactly as asked");
+      expect(text).toMatch(/!\[Swap the two lines, same style\.\]\(file:/);
+    });
+
+    it("says what is off when the words never come out as asked, after one retry", async () => {
+      routellm(["LINE TWO LINE ONE", "LINE TWO LINE ONE"]);
+
+      const { text } = await generate({
+        prompt: "A two-line sign.",
+        text: "LINE ONE\nLINE TWO",
+      });
+
+      expect(generations()).toHaveLength(2);
+      expect(text).toContain('the image reads "LINE TWO LINE ONE"');
+      expect(text).toMatch(/Do not present it as correct/);
+    });
+
+    it("generates once with no text to check", async () => {
+      routellm([]);
+
+      const { text } = await generate({ prompt: "A sunset." });
+
+      expect(requests).toHaveLength(1);
+      expect(text).not.toContain("Text check");
+    });
+
+    it("sends nothing but a picture to edit", async () => {
+      const notes = path.join(home, "notes.txt");
+      fs.writeFileSync(notes, "private");
+      routellm([]);
+
+      const { text, isError } = await generate({
+        prompt: "Edit this.",
+        images: [notes],
+      });
+
+      expect(isError).toBe(true);
+      expect(text).toMatch(/not a PNG, JPEG, WebP or GIF image/);
+      expect(requests).toHaveLength(0);
+    });
   });
 });

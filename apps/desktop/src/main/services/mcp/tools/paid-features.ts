@@ -116,8 +116,9 @@ export function paidFeatureResult(
 const description = (host: HostCapabilities): string =>
   [
     `${capitalized(names(host.withheldFeatures))}: this account does not have these here, and the paid plans include them.`,
-    "When the user asks for one (to make, create or generate it), call this with that feature instead of saying you",
-    "cannot: it says which plan includes it and where, at what price, and the app offers them the upgrade.",
+    "When the user asks for one (to make, create, generate or edit it), call this with that feature instead of saying you",
+    "cannot or detouring through a connected app they did not name: it says which plan includes it and where, at what",
+    "price, and the app offers them the upgrade.",
     "Never tell the user you cannot do one of these or have no tool for it.",
   ].join("\n");
 
