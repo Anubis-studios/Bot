@@ -722,6 +722,58 @@ describe("the rail's last location (Claude #6)", () => {
   });
 });
 
+describe("the rail item already showing toggles the sidebar (VS Code)", () => {
+  const pinned = () => harness!.db.prefs.rows.get("app")?.sidebar.pinned;
+
+  it("collapses and expands it in place; another item navigates and keeps it", async () => {
+    await at(1280, "/routines");
+    expect(shell().dataset.sidebar).toBe("pinned");
+    fireEvent.click(railLink("routines"));
+    await waitFor(() => expect(pinned()).toBe(false));
+    await waitFor(() => expect(shell().dataset.sidebar).toBe("floating"));
+    expect(harness!.router.state.location.pathname).toBe("/routines");
+    fireEvent.click(railLink("routines"));
+    await waitFor(() => expect(pinned()).toBe(true));
+    await waitFor(() => expect(shell().dataset.sidebar).toBe("pinned"));
+
+    fireEvent.click(railLink("bots"));
+    await waitFor(() =>
+      expect(harness!.router.state.location.pathname).toBe("/bots/new")
+    );
+    expect(pinned()).toBe(true);
+  });
+
+  it("leaves a modified click to the link", async () => {
+    await at(1280, "/routines");
+    fireEvent.click(railLink("routines"), { metaKey: true });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    expect(pinned()).toBe(true);
+  });
+
+  it("reveals and hides the floating sidebar where the band forces it, the pin untouched", async () => {
+    await at(820, "/sessions/new");
+    expect(shell().dataset.sidebar).toBe("floating");
+    fireEvent.click(railLink("sessions"));
+    await waitFor(() => expect(shellStore.state.floating.open).toBe(true));
+    expect(harness!.router.state.location.pathname).toBe("/sessions/new");
+    fireEvent.click(railLink("sessions"));
+    await waitFor(() => expect(shellStore.state.floating.open).toBe(false));
+    expect(pinned()).toBe(true);
+  });
+
+  it("over a masked pop-up, goes back to the background instead", async () => {
+    await at(1280, "/routines");
+    await navigate({ to: "/routines/new" });
+    fireEvent.click(railLink("routines"));
+    await waitFor(() =>
+      expect(harness!.router.state.location.pathname).toBe("/routines")
+    );
+    expect(pinned()).toBe(true);
+  });
+});
+
 describe("the title bar", () => {
   it("enables Forward only when history has an entry ahead (Claude #16)", async () => {
     await at(1280, "/bots/new");
