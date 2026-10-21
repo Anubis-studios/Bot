@@ -589,6 +589,14 @@ function cachedRegistryPath(key: string): string | undefined {
   return value;
 }
 
+/** A PATH entry as compared: case folded, trailing separators dropped. */
+function pathKey(entry: string): string {
+  let end = entry.length;
+  while (end > 0 && (entry[end - 1] === "\\" || entry[end - 1] === "/")) end--;
+
+  return entry.slice(0, end).toLowerCase();
+}
+
 /**
  * The machine then the user PATH as the registry holds them now, less what
  * this process's PATH already has. A desktop app started before an installer
@@ -599,17 +607,11 @@ export function registryPathEntries(
   read: RegistryRead = cachedRegistryPath
 ): string | undefined {
   const current = new Set(
-    (childProcessEnv(env).PATH ?? "")
-      .split(";")
-      .map((entry) => entry.replace(/[\\/]+$/, "").toLowerCase())
+    (childProcessEnv(env).PATH ?? "").split(";").map(pathKey)
   );
   const fresh = ENVIRONMENT_KEYS.flatMap((key) =>
     expandVariables(read(key) ?? "", env).split(";")
-  ).filter(
-    (entry) =>
-      entry.length > 0 &&
-      !current.has(entry.replace(/[\\/]+$/, "").toLowerCase())
-  );
+  ).filter((entry) => entry.length > 0 && !current.has(pathKey(entry)));
 
   return mergePath(fresh.join(";"), undefined, ";");
 }
