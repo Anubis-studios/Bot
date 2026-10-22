@@ -11,6 +11,7 @@ import {
   describeCheckIn,
   type CheckInDraft,
 } from "#renderer/lib/bots/check-in";
+import { BOT_TEMPLATES } from "#renderer/lib/bots/templates";
 
 import {
   createBot,
@@ -99,6 +100,8 @@ export const submitCreate = async (
   values: BotFormValues,
   saveStage: (draft: BotDraft) => void
 ): Promise<void> => {
+  // The picked template, so the bot's first run knows what its mission needs.
+  const template = BOT_TEMPLATES.find((item) => item.id === draft.templateId);
   let row: BotRow = {
     id: draft.id,
     name: values.name,
@@ -111,6 +114,10 @@ export const submitCreate = async (
 
     model: values.model,
     channel: null,
+    ...(template?.homeChannel != null
+      ? { homeChannel: template.homeChannel }
+      : {}),
+    ...(template != null ? { templateId: template.id } : {}),
     workspaceId: null,
     sessionId: null,
     createdAt: Date.now(),

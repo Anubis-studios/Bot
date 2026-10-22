@@ -58,6 +58,7 @@ export const previewFirstBot = (
       ...(template.homeChannel != null
         ? { homeChannel: template.homeChannel }
         : {}),
+      templateId: template.id,
       sessionId: null,
       workspaceId: null,
       createdAt: Date.now(),

@@ -149,6 +149,27 @@ describe("draft and staged creation", () => {
     expect(getDraft().values.instructions).not.toBe("");
     expect(getDraft().id).toBe(id);
   });
+  it("carries the picked template and its home app onto the bot", async () => {
+    const db = await setup();
+    selectTemplate("whatsapp-agent", "WhatsApp Agent");
+    const draft = getDraft();
+    const deps = {
+      db,
+      transport: { client: { bots: { openChat: vi.fn(async () => {}) } } },
+      load: vi.fn(async () => {}),
+      navigate: vi.fn(async () => {}),
+      routineName: "check-in",
+      checkInFailed: vi.fn(),
+    } as never;
+    await submitCreate(deps, draft, v.parse(BotFormSchema, values()), () => {});
+    expect(db.collections.bots.get(draft.id)?.homeChannel).toBe("whatsapp");
+
+    clearDraft();
+    selectTemplate("email-drafting", "Email Drafting");
+    const mail = getDraft();
+    await submitCreate(deps, mail, v.parse(BotFormSchema, values()), () => {});
+    expect(db.collections.bots.get(mail.id)?.templateId).toBe("email-drafting");
+  });
   it("persists bot and check-in before readiness and navigation; readiness rejection cannot create twice", async () => {
     const db = await setup();
     const draft = getDraft();

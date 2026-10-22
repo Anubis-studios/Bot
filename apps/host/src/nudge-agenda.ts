@@ -386,8 +386,8 @@ const FIRST_BRIEF =
   "will be sent, and ask them to reply yes. Last, one line offering to send this brief here every morning at 8; on " +
   "their yes, set it up with `cronjob`. A service whose tool call fails with an auth, permission or expired-token " +
   "error is not connected: leave it out of the brief, and call `connect_connector` for it and send the link it gives " +
-  "to reconnect it. If neither is connected, greet them and offer to connect Google with `connect_connector` so you " +
-  "can brief them. Never send an email, and draft only after their yes.";
+  "to reconnect it. If neither is connected, greet them and call `connect_connector` for Google, sending the link it gives, " +
+  "so you can brief them. Never send an email, and draft only after their yes.";
 
 const CHECKINS_ON_GREETING =
   "[check-ins] Check-ins are on: say once in this greeting, in the user's language, that you may check in here " +

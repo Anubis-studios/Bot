@@ -50,6 +50,7 @@ const write = <TInput extends v.GenericSchema>(input: TInput) =>
 export const BotCreateInputSchema = v.object({
   sponsoredFirstRun: v.optional(v.boolean()),
   homeChannel: v.optional(v.nullable(v.picklist(HOME_CHANNELS))),
+  templateId: v.optional(v.nullable(v.string())),
   name: v.pipe(v.string(), v.nonEmpty()),
   title: v.optional(v.string()),
   description: v.string(),

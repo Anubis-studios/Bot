@@ -94,6 +94,44 @@ describe("creating a bot", () => {
     expect(bot.homeChannel).toBe("telegram");
     const persona = fs.readFileSync(personaPath(bot.id), "utf8");
     expect(persona).toContain("**Your main connector to use is Telegram.**");
+    expect(persona).toContain("**Connectors your mission needs:** Telegram.");
+  });
+
+  it("names what the mission needs, home app first, and never says offer", () => {
+    // Told to offer, new bots greeted with "tap the Connect card" and never
+    // called the tool, so no card was there.
+    const service = new BotService(makeCallbacks());
+
+    const bot = service.create({
+      name: "Follow-Up",
+      description: "Chase replies.",
+      homeChannel: "whatsapp",
+      templateId: "follow-up-tracker",
+    });
+
+    const persona = fs.readFileSync(personaPath(bot.id), "utf8");
+    expect(persona).toContain(
+      "**Connectors your mission needs:** WhatsApp, Gmail, Slack, Google Calendar."
+    );
+    expect(persona).toContain("call connect_connector for it right away");
+    expect(persona).toContain(
+      "Never say a Connect card, link or QR code is waiting unless you"
+    );
+    expect(persona).not.toMatch(/offer to connect/);
+  });
+
+  it("remembers the template it was made from, and a written bot none", () => {
+    const service = new BotService(makeCallbacks());
+
+    const made = service.create({
+      name: "Email Drafting",
+      description: "Draft replies.",
+      templateId: "email-drafting",
+    });
+    const written = service.create({ name: "Scout", description: "Watch." });
+
+    expect(getBot(made.id)?.templateId).toBe("email-drafting");
+    expect(getBot(written.id)?.templateId).toBeUndefined();
   });
 
   it("gives a bot with no home app no home line", () => {
@@ -103,6 +141,7 @@ describe("creating a bot", () => {
 
     const persona = fs.readFileSync(personaPath(bot.id), "utf8");
     expect(persona).not.toContain("Your main connector to use is");
+    expect(persona).not.toContain("Connectors your mission needs");
   });
 });
 
@@ -135,6 +174,53 @@ describe("opening the forever chat", () => {
       expect.stringContaining("No second greeting"),
       { operator: { kind: "kickstart" } }
     );
+  });
+
+  it("has a chat-app agent ask for its unlinked home app before greeting", async () => {
+    const callbacks = makeCallbacks();
+    const service = new BotService(callbacks);
+    const bot = service.create({
+      name: "WhatsApp Agent",
+      description: "Live in my WhatsApp.",
+      homeChannel: "whatsapp",
+    });
+
+    await service.openChat(bot.id);
+
+    const [, , kickstart] = vi.mocked(callbacks.sendMessage).mock.calls[0]!;
+    expect(kickstart).toMatch(/^\[first run\] First, if the system reminder/);
+    expect(kickstart).toContain(
+      "does not list WhatsApp as connected, call connect_connector for it now."
+    );
+  });
+
+  it("asks a written bot for nothing up front, whatever its mission names", async () => {
+    // Only a template declares what a mission needs; a bot the user wrote
+    // connects what a task needs when the task comes up.
+    const callbacks = makeCallbacks();
+    const service = new BotService(callbacks);
+    const bot = service.create({
+      name: "Site Builder",
+      description: "Build my website; email me in Gmail when it is live.",
+    });
+
+    await service.openChat(bot.id);
+
+    const persona = fs.readFileSync(personaPath(bot.id), "utf8");
+    expect(persona).not.toContain("Connectors your mission needs");
+    const [, , kickstart] = vi.mocked(callbacks.sendMessage).mock.calls[0]!;
+    expect(kickstart).not.toContain("connect_connector");
+  });
+
+  it("kicks off a bot that needs nothing without a connect step", async () => {
+    const callbacks = makeCallbacks();
+    const service = new BotService(callbacks);
+    const bot = service.create({ name: "Scout", description: "Watch." });
+
+    await service.openChat(bot.id);
+
+    const [, , kickstart] = vi.mocked(callbacks.sendMessage).mock.calls[0]!;
+    expect(kickstart).not.toContain("connect_connector");
   });
 
   it("reuses the recorded session while it exists", async () => {

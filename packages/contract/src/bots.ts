@@ -44,6 +44,8 @@ export interface Bot {
    * Agent template): where the user talks to it. Its standing prompt says so.
    */
   homeChannel?: HomeChannel | null;
+  /** The template it was made from (BotTemplate.id); absent for a bot the user wrote. */
+  templateId?: string | null;
   /** Per bot rather than per machine: the bot loop is tuned for cheap models. */
   model: string | null;
   /**
@@ -85,6 +87,7 @@ export interface BotCreateInput {
   model?: string | null;
   channel?: string | null;
   homeChannel?: HomeChannel | null;
+  templateId?: string | null;
   /** Make this bot's first runs free of charge for SPONSORED_FIRST_RUN_WINDOW_MS; onboarding's Chief of Staff only. */
   sponsoredFirstRun?: boolean;
 }
