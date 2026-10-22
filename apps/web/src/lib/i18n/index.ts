@@ -75,4 +75,4 @@ export const changeLanguage = async (
 export const fixedT = (): TFunction =>
   i18n.getFixedT(null, "translation") as unknown as TFunction;
 
-export { resolveLanguage } from "./languages";
+export { resolveLanguage, setSystemLanguages } from "./languages";

@@ -3,7 +3,8 @@
  * wall), in the person's language: the app's own locale files, so a line is
  * translated once for the card and the chat alike. The language is the one
  * the bot already answers in (user-language.json), else the app's, else
- * English; a key a locale lacks reads in English.
+ * English; a key a locale lacks reads in English. The main process's other
+ * words (the first-run note, native menus and dialogs) load the same way.
  */
 import type { PlanT } from "@abacus-ai/contract/billing-plan";
 import {
@@ -130,6 +131,14 @@ export async function channelWords(
       loaded.set(locale, enUS);
     }
   }
+  return loadedWords(locale);
+}
+
+/**
+ * The translator for a locale already loaded by `channelWords`, English
+ * until it is: for callers that cannot wait (a context menu being built).
+ */
+export function loadedWords(locale: SupportedLanguage): ChannelWords {
   const tree = loaded.get(locale) ?? enUS;
   const plural = new Intl.PluralRules(locale);
   const find = (key: string): string | undefined =>

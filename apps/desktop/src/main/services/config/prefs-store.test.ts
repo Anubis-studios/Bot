@@ -10,7 +10,6 @@ import path from "node:path";
 import { AgentMode } from "@abacus-ai/contract/agent-types";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { appLocaleTag } from "./agent-env";
 import { PREFS_DEFAULTS, PrefsStore } from "./prefs-store";
 
 let dir: string;
@@ -183,13 +182,6 @@ describe("PrefsStore", () => {
     expect(store.get()).toMatchObject({ theme: "dark", language: "system" });
     expect(store.provenance().language).toBe("default");
     expect(() => store.update({ language: "hi-IN" as never })).toThrow();
-  });
-
-  it("hands the agent the UI language picked, else the OS's first preferred one, else the app locale", () => {
-    expect(appLocaleTag("tr-TR", ["pt-BR"], "en-US")).toBe("tr-TR");
-    expect(appLocaleTag("system", ["bn-BD", "en-US"], "en-US")).toBe("bn-BD");
-    expect(appLocaleTag(undefined, [], "es-MX")).toBe("es-MX");
-    expect(appLocaleTag("system", [""], "de")).toBe("de");
   });
 
   it("a failed write changes nothing; the retry writes, and a reload has it", () => {

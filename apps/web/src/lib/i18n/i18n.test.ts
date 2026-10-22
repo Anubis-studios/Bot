@@ -5,7 +5,11 @@ import enUS from "#locales/en-US.json";
 import { readSourceFiles } from "#renderer/test-support/source-files";
 
 import { changeLanguage, i18n } from "./index";
-import { matchSupportedLanguage, resolveLanguage } from "./languages";
+import {
+  matchSupportedLanguage,
+  resolveLanguage,
+  setSystemLanguages,
+} from "./languages";
 
 type Tree = { [key: string]: string | Tree };
 
@@ -70,6 +74,21 @@ describe("resolveLanguage", () => {
 
   it("keeps an explicit en-US on a German OS", () => {
     expect(resolveLanguage("en-US", ["de-DE"])).toBe("en-US");
+  });
+
+  it("never shows Hindi: a Hindi OS gets the English UI", () => {
+    expect(resolveLanguage("system", ["hi-IN"])).toBe("en-US");
+    expect(resolveLanguage("system", ["hi-IN", "ta-IN"])).toBe("en-US");
+  });
+
+  it("reads the OS languages main reports over the browser's, and the browser's without them", () => {
+    setSystemLanguages(["tr-TR", "en-US"]);
+    expect(resolveLanguage("system")).toBe("tr-TR");
+    expect(resolveLanguage("de-DE")).toBe("de-DE");
+    setSystemLanguages(undefined);
+    expect(resolveLanguage("system")).toBe(
+      matchSupportedLanguage(navigator.languages) ?? "en-US"
+    );
   });
 });
 

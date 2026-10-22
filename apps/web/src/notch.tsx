@@ -13,6 +13,7 @@ import {
   initI18n,
   changeLanguage,
   resolveLanguage,
+  setSystemLanguages,
   i18n,
 } from "#renderer/lib/i18n";
 import { installLogRing } from "#renderer/lib/log-ring";
@@ -43,6 +44,10 @@ const start = async () => {
     db.collections.bots.preload(),
     db.collections.routines.preload(),
   ]);
+  // The OS languages main reports, so this window matches the main one.
+  setSystemLanguages(
+    (await transport.client.system.info({}).catch(() => null))?.systemLanguages
+  );
   await changeLanguage(
     resolveLanguage((db.collections.prefs.get("app") ?? DEFAULT_PREFS).language)
   );

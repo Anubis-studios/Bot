@@ -13,6 +13,11 @@ export interface SystemInfo {
   /** Upgraded from the old renderer (1.0.85 or earlier). */
   legacyInstall: boolean;
   platform: string;
+  /**
+   * The OS's preferred languages, in order (absent from an older main): what
+   * a "system" UI language and the agent's reply fallback both resolve from.
+   */
+  systemLanguages?: string[];
   arch: string;
   versions: Record<string, string | undefined>;
   homeDir: string;

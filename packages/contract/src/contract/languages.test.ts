@@ -9,6 +9,7 @@ import * as v from "valibot";
 import { describe, expect, it } from "vitest";
 
 import { PrefsPatchSchema } from "./db";
+import { matchSupportedLanguage, resolveAppLanguage } from "./languages";
 import { SUPPORTED_LANGUAGES } from "./rows";
 
 describe("supported languages", () => {
@@ -33,5 +34,59 @@ describe("supported languages", () => {
     expect(SUPPORTED_LANGUAGES).not.toContain("hi-IN");
     // Unknown keys are refused, as the spec's prefs patch requires.
     expect(v.is(PrefsPatchSchema, { colour: "red" })).toBe(false);
+  });
+
+  it("are never Hindi: a Hindi OS matches no UI locale", () => {
+    expect(matchSupportedLanguage(["hi-IN"])).toBeUndefined();
+    expect(matchSupportedLanguage(["hi"])).toBeUndefined();
+  });
+});
+
+describe("the app's language, one resolution for the UI, the menus and the agent", () => {
+  it.each([
+    [
+      "an explicit pick, whatever the OS says",
+      "tr-TR",
+      ["pt-BR"],
+      { ui: "tr-TR", tag: "tr-TR" },
+    ],
+    [
+      "the OS's first language for system",
+      "system",
+      ["de-DE", "en-US"],
+      { ui: "de-DE", tag: "de-DE" },
+    ],
+    [
+      "a first-launch prefs row with none set",
+      undefined,
+      ["pt-BR"],
+      { ui: "pt-BR", tag: "pt-BR" },
+    ],
+    [
+      "the first shipped one for the UI, the first one for replies",
+      "system",
+      ["bn-BD", "en-US"],
+      { ui: "en-US", tag: "bn-BD" },
+    ],
+    [
+      "Spain's Spanish, and the rest of Spanish",
+      "system",
+      ["es-MX"],
+      { ui: "es-419", tag: "es-MX" },
+    ],
+    [
+      "an English UI on a Hindi OS (the agent reads hi as English too)",
+      "system",
+      ["hi-IN"],
+      { ui: "en-US", tag: "hi-IN" },
+    ],
+    [
+      "English with no languages at all",
+      "system",
+      [""],
+      { ui: "en-US", tag: "en-US" },
+    ],
+  ] as const)("takes %s", (_label, pick, languages, expected) => {
+    expect(resolveAppLanguage(pick, languages)).toEqual(expected);
   });
 });

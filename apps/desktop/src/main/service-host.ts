@@ -330,9 +330,9 @@ import {
 import type { ElectronBrowserRuntime } from "./services/browser/electron-browser-runtime";
 import {
   buildAgentAuthEnv,
-  appLocaleTag,
   buildAgentConfigEnv,
 } from "./services/config/agent-env";
+import { appLanguage } from "./services/config/native-language";
 import type { PrefsStore } from "./services/config/prefs-store";
 import {
   readExecBackend,
@@ -5751,13 +5751,9 @@ export class ServiceHost {
     };
   }
 
-  /** The app's language, the OS's while the user has not picked one. */
+  /** The app's language tag, the OS's while the user has not picked one; the UI resolves the same way. */
   private appLanguage(): string {
-    return appLocaleTag(
-      this.prefs?.().get().language,
-      app.getPreferredSystemLanguages(),
-      app.getLocale()
-    );
+    return appLanguage(this.prefs?.().get().language).tag;
   }
 
   /**

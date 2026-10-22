@@ -34,22 +34,6 @@ export function buildAgentAuthEnv(): Record<string, string> {
   return credentialEnv();
 }
 
-/**
- * The app's language as a BCP 47 tag, the agent's reply fallback when the
- * user has neither chosen nor written one (ABACUSAI_BOT_LOCALE): the UI
- * language the user picked, else the OS's first preferred language (any
- * tag, shipped as a UI language or not), else Electron's locale. The agent
- * maps it to a language name, Hindi to English.
- */
-export function appLocaleTag(
-  picked: string | undefined,
-  systemLanguages: readonly string[],
-  appLocale: string
-): string {
-  if (picked != null && picked !== "system") return picked;
-  return systemLanguages.find((tag) => tag.trim().length > 0) ?? appLocale;
-}
-
 /** Everything besides auth and the MCP config path. See the call site. */
 export function buildAgentConfigEnv(
   runtimeMcpPath: string | null,

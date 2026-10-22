@@ -60,6 +60,8 @@ export interface AppOperations {
   openFilePath(filePath: string): Promise<OpenFilePathResult>;
   showItemInFolder(filePath: string): void;
   appVersion(): string;
+  /** The OS's preferred languages, in order; see contract/languages.ts. */
+  systemLanguages(): string[];
   homeDir(): string;
   /** Where the app keeps its own files. */
   botHome(): string;
