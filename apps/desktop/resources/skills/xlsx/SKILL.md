@@ -5,58 +5,84 @@ description: Read, edit, analyse, and create .xlsx, .xlsm, and .csv spreadsheets
 
 # Working with spreadsheets
 
-## Choosing an approach
+Write a CommonJS script (`sheet.cjs`) and run it with the app's own Node:
 
-| Need | Use |
-|---|---|
-| Analysis, aggregation, joins | `pandas` |
-| Preserving formatting, formulas, charts | `openpyxl` |
-| Very large files (read-only streaming) | `openpyxl` with `read_only=True` |
-| CSV only | the stdlib `csv` module, or `pandas` |
+```sh
+"$ABACUSAI_BOT_NODE" sheet.cjs
+```
 
-The decision that matters: **`pandas` throws away everything that is not
-values.** Round-tripping a formatted workbook through `pandas` destroys its
-formulas, styles, merged cells, and charts. If the user's file has any of that
-and they expect it back, use `openpyxl` and edit in place.
+`require("exceljs")` works with nothing to install. It reads and writes
+values, formulas, styles, number formats, merged cells, column widths and
+data validation.
+
+## What survives a rewrite
+
+**exceljs does not carry charts, pivot tables, slicers or macros through a
+read-and-save.** A workbook that has them comes back without them. If the
+user's file has any of these and they expect it back intact, say so before
+you change it. Then either write your results to a new sheet or file, or edit
+only the cells by changing the sheet XML in place with `jszip`.
+
+For heavy analysis (joins, group-bys, statistics), Python with `pandas` in the
+shell is the better tool, when it is there. Write the result with exceljs if
+the deliverable needs formatting.
 
 ## Look before you write
 
-Never assume row 0 is the header: real files have title rows, logos, and blank
+Never assume row 1 is the header. Real files have title rows, logos and blank
 spacers above the table:
 
-```python
-import pandas as pd
-raw = pd.read_excel("in.xlsx", header=None, nrows=20)
-print(raw.to_string())
+```js
+const ExcelJS = require("exceljs");
+(async () => {
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.readFile("in.xlsx");
+  const ws = wb.worksheets[0];
+  ws.eachRow({ includeEmpty: true }, (row, n) => { if (n <= 20) console.log(n, row.values); });
+})();
 ```
 
-Find the actual header row, then re-read with `header=<n>` (or `skiprows`).
+Find the actual header row, then read the data from the row below it.
+
+## Writing
+
+```js
+const ws = wb.addWorksheet("Budget");
+ws.columns = [{ header: "Item", key: "item", width: 24 }, { header: "Cost", key: "cost", width: 12 }];
+ws.addRows([{ item: "Hotel", cost: 120 }, { item: "Food", cost: 45 }]);
+ws.getRow(1).font = { bold: true };
+ws.getColumn("cost").numFmt = "#,##0.00";
+await wb.xlsx.writeFile("out.xlsx");
+```
 
 ## Formulas
 
-`openpyxl` writes formulas as strings, and does **not** evaluate them:
+exceljs writes formulas as text and does **not** evaluate them:
 
-```python
-ws["D2"] = "=SUM(B2:C2)"
+```js
+ws.getCell("B4").value = { formula: "SUM(B2:B3)" };
 ```
 
-This means a file you wrote will show the formula's *cached* value as `None`
-until Excel opens it. If a downstream step needs the computed number, compute it
-in Python as well. Do not read it back expecting a value.
+A file you wrote has no cached value until Excel opens it. If a later step
+needs the number, compute it in the script as well. Give the cell
+`{ formula, result }` when you know the answer, so viewers that do not
+recalculate still show it.
 
-Reading with `data_only=True` gives you the last value **Excel** cached. On a
-file that Excel has never opened, that is `None`.
+Reading a formula cell gives `{ formula, result }`. `result` is the value
+**Excel** last cached, which is missing on a file Excel has never opened.
 
 ## Common pitfalls
 
-- **Columns are 1-indexed** in `openpyxl` (`ws.cell(row=1, column=1)`), and
-  `ws["A1"]` is the same cell. Mixing conventions silently writes to the wrong
-  place.
-- **Dates** come back as `datetime` sometimes and as floats (Excel serials)
-  other times, depending on cell formatting. Check `type()` before arithmetic.
-- **Merged cells** hold their value only in the top-left cell; the others read
-  as `None`.
-- Writing with `pandas.to_excel` on an existing path **replaces the whole file**,
-  not the sheet.
-- Numbers stored as text are extremely common in exported data: `df.dtypes`
-  showing `object` for a numeric column is the tell.
+- **Rows and columns are 1-indexed** (`ws.getCell(1, 1)` is `A1`). Mixing in a
+  0-based loop index silently writes to the wrong place.
+- **Dates** come back as `Date` objects when the cell is formatted as a date,
+  and as plain numbers (Excel serials) when it is not. Check before you do
+  arithmetic.
+- **Merged cells** hold their value in the top-left cell only; the others read
+  as that same cell (`cell.isMerged`, `cell.master`).
+- `writeFile` on an existing path **replaces the whole file**. To add a sheet,
+  read the workbook, add to it, then write it back.
+- **Numbers stored as text** are very common in exported data. A value that
+  is a string of digits is the tell; convert it before you sum.
+- For `.csv`, use `wb.csv.readFile` / `wb.csv.writeFile`, or plain `fs` for a
+  simple file.

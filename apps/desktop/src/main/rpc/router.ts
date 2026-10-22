@@ -4,6 +4,7 @@ import { aiRouter } from "./procedures/ai";
 import { authRouter } from "./procedures/auth";
 import { botsRouter } from "./procedures/bots";
 import { browserRouter } from "./procedures/browser";
+import { checkpointsRouter } from "./procedures/checkpoints";
 import { connectorsRouter } from "./procedures/connectors";
 import { dbRouter } from "./procedures/db";
 import { devicesRouter } from "./procedures/devices";
@@ -38,6 +39,7 @@ const routes: {
   workspaces: typeof workspacesRouter;
   git: typeof gitRouter;
   github: typeof githubRouter;
+  checkpoints: typeof checkpointsRouter;
   files: typeof filesRouter;
   sessions: typeof sessionsRouter;
   agent: typeof agentRouter;
@@ -68,6 +70,7 @@ const routes: {
   workspaces: workspacesRouter,
   git: gitRouter,
   github: githubRouter,
+  checkpoints: checkpointsRouter,
   files: filesRouter,
   sessions: sessionsRouter,
   agent: agentRouter,

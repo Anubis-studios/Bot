@@ -40,6 +40,11 @@ const REQUIRED = [
   // fails outright on a machine that cannot reach it.
   `agent/vendor/rg${EXE}`,
   `agent/vendor/fd${EXE}`,
+  // What the Word and Excel skills' scripts `require` (bundled-tools.ts).
+  "agent/modules/docx.js",
+  "agent/modules/exceljs.js",
+  "agent/modules/jszip.js",
+  "agent/modules/mammoth.js",
   // The POSIX shell `bash` runs under on Windows; without it every command
   // the model writes fails on a machine with no Git Bash.
   ...(process.platform === "win32" ? ["agent/vendor/busybox.exe"] : []),

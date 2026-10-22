@@ -19,7 +19,7 @@ const autoUpdater = new EventEmitter() as EventEmitter &
 autoUpdater.checkForUpdates = checkForUpdates;
 
 vi.mock("electron-updater", () => ({
-  default: { autoUpdater },
+  default: { autoUpdater, DebUpdater: class {} },
 }));
 vi.mock("electron", () => ({
   app: { getVersion: () => "1.0.18", isPackaged: false, on: () => {} },

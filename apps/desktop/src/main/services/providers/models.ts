@@ -12,11 +12,14 @@ import { PROVIDER_KEY_FIELDS } from "@abacus-ai/contract/settings";
 import { abacusBotHome } from "../../paths";
 import { hasCredential, hasOAuthCredential } from "../config/settings";
 import {
+  abacusPaymentRequired,
   cachedAbacusModels,
   clearAbacusCache,
   fetchAbacusAccount,
   fetchAbacusModels,
+  planLockedAbacusIds,
 } from "./abacus";
+import { fetchBillingPlan } from "./abacus-upgrade";
 import {
   cachedLiveGroqModelIds,
   clearGroqCache,
@@ -66,6 +69,29 @@ let lastRecommendedId: string | null = null;
 
 export const cachedRecommendedModelId = (): string | null => lastRecommendedId;
 
+/**
+ * The plan the platform offers this account first (its billing plan's first
+ * upgrade): what a locked model is "included in". Read only when a row is
+ * locked, and cached, since the picker reads the catalog often.
+ */
+const UNLOCK_PLAN_TTL_MS = 10 * 60_000;
+let unlockPlanCache: { name: string | null; at: number } | null = null;
+
+const unlockPlanName = async (): Promise<string | null> => {
+  if (
+    unlockPlanCache != null &&
+    Date.now() - unlockPlanCache.at < UNLOCK_PLAN_TTL_MS
+  )
+    return unlockPlanCache.name;
+  const plan = await fetchBillingPlan(false).catch(() => null);
+  const name = plan?.upgrades[0]?.planName ?? null;
+  unlockPlanCache = { name, at: Date.now() };
+  return name;
+};
+
+/** What a refused id is called when no catalog row names it. */
+const lockedLabel = (id: string): string => id.split("/").at(-1) ?? id;
+
 export const listAvailableModels = async (
   refresh = false
 ): Promise<ModelAvailability[]> => {
@@ -73,11 +99,12 @@ export const listAvailableModels = async (
     clearOpenRouterCache();
     clearAbacusCache();
     clearGroqCache();
+    unlockPlanCache = null;
   }
 
   // Live catalogs, each gated on its own key, fetched in parallel so the
   // picker does not wait for them in series.
-  const [openRouterFree, abacusModels, abacusAccount, groqLive] =
+  const [openRouterFree, liveAbacusModels, abacusAccount, groqLive] =
     await Promise.all([
       refresh || cachedFreeOpenRouterModels().length === 0
         ? fetchFreeOpenRouterModels()
@@ -97,11 +124,15 @@ export const listAvailableModels = async (
     ]);
 
   const config = readConfig();
+  // An account the payment gate refuses runs nothing on Abacus: no row may
+  // read as configured, or every turn on it would answer 402.
+  const abacusBlocked = abacusPaymentRequired() != null;
+  const abacusModels = abacusBlocked ? [] : liveAbacusModels;
 
   // OpenLLM pools every free-or-nearly-free source, so "configured" means any
   // of their keys exists; a single `requiresEnv` cannot say that.
   const openLlmConfigured =
-    hasCredential("ABACUS_API_KEY") ||
+    (hasCredential("ABACUS_API_KEY") && !abacusBlocked) ||
     FREE_POOL_PROVIDERS.some((provider) => {
       const envVar = PROVIDER_KEY_FIELDS.find(
         (field) => field.provider === provider
@@ -217,17 +248,59 @@ export const listAvailableModels = async (
   // the live list answers: the static rows describe a paid catalog and read as
   // configured to anyone holding an Abacus key, so one slow or failed
   // /v1/models fetch would offer a free user a lineup none of which is servable.
+  //
+  // Locked, not dropped, on the free plan: the static rows are the paid
+  // catalog, and a model the platform refused for this plan at run time
+  // stays refused while the plan is the same, even if a list still names it.
+  // Neither is selectable; the picker sells the plan that includes them.
   const freeTier = abacusAccount?.subscription_tier === "free";
+  const refused = planLockedAbacusIds();
+  const liveAbacusIds = new Set(abacusModels.map((model) => model.id));
+  const lock = (model: ModelAvailability): ModelAvailability => {
+    const { recommended: _recommended, ...rest } = model;
+    return { ...rest, configured: false, access: "locked" };
+  };
+  const staticAbacus = withoutStaleFree.filter(
+    (model) => model.provider === "abacus"
+  );
+  const lockedStatic = freeTier
+    ? staticAbacus.filter((model) => !liveAbacusIds.has(model.id)).map(lock)
+    : [];
   const withoutStaticAbacus =
-    abacusModels.length > 0 || freeTier
+    abacusModels.length > 0 || freeTier || abacusBlocked
       ? withoutStaleFree.filter((model) => model.provider !== "abacus")
       : withoutStaleFree;
+  const listedIds = new Set([
+    ...withoutStaticAbacus.map((model) => model.id),
+    ...abacusModels.map((model) => model.id),
+    ...lockedStatic.map((model) => model.id),
+  ]);
+  const lockedRefused: ModelAvailability[] = [...refused]
+    .filter((id) => !listedIds.has(id))
+    .map((id) => ({
+      id,
+      label: lockedLabel(id),
+      provider: "abacus",
+      tier: "strong" as const,
+      requiresEnv: "ABACUS_API_KEY",
+      configured: false,
+      access: "locked" as const,
+    }));
+  const abacusRows = [
+    ...abacusModels.map((model) =>
+      refused.has(model.id) ? lock(model) : model
+    ),
+    ...lockedStatic,
+    ...lockedRefused,
+  ];
 
   // A paying tier lives on its RouteLLM router and has no OpenLLM at all,
   // whatever other keys are configured.
-  const presented = payingTier
-    ? withoutStaticAbacus.filter((model) => model.provider !== "openllm")
-    : withoutStaticAbacus;
+  const presented = (
+    payingTier
+      ? withoutStaticAbacus.filter((model) => model.provider !== "openllm")
+      : withoutStaticAbacus
+  ).map((model) => (refused.has(model.id) ? lock(model) : model));
 
   // The free tier's dropdown is OpenLLM plus its plan models; the low code
   // router stays off the list (still OpenLLM's routing lane underneath). The
@@ -236,7 +309,7 @@ export const listAvailableModels = async (
     ...presented,
     ...servableExpanded.filter((model) => !liveOpenRouterIds.has(model.id)),
     ...openRouterFree,
-    ...abacusModels,
+    ...abacusRows,
     ...custom,
   ];
   const all = freeTier
@@ -265,9 +338,24 @@ export const listAvailableModels = async (
   lastRecommendedId =
     withRecommendation.find((model) => model.recommended === true)?.id ?? null;
 
+  // Every row says which of the three it is; a locked one, which plan
+  // includes it.
+  const unlockPlan = withRecommendation.some(
+    (model) => model.access === "locked"
+  )
+    ? await unlockPlanName()
+    : null;
+  const withAccess = withRecommendation.map((model): ModelAvailability =>
+    model.access === "locked"
+      ? unlockPlan == null
+        ? model
+        : { ...model, unlockPlan }
+      : { ...model, access: model.configured ? "runnable" : "needs-key" }
+  );
+
   // Free models first; order within a tier is preserved.
   const tierRank = (model: ModelAvailability): number =>
     model.tier === "free" ? 0 : 1;
 
-  return withRecommendation.sort((a, b) => tierRank(a) - tierRank(b));
+  return withAccess.sort((a, b) => tierRank(a) - tierRank(b));
 };

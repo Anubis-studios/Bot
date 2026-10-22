@@ -18,6 +18,7 @@ import {
   Star,
   FilePenLine,
   ListTodo,
+  Lock,
   LockOpen,
   Sparkles,
   Settings2,
@@ -431,7 +432,10 @@ export const ModelChip = ({
     : { rows: [], sections: [] };
   const selected =
     rows.find(
-      (row) => row.kind === "item" && row.item.id === (binding.value ?? "")
+      (row) =>
+        row.kind === "item" &&
+        row.item.locked == null &&
+        row.item.id === (binding.value ?? "")
     ) ?? null;
   const change = (next: boolean) => {
     setOpen(next);
@@ -444,7 +448,10 @@ export const ModelChip = ({
   };
   const pick = (row: ModelRow | null) => {
     if (row == null) return;
-    if (row.kind === "item")
+    // A model the plan does not include is never chosen: it opens the upgrade.
+    if (row.kind === "item" && row.item.locked != null)
+      row.item.locked.onSelect();
+    else if (row.kind === "item")
       binding.onChange(row.item.id === "" ? null : row.item.id);
     else row.group.connect!.onSelect();
     change(false);
@@ -674,11 +681,37 @@ export const ModelChip = ({
                       value={row}
                       data-checked={
                         row.kind === "item" &&
+                        row.item.locked == null &&
                         row.item.id === (binding.value ?? "")
+                      }
+                      data-locked={
+                        row.kind === "item" && row.item.locked != null
+                          ? true
+                          : undefined
                       }
                       className={ROW_CLASS}
                     >
-                      {row.kind === "item" ? (
+                      {row.kind === "item" && row.item.locked != null ? (
+                        <>
+                          <ConnectorMark
+                            id={markOf(
+                              providerGroupForItem(binding, group, row.item)
+                            )}
+                            size={16}
+                            className="rounded-[5px] opacity-50 grayscale"
+                          />
+                          <span className="text-muted-foreground min-w-0 flex-1 truncate">
+                            {row.item.label}
+                          </span>
+                          <span className="text-muted-foreground flex shrink-0 items-center gap-1 pe-4 text-xs">
+                            <Lock aria-hidden className="size-3" />
+                            {row.item.locked.label}
+                            <span className="text-primary font-medium">
+                              {t("creditsCard.cta")}
+                            </span>
+                          </span>
+                        </>
+                      ) : row.kind === "item" ? (
                         <>
                           <ConnectorMark
                             id={markOf(

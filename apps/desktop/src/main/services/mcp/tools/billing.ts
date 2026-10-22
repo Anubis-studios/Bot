@@ -1,9 +1,12 @@
-import { cachedAbacusAccount, onFreePlan } from "../../providers/abacus";
 import {
   type BillingPlan,
   type BillingPlanTier,
-  fetchBillingPlan,
-} from "../../providers/abacus-upgrade";
+  creditsRenewMonthly,
+} from "@abacus-ai/contract/billing-plan";
+import { ABACUS_AGENT_ROUTINES_URL } from "@abacus-ai/contract/routines";
+
+import { cachedAbacusAccount, onFreePlan } from "../../providers/abacus";
+import { fetchBillingPlan } from "../../providers/abacus-upgrade";
 import type { ToolDefinition, ToolHost, ToolResult } from "./definition";
 
 export const credits = (value: number | null): string =>
@@ -25,8 +28,20 @@ export const priceLine = (tier: BillingPlanTier): string => {
   return `${dollars(first)} for the first month (${off}% off the usual ${dollars(monthly)}/mo), then ${dollars(monthly)}/mo`;
 };
 
+/**
+ * A feature that lives in Abacus AI Agent on the web (apps and their monthly
+ * project count, 24/7 routines there), as the server words it. Read as a cap
+ * on this app's bots, "3 projects a month" lost a sale: the label says where.
+ */
+const WEB_FEATURE =
+  /\bon the web\b|\bAbacus ?AI Agent\b|\bprojects? a month\b/i;
+
 export const bullets = (features: readonly string[]): string[] =>
-  features.map((feature) => `  - ${feature}`);
+  features.map((feature) =>
+    WEB_FEATURE.test(feature)
+      ? `  - ${feature} [in Abacus AI Agent on the web; not a limit on this app]`
+      : `  - ${feature}`
+  );
 
 const day = (iso: string): string =>
   new Date(iso).toLocaleDateString("en-US", {
@@ -70,6 +85,31 @@ export function creditStanding(billing: BillingPlan): string[] {
   ];
 }
 
+/**
+ * What both billing answers state outright so the model never guesses: that
+ * the credits renew (and how many), and that this app's bots have no task
+ * cap, the web's items being the web's.
+ */
+export const planFacts = (billing: BillingPlan): string[] => [
+  ...(creditsRenewMonthly(billing)
+    ? [
+        `Their plan's credits renew every month: ${credits(billing.plans.find((plan) => plan.current)?.creditsPerMonth ?? null)} a month. Never call them a one-time grant.`,
+      ]
+    : []),
+  "In this app, bots, chats and routines have no task or project cap: a plan gives them its monthly credits and its models. Items marked as on the web are Abacus AI Agent's, not limits here.",
+  "On a plan, creating and editing images, making videos and making speech or audio happen in Abacus AI Agent on the web; this app makes them only with a provider key of the user's own.",
+];
+
+/**
+ * The answer to "can it keep working with my computer off?": a free account
+ * is offered the plan's personal agents on the web, never a flat no; a paid
+ * one is pointed at its own.
+ */
+export const alwaysOnAnswer = (billing: BillingPlan): string =>
+  billing.plans.some((plan) => plan.current && plan.plan !== "free")
+    ? `Asked for anything to keep working while the app or computer is off (WhatsApp, Telegram or Discord auto-replies, routines, reminders, monitoring) or to stay online 24/7: their plan already includes personal agents in Abacus AI Agent on the web that run 24/7 with the computer off and do everything this bot does there, those auto-replies and every routine included. Set them up there: ${ABACUS_AGENT_ROUTINES_URL} (give the link as written). Do not offer an upgrade for it.`
+    : `Asked for anything to keep working while the app or computer is off (WhatsApp, Telegram or Discord auto-replies, routines, reminders, monitoring) or to stay online 24/7: never answer no or impossible. Offer ${billing.upgrades[0]?.planName ?? "the next plan"}: personal agents in Abacus AI Agent on the web that run 24/7 with the computer off and do everything this bot does, WhatsApp, Telegram and Discord auto-replies and every routine included. Use its own feature line above for the wording, with its price and their upgrade link, in their language.`;
+
 /** What the app's model is told about the user's plan, and how to answer. */
 export function appBillingResult(
   host: Pick<ToolHost, "ok">,
@@ -82,6 +122,7 @@ export function appBillingResult(
   const lines = [
     `The user's plan: ${billing.current.planName}.`,
     ...creditStanding(billing),
+    ...planFacts(billing),
   ];
   lines.push("", "The plans:");
   for (const plan of billing.plans)
@@ -114,6 +155,7 @@ export function appBillingResult(
     "never send them to account settings or a billing page instead of these links, and never say you changed their",
     "plan: they upgrade on the page. Do not bring plans up unasked in the middle of a task or after a complaint."
   );
+  lines.push("", alwaysOnAnswer(billing));
   if (billing.upgradeInMobileApp)
     lines.push(
       "Their plan is billed through the app store: they upgrade or buy credits in the mobile app, under Settings. Say so instead of sending a link."
@@ -147,16 +189,22 @@ export const withUpgradeNudge = (message: string): string =>
 export const BILLING_TOOLS: ToolDefinition[] = [
   {
     name: "billing_plan",
+    // Every chat, bot and chat app, on every plan and at zero credits: the
+    // answer is a read of the account, never something the model recalls.
     toolsets: "always",
     botAlways: true,
-    // Free accounts only: a paid account the app has read is never offered it.
-    // Before the first account read it is listed, and its answer still fits.
-    ready: billingPlanReady,
     description: [
-      "The user's Abacus AI plan and credits, every plan with its price, any first-month discount and what it gives,",
-      "and the links to upgrade or buy credits. Call it whenever they ask about their plan, credits or balance, prices,",
-      "discounts or deals, upgrading, or what a plan includes, and when they run into a plan limit or run low on",
-      "credits. Pass upgrade: true whenever they might upgrade, so the answer carries their upgrade links.",
+      "The source of truth for every question about money and limits: the user's Abacus AI plan, credits left and",
+      "when they renew, every plan with its price, any first-month discount and what it gives, the limits, and the",
+      "links to upgrade or buy credits. Call it for any question, in any wording or language, about what models or",
+      "plans cost, prices, discounts or deals, credits or balance, limits, resets or renewals, upgrading, or what a",
+      "plan includes; whenever they ask whether anything keeps working while the app or computer is off (WhatsApp,",
+      "Telegram or Discord auto-replies, routines, reminders, monitoring, staying online 24/7), which a plan answers",
+      "and is never impossible; when they ask to analyse a video (a reel, a Short, a YouTube or TikTok link, a video",
+      "file); and when they run into a plan limit or run low on credits. Pass upgrade: true whenever they might",
+      "upgrade, so the answer carries their upgrade links.",
+      "Never quote a price, discount, credit amount, limit or reset from memory: call this first, every time, and",
+      "answer only from what it returns, with every feature line as written (translated, never shortened).",
     ].join("\n"),
     inputSchema: {
       type: "object",

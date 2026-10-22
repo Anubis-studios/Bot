@@ -103,10 +103,16 @@ export const composeNodeHost = async () => {
   // The hosted host's logs, transcripts and diagnostics sync like the app's, so phone users can be debugged.
   serviceHost.startSync();
   serviceHost.startBackgroundSync();
+  const prefsStore = new PrefsStore();
+  // The credit wall lives in the prefs row; every agent here hears it move.
+  serviceHost.attachPrefs(() => prefsStore);
+  prefsStore.onChanged((row, previous) =>
+    serviceHost.prefsChanged(row, previous)
+  );
   const tables = createTables({
     bus: mainEventBus,
     sources: serviceHost,
-    prefsStore: new PrefsStore(),
+    prefsStore,
   });
   const trackers = createEventTrackers(mainEventBus);
   const refuseBrowser = refuse("browser");

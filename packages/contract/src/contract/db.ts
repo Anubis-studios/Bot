@@ -260,6 +260,7 @@ export const PREFS_SCALAR_ENTRIES = {
   lastPickedWorkspaceId: v.nullable(v.string()),
   recentFolders: v.pipe(v.array(v.string()), v.maxLength(5)),
   creditsExhaustedAt: NullableTimestamp,
+  freeLaneChosenAt: NullableTimestamp,
   browserHomepage: v.nullable(v.string()),
   showLinkPreviews: v.boolean(),
   /** Off: no `gh` call, no PR chip, tab or review anywhere. */
@@ -299,6 +300,7 @@ export const PrefsPatchSchema = v.strictObject({
   lastPickedWorkspaceId: v.optional(S.lastPickedWorkspaceId),
   recentFolders: v.optional(S.recentFolders),
   creditsExhaustedAt: v.optional(S.creditsExhaustedAt),
+  freeLaneChosenAt: v.optional(S.freeLaneChosenAt),
   browserHomepage: v.optional(S.browserHomepage),
   showLinkPreviews: v.optional(S.showLinkPreviews),
   githubIntegration: v.optional(S.githubIntegration),

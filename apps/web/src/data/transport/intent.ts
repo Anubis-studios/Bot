@@ -19,7 +19,7 @@
 
 /** `"account": "abacus state usage"` reads `account.abacus`, … */
 const READS: Record<string, string> = {
-  account: "abacus state upgradeUrl usage vaultUrl",
+  account: "abacus billingPlan payment state upgradeUrl usage vaultUrl",
   agent: "queue.get skills state",
   ai: "attention hydrate joinRun runFinished subscribe",
   auth: "abacus.shouldAutoSignIn",
@@ -44,6 +44,7 @@ const READS: Record<string, string> = {
     "events listDirectory pendingPreview readImageAsDataUrl readPptx readText search treeChildren treeRoot",
   git: "branches checkoutStatus currentBranch diff prInfo watch worktrees.list",
   github: "pr prDiff status",
+  checkpoints: "list diff",
   links: "preview",
   mcp: "list runtime.events runtime.logs runtime.servers",
   memory: "bots customInstructions.get events",

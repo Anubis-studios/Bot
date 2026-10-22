@@ -5,60 +5,103 @@ description: Create, read, and edit .docx Word documents: headings, tables, styl
 
 # Working with Word documents
 
-Use `python-docx`. It covers everything below except tracked changes, which need
-raw XML.
+Write a CommonJS script (`make-doc.cjs`) and run it with the app's own Node:
+
+```sh
+"$ABACUSAI_BOT_NODE" make-doc.cjs
+```
+
+`require()` finds these with nothing to install:
+
+| Need | Use |
+|---|---|
+| Read the text or the structure | `mammoth` |
+| Create a document | `docx` |
+| Change an existing document in place | `jszip`, editing its XML |
 
 ## Reading
 
-```python
-from docx import Document
-doc = Document("in.docx")
-for p in doc.paragraphs:
-    if p.text.strip():
-        print(p.style.name, "|", p.text)
+```js
+const mammoth = require("mammoth");
+const { value } = await mammoth.extractRawText({ path: "in.docx" });
 ```
 
-Paragraphs and tables are **separate collections**, and iterating `doc.paragraphs`
-silently skips every table. If document order matters, walk the body XML instead:
+For headings, lists and tables, convert to HTML instead. The tags keep the
+structure, and paragraph styles show up as `h1`, `h2` and so on:
 
-```python
-from docx.table import Table
-from docx.text.paragraph import Paragraph
-for child in doc.element.body.iterchildren():
-    if child.tag.endswith('}p'):
-        print(Paragraph(child, doc).text)
-    elif child.tag.endswith('}tbl'):
-        print(Table(child, doc))
+```js
+const { value: html, messages } = await mammoth.convertToHtml({ path: "in.docx" });
 ```
+
+`messages` lists what mammoth could not map. Read it before you trust the
+output. Wrap top-level `await` in `(async () => { ... })()`, since a `.cjs`
+script has none.
 
 ## Writing
 
-Use the built-in styles rather than manual formatting: they are what make a
-document look native and what the user's own template expects:
+Use the built-in heading styles and real lists rather than manual formatting.
+They are what make a document look native, and what its table of contents and
+navigation pane read:
 
-```python
-doc.add_heading("Title", level=1)
-doc.add_paragraph("Body text")
-doc.add_paragraph("A point", style="List Bullet")
-table = doc.add_table(rows=1, cols=3)
-table.style = "Light Grid Accent 1"
+```js
+const fs = require("fs");
+const { Document, Packer, Paragraph, HeadingLevel, Table, TableRow, TableCell,
+  WidthType, Header, TextRun } = require("docx");
+
+const cell = (text) => new TableCell({ children: [new Paragraph(text)] });
+const doc = new Document({
+  sections: [{
+    headers: { default: new Header({ children: [new Paragraph("Quarterly report")] }) },
+    children: [
+      new Paragraph({ text: "Title", heading: HeadingLevel.HEADING_1 }),
+      new Paragraph({ children: [new TextRun("Body text, "), new TextRun({ text: "bold", bold: true })] }),
+      new Paragraph({ text: "A point", bullet: { level: 0 } }),
+      new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        rows: [new TableRow({ children: [cell("Day"), cell("Plan")] })],
+      }),
+    ],
+  }],
+});
+Packer.toBuffer(doc).then((buffer) => fs.writeFileSync("out.docx", buffer));
 ```
 
-To match a house style, **start from the user's template** (`Document("template.docx")`)
-and add to it. Styles are defined per-document; a style name that exists in their
-template will not exist in a blank one.
+## Editing an existing document
+
+`docx` only creates documents. To change one the user gave you, so that it
+keeps their template and styles, edit its XML with `jszip`. The body is in
+`word/document.xml`:
+
+```js
+const fs = require("fs");
+const JSZip = require("jszip");
+(async () => {
+  const zip = await JSZip.loadAsync(fs.readFileSync("in.docx"));
+  let xml = await zip.file("word/document.xml").async("string");
+  xml = xml.replace("{{CLIENT}}", "Acme Ltd");
+  zip.file("word/document.xml", xml);
+  fs.writeFileSync("out.docx", await zip.generateAsync({ type: "nodebuffer" }));
+})();
+```
+
+To fill a template with placeholders, `patchDocument` from `docx` replaces
+`{{name}}` markers with paragraphs, runs or tables, and keeps everything else.
 
 ## Common pitfalls
 
-- **Runs fragment.** A single visible sentence is often many runs, split
-  mid-word wherever formatting or a spellcheck marker changed. Naive
-  find-and-replace over `run.text` misses matches that straddle runs. Match on
-  `paragraph.text`, then rewrite the runs.
-- **`add_picture` needs an explicit width** or it inserts at native pixel size,
-  which is usually far wider than the page: `doc.add_picture(p, width=Inches(6))`.
-- **Tracked changes are not exposed** by python-docx. Accepting or rejecting them
-  means editing `w:ins`/`w:del` elements in the XML directly.
-- Headers and footers live on `section.header` / `section.footer`, not on the
-  document.
-- `.doc` (the old binary format) is **not** supported. Convert with LibreOffice
-  first: `soffice --headless --convert-to docx`.
+- **Runs fragment.** One visible sentence is often several `<w:r>` runs, split
+  mid-word wherever formatting or a spellcheck marker changed. A plain string
+  replace over the XML misses any match that straddles runs. Find the
+  paragraph (`<w:p>`) by its text, then rewrite its runs.
+- **Images need an explicit size.** An `ImageRun` takes
+  `transformation: { width, height }` in pixels. Size it to the page (about
+  600 px wide for a portrait page with normal margins), or it inserts at the
+  image's native size.
+- **Tracked changes are not applied by any of these.** `mammoth` shows
+  insertions and ignores deletions. Accepting or rejecting changes means
+  editing the `w:ins` and `w:del` elements in `word/document.xml` directly.
+- Headers and footers belong to a section (`headers`/`footers` on it), not to
+  the document. In an existing file they are separate parts:
+  `word/header1.xml` and the like.
+- `.doc` (the old binary format) is **not** supported. Convert it with
+  LibreOffice first: `soffice --headless --convert-to docx`.

@@ -1,11 +1,9 @@
 import { PHONE_CONNECTABLE_SERVICES } from "@abacus-ai/agent/tool-policy";
 import { CONNECTORS } from "@abacus-ai/connectors/registry";
+import type { BillingPlan } from "@abacus-ai/contract/billing-plan";
 
 import { fetchAbacusAccount, onFreePlan } from "../../../providers/abacus";
-import {
-  type BillingPlan,
-  fetchBillingPlan,
-} from "../../../providers/abacus-upgrade";
+import { fetchBillingPlan } from "../../../providers/abacus-upgrade";
 import type { ConnectOutcome, DisconnectOutcome } from "../connect-outcome";
 import type { ToolHost, ToolResult } from "../definition";
 import type { PhoneToolDefinition } from "./definition";

@@ -7,11 +7,20 @@ export const accountRouter = impl.account.router({
   abacus: impl.account.abacus.handler(({ input, context }) =>
     context.deps.host.getAbacusAccount(input?.refresh)
   ),
+  payment: impl.account.payment.handler(({ input, context }) =>
+    context.deps.host.getAbacusPayment(input?.refresh)
+  ),
+  releasePayment: impl.account.releasePayment.handler(({ context }) =>
+    context.deps.host.releaseAbacusPayment()
+  ),
   vaultUrl: impl.account.vaultUrl.handler(({ context }) =>
     context.deps.host.getVaultManageUrl()
   ),
   upgradeUrl: impl.account.upgradeUrl.handler(({ context }) =>
     context.deps.host.getUpgradeUrl()
+  ),
+  billingPlan: impl.account.billingPlan.handler(({ context }) =>
+    context.deps.host.getBillingPlan()
   ),
   state: impl.account.state.handler(({ context }) =>
     context.deps.app.account.get()

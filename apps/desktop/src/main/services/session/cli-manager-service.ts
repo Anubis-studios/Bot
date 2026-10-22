@@ -7,7 +7,10 @@ import { existsSync } from "fs";
 import { delimiter } from "path";
 import type { Writable } from "stream";
 
-import { childProcessEnv } from "@abacus-ai/agent/child-env";
+import {
+  childProcessEnv,
+  MANAGED_PYTHON_ENV,
+} from "@abacus-ai/agent/child-env";
 import type { UnattendedPolicy } from "@abacus-ai/agent/tool-policy";
 import {
   AgentMode,
@@ -130,6 +133,11 @@ type AgentManagerServiceOptions = {
    * with one is spawned in that mode whatever the request asked for.
    */
   resolveUnattended?: (sessionId: string) => UnattendedPolicy | null;
+  /** The app's own Python environment when the machine has no usable one. */
+  resolveManagedPython?: () => Promise<{
+    envDir: string;
+    binDir: string;
+  } | null>;
   emitStateUpdated: (
     workspaceId: string,
     sessionId: string,
@@ -630,6 +638,15 @@ export class AgentManagerService {
       }
     } catch {
       // Vendor resolution unavailable; the agent falls back to PATH.
+    }
+    // No usable system Python: the app's own goes first, ahead of a Store
+    // alias or an old interpreter, and is set up when a command first needs it.
+    const python = await this.options.resolveManagedPython?.();
+    if (python != null) {
+      inherited.PATH = [python.binDir, inherited.PATH ?? ""]
+        .filter((entry) => entry.length > 0)
+        .join(delimiter);
+      inherited[MANAGED_PYTHON_ENV] = python.envDir;
     }
     const env = childProcessEnv(
       inherited,

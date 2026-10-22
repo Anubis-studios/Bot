@@ -6,9 +6,10 @@ import type {
   AgentState,
   PermissionDescriptor,
 } from "@abacus-ai/contract/contract";
-import type {
-  AiNotice,
-  RunOutcomeRecord,
+import {
+  freeLaneOf,
+  type AiNotice,
+  type RunOutcomeRecord,
 } from "@abacus-ai/contract/contract/ai-thread";
 import {
   applyMessageReaction,
@@ -372,6 +373,7 @@ const fold = (
         ];
       } else {
         const usage = Array.isArray(value.usage) ? value.usage[0] : undefined;
+        const freeLane = freeLaneOf(value.metadata);
         outcomes = [
           ...outcomes,
           {
@@ -383,6 +385,7 @@ const fold = (
             ...(usage != null && typeof usage === "object"
               ? { usage: usage as RunOutcomeRecord["usage"] }
               : {}),
+            ...(freeLane != null ? { freeLane } : {}),
           },
         ];
       }

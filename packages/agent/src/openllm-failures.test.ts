@@ -12,6 +12,7 @@ import {
 } from "./connectivity.js";
 import {
   BusyWait,
+  NETWORK_UNREACHABLE_CODE,
   failedCallStreamed,
   NETWORK_WAIT_TURN_MS,
   NETWORK_WAIT_ROUTINE_MS,
@@ -23,10 +24,18 @@ import {
 import {
   classifyFailure,
   endedOnLeakedToolCall,
-  isBusyFailure,
   networkVerdict,
   retryHintMs,
 } from "./openllm-failures.js";
+import {
+  EMPTY_REPLY_FAILURE,
+  EMPTY_REPLY_MESSAGE,
+  OPENLLM_POOL_BUSY_MESSAGE,
+  TurnChain,
+  classifyAttempt,
+  isBusyCause,
+  presentFailure,
+} from "./turn-outcome.js";
 
 const NOON = Date.UTC(2026, 9, 1, 12, 0, 0);
 
@@ -243,7 +252,7 @@ describe("a busy provider", () => {
     ["404 model not found", false],
     ["401 Invalid API Key", false],
   ])("%s busy: %s", (failure, busy) => {
-    expect(isBusyFailure(failure)).toBe(busy);
+    expect(isBusyCause(failure, "openrouter")).toBe(busy);
   });
 });
 
@@ -465,5 +474,234 @@ describe("network and busy waits", () => {
 
       expect(await next).toBe(false);
     });
+  });
+});
+
+describe("one cause per turn, read from the whole chain of calls", () => {
+  const route = {
+    routed: true,
+    freeLaneProviders: ["openrouter", "gemini"],
+    onFreeLane: false,
+    abacusFreeModels: [],
+    abacus: null,
+  };
+
+  // Each from a real turn's log: what the call said, and what it means.
+  it.each([
+    [
+      "abacus",
+      "429: You have no remaining credits to use the LLM apis.",
+      "credits_exhausted",
+    ],
+    [
+      "abacus",
+      "429: Your free AbacusAI credits have expired, so you have no remaining credits to use the API.",
+      "credits_expired",
+    ],
+    ["openrouter", "Connection error.", "connection"],
+    ["gemini", "fetch failed", "connection"],
+    ["openrouter", "Request timed out.", "connection"],
+    ["openrouter", "read ECONNRESET", "connection"],
+    ["openrouter", "getaddrinfo ENOTFOUND openrouter.ai", "connection"],
+    [
+      "openrouter",
+      "400 Please reduce the length of the messages or completion.",
+      "context_too_long",
+    ],
+    [
+      "groq",
+      "413 Request too large for model on tokens per minute (TPM)",
+      "context_too_long",
+    ],
+    ["openrouter", "400 failed to template request", "model_unavailable"],
+    ["openrouter", "404 No endpoints found for big:free.", "model_unavailable"],
+    ["mistral", "401 Unauthorized", "key_invalid"],
+    ["nvidia", "429 Too Many Requests", "rate_limited"],
+    ["openrouter", "503 Service Unavailable", "rate_limited"],
+    [
+      "gemini",
+      '429 {"error":{"code":429,"message":"You exceeded your current quota, please check your plan and billing details.","status":"RESOURCE_EXHAUSTED"}}',
+      "own_key_quota",
+    ],
+    [
+      "openrouter",
+      "429: Rate limit exceeded: free-models-per-day.",
+      "own_key_quota",
+    ],
+    [
+      "nvidia",
+      "429 You have exceeded your daily request limit (requests per day).",
+      "own_key_quota",
+    ],
+    [
+      "abacus",
+      'OpenAI API error (403): {"message":"Model \'gpt-6-luna\' is not available on the free tier.","type":"permission_denied","param":null,"code":null}',
+      "not_in_plan",
+    ],
+    [
+      "abacus",
+      'OpenAI API error (500): {"message":"An unexpected error occurred.","type":"api_error","param":null,"code":null}',
+      "rate_limited",
+    ],
+    [
+      "abacus",
+      '403 {"type":"error","error":{"type":"permission_error","message":"Model \'claude-sonnet-5-5\' is not available on the free tier."}}',
+      "not_in_plan",
+    ],
+  ] as const)("%s: %s → %s", (provider, raw, cause) => {
+    expect(classifyAttempt(raw, provider)).toBe(cause);
+  });
+
+  it("a connection error after a rate limit is the connection's, never busy", () => {
+    const chain = new TurnChain();
+    chain.failed("429 Too Many Requests", "openrouter");
+    chain.failed("Connection error.", "gemini");
+    expect(chain.failure()).toMatchObject({
+      cause: "connection",
+      provider: "gemini",
+    });
+  });
+
+  it("says busy only when every failed call was a real rate limit", () => {
+    const chain = new TurnChain();
+    chain.failed("429 Too Many Requests", "openrouter");
+    chain.failed("503 Service Unavailable", "gemini");
+    const failure = chain.failure()!;
+    expect(failure.cause).toBe("rate_limited");
+    expect(presentFailure(failure, route).message).toBe(
+      OPENLLM_POOL_BUSY_MESSAGE
+    );
+  });
+
+  it("a too-long chat outranks a busy model, and offers a new chat", () => {
+    const chain = new TurnChain();
+    chain.failed("429 Too Many Requests", "openrouter");
+    chain.failed("400 Please reduce the length of the messages.", "gemini");
+    const shown = presentFailure(chain.failure()!, route);
+    expect(shown.cause).toBe("context_too_long");
+    expect(shown.actions).toEqual([
+      { type: "new-chat" },
+      { type: "switch-model" },
+    ]);
+  });
+
+  it("an empty reply after a failure is a failure, not a silent end", () => {
+    const chain = new TurnChain();
+    chain.failed("429 Too Many Requests", "openrouter");
+    chain.failed(EMPTY_REPLY_FAILURE, "gemini");
+    expect(chain.failure()?.cause).toBe("rate_limited");
+    const lone = new TurnChain();
+    lone.failed(EMPTY_REPLY_FAILURE, "gemini");
+    expect(presentFailure(lone.failure()!, route)).toMatchObject({
+      cause: "empty",
+      message: EMPTY_REPLY_MESSAGE,
+      actions: [{ type: "retry" }, { type: "switch-model" }],
+    });
+  });
+
+  it("a call that answered last ends the turn with nothing to report", () => {
+    const chain = new TurnChain();
+    chain.failed("429 Too Many Requests", "openrouter");
+    chain.answered("gemini");
+    expect(chain.failure()).toBeNull();
+  });
+
+  it("the credit wall outranks everything and offers the free lane by name", () => {
+    const chain = new TurnChain();
+    chain.failed(
+      "429: You have no remaining credits to use the LLM apis.",
+      "abacus"
+    );
+    const shown = presentFailure(chain.failure()!, route);
+    expect(shown).toMatchObject({
+      cause: "credits_exhausted",
+      code: "turn_failed",
+    });
+    expect(shown.actions).toEqual([
+      { type: "upgrade-abacus", cause: "exhausted" },
+      { type: "continue-free", providers: ["openrouter", "gemini"] },
+    ]);
+    // No plans page in the words: the card carries the account's own link.
+    expect(JSON.stringify(shown)).not.toMatch(/https?:/);
+  });
+
+  it("offers no free lane when no hosted free source is connected", () => {
+    const shown = presentFailure(
+      {
+        cause: "credits_exhausted",
+        provider: "abacus",
+        raw: "429: no remaining credits",
+      },
+      { ...route, freeLaneProviders: [] }
+    );
+    expect(shown.actions).toEqual([
+      { type: "upgrade-abacus", cause: "exhausted" },
+    ]);
+  });
+
+  it("a pinned Abacus model at the wall keeps its own $0 models by name", () => {
+    const shown = presentFailure(
+      {
+        cause: "credits_exhausted",
+        provider: "abacus",
+        raw: "429: You have no remaining credits to use the LLM apis.",
+      },
+      {
+        routed: false,
+        freeLaneProviders: ["gemini"],
+        onFreeLane: false,
+        abacusFreeModels: [{ model: "abacus/free-1", label: "Free One" }],
+        abacus: "out",
+      }
+    );
+    expect(shown.actions).toEqual([
+      { type: "upgrade-abacus", cause: "exhausted" },
+      { type: "switch-model", model: "abacus/free-1", label: "Free One" },
+    ]);
+    expect(shown.message).toBe(
+      "You're out of credits (429). Upgrade your plan to keep going, or switch to a model with its own key."
+    );
+  });
+
+  it("a connection failure ends on the connection card", () => {
+    const shown = presentFailure(
+      { cause: "connection", provider: "openrouter", raw: "Connection error." },
+      route
+    );
+    expect(shown).toMatchObject({
+      code: NETWORK_UNREACHABLE_CODE,
+      cause: "connection",
+      message:
+        "Connection problem — check your internet connection, VPN, or proxy.",
+      detail: "Connection error.",
+      actions: [{ type: "retry" }],
+    });
+  });
+
+  it("a failed turn on the chosen free lane comes back to the wall's card, not a busy loop", () => {
+    const shown = presentFailure(
+      {
+        cause: "rate_limited",
+        provider: "openrouter",
+        raw: "429 Too Many Requests",
+      },
+      { ...route, onFreeLane: true }
+    );
+    expect(shown.cause).toBe("rate_limited");
+    expect(shown.actions?.[0]).toEqual({
+      type: "upgrade-abacus",
+      cause: "exhausted",
+    });
+  });
+
+  it("a refused own key names its provider with a way to fix it", () => {
+    const shown = presentFailure(
+      { cause: "key_invalid", provider: "mistral", raw: "401 Unauthorized" },
+      route
+    );
+    expect(shown.actions).toEqual([
+      { type: "fix-key", provider: "mistral" },
+      { type: "switch-model" },
+    ]);
   });
 });

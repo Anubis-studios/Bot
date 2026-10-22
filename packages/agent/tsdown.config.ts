@@ -1,3 +1,5 @@
+import path from "node:path";
+
 import { NATIVE_PACKAGES } from "@abacus-ai/config/native-packages";
 import { defineConfig } from "tsdown";
 
@@ -46,6 +48,10 @@ export default defineConfig({
     "src/user-text.ts",
     // How a path is spelled for the model; main and the renderer show it paths.
     "src/model-path.ts",
+    // The language the user wants replies in, for the chat apps' fixed lines.
+    "src/user-language.ts",
+    // Turn checkpoints: main lists, diffs and restores them. node builtins and atomic-file only.
+    "src/checkpoint-store.ts",
     // The phone reply's bubble split, for the hosted app's WhatsApp lane.
     "src/phone/phone-bubbles.ts",
     // The phone loop's zone, check-in language and due loops, for its agenda.
@@ -59,12 +65,22 @@ export default defineConfig({
     "src/sandbox/secrets.ts",
     // Saved travelers: main's browser types a passport number from it.
     "src/traveler/traveler-store.ts",
+    // Libraries the agent's own Node scripts `require` (Word and Excel files),
+    // one file each under dist/modules, which NODE_PATH names (bundled-tools.ts).
+    "src/modules/docx.js",
+    "src/modules/exceljs.js",
+    "src/modules/jszip.js",
+    "src/modules/mammoth.js",
   ],
   deps: {
     // The sandbox runtime finds its vendored seccomp filters and Java agent
     // relative to its own files, so it ships as a package beside the agent.
     neverBundle: [...NATIVE_PACKAGES, "@anthropic-ai/sandbox-runtime"],
     onlyBundle: false,
+  },
+  // Only exceljs imports it (its streaming reader); see the stub.
+  alias: {
+    unzipper: path.join(import.meta.dirname, "src/modules/unzipper-stub.cjs"),
   },
   format: "esm",
   platform: "node",

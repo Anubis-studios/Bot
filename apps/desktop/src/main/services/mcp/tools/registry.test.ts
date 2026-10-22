@@ -22,13 +22,15 @@ import { AGENT_TOOL_NAMES, AGENT_TOOLS, agentTool } from "./index";
  * conversations; it grants nothing and there is nothing for a user to switch.
  * `billing_plan` reads the user's own plan and prices; it grants nothing
  * either, and nor does `paid_feature`, which says where a plan has a capability. `offer_session` draws a card that opens a session; it does nothing
- * until the user clicks it.
+ * until the user clicks it. `bot_help` reads the app's own state to answer
+ * questions about the app; switching it off would leave those to memory.
  */
 const NOT_IN_REGISTRY = new Set([
   "my_activity",
   "billing_plan",
   "paid_feature",
   "offer_session",
+  "bot_help",
 ]);
 
 const registryTools = new Map<string, { toolset: string; agent: boolean }>();
@@ -139,5 +141,301 @@ describe("the Capabilities registry", () => {
 
     expect(undescribed).toEqual([]);
     expect(orphaned).toEqual([]);
+  });
+});
+
+describe("billing_plan grounds every answer about plans and credits", () => {
+  it("is served in every chat, bot and chat app, on every plan, and owns those questions", () => {
+    const billing = agentTool("billing_plan");
+    expect(billing).toMatchObject({ toolsets: "always", botAlways: true });
+    // No plan gate: a paid account, and one at zero credits, gets it too.
+    expect(billing?.ready).toBeUndefined();
+    expect(billing?.description).toMatch(
+      /what models or\nplans cost, prices, discounts or deals, credits or balance, limits, resets or renewals/
+    );
+    expect(billing?.description).toMatch(
+      /Never quote a price, discount, credit amount, limit or reset from memory/
+    );
+  });
+});
+
+describe("billing_plan's answer", () => {
+  it("states the plan, the credits left, the renewal, the next plan's price and features, and the link", async () => {
+    const { appBillingResult } = await import("./billing");
+    const result = appBillingResult(
+      {
+        ok: (text: string) => ({ content: [{ type: "text", text }] }),
+      } as never,
+      {
+        current: {
+          planName: "Free",
+          creditsRemaining: 0,
+          creditsGranted: 2000,
+          freeTierExpiresAt: null,
+        },
+        plans: [
+          {
+            plan: "free",
+            planName: "Free",
+            priceText: "Free",
+            features: [],
+            creditsPerMonth: 2000,
+            current: true,
+          },
+          {
+            plan: "basic",
+            planName: "Basic",
+            priceText: "$10/mo",
+            firstMonthPriceCents: 700,
+            priceCents: 1000,
+            features: ["Image and video generation"],
+            creditsPerMonth: 20000,
+            current: false,
+          },
+        ],
+        upgrades: [
+          {
+            plan: "basic",
+            planName: "Basic",
+            priceText: "$10/mo",
+            firstMonthPriceCents: 700,
+            priceCents: 1000,
+            features: ["Image and video generation"],
+            url: "https://example.test/upgrade",
+          },
+        ],
+        topUpUrl: null,
+        upgradeInMobileApp: false,
+      }
+    ) as unknown as { content: Array<{ text: string }> };
+    const text = result.content[0]!.text;
+    expect(text).toContain("The user's plan: Free.");
+    expect(text).toContain("Credits left: 0 of 2,000 this month.");
+    expect(text).toContain(
+      "Their plan's credits renew every month: 2,000 a month. Never call them a one-time grant."
+    );
+    expect(text).toContain(
+      "Basic: $7 for the first month (30% off the usual $10/mo), then $10/mo, link: https://example.test/upgrade"
+    );
+    expect(text).toContain("  - Image and video generation");
+  });
+});
+
+describe("billing_plan for what only a plan does", () => {
+  const plan = (current: "free" | "basic") => ({
+    current: {
+      planName: current === "free" ? "Free" : "Basic",
+      creditsRemaining: 100,
+      creditsGranted: 2000,
+      freeTierExpiresAt: null,
+    },
+    plans: [
+      {
+        plan: "free",
+        planName: "Free",
+        priceText: "Free",
+        features: [],
+        creditsPerMonth: 2000,
+        current: current === "free",
+      },
+      {
+        plan: "basic",
+        planName: "Basic",
+        priceText: "$10/mo",
+        firstMonthPriceCents: 700,
+        priceCents: 1000,
+        features: [
+          "Routines that run 24/7 in Abacus AI Agent on the web, even with your computer off",
+        ],
+        creditsPerMonth: 20000,
+        current: current === "basic",
+      },
+    ],
+    upgrades:
+      current === "free"
+        ? [
+            {
+              plan: "basic",
+              planName: "Basic",
+              priceText: "$10/mo",
+              firstMonthPriceCents: 700,
+              priceCents: 1000,
+              features: [
+                "Routines that run 24/7 in Abacus AI Agent on the web, even with your computer off",
+              ],
+              url: "https://example.test/upgrade",
+            },
+          ]
+        : [],
+    topUpUrl: null,
+    upgradeInMobileApp: false,
+  });
+  const answer = async (current: "free" | "basic") => {
+    const { appBillingResult } = await import("./billing");
+    const result = appBillingResult(
+      {
+        ok: (text: string) => ({ content: [{ type: "text", text }] }),
+      } as never,
+      plan(current)
+    ) as unknown as { content: Array<{ text: string }> };
+    return result.content[0]!.text;
+  };
+
+  it("owns 'keep working with the computer off' (WhatsApp, Telegram, Discord) and video analysis in its description", () => {
+    const description = agentTool("billing_plan")?.description;
+    expect(typeof description).toBe("string");
+    expect(String(description).replace(/\n/g, " ")).toContain(
+      "whenever they ask whether anything keeps working while the app or computer is off (WhatsApp, Telegram or Discord auto-replies, routines, reminders, monitoring, staying online 24/7), which a plan answers and is never impossible"
+    );
+    expect(String(description).replace(/\n/g, " ")).toContain(
+      "when they ask to analyse a video (a reel, a Short, a YouTube or TikTok link, a video file)"
+    );
+  });
+
+  it("a free account asking whether its WhatsApp auto-reply or routines can keep working with the PC off is offered personal agents on the web, priced and linked, never a no", async () => {
+    const text = await answer("free");
+    expect(text).toContain(
+      "Asked for anything to keep working while the app or computer is off (WhatsApp, Telegram or Discord auto-replies, routines, reminders, monitoring) or to stay online 24/7: never answer no or impossible. Offer Basic: personal agents in Abacus AI Agent on the web that run 24/7 with the computer off and do everything this bot does, WhatsApp, Telegram and Discord auto-replies and every routine included."
+    );
+    expect(text).toContain(
+      "  - Routines that run 24/7 in Abacus AI Agent on the web, even with your computer off"
+    );
+    expect(text).toContain("$7 for the first month");
+    expect(text).toContain("link: https://example.test/upgrade");
+  });
+
+  it("a Basic account asking whether its Telegram or Discord auto-replies keep going with the PC off is pointed at its own 24/7 agents in Abacus AI Agent, with no upsell", async () => {
+    const text = await answer("basic");
+    expect(text).toContain(
+      "their plan already includes personal agents in Abacus AI Agent on the web that run 24/7 with the computer off"
+    );
+    expect(text).toContain("Do not offer an upgrade for it.");
+    expect(text).not.toContain("never answer no or impossible");
+  });
+});
+
+describe("billing_plan on what Basic gives this app", () => {
+  it("a free user asking what Basic gives hears the credits, the models and image and video, with no task cap on the bot", async () => {
+    const { appBillingResult } = await import("./billing");
+    const features = [
+      "20,000 credits a month (10x the free tier)",
+      "Top models: GPT, Claude and Gemini",
+      "Image and video generation",
+      "Build and publish apps on the web (3 projects a month)",
+      "Routines that run 24/7 in Abacus AI Agent on the web, even with your computer off",
+    ];
+    const result = appBillingResult(
+      {
+        ok: (text: string) => ({ content: [{ type: "text", text }] }),
+      } as never,
+      {
+        current: {
+          planName: "Free",
+          creditsRemaining: 300,
+          creditsGranted: 2000,
+          freeTierExpiresAt: null,
+        },
+        plans: [
+          {
+            plan: "free",
+            planName: "Free",
+            priceText: "Free",
+            features: [],
+            creditsPerMonth: 2000,
+            current: true,
+          },
+        ],
+        upgrades: [
+          {
+            plan: "basic",
+            planName: "Basic",
+            priceText: "$10/mo",
+            firstMonthPriceCents: 700,
+            priceCents: 1000,
+            features,
+            url: "https://example.test/upgrade",
+          },
+        ],
+        topUpUrl: null,
+        upgradeInMobileApp: false,
+      }
+    ) as unknown as { content: Array<{ text: string }> };
+    const text = result.content[0]!.text;
+    expect(text).toContain("  - 20,000 credits a month (10x the free tier)\n");
+    expect(text).toContain("  - Top models: GPT, Claude and Gemini\n");
+    expect(text).toContain("  - Image and video generation\n");
+    expect(text).toContain(
+      "  - Build and publish apps on the web (3 projects a month) [in Abacus AI Agent on the web; not a limit on this app]"
+    );
+    expect(text).toContain(
+      "In this app, bots, chats and routines have no task or project cap"
+    );
+    expect(text).toContain(
+      "Their plan's credits renew every month: 2,000 a month. Never call them a one-time grant."
+    );
+    expect(text).not.toMatch(/tasks? per month/i);
+  });
+});
+
+describe("billing_plan on the phone", () => {
+  it("is called for 'keeps working with the computer off' and relays every feature line as written", async () => {
+    const { PHONE_BILLING_TOOLS, phoneBillingResult } =
+      await import("./phone/billing");
+    const description = String(PHONE_BILLING_TOOLS[0]?.description).replace(
+      /\n/g,
+      " "
+    );
+    expect(description).toContain(
+      "whenever they ask whether something keeps working while their app or computer is off (WhatsApp, Telegram or Discord auto-replies, routines, reminders)"
+    );
+    expect(description).toContain("with every feature line as written");
+    expect(description).toContain("Never answer these from memory.");
+
+    const line =
+      "Personal agents in Abacus AI Agent on the web that run 24/7, even with your computer off: WhatsApp, Discord and Telegram auto-replies, all your routines, and everything your bot does";
+    const result = phoneBillingResult(
+      {
+        ok: (text: string) => ({ content: [{ type: "text", text }] }),
+      } as never,
+      {
+        current: {
+          planName: "Free",
+          creditsRemaining: 0,
+          creditsGranted: 2000,
+          freeTierExpiresAt: null,
+        },
+        plans: [
+          {
+            plan: "free",
+            planName: "Free",
+            priceText: "Free",
+            features: [],
+            creditsPerMonth: 2000,
+            current: true,
+          },
+        ],
+        upgrades: [
+          {
+            plan: "basic",
+            planName: "Basic",
+            priceText: "$10/mo",
+            firstMonthPriceCents: 700,
+            priceCents: 1000,
+            features: [line],
+            url: "https://example.test/upgrade",
+          },
+        ],
+        topUpUrl: null,
+        upgradeInMobileApp: false,
+      }
+    ) as unknown as { content: Array<{ text: string }> };
+    const text = result.content[0]!.text;
+    // The server's line, whole, marked as the web's.
+    expect(text).toContain(`  - ${line} [in Abacus AI Agent on the web`);
+    expect(text).toContain("every feature line as written");
+    expect(text).toContain("never answer no or impossible");
+    expect(text).toContain(
+      "Their plan's credits renew every month: 2,000 a month."
+    );
   });
 });

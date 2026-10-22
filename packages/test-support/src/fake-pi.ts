@@ -20,6 +20,8 @@ export interface FakePi {
     options?: { triggerTurn?: boolean; deliverAs?: string };
   }>;
   entries: Array<{ customType: string; data: unknown }>;
+  /** Text pushed with `sendUserMessage`, as if the user had typed it. */
+  userMessages: Array<{ text: string; options?: { deliverAs?: string } }>;
   notifications: Array<{ text: string; level?: string }>;
 }
 
@@ -52,6 +54,7 @@ export function fakePi(): FakePi {
   const messages: FakePi["messages"] = [];
   const entries: FakePi["entries"] = [];
   const notifications: FakePi["notifications"] = [];
+  const userMessages: FakePi["userMessages"] = [];
 
   const api = {
     on(event: string, handler: Handler) {
@@ -69,6 +72,9 @@ export function fakePi(): FakePi {
       options?: { triggerTurn?: boolean; deliverAs?: string }
     ) {
       messages.push({ ...message, ...(options != null ? { options } : {}) });
+    },
+    sendUserMessage(text: string, options?: { deliverAs?: string }) {
+      userMessages.push({ text, ...(options != null ? { options } : {}) });
     },
     appendEntry(customType: string, data: unknown) {
       entries.push({ customType, data });
@@ -104,6 +110,7 @@ export function fakePi(): FakePi {
     tools,
     messages,
     entries,
+    userMessages,
     notifications,
     async fire(event, payload, ctx = defaultCtx) {
       let last: unknown;

@@ -16,6 +16,8 @@ vi.mock("./providers.js", () => ({
 
 const { OpenLlmRouter } = await import("./openllm-router.js");
 const { memoryQuotaStore } = await import("./openllm-quota.js");
+const { noteCreditsBack, setHostCreditWall, creditWallActive } =
+  await import("./credit-wall.js");
 
 const choice = (id: string, free = true): ModelChoice => ({
   provider: id.split("/")[0]!,
@@ -46,6 +48,8 @@ const OUT_OF_CREDITS =
   '429: {"message":"You have no remaining credits to use the LLM apis.","type":"insufficient_quota"}';
 
 beforeEach(() => {
+  // The wall is the process's; each case starts with the credits there.
+  noteCreditsBack();
   pool.models = [
     choice("abacus/muse-spark-1.3-contributor"),
     choice("gemini/gemini-3.6-flash"),
@@ -54,7 +58,7 @@ beforeEach(() => {
 });
 
 describe("a provider that refuses the account", () => {
-  it("is put out as a whole, and the next source takes the turn", () => {
+  it("stops at the credit wall: no free model takes the turn before the user chooses one", () => {
     const router = new OpenLlmRouter(
       () => 1_000,
       memoryStore(),
@@ -67,11 +71,45 @@ describe("a provider that refuses the account", () => {
       id: "muse-spark-1.3-contributor",
     });
 
-    expect(next).toEqual({ nextId: "gemini/gemini-3.6-flash" });
-    expect(router.poolShut(registry)).toBe(false);
+    expect(next).toBeNull();
+    expect(creditWallActive(1_000)).toBe(true);
+    expect(router.pick(registry)).toBeUndefined();
+    expect(router.wallStops(registry)).toMatchObject({
+      cause: "credits_exhausted",
+      provider: "abacus",
+    });
+    // What the card names: the sources the free lane would go on to.
+    expect(router.freeLaneProviders(registry)).toEqual([
+      "gemini",
+      "openrouter",
+    ]);
+    expect(router.chain.failure()).toMatchObject({
+      cause: "credits_exhausted",
+    });
   });
 
-  it("stays out for the next chat, which starts on the next source", () => {
+  it("is put out as a whole once the free lane is chosen, and the next source takes the turn", () => {
+    setHostCreditWall({ exhaustedAt: 1_000, freeLaneChosenAt: 1_000 });
+    const router = new OpenLlmRouter(
+      () => 1_000,
+      memoryStore(),
+      memoryQuotaStore()
+    );
+
+    const next = router.failed(registry, OUT_OF_CREDITS, {
+      provider: "abacus",
+      id: "muse-spark-1.3-contributor",
+    });
+
+    expect(next).toEqual({ nextId: "gemini/gemini-3.6-flash" });
+    expect(router.poolShut(registry)).toBe(false);
+    expect(router.wallStops(registry)).toBeNull();
+    expect(router.onFreeLane("gemini")).toBe(true);
+    expect(router.onFreeLane("abacus")).toBe(false);
+  });
+
+  it("stays out for the next chat, which starts on the next source of the chosen free lane", () => {
+    setHostCreditWall({ exhaustedAt: 1_000, freeLaneChosenAt: 1_000 });
     const store = memoryStore();
     const first = new OpenLlmRouter(() => 1_000, store, memoryQuotaStore());
     first.failed(registry, OUT_OF_CREDITS, {
@@ -82,6 +120,60 @@ describe("a provider that refuses the account", () => {
     // A new chat is a new process with a new router on the same file.
     const second = new OpenLlmRouter(() => 2_000, store, memoryQuotaStore());
     expect(second.pick(registry)?.id).toBe("gemini/gemini-3.6-flash");
+  });
+
+  it("asks again a day after the choice", () => {
+    const day = 24 * 60 * 60_000;
+    setHostCreditWall({ exhaustedAt: 1_000, freeLaneChosenAt: 1_000 });
+    const router = new OpenLlmRouter(
+      () => 1_000 + day,
+      memoryStore(),
+      memoryQuotaStore()
+    );
+    // The wall itself has lapsed: Abacus is asked first again.
+    expect(router.pick(registry)?.id).toBe("abacus/muse-spark-1.3-contributor");
+    expect(
+      router.failed(registry, OUT_OF_CREDITS, {
+        provider: "abacus",
+        id: "muse-spark-1.3-contributor",
+      })
+    ).toBeNull();
+    expect(router.wallStops(registry)).not.toBeNull();
+  });
+
+  it("never puts a model on this computer on the free lane", () => {
+    pool.models = [
+      choice("abacus/muse-spark-1.3-contributor"),
+      choice("local/qwen-small"),
+    ];
+    const router = new OpenLlmRouter(
+      () => 1_000,
+      memoryStore(),
+      memoryQuotaStore()
+    );
+    router.failed(registry, OUT_OF_CREDITS, {
+      provider: "abacus",
+      id: "muse-spark-1.3-contributor",
+    });
+    expect(router.freeLaneProviders(registry)).toEqual([]);
+    setHostCreditWall({ exhaustedAt: 1_000, freeLaneChosenAt: 1_000 });
+    expect(router.pick(registry)).toBeUndefined();
+  });
+
+  it("lifts the wall when Abacus answers again", () => {
+    const router = new OpenLlmRouter(
+      () => 1_000,
+      memoryStore(),
+      memoryQuotaStore()
+    );
+    router.failed(registry, OUT_OF_CREDITS, {
+      provider: "abacus",
+      id: "muse-spark-1.3-contributor",
+    });
+    router.beginTurn();
+    router.succeeded("abacus/muse-spark-1.3-contributor");
+    expect(creditWallActive(1_000)).toBe(false);
+    expect(router.chain.failure()).toBeNull();
   });
 
   it("shuts the pool once every source has refused", () => {

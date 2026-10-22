@@ -562,6 +562,7 @@
       "browser_snapshot": "Die Seite als Liste interaktiver Elemente auslesen.",
       "browser_tabs": "Die Tabs des Browsers auflisten, wechseln und schließen.",
       "browser_task": "Hand a whole web task to a browser sub-agent and get back the answer.",
+      "checkpoint_diff": "Show what earlier turns changed on disk, from their checkpoints.",
       "code_map": "Index the functions and classes in a file or folder.",
       "connect_connector": "Ask the user to attach a service, such as Gmail or Slack, so its tools become available.",
       "cronjob": "Create, list, pause, or run scheduled tasks.",
@@ -606,6 +607,7 @@
       "read_telegram_messages": "Aktuelle Telegram-Nachrichten auf Anfrage lesen.",
       "read_whatsapp_messages": "Aktuelle WhatsApp-Nachrichten auf Anfrage lesen.",
       "run_tests": "Run the project's tests and report what passed and failed.",
+      "restore_checkpoint": "Put files back as they were before an earlier turn changed them.",
       "send_discord_message": "Eine Nachricht über Discord senden.",
       "send_telegram_message": "Eine Nachricht über Telegram senden.",
       "send_to_whatsapp": "Schickt dir eine Nachricht auf dein WhatsApp, von der Nummer von AbacusAI Bot.",
@@ -2821,7 +2823,9 @@
       "providerConnectHint": "Verbinde ihn, um seine Modelle zu nutzen, auch die kostenlosen.",
       "retryAttachment": "Retry attachment",
       "folderItems_one": "{{count}} item",
-      "folderItems_other": "{{count}} items"
+      "folderItems_other": "{{count}} items",
+      "includedIn": "In {{plan}} enthalten",
+      "includedInPaid": "In bezahlten Tarifen enthalten"
     },
     "day": {
       "today": "Today",
@@ -3165,7 +3169,14 @@
     },
     "paidFeature": {
       "title": "{{feature}} ist in Basic enthalten",
-      "webTitle": "{{feature}} ist in Basic enthalten, in Abacus AI Agent im Web"
+      "webTitle": "{{feature}} ist in Basic enthalten, in Abacus AI Agent im Web",
+      "webBody": "Basic umfasst das Erstellen und Bearbeiten von Bildern und Videos sowie das Erzeugen von Audio, im Web in Abacus AI Agent.",
+      "agentTitle": "{{feature}} gibt es in Abacus AI Agent im Web",
+      "agentBody": "Dein Plan umfasst das Erstellen und Bearbeiten von Bildern und Videos sowie das Erzeugen von Audio, im Web in Abacus AI Agent. Deine Anfrage ist dort schon eingetragen; hänge dort jedes Bild an, das du bearbeiten möchtest.",
+      "openAgent": "In Abacus AI Agent öffnen"
+    },
+    "botHelp": {
+      "open": "Öffnen"
     }
   },
   "notch": {
@@ -3850,6 +3861,30 @@
     "showLess": "Show less",
     "showMore": "+{{count}} more"
   },
+  "checkpoints": {
+    "summary_one": "Changed {{count}} file",
+    "summary_other": "Changed {{count}} files",
+    "restore": "Restore to before this turn",
+    "restoreFile": "Restore this file",
+    "undoRestore": "Undo restore",
+    "busy": "Wait for the agent to finish this turn",
+    "binary": "binary",
+    "noCopy": "no copy kept",
+    "partial": "Some folders were too large to keep whole; files past the limit are not covered.",
+    "failed": "Could not restore. Try again once the agent has finished.",
+    "restored_one": "Restored {{count}} file.",
+    "restored_other": "Restored {{count}} files.",
+    "unrestorable_one": "{{count}} file was too large to keep a copy of.",
+    "unrestorable_other": "{{count}} files were too large to keep a copy of.",
+    "conflicts_one": "{{count}} file changed after this turn and was left as it is.",
+    "conflicts_other": "{{count}} files changed after this turn and were left as they are.",
+    "force": "Restore anyway",
+    "kind": {
+      "modified": "Edited",
+      "created": "Added",
+      "deleted": "Deleted"
+    }
+  },
   "devicePanel": {
     "axPermissionNeeded": "Für die Spiegelung des Simulators ohne sichtbares Fenster wird die Bedienungshilfen-Berechtigung benötigt.",
     "boot": "Starten",
@@ -4162,6 +4197,24 @@
     "waitingTitle": "Schließe den Checkout in deinem Browser ab",
     "waitingToSend": "Wartet auf Senden: „{{text}}“"
   },
+  "paymentRequired": {
+    "unconfirmedTitle": "Wähle einen Plan, um AbacusAI Bot weiter zu nutzen",
+    "unconfirmedBody": "Du bist angemeldet, aber dein Konto braucht einen Plan, damit AbacusAI Bot funktioniert.",
+    "alreadySubscribed": "Schon abonniert? {{link}}",
+    "reportIssue": "Problem melden",
+    "trialEndedTitle": "Deine kostenlose Testphase ist abgelaufen",
+    "trialEndedBody": "Führe ein Upgrade durch, um AbacusAI Bot mit diesem Konto weiter zu nutzen.",
+    "lapsedTitle": "Dein Abonnement ist abgelaufen",
+    "lapsedBody": "Verlängere deinen Plan, um AbacusAI Bot mit diesem Konto weiter zu nutzen.",
+    "upgrade": "Upgrade",
+    "renew": "Verlängern",
+    "webAgent": "Zu Abacus AI Agent im Web →",
+    "tryAgain": "Erneut versuchen",
+    "checking": "Wird geprüft…",
+    "stillBlocked": "Für dieses Konto ist noch keine Zahlung zu sehen.",
+    "waiting": "Schließe den Kauf in deinem Browser ab. Die App macht weiter, sobald deine Zahlung eingegangen ist.",
+    "otherAccount": "Mit einem anderen Konto anmelden"
+  },
   "visualizer": {
     "loading": "Visualisierung wird geladen …"
   },
@@ -4335,5 +4388,94 @@
     "outOfCredit": "Your {{provider}} key is out of credit",
     "paidBody": "Use it in AbacusAI Agent on the web: the top models are included in your plan.",
     "rateLimited": "Your {{provider}} key hit its rate limit"
+  },
+  "outcome": {
+    "wall": {
+      "title": "Deine kostenlosen Credits sind aufgebraucht",
+      "expiredTitle": "Deine kostenlosen Credits sind abgelaufen",
+      "paidTitle": "Du hast die Credits dieses Monats verbraucht",
+      "renews": "Kostenlose Credits erneuern sich jeden Monat.",
+      "balance": "Noch {{remaining}} von {{granted}} Credits",
+      "warning": "Um jetzt weiterzumachen, würde der Bot zu kostenlosen Modellen eines anderen Anbieters wechseln ({{providers}}). Sie sind deutlich schwächer: mehr Fehler, sie können funktionierenden Code kaputt machen und stoßen oft an Ratenlimits.",
+      "offer": "Upgrade auf {{plan}} — {{price}}",
+      "upgradeCta": "Upgrade auf {{plan}}",
+      "continueFree": "Mit kostenlosen Modellen weitermachen (geringere Qualität)"
+    },
+    "plan": {
+      "introPrice": "{{first}} im ersten Monat, danach {{monthly}}/Monat",
+      "monthlyPrice": "{{monthly}}/Monat"
+    },
+    "freeChip": "Kostenloses Modell · {{provider}}",
+    "freeChipAny": "anderer Anbieter",
+    "freeChipUpgrade": "Upgrade für Top-Modelle",
+    "connection": {
+      "title": "Verbindungsproblem",
+      "body": "Prüfe deine Internetverbindung, dein VPN oder deinen Proxy und versuche es erneut."
+    },
+    "cause": {
+      "context_too_long": "Diese Unterhaltung ist zu lang für das Modell. Starte einen neuen Chat oder wähle ein Modell mit größerem Kontext.",
+      "key_invalid": "Dein {{provider}}-Schlüssel wurde abgelehnt – er ist ungültig oder abgelaufen.",
+      "own_key_quota": "Dein {{provider}}-Schlüssel hat sein Kontingent erreicht. Wechsle zu einem anderen Modell oder prüfe den Tarif des Schlüssels.",
+      "model_unavailable": "Dieses Modell konnte die Anfrage nicht annehmen. Wähle ein anderes Modell.",
+      "free_pool_spent": "Alle kostenlosen Quellen sind vorerst aufgebraucht. Verbinde eine weitere kostenlose Quelle oder wähle ein anderes Modell.",
+      "rate_limited": "Die kostenlosen Modelle sind gerade ausgelastet. Versuche es in ein paar Minuten erneut oder wechsle zu einem anderen Modell.",
+      "empty": "Das Modell hat eine leere Antwort geliefert. Versuche es erneut oder wechsle zu einem anderen Modell.",
+      "unknown": "Das Modell konnte das nicht abschließen. Versuche es erneut oder wechsle zu einem anderen Modell."
+    },
+    "action": {
+      "newChat": "Neuer Chat",
+      "fixKey": "Schlüssel prüfen",
+      "viewDetails": "Details anzeigen",
+      "tryAgain": "Erneut versuchen",
+      "switchToAbacus": "Zu Abacus wechseln (RouteLLM - Open)"
+    },
+    "channel": {
+      "wall": "Ich habe pausiert, weil deine kostenlosen Credits aufgebraucht sind.",
+      "expired": "Ich habe pausiert, weil deine kostenlosen Credits abgelaufen sind.",
+      "renews": "Kostenlose Credits erneuern sich jeden Monat.",
+      "offer": "{{plan}} kostet {{price}} und bietet dir:",
+      "link": "Hier upgraden: {{link}}",
+      "repeat": "Weiterhin pausiert: {{link}}",
+      "paidOut": "Ich habe pausiert, weil die Credits dieses Monats aufgebraucht sind. Füge Credits hinzu, um weiterzumachen: {{link}}",
+      "unavailable": "{{model}} ist nicht mehr verfügbar, daher konnte ich das nicht abschließen. Deine Nachricht bleibt erhalten: Wechsle in der Modellauswahl der App zu RouteLLM - Open, um weiterzumachen.",
+      "unavailableDown": "{{model}} ist gerade nicht verfügbar: Sein Anbieter schlägt weiterhin fehl. Deine Nachricht bleibt erhalten: Wechsle in der Modellauswahl der App zu RouteLLM - Open, um weiterzumachen.",
+      "unavailablePlan": "{{model}} ist in deinem Tarif nicht enthalten. Wechsle in der Modellauswahl der App zu RouteLLM - Open, um weiterzumachen, oder führe ein Upgrade durch, um es zu nutzen.",
+      "unavailableOut": "{{model}} ist nicht verfügbar, und deine Abacus-Credits sind aufgebraucht.",
+      "ownKeyCredit": "Dein {{provider}}-Schlüssel hat kein Guthaben mehr.",
+      "ownKeyRateLimit": "Dein {{provider}}-Schlüssel hat sein Ratenlimit erreicht.",
+      "ownKeyDown": "{{provider}} antwortet gerade nicht.",
+      "ownKeyRejected": "Dein {{provider}}-Schlüssel wurde abgelehnt – er ist ungültig oder abgelaufen. Korrigiere ihn in der App unter Einstellungen → Modelle.",
+      "ownKeyOffer": "Nutze stattdessen jedes Modell auf AbacusAI: {{link}}",
+      "ownKeyWeb": "Nutze ihn in AbacusAI Agent im Web: {{link}}",
+      "busy": "Die kostenlosen Modelle sind gerade ausgelastet.",
+      "connection": "Die Verbindung ist abgebrochen, daher konnte ich das nicht abschließen. Bitte versuche es gleich noch einmal.",
+      "notSignedIn": "Die Desktop-App ist gerade nicht bei Abacus.AI angemeldet. Öffne die App, melde dich an und schreib mir dann erneut.",
+      "generic": "Bei mir ist etwas schiefgelaufen, daher konnte ich das nicht abschließen. Bitte versuche es gleich noch einmal.",
+      "contactFailed": "Ich konnte {{name}} gerade nicht antworten.",
+      "contactFailedGeneric": "Ich konnte {{name}} gerade nicht antworten: Bei mir ist etwas schiefgelaufen.",
+      "someone": "jemandem"
+    },
+    "unavailable": {
+      "title": {
+        "retired": "{{model}} ist nicht mehr verfügbar",
+        "down": "{{model}} ist gerade nicht verfügbar",
+        "plan": "{{model}} ist in deinem Tarif nicht enthalten"
+      },
+      "why": {
+        "retired": "Es wurde aus den Modellen entfernt, die du nutzen kannst.",
+        "down": "Sein Anbieter schlägt weiterhin fehl, auch nach erneuten Versuchen."
+      },
+      "kept": "Deine Nachricht bleibt erhalten.",
+      "switch": "Zu RouteLLM - Open wechseln",
+      "pickModel": "Anderes Modell wählen",
+      "creditsLeft": "Noch {{credits}} Abacus-Credits",
+      "creditsOut": "Du hast außerdem deine kostenlosen Abacus-Credits aufgebraucht.",
+      "offer": "{{plan}} bietet dir:",
+      "upgradeIntro": "Upgrade · {{price}} im ersten Monat",
+      "upgradeMonthly": "Upgrade · {{price}}/Monat",
+      "seePlans": "Tarife ansehen",
+      "planBody": "Mach jetzt mit einem kostenlosen Modell weiter oder wechsle zu {{plan}}, um es zu nutzen.",
+      "planBodyAny": "Mach jetzt mit einem kostenlosen Modell weiter oder führe ein Upgrade durch, um es zu nutzen."
+    }
   }
 }

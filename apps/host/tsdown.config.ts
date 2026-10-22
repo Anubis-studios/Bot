@@ -5,6 +5,8 @@ export const hostAliases = {
   electron: resolve(import.meta.dirname, "src/electron-shim.ts"),
   "electron-store": resolve(import.meta.dirname, "src/store.ts"),
   "#main": resolve(import.meta.dirname, "../desktop/src/main"),
+  // The app's locale files, for the lines main words itself (channel-words.ts).
+  "#locales": resolve(import.meta.dirname, "../web/src/locales"),
   "@abacus-ai/contract": resolve(
     import.meta.dirname,
     "../../packages/contract/src"

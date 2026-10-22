@@ -10,8 +10,15 @@
  * names itself in a tooltip to the right, with its shortcut, except while
  * the sidebar floats: there a hover opens the floating sidebar for the
  * area, and a tooltip would fight it.
+ *
+ * Clicking the item already showing (VS Code's activity bar) toggles the
+ * sidebar, the same action as ⌘B and the title-bar toggle, rather than
+ * navigating to where you already are; any other item navigates and leaves
+ * the sidebar as it is. A masked pop-up is not "already showing": the click
+ * still takes you back to its background.
  */
 import { formatForDisplay } from "@tanstack/hotkeys";
+import { useLocation } from "@tanstack/react-router";
 import { useStore } from "@tanstack/react-store";
 import type { FocusEvent, PointerEvent, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -49,10 +56,19 @@ const railTarget = (
 /** Tooltips wait a beat so a pass over the rail shows none. */
 const TOOLTIP_DELAY_MS = 400;
 
+/** The rail's target is the page on screen, unmasked (not a pop-up over it). */
+const isCurrent = (
+  target: AreaLocation,
+  location: { pathname: string; search: unknown }
+): boolean =>
+  target.pathname === location.pathname &&
+  JSON.stringify(target.search) === JSON.stringify(location.search);
+
 const RailLink = ({
   area,
   target,
   transition,
+  onToggle,
   onPointerEnter,
   onFocus,
   ...props
@@ -60,6 +76,8 @@ const RailLink = ({
   area: ShellArea;
   target: AreaLocation;
   transition: NavType;
+  /** The item is already showing: a plain click toggles the sidebar instead. */
+  onToggle?: () => void;
   onPointerEnter?: (event: PointerEvent<HTMLAnchorElement>) => void;
   onFocus?: (event: FocusEvent<HTMLAnchorElement>) => void;
   className?: string;
@@ -84,14 +102,18 @@ const RailLink = ({
         onFocus?.(event);
       }}
       onClick={(event) => {
-        if (
-          area === "sessions" &&
-          target.pathname === "/sessions/new" &&
+        const plain =
           !event.metaKey &&
           !event.ctrlKey &&
           !event.shiftKey &&
-          event.button === 0
-        ) {
+          event.button === 0;
+        if (!plain) return;
+        if (onToggle != null) {
+          event.preventDefault();
+          onToggle();
+          return;
+        }
+        if (area === "sessions" && target.pathname === "/sessions/new") {
           event.preventDefault();
           void navigate({
             to: "/sessions/new",
@@ -143,6 +165,7 @@ const RailItem = ({
   iconsOnly,
   tooltip,
   onPreview,
+  onToggle,
 }: {
   area: ShellArea;
   active: boolean;
@@ -153,11 +176,13 @@ const RailItem = ({
   tooltip: boolean;
   /** A mouse over the item: the floating sidebar switches to this area. */
   onPreview?: (area: ShellArea) => void;
+  onToggle?: () => void;
 }) => (
   <RailTip label={label} enabled={tooltip}>
     <RailLink
       area={area}
       target={target}
+      onToggle={onToggle}
       onPointerEnter={(event) => {
         if (event.pointerType === "mouse") onPreview?.(area);
       }}
@@ -201,6 +226,7 @@ export const Rail = ({
   floatingEnabled,
   iconsOnly = false,
   label,
+  onToggleSidebar,
 }: {
   area: ShellArea | undefined;
   /** Overrides the landmark name (the gallery shows several rails). */
@@ -209,11 +235,26 @@ export const Rail = ({
   floatingEnabled: boolean;
   /** Settings › Appearance "Rail: icons only". */
   iconsOnly?: boolean;
+  /**
+   * The shell's sidebar toggle (⌘B): clicking the item already showing runs
+   * it. Left out, every click navigates (the phone's drawer, the gallery).
+   */
+  onToggleSidebar?: () => void;
 }) => {
   const { t } = useTranslation();
   const system = useSystem();
   const last = useStore(shellStore, (state) => state.lastLocationByArea);
+  const location = useLocation();
   const intent = useFloatingIntent();
+  /** The toggle for an item already showing, else nothing (it navigates). */
+  const toggleFor = (item: ShellArea, target: AreaLocation) =>
+    onToggleSidebar != null && area === item && isCurrent(target, location)
+      ? () => {
+          // A hover pending on the rail must not reopen what the click closed.
+          intent.cancel();
+          onToggleSidebar();
+        }
+      : undefined;
   // While the sidebar floats, a hover opens it for the area: no tooltips.
   const tooltip = iconsOnly && !floatingEnabled;
 
@@ -237,19 +278,23 @@ export const Rail = ({
         else intent.cancel();
       }}
     >
-      {RAIL_AREAS.map((item) => (
-        <RailItem
-          key={item}
-          area={item}
-          active={area === item}
-          icon={item}
-          label={t(`shell.rail.${item}`)}
-          target={railTarget(item, last)}
-          iconsOnly={iconsOnly}
-          tooltip={tooltip}
-          onPreview={floatingEnabled ? previewFloatingArea : undefined}
-        />
-      ))}
+      {RAIL_AREAS.map((item) => {
+        const target = railTarget(item, last);
+        return (
+          <RailItem
+            key={item}
+            area={item}
+            active={area === item}
+            icon={item}
+            label={t(`shell.rail.${item}`)}
+            target={target}
+            iconsOnly={iconsOnly}
+            tooltip={tooltip}
+            onPreview={floatingEnabled ? previewFloatingArea : undefined}
+            onToggle={toggleFor(item, target)}
+          />
+        );
+      })}
       <div className="flex-1" />
       <div className="flex h-9 shrink-0 items-center justify-center">
         <AgentLink />
@@ -265,6 +310,7 @@ export const Rail = ({
           area="settings"
           data-tour-target="settings"
           target={railTarget("settings", last)}
+          onToggle={toggleFor("settings", railTarget("settings", last))}
           transition="settings-in"
           aria-label={t("shell.rail.settings")}
           // The tooltip names it; otherwise the native one does.

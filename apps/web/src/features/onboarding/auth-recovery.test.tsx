@@ -159,3 +159,119 @@ it("cancel after credentials are saved skips signup without allowing a stale han
   expect(connect).not.toHaveBeenCalled();
   expect(onboardingStore.state.signIn?.id).toBe(currentAttempt);
 });
+
+const paymentScreens = [
+  {
+    reason: "unconfirmed",
+    title: "Choose a plan to keep using AbacusAI Bot",
+    cta: "Upgrade",
+  },
+  { reason: "trial_ended", title: "Your free trial has ended", cta: "Upgrade" },
+  { reason: "lapsed", title: "Your subscription has ended", cta: "Renew" },
+] as const;
+
+it.each(paymentScreens)(
+  "a sign-in refused for payment ($reason) shows its screen, once, not the sign-in again",
+  async ({ reason, title, cta }) => {
+    let held = false;
+    const authStart = vi.fn(async () => {
+      held = true;
+      return { ok: false as const, error: "payment-required" };
+    });
+    app = await renderApp("/onboarding/welcome", {
+      onboarded: false,
+      signedIn: false,
+      authStart,
+      procedures: {
+        account: {
+          payment: os.account.payment.handler(() => (held ? { reason } : null)),
+          billingPlan: os.account.billingPlan.handler(
+            () =>
+              ({
+                current: {
+                  planName: "Free",
+                  creditsRemaining: null,
+                  creditsGranted: null,
+                  freeTierExpiresAt: null,
+                },
+                plans: [],
+                upgrades: [
+                  {
+                    plan: "basic",
+                    planName: "Basic",
+                    priceText: "Intro offer",
+                    features: ["Top models"],
+                    url: null,
+                  },
+                ],
+                topUpUrl: null,
+                upgradeInMobileApp: false,
+              }) as never
+          ),
+        },
+      },
+    });
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Sign up for free" })
+    );
+
+    expect(await screen.findByRole("heading", { name: title })).not.toBeNull();
+    expect(screen.getByRole("button", { name: cta })).not.toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Go to Abacus AI Agent on the web →" })
+    ).not.toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Sign in with a different account" })
+    ).not.toBeNull();
+    // The plan comes from billing_plan; a lapsed plan is renewed, not sold.
+    await waitFor(() =>
+      expect(screen.queryByText("Upgrade to Basic — Intro offer") != null).toBe(
+        reason !== "lapsed"
+      )
+    );
+    expect(
+      screen.queryByRole("button", { name: "Sign up for free" })
+    ).toBeNull();
+    // Only a plan whose payment did not confirm offers subscribers a report.
+    expect(
+      screen.queryByRole("button", { name: "Report an issue" }) != null
+    ).toBe(reason === "unconfirmed");
+    expect(authStart).toHaveBeenCalledOnce();
+  }
+);
+
+it("Try again after paying on the web signs in without a restart", async () => {
+  let paid = false;
+  app = await renderApp("/onboarding/welcome", {
+    onboarded: false,
+    signedIn: false,
+    authStart: async () => ({ ok: false, error: "payment-required" }),
+    procedures: {
+      settings: {
+        get: os.settings.get.handler(
+          () =>
+            ({
+              defaultModel: null,
+              apiKeys: paid ? { ABACUS_API_KEY: "test-credential" } : {},
+            }) as never
+        ),
+      },
+      account: {
+        payment: os.account.payment.handler(({ input }) => {
+          if (input?.refresh) paid = true;
+          return paid ? null : { reason: "trial_ended" };
+        }),
+      },
+    },
+  });
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Sign up for free" })
+  );
+  fireEvent.click(await screen.findByRole("button", { name: "Try again" }));
+  await waitFor(() =>
+    expect(app!.router.state.location.pathname).toBe("/onboarding/connected")
+  );
+  expect(
+    screen.queryByRole("heading", { name: "Your free trial has ended" })
+  ).toBeNull();
+});

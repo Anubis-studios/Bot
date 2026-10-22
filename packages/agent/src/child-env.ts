@@ -3,6 +3,12 @@
  * `env.PATH` misses it; here each name appears once and the path one is `PATH`.
  */
 
+/**
+ * Names the app's own Python environment when the desktop put it first on the
+ * agent's PATH, because the machine has no usable Python of its own.
+ */
+export const MANAGED_PYTHON_ENV = "ABACUSAI_BOT_PYTHON_ENV";
+
 /** Variables laid over the base; an `undefined` value removes one, as a spread would. */
 export type EnvOverrides = Readonly<Record<string, string | undefined>>;
 

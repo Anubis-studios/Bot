@@ -5,6 +5,12 @@ body:
   - type: markdown
     attributes:
       value: |
+        **This page is public.** Don't include payment details, card numbers, order or invoice IDs,
+        email addresses, phone numbers or API keys. For billing or account questions, just describe
+        what you see; we'll follow up.
+  - type: markdown
+    attributes:
+      value: |
         Search existing issues before opening a new report. Report vulnerabilities
         [privately](https://github.com/abacusai/abacusai-bot/security/advisories/new).
         Remove credentials and private data from logs and screenshots.

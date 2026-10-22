@@ -1,5 +1,10 @@
 [
   {
+    "prefix": "checkpoints.kind.",
+    "values": ["modified", "created", "deleted"],
+    "sources": ["features/sessions/chat/checkpoint-card.tsx"]
+  },
+  {
     "prefix": "sessions.pr.",
     "values": [
       "approved",
@@ -339,6 +344,7 @@
       "browser_snapshot",
       "browser_tabs",
       "browser_task",
+      "checkpoint_diff",
       "code_map",
       "connect_connector",
       "cronjob",
@@ -381,6 +387,7 @@
       "read_output",
       "read_telegram_messages",
       "read_whatsapp_messages",
+      "restore_checkpoint",
       "run_tests",
       "send_discord_message",
       "send_telegram_message",
@@ -1557,5 +1564,66 @@
       "bots.body"
     ],
     "sources": ["features/tour/card.tsx", "features/tour/gallery.tsx"]
+  },
+  {
+    "prefix": "outcome.cause.",
+    "values": [
+      "context_too_long",
+      "key_invalid",
+      "own_key_quota",
+      "model_unavailable",
+      "free_pool_spent",
+      "rate_limited",
+      "empty",
+      "unknown"
+    ],
+    "sources": ["features/chat/kit/status/status.tsx"]
+  },
+  {
+    "prefix": "outcome.plan.",
+    "values": ["introPrice", "monthlyPrice"],
+    "sources": ["../../../packages/contract/src/billing-plan.ts"]
+  },
+  {
+    "prefix": "outcome.channel.",
+    "values": [
+      "wall",
+      "expired",
+      "renews",
+      "offer",
+      "link",
+      "repeat",
+      "unavailable",
+      "unavailableDown",
+      "unavailablePlan",
+      "unavailableOut",
+      "paidOut",
+      "ownKeyCredit",
+      "ownKeyRateLimit",
+      "ownKeyDown",
+      "ownKeyRejected",
+      "ownKeyOffer",
+      "ownKeyWeb",
+      "busy",
+      "connection",
+      "notSignedIn",
+      "generic",
+      "contactFailed",
+      "contactFailedGeneric",
+      "someone"
+    ],
+    "sources": [
+      "../../desktop/src/main/services/messaging/chat-failure-reply.ts"
+    ]
+  },
+  {
+    "prefix": "outcome.unavailable.title.",
+    "values": ["retired", "down", "plan"],
+    "sources": ["components/credits-card/model-unavailable.tsx"]
+  },
+  {
+    "prefix": "outcome.unavailable.why.",
+    "values": ["retired", "down"],
+    "sources": ["components/credits-card/model-unavailable.tsx"]
   }
 ]

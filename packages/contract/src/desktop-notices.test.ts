@@ -39,6 +39,8 @@ function fixture() {
   json("packages/agent/dist/main.js.map", {
     sources: ["../../../node_modules/bundled/index.js"],
   });
+  // The libraries the agent's scripts require, bundled one per file.
+  json("packages/agent/dist/modules/library.js.map", { sources: [] });
   json("apps/desktop/dist/main/index.js.map", { sources: [] });
   json("apps/desktop/dist/preload/index.cjs.map", { sources: [] });
   json("apps/desktop/dist/renderer/assets/index.js.map", {

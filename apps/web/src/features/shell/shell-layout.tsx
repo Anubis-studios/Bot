@@ -362,6 +362,7 @@ export const ShellLayout = ({
                   area={area}
                   floatingEnabled={floatingEnabled}
                   iconsOnly={prefs.appearance?.railIconsOnly === true}
+                  onToggleSidebar={sidebarToggle.toggle}
                 />
               )}
               <PaneBoundary resetKey={area}>

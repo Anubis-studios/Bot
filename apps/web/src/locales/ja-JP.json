@@ -562,6 +562,7 @@
       "browser_snapshot": "ページを操作可能な要素の一覧として読み取ります。",
       "browser_tabs": "ブラウザーのタブを一覧表示、切り替え、閉じます。",
       "browser_task": "Hand a whole web task to a browser sub-agent and get back the answer.",
+      "checkpoint_diff": "Show what earlier turns changed on disk, from their checkpoints.",
       "code_map": "Index the functions and classes in a file or folder.",
       "connect_connector": "Ask the user to attach a service, such as Gmail or Slack, so its tools become available.",
       "cronjob": "Create, list, pause, or run scheduled tasks.",
@@ -606,6 +607,7 @@
       "read_telegram_messages": "求めに応じて最近の Telegram メッセージを読みます。",
       "read_whatsapp_messages": "求めに応じて最近の WhatsApp メッセージを読みます。",
       "run_tests": "Run the project's tests and report what passed and failed.",
+      "restore_checkpoint": "Put files back as they were before an earlier turn changed them.",
       "send_discord_message": "Discord でメッセージを送信します。",
       "send_telegram_message": "Telegram でメッセージを送信します。",
       "send_to_whatsapp": "AbacusAI Bot の番号からあなたの WhatsApp にメッセージを送ります。",
@@ -2821,7 +2823,9 @@
       "providerConnectHint": "接続すると、無料のものを含むモデルを使えます。",
       "retryAttachment": "Retry attachment",
       "folderItems_one": "{{count}} item",
-      "folderItems_other": "{{count}} items"
+      "folderItems_other": "{{count}} items",
+      "includedIn": "{{plan}} に含まれます",
+      "includedInPaid": "有料プランに含まれます"
     },
     "day": {
       "today": "Today",
@@ -3165,7 +3169,14 @@
     },
     "paidFeature": {
       "title": "{{feature}}はBasicに含まれています",
-      "webTitle": "{{feature}}はBasicに含まれています(Web版のAbacus AI Agentで利用できます)"
+      "webTitle": "{{feature}}はBasicに含まれています(Web版のAbacus AI Agentで利用できます)",
+      "webBody": "Basicでは、Web版のAbacus AI Agentで画像や動画の作成・編集、音声の作成ができます。",
+      "agentTitle": "{{feature}}はWeb版のAbacus AI Agentで利用できます",
+      "agentBody": "ご利用のプランでは、Web版のAbacus AI Agentで画像や動画の作成・編集、音声の作成ができます。リクエストは入力済みです。編集したい画像はそちらで添付してください。",
+      "openAgent": "Abacus AI Agentで開く"
+    },
+    "botHelp": {
+      "open": "開く"
     }
   },
   "notch": {
@@ -3850,6 +3861,30 @@
     "showLess": "Show less",
     "showMore": "+{{count}} more"
   },
+  "checkpoints": {
+    "summary_one": "Changed {{count}} file",
+    "summary_other": "Changed {{count}} files",
+    "restore": "Restore to before this turn",
+    "restoreFile": "Restore this file",
+    "undoRestore": "Undo restore",
+    "busy": "Wait for the agent to finish this turn",
+    "binary": "binary",
+    "noCopy": "no copy kept",
+    "partial": "Some folders were too large to keep whole; files past the limit are not covered.",
+    "failed": "Could not restore. Try again once the agent has finished.",
+    "restored_one": "Restored {{count}} file.",
+    "restored_other": "Restored {{count}} files.",
+    "unrestorable_one": "{{count}} file was too large to keep a copy of.",
+    "unrestorable_other": "{{count}} files were too large to keep a copy of.",
+    "conflicts_one": "{{count}} file changed after this turn and was left as it is.",
+    "conflicts_other": "{{count}} files changed after this turn and were left as they are.",
+    "force": "Restore anyway",
+    "kind": {
+      "modified": "Edited",
+      "created": "Added",
+      "deleted": "Deleted"
+    }
+  },
   "devicePanel": {
     "axPermissionNeeded": "ウインドウを表示せずにシミュレーターをミラーリングするにはアクセシビリティの許可が必要です。",
     "boot": "起動",
@@ -4162,6 +4197,24 @@
     "waitingTitle": "ブラウザで決済を完了してください",
     "waitingToSend": "送信待ち：「{{text}}」"
   },
+  "paymentRequired": {
+    "unconfirmedTitle": "AbacusAI Bot を引き続き使うにはプランを選んでください",
+    "unconfirmedBody": "サインイン済みですが、AbacusAI Bot を使うにはアカウントにプランが必要です。",
+    "alreadySubscribed": "すでにご契約中ですか？{{link}}",
+    "reportIssue": "問題を報告",
+    "trialEndedTitle": "無料トライアルが終了しました",
+    "trialEndedBody": "このアカウントで AbacusAI Bot を引き続き使うにはアップグレードしてください。",
+    "lapsedTitle": "サブスクリプションが終了しました",
+    "lapsedBody": "このアカウントで AbacusAI Bot を引き続き使うにはプランを更新してください。",
+    "upgrade": "アップグレード",
+    "renew": "更新する",
+    "webAgent": "Web の Abacus AI Agent へ →",
+    "tryAgain": "再試行",
+    "checking": "確認しています…",
+    "stillBlocked": "このアカウントの支払いはまだ確認できません。",
+    "waiting": "ブラウザで支払いを完了してください。支払いが完了すると、アプリはそのまま続きます。",
+    "otherAccount": "別のアカウントでサインイン"
+  },
   "visualizer": {
     "loading": "ビジュアライゼーションを読み込み中…"
   },
@@ -4335,5 +4388,94 @@
     "outOfCredit": "Your {{provider}} key is out of credit",
     "paidBody": "Use it in AbacusAI Agent on the web: the top models are included in your plan.",
     "rateLimited": "Your {{provider}} key hit its rate limit"
+  },
+  "outcome": {
+    "wall": {
+      "title": "無料クレジットを使い切りました",
+      "expiredTitle": "無料クレジットの有効期限が切れました",
+      "paidTitle": "今月のクレジットを使い切りました",
+      "renews": "無料クレジットは毎月更新されます。",
+      "balance": "残り {{remaining}} / {{granted}} クレジット",
+      "warning": "このまま続けると、ボットは別のプロバイダー（{{providers}}）の無料モデルに切り替わります。品質はかなり低く、ミスが増え、動いているコードを壊すことがあり、利用制限にもよく達します。",
+      "offer": "{{plan}} にアップグレード — {{price}}",
+      "upgradeCta": "{{plan}} にアップグレード",
+      "continueFree": "無料モデルで続ける（品質は低め）"
+    },
+    "plan": {
+      "introPrice": "初月 {{first}}、以降 {{monthly}}/月",
+      "monthlyPrice": "{{monthly}}/月"
+    },
+    "freeChip": "無料モデル · {{provider}}",
+    "freeChipAny": "別のプロバイダー",
+    "freeChipUpgrade": "トップモデルにアップグレード",
+    "connection": {
+      "title": "接続の問題",
+      "body": "インターネット接続、VPN、プロキシを確認して、もう一度お試しください。"
+    },
+    "cause": {
+      "context_too_long": "この会話はモデルには長すぎます。新しいチャットを始めるか、より大きなコンテキストのモデルを選んでください。",
+      "key_invalid": "{{provider}} のキーが拒否されました。無効か期限切れです。",
+      "own_key_quota": "{{provider}} のキーが上限に達しました。別のモデルに切り替えるか、キーのプランを確認してください。",
+      "model_unavailable": "このモデルはリクエストを受け付けられませんでした。別のモデルを選んでください。",
+      "free_pool_spent": "無料のソースは今のところすべて使い切りました。別の無料ソースを接続するか、別のモデルを選んでください。",
+      "rate_limited": "無料モデルは現在混み合っています。数分後にもう一度試すか、別のモデルに切り替えてください。",
+      "empty": "モデルから空の返信が返されました。もう一度試すか、別のモデルに切り替えてください。",
+      "unknown": "モデルはこれを完了できませんでした。もう一度試すか、別のモデルに切り替えてください。"
+    },
+    "action": {
+      "newChat": "新しいチャット",
+      "fixKey": "キーを確認",
+      "viewDetails": "詳細を表示",
+      "tryAgain": "再試行",
+      "switchToAbacus": "Abacus に切り替える（RouteLLM - Open）"
+    },
+    "channel": {
+      "wall": "無料クレジットを使い切ったため、一時停止しました。",
+      "expired": "無料クレジットの有効期限が切れたため、一時停止しました。",
+      "renews": "無料クレジットは毎月更新されます。",
+      "offer": "{{plan}} は {{price}} で、次のものが使えます:",
+      "link": "アップグレードはこちら: {{link}}",
+      "repeat": "一時停止中です: {{link}}",
+      "paidOut": "今月のクレジットを使い切ったため、一時停止しました。続けるにはクレジットを追加してください: {{link}}",
+      "unavailable": "{{model}} は利用できなくなったため、完了できませんでした。メッセージは保持されています。アプリのモデル選択で RouteLLM - Open に切り替えると続けられます。",
+      "unavailableDown": "{{model}} は現在利用できません。プロバイダーでエラーが続いています。メッセージは保持されています。アプリのモデル選択で RouteLLM - Open に切り替えると続けられます。",
+      "unavailablePlan": "{{model}} はご利用のプランに含まれていません。アプリのモデル選択で RouteLLM - Open に切り替えて続けるか、アップグレードしてご利用ください。",
+      "unavailableOut": "{{model}} は利用できず、Abacus クレジットも使い切りました。",
+      "ownKeyCredit": "{{provider}} のキーの残高がなくなりました。",
+      "ownKeyRateLimit": "{{provider}} のキーが利用制限に達しました。",
+      "ownKeyDown": "{{provider}} は現在応答していません。",
+      "ownKeyRejected": "{{provider}} のキーが拒否されました。無効か期限切れです。アプリの 設定 → モデル で修正してください。",
+      "ownKeyOffer": "代わりに AbacusAI のモデルを使えます: {{link}}",
+      "ownKeyWeb": "Web 版 AbacusAI Agent で使えます: {{link}}",
+      "busy": "無料モデルは現在混み合っています。",
+      "connection": "接続が切れたため、完了できませんでした。少し待ってからもう一度お試しください。",
+      "notSignedIn": "デスクトップアプリが現在 Abacus.AI にサインインしていません。アプリを開いてサインインし、もう一度メッセージを送ってください。",
+      "generic": "こちらで問題が起きたため、完了できませんでした。少し待ってからもう一度お試しください。",
+      "contactFailed": "先ほど {{name}} さんに返信できませんでした。",
+      "contactFailedGeneric": "先ほど {{name}} さんに返信できませんでした: こちらで問題が起きました。",
+      "someone": "相手"
+    },
+    "unavailable": {
+      "title": {
+        "retired": "{{model}} は利用できなくなりました",
+        "down": "{{model}} は現在利用できません",
+        "plan": "{{model}} はご利用のプランに含まれていません"
+      },
+      "why": {
+        "retired": "利用できるモデルから削除されました。",
+        "down": "再試行してもプロバイダーでエラーが続いています。"
+      },
+      "kept": "メッセージは保持されています。",
+      "switch": "RouteLLM - Open に切り替える",
+      "pickModel": "別のモデルを選ぶ",
+      "creditsLeft": "Abacus クレジット残り {{credits}}",
+      "creditsOut": "無料の Abacus クレジットも使い切りました。",
+      "offer": "{{plan}} で利用できるもの:",
+      "upgradeIntro": "アップグレード · 初月 {{price}}",
+      "upgradeMonthly": "アップグレード · {{price}}/月",
+      "seePlans": "プランを見る",
+      "planBody": "今は無料モデルで続けるか、{{plan}} にアップグレードしてご利用ください。",
+      "planBodyAny": "今は無料モデルで続けるか、プランをアップグレードしてご利用ください。"
+    }
   }
 }

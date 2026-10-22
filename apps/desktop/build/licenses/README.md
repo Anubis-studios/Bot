@@ -30,8 +30,9 @@ maps add shipped code declared as development dependencies. Source asset
 imports, copied font/template texts, and `sources.json` cover non-code assets.
 Sounds are synthesized by the app. Electron's distribution supplies its MIT
 license and the complete Chromium/embedded Node.js notices, copied verbatim
-into both web assets and installer resources. Python is invoked from the user's
-system; no Python distribution is bundled.
+into both web assets and installer resources. No Python distribution is
+bundled: on a machine without one, the agent shell's Python is downloaded on
+first use (uv and CPython, from their own releases).
 
 `license-data.mjs` contains the SPDX allowlist. MPL-2.0 requires preservation of
 notices and availability of modified covered source files. Unknown terms,

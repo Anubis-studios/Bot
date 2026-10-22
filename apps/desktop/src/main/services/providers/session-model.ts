@@ -6,7 +6,8 @@
  * stored default or bot model (a removed credential) is never started.
  *
  * Only an authoritative answer moves a session off its stored pin: a catalog
- * row for the wanted model that says its credential is gone. A catalog that
+ * row for the wanted model that says its credential is gone, or that the
+ * account's plan does not include it (locked). A catalog that
  * cannot be read or comes back empty, or one that simply lacks the wanted
  * id (offline, the plan tier unknown, a live list that did not answer),
  * keeps the stored pin; a brand-new session (no pin yet) then takes the
@@ -14,6 +15,7 @@
  * cached recommendation.
  */
 import {
+  modelAccess,
   resolveConfiguredModel,
   type ModelAvailability,
 } from "@abacus-ai/contract/models";
@@ -78,6 +80,10 @@ export const resolveSessionModel = async (
   });
   if (resolved != null) return resolved;
   // Nothing runnable: a pinned session keeps its pin (null: no write); a new
-  // one is still pinned, so it does not start on the CLI's own fallback.
-  return pinned != null ? null : syncDefault();
+  // one is still pinned, so it does not start on the CLI's own fallback, but
+  // never on a model its plan does not include.
+  if (pinned != null) return null;
+  return row != null && modelAccess(row) === "locked"
+    ? present(sources.cachedRecommended?.())
+    : syncDefault();
 };

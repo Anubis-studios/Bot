@@ -11,6 +11,7 @@ import type {
   PermissionDescriptor,
   RunOutcomeRecord,
 } from "@abacus-ai/contract/contract";
+import { freeLaneOf } from "@abacus-ai/contract/contract/ai-thread";
 import {
   applyMessageReaction,
   type MessageReactionChange,
@@ -1249,10 +1250,12 @@ export class ThreadRelay {
 
     const outcome = record(event.outcome);
     const usage = Array.isArray(event.usage) ? event.usage[0] : undefined;
+    const freeLane = freeLaneOf(event.metadata);
     return {
       ...base,
       kind: outcome.type === "cancelled" ? "cancelled" : "success",
       ...(usage != null && typeof usage === "object" && { usage }),
+      ...(freeLane != null && { freeLane }),
     };
   }
 

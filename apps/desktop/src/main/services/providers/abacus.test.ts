@@ -21,9 +21,12 @@ vi.stubGlobal("fetch", fetchMock);
 
 const {
   abacusCredentialRejected,
+  abacusPaymentRequired,
+  cachedAbacusModels,
   clearAbacusCache,
   fetchAbacusAccount,
   fetchAbacusModels,
+  onAbacusPaymentChange,
 } = await import("./abacus");
 const { ConnectivityService } =
   await import("../connectivity/connectivity-service");
@@ -209,6 +212,98 @@ describe("whether the key has been refused outright", () => {
   });
 });
 
+/**
+ * The payment gate's 402: the key is good, the account has to pay. It is
+ * neither a refused key (no sign-out) nor a blip (no stale profile).
+ */
+describe("an account the payment gate refuses", () => {
+  const refusal = (reason?: string) =>
+    new Response(
+      JSON.stringify({
+        success: false,
+        error: "Payment required",
+        errorType: "PaymentMethodRequired",
+        ...(reason == null ? {} : { reason, abacusaibotOnly: true }),
+      }),
+      { status: 402 }
+    );
+
+  it.each(["unconfirmed", "trial_ended", "lapsed"] as const)(
+    "is signed in but must pay (%s), and the key is not refused",
+    async (reason) => {
+      fetchMock.mockResolvedValueOnce(refusal(reason));
+
+      await expect(fetchAbacusAccount(true)).resolves.toBeNull();
+
+      expect(abacusPaymentRequired()).toEqual({ reason });
+      expect(abacusCredentialRejected()).toBe(false);
+    }
+  );
+
+  it("has no reason from a server that sends none", async () => {
+    fetchMock.mockResolvedValueOnce(refusal());
+
+    await fetchAbacusAccount(true);
+
+    expect(abacusPaymentRequired()).toEqual({ reason: null });
+  });
+
+  it("keeps 401 and 403 as a refused key, not a payment", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 401 }));
+
+    await fetchAbacusAccount(true);
+
+    expect(abacusCredentialRejected()).toBe(true);
+    expect(abacusPaymentRequired()).toBeNull();
+  });
+
+  it("does not keep serving the profile it had before the refusal", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ name: "Ada" }), { status: 200 })
+    );
+    await fetchAbacusAccount(true);
+    fetchMock.mockResolvedValueOnce(refusal("lapsed"));
+
+    await expect(fetchAbacusAccount(true)).resolves.toBeNull();
+    await expect(fetchAbacusAccount()).resolves.toBeNull();
+  });
+
+  it("offers no Abacus model while the account must pay", async () => {
+    fetchMock.mockResolvedValueOnce(refusal("trial_ended"));
+
+    await expect(fetchAbacusModels()).resolves.toEqual([]);
+
+    expect(abacusPaymentRequired()).toEqual({ reason: "trial_ended" });
+    expect(cachedAbacusModels()).toEqual([]);
+  });
+
+  it("is over once the account pays, and says so once per change", async () => {
+    fetchMock.mockResolvedValueOnce(new Response("{}", { status: 200 }));
+    await fetchAbacusAccount(true);
+    const heard = vi.fn();
+    const stop = onAbacusPaymentChange(heard);
+    fetchMock.mockResolvedValueOnce(refusal("trial_ended"));
+    await fetchAbacusAccount(true);
+    // A key change clears the verdict; the same answer again is not news.
+    clearAbacusCache();
+    fetchMock.mockResolvedValueOnce(refusal("trial_ended"));
+    await fetchAbacusAccount(true);
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ subscription_tier: "basic" }), {
+        status: 200,
+      })
+    );
+
+    await expect(fetchAbacusAccount(true)).resolves.toMatchObject({
+      subscription_tier: "basic",
+    });
+
+    expect(abacusPaymentRequired()).toBeNull();
+    expect(heard).toHaveBeenCalledTimes(2);
+    stop();
+  });
+});
+
 describe("fetchAbacusModels without a network", () => {
   it("offers the account's last fetched list after a restart", async () => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), "desktop-abacus-"));
@@ -332,5 +427,64 @@ describe("connectivity", () => {
       expect(probe).toHaveBeenCalledTimes(1);
       connectivity.stop();
     });
+  });
+});
+
+describe("a model the plan refused", () => {
+  const freeAccount = (tier: string) =>
+    new Response(JSON.stringify({ subscription_tier: tier }), { status: 200 });
+
+  it("stays locked across a catalog refresh and a restart, and lifts on a new plan", async () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "desktop-abacus-"));
+    vi.stubEnv("ABACUSAI_BOT_HOME", home);
+    try {
+      fetchMock.mockResolvedValueOnce(freeAccount("free"));
+      await fetchAbacusAccount(true);
+      const { lockAbacusModelForPlan, planLockedAbacusIds, planRefusedModel } =
+        await import("./abacus");
+      const model = planRefusedModel({
+        actions: [
+          { type: "switch-model" },
+          { type: "model-unavailable", cause: "plan", model: "abacus/paid" },
+        ],
+      });
+      expect(model).toBe("abacus/paid");
+      expect(
+        planRefusedModel({ actions: [{ type: "upgrade-abacus" }] })
+      ).toBeNull();
+      // A retired or failing model is not locked: only the plan's refusal.
+      expect(
+        planRefusedModel({
+          actions: [
+            { type: "model-unavailable", cause: "retired", model: "abacus/x" },
+          ],
+        })
+      ).toBeNull();
+      lockAbacusModelForPlan(model!);
+      // Only Abacus ids: another provider's model is its key's business.
+      lockAbacusModelForPlan("openai/gpt");
+      expect([...planLockedAbacusIds()]).toEqual(["abacus/paid"]);
+
+      // A refresh drops the caches, not what the platform refused.
+      clearAbacusCache();
+      fetchMock.mockResolvedValueOnce(freeAccount("free"));
+      await fetchAbacusAccount(true);
+      expect([...planLockedAbacusIds()]).toEqual(["abacus/paid"]);
+
+      // A new process reads it back from disk.
+      vi.resetModules();
+      const restarted = await import("./abacus");
+      fetchMock.mockResolvedValueOnce(freeAccount("free"));
+      await restarted.fetchAbacusAccount(true);
+      expect([...restarted.planLockedAbacusIds()]).toEqual(["abacus/paid"]);
+
+      // The upgrade: the plan changed, so the lock is lifted.
+      fetchMock.mockResolvedValueOnce(freeAccount("basic"));
+      await restarted.fetchAbacusAccount(true);
+      expect(restarted.planLockedAbacusIds().size).toBe(0);
+    } finally {
+      vi.unstubAllEnvs();
+      fs.rmSync(home, { recursive: true, force: true });
+    }
   });
 });

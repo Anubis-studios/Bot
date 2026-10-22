@@ -7,6 +7,7 @@ import {
 import { lazy, Suspense, useEffect } from "react";
 
 import { WhatsAppIntro } from "#platform/whatsapp-bot";
+import { PaymentRequiredDialog } from "#renderer/components/payment-required";
 import { DEFAULT_PREFS } from "#renderer/data/db/prefs";
 import { BotsGlobals } from "#renderer/features/bots/watcher";
 import { finishCompletion } from "#renderer/features/onboarding/actions";
@@ -93,6 +94,7 @@ const ShellRoute = () => {
       {!provisional && tour == null && <NewLookNotice />}
       <SessionsGlobals preview={dispatchPreview} />
       <UpgradeDialogHost />
+      {!provisional && <PaymentRequiredDialog />}
     </>
   );
 };

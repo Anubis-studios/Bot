@@ -562,6 +562,7 @@
       "browser_snapshot": "페이지를 상호작용 요소 목록으로 읽습니다.",
       "browser_tabs": "브라우저 탭을 나열하고 전환하고 닫습니다.",
       "browser_task": "Hand a whole web task to a browser sub-agent and get back the answer.",
+      "checkpoint_diff": "Show what earlier turns changed on disk, from their checkpoints.",
       "code_map": "Index the functions and classes in a file or folder.",
       "connect_connector": "Ask the user to attach a service, such as Gmail or Slack, so its tools become available.",
       "cronjob": "Create, list, pause, or run scheduled tasks.",
@@ -606,6 +607,7 @@
       "read_telegram_messages": "요청 시 최근 Telegram 메시지를 읽습니다.",
       "read_whatsapp_messages": "요청 시 최근 WhatsApp 메시지를 읽습니다.",
       "run_tests": "Run the project's tests and report what passed and failed.",
+      "restore_checkpoint": "Put files back as they were before an earlier turn changed them.",
       "send_discord_message": "Discord으로 메시지를 보냅니다.",
       "send_telegram_message": "Telegram으로 메시지를 보냅니다.",
       "send_to_whatsapp": "AbacusAI Bot 번호에서 내 WhatsApp으로 메시지를 보냅니다.",
@@ -2821,7 +2823,9 @@
       "providerConnectHint": "연결하면 무료 모델을 포함해 그 모델을 사용할 수 있습니다.",
       "retryAttachment": "Retry attachment",
       "folderItems_one": "{{count}} item",
-      "folderItems_other": "{{count}} items"
+      "folderItems_other": "{{count}} items",
+      "includedIn": "{{plan}}에 포함",
+      "includedInPaid": "유료 요금제에 포함"
     },
     "day": {
       "today": "Today",
@@ -3165,7 +3169,14 @@
     },
     "paidFeature": {
       "title": "{{feature}}은(는) Basic에 포함되어 있습니다",
-      "webTitle": "{{feature}}은(는) Basic에 포함되어 있습니다(웹의 Abacus AI Agent에서 사용)"
+      "webTitle": "{{feature}}은(는) Basic에 포함되어 있습니다(웹의 Abacus AI Agent에서 사용)",
+      "webBody": "Basic에는 웹의 Abacus AI Agent에서 이미지와 동영상을 만들고 편집하고 오디오를 만드는 기능이 포함됩니다.",
+      "agentTitle": "{{feature}}은(는) 웹의 Abacus AI Agent에서 사용할 수 있습니다",
+      "agentBody": "요금제에 웹의 Abacus AI Agent에서 이미지와 동영상을 만들고 편집하고 오디오를 만드는 기능이 포함되어 있습니다. 요청이 미리 입력되어 있으니, 편집할 이미지는 그곳에서 첨부하세요.",
+      "openAgent": "Abacus AI Agent에서 열기"
+    },
+    "botHelp": {
+      "open": "열기"
     }
   },
   "notch": {
@@ -3850,6 +3861,30 @@
     "showLess": "Show less",
     "showMore": "+{{count}} more"
   },
+  "checkpoints": {
+    "summary_one": "Changed {{count}} file",
+    "summary_other": "Changed {{count}} files",
+    "restore": "Restore to before this turn",
+    "restoreFile": "Restore this file",
+    "undoRestore": "Undo restore",
+    "busy": "Wait for the agent to finish this turn",
+    "binary": "binary",
+    "noCopy": "no copy kept",
+    "partial": "Some folders were too large to keep whole; files past the limit are not covered.",
+    "failed": "Could not restore. Try again once the agent has finished.",
+    "restored_one": "Restored {{count}} file.",
+    "restored_other": "Restored {{count}} files.",
+    "unrestorable_one": "{{count}} file was too large to keep a copy of.",
+    "unrestorable_other": "{{count}} files were too large to keep a copy of.",
+    "conflicts_one": "{{count}} file changed after this turn and was left as it is.",
+    "conflicts_other": "{{count}} files changed after this turn and were left as they are.",
+    "force": "Restore anyway",
+    "kind": {
+      "modified": "Edited",
+      "created": "Added",
+      "deleted": "Deleted"
+    }
+  },
   "devicePanel": {
     "axPermissionNeeded": "창을 표시하지 않고 시뮬레이터를 미러링하려면 손쉬운 사용 권한이 필요합니다.",
     "boot": "부팅",
@@ -4162,6 +4197,24 @@
     "waitingTitle": "브라우저에서 결제를 완료하세요",
     "waitingToSend": "전송 대기 중: “{{text}}”"
   },
+  "paymentRequired": {
+    "unconfirmedTitle": "AbacusAI Bot을 계속 사용하려면 요금제를 선택하세요",
+    "unconfirmedBody": "로그인되었지만 AbacusAI Bot을 사용하려면 계정에 요금제가 필요합니다.",
+    "alreadySubscribed": "이미 구독 중이신가요? {{link}}",
+    "reportIssue": "문제 신고",
+    "trialEndedTitle": "무료 체험이 끝났습니다",
+    "trialEndedBody": "이 계정으로 AbacusAI Bot을 계속 사용하려면 업그레이드하세요.",
+    "lapsedTitle": "구독이 종료되었습니다",
+    "lapsedBody": "이 계정으로 AbacusAI Bot을 계속 사용하려면 요금제를 갱신하세요.",
+    "upgrade": "업그레이드",
+    "renew": "갱신",
+    "webAgent": "웹에서 Abacus AI Agent로 이동 →",
+    "tryAgain": "다시 시도",
+    "checking": "확인 중…",
+    "stillBlocked": "아직 이 계정의 결제가 확인되지 않습니다.",
+    "waiting": "브라우저에서 결제를 완료하세요. 결제가 완료되면 앱이 바로 이어집니다.",
+    "otherAccount": "다른 계정으로 로그인"
+  },
   "visualizer": {
     "loading": "시각화를 불러오는 중…"
   },
@@ -4335,5 +4388,94 @@
     "outOfCredit": "Your {{provider}} key is out of credit",
     "paidBody": "Use it in AbacusAI Agent on the web: the top models are included in your plan.",
     "rateLimited": "Your {{provider}} key hit its rate limit"
+  },
+  "outcome": {
+    "wall": {
+      "title": "무료 크레딧을 모두 사용했어요",
+      "expiredTitle": "무료 크레딧이 만료되었어요",
+      "paidTitle": "이번 달 크레딧을 모두 사용했어요",
+      "renews": "무료 크레딧은 매달 갱신돼요.",
+      "balance": "{{granted}} 크레딧 중 {{remaining}} 남음",
+      "warning": "지금 계속하면 봇이 다른 제공업체({{providers}})의 무료 모델로 전환돼요. 품질이 훨씬 낮아서 실수가 많고, 잘 돌아가던 코드를 망가뜨릴 수 있으며, 사용 한도에 자주 걸려요.",
+      "offer": "{{plan}}(으)로 업그레이드 — {{price}}",
+      "upgradeCta": "{{plan}}(으)로 업그레이드",
+      "continueFree": "무료 모델로 계속하기 (품질 낮음)"
+    },
+    "plan": {
+      "introPrice": "첫 달 {{first}}, 이후 월 {{monthly}}",
+      "monthlyPrice": "월 {{monthly}}"
+    },
+    "freeChip": "무료 모델 · {{provider}}",
+    "freeChipAny": "다른 제공업체",
+    "freeChipUpgrade": "최고 모델로 업그레이드",
+    "connection": {
+      "title": "연결 문제",
+      "body": "인터넷 연결, VPN 또는 프록시를 확인한 뒤 다시 시도해 주세요."
+    },
+    "cause": {
+      "context_too_long": "이 대화는 모델이 처리하기에 너무 길어요. 새 채팅을 시작하거나 더 큰 컨텍스트를 지원하는 모델을 선택하세요.",
+      "key_invalid": "{{provider}} 키가 거부되었어요. 유효하지 않거나 만료되었어요.",
+      "own_key_quota": "{{provider}} 키가 할당량에 도달했어요. 다른 모델로 전환하거나 키의 요금제를 확인하세요.",
+      "model_unavailable": "이 모델은 요청을 받을 수 없었어요. 다른 모델을 선택하세요.",
+      "free_pool_spent": "현재 모든 무료 소스를 다 사용했어요. 다른 무료 소스를 연결하거나 다른 모델을 선택하세요.",
+      "rate_limited": "무료 모델이 지금 혼잡해요. 몇 분 후 다시 시도하거나 다른 모델로 전환하세요.",
+      "empty": "모델이 빈 답변을 보냈어요. 다시 시도하거나 다른 모델로 전환하세요.",
+      "unknown": "모델이 이 작업을 끝내지 못했어요. 다시 시도하거나 다른 모델로 전환하세요."
+    },
+    "action": {
+      "newChat": "새 채팅",
+      "fixKey": "키 확인",
+      "viewDetails": "자세히 보기",
+      "tryAgain": "다시 시도",
+      "switchToAbacus": "Abacus로 전환 (RouteLLM - Open)"
+    },
+    "channel": {
+      "wall": "무료 크레딧을 모두 사용해서 잠시 멈췄어요.",
+      "expired": "무료 크레딧이 만료되어 잠시 멈췄어요.",
+      "renews": "무료 크레딧은 매달 갱신돼요.",
+      "offer": "{{plan}}은(는) {{price}}이며 다음을 제공해요:",
+      "link": "여기서 업그레이드하세요: {{link}}",
+      "repeat": "아직 멈춰 있어요: {{link}}",
+      "paidOut": "이번 달 크레딧을 모두 사용해서 잠시 멈췄어요. 계속하려면 크레딧을 추가하세요: {{link}}",
+      "unavailable": "{{model}}을(를) 더 이상 사용할 수 없어서 마무리하지 못했어요. 메시지는 그대로 보관돼요. 앱의 모델 선택에서 RouteLLM - Open으로 전환하면 계속할 수 있어요.",
+      "unavailableDown": "{{model}}을(를) 지금 사용할 수 없어요. 제공업체에서 계속 오류가 나요. 메시지는 그대로 보관돼요. 앱의 모델 선택에서 RouteLLM - Open으로 전환하면 계속할 수 있어요.",
+      "unavailablePlan": "{{model}}은(는) 현재 요금제에 포함되어 있지 않아요. 앱의 모델 선택에서 RouteLLM - Open으로 전환해 계속하거나, 업그레이드해서 사용하세요.",
+      "unavailableOut": "{{model}}을(를) 사용할 수 없고, Abacus 크레딧도 모두 사용했어요.",
+      "ownKeyCredit": "{{provider}} 키의 잔액이 없어요.",
+      "ownKeyRateLimit": "{{provider}} 키가 사용 한도에 도달했어요.",
+      "ownKeyDown": "{{provider}}이(가) 지금 응답하지 않아요.",
+      "ownKeyRejected": "{{provider}} 키가 거부되었어요. 유효하지 않거나 만료되었어요. 앱의 설정 → 모델에서 수정하세요.",
+      "ownKeyOffer": "대신 AbacusAI에서 어떤 모델이든 사용하세요: {{link}}",
+      "ownKeyWeb": "웹의 AbacusAI Agent에서 사용하세요: {{link}}",
+      "busy": "무료 모델이 지금 혼잡해요.",
+      "connection": "연결이 끊겨서 끝내지 못했어요. 잠시 후 다시 시도해 주세요.",
+      "notSignedIn": "데스크톱 앱이 지금 Abacus.AI에 로그인되어 있지 않아요. 앱을 열어 로그인한 뒤 다시 메시지를 보내 주세요.",
+      "generic": "제 쪽에서 문제가 생겨 끝내지 못했어요. 잠시 후 다시 시도해 주세요.",
+      "contactFailed": "방금 {{name}}님에게 답장하지 못했어요.",
+      "contactFailedGeneric": "방금 {{name}}님에게 답장하지 못했어요: 제 쪽에서 문제가 생겼어요.",
+      "someone": "상대방"
+    },
+    "unavailable": {
+      "title": {
+        "retired": "{{model}}을(를) 더 이상 사용할 수 없어요",
+        "down": "{{model}}을(를) 지금 사용할 수 없어요",
+        "plan": "{{model}}은(는) 현재 요금제에 포함되어 있지 않아요"
+      },
+      "why": {
+        "retired": "사용할 수 있는 모델에서 제외되었어요.",
+        "down": "다시 시도해도 제공업체에서 계속 오류가 나요."
+      },
+      "kept": "메시지는 그대로 보관돼요.",
+      "switch": "RouteLLM - Open으로 전환",
+      "pickModel": "다른 모델 선택",
+      "creditsLeft": "Abacus 크레딧 {{credits}} 남음",
+      "creditsOut": "무료 Abacus 크레딧도 모두 사용했어요.",
+      "offer": "{{plan}}에서 받을 수 있는 것:",
+      "upgradeIntro": "업그레이드 · 첫 달 {{price}}",
+      "upgradeMonthly": "업그레이드 · 월 {{price}}",
+      "seePlans": "요금제 보기",
+      "planBody": "지금은 무료 모델로 계속하거나, {{plan}}(으)로 업그레이드해서 사용하세요.",
+      "planBodyAny": "지금은 무료 모델로 계속하거나, 요금제를 업그레이드해서 사용하세요."
+    }
   }
 }

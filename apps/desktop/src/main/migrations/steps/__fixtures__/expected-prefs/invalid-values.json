@@ -27,6 +27,7 @@
       "dismissals.routinesMissedSeenAt": "default",
       "dismissals.upsell": "default",
       "dismissals.whatsappIntroAt": "default",
+      "freeLaneChosenAt": "default",
       "githubIntegration": "default",
       "keymap": "default",
       "language": "legacy",
@@ -91,6 +92,7 @@
         "upsell": false,
         "whatsappIntroAt": null
       },
+      "freeLaneChosenAt": null,
       "githubIntegration": true,
       "id": "app",
       "keymap": {},

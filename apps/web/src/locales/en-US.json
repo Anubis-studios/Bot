@@ -562,6 +562,7 @@
       "browser_snapshot": "Read the page as a list of interactive elements.",
       "browser_tabs": "List, switch and close the browser's tabs.",
       "browser_task": "Hand a whole web task to a browser sub-agent and get back the answer.",
+      "checkpoint_diff": "Show what earlier turns changed on disk, from their checkpoints.",
       "code_map": "Index the functions and classes in a file or folder.",
       "connect_connector": "Ask the user to attach a service, such as Gmail or Slack, so its tools become available.",
       "cronjob": "Create, list, pause, or run scheduled tasks.",
@@ -606,6 +607,7 @@
       "read_telegram_messages": "Read recent Telegram messages, on request.",
       "read_whatsapp_messages": "Read recent WhatsApp messages, on request.",
       "run_tests": "Run the project's tests and report what passed and failed.",
+      "restore_checkpoint": "Put files back as they were before an earlier turn changed them.",
       "send_discord_message": "Send a message on Discord.",
       "send_telegram_message": "Send a message on Telegram.",
       "send_to_whatsapp": "Send a message or a screenshot to your own WhatsApp, from AbacusAI Bot's number.",
@@ -2821,7 +2823,9 @@
       "providerConnectHint": "Connect it to use its models, including the free ones.",
       "retryAttachment": "Retry attachment",
       "folderItems_one": "{{count}} item",
-      "folderItems_other": "{{count}} items"
+      "folderItems_other": "{{count}} items",
+      "includedIn": "Included in {{plan}}",
+      "includedInPaid": "Included in paid plans"
     },
     "day": {
       "today": "Today",
@@ -3165,7 +3169,14 @@
     },
     "paidFeature": {
       "title": "{{feature}} is included in Basic",
-      "webTitle": "{{feature}} is included in Basic, in Abacus AI Agent on the web"
+      "webTitle": "{{feature}} is included in Basic, in Abacus AI Agent on the web",
+      "webBody": "Basic includes creating and editing images and videos, and making audio, on the web in Abacus AI Agent.",
+      "agentTitle": "{{feature}} is in Abacus AI Agent on the web",
+      "agentBody": "Your plan includes creating and editing images and videos, and making audio, on the web in Abacus AI Agent. Your request is filled in there; attach any image you want edited.",
+      "openAgent": "Open in Abacus AI Agent"
+    },
+    "botHelp": {
+      "open": "Open"
     }
   },
   "notch": {
@@ -3850,6 +3861,30 @@
     "showLess": "Show less",
     "showMore": "+{{count}} more"
   },
+  "checkpoints": {
+    "summary_one": "Changed {{count}} file",
+    "summary_other": "Changed {{count}} files",
+    "restore": "Restore to before this turn",
+    "restoreFile": "Restore this file",
+    "undoRestore": "Undo restore",
+    "busy": "Wait for the agent to finish this turn",
+    "binary": "binary",
+    "noCopy": "no copy kept",
+    "partial": "Some folders were too large to keep whole; files past the limit are not covered.",
+    "failed": "Could not restore. Try again once the agent has finished.",
+    "restored_one": "Restored {{count}} file.",
+    "restored_other": "Restored {{count}} files.",
+    "unrestorable_one": "{{count}} file was too large to keep a copy of.",
+    "unrestorable_other": "{{count}} files were too large to keep a copy of.",
+    "conflicts_one": "{{count}} file changed after this turn and was left as it is.",
+    "conflicts_other": "{{count}} files changed after this turn and were left as they are.",
+    "force": "Restore anyway",
+    "kind": {
+      "modified": "Edited",
+      "created": "Added",
+      "deleted": "Deleted"
+    }
+  },
   "devicePanel": {
     "axPermissionNeeded": "Accessibility permission is needed to mirror the simulator without showing its window.",
     "boot": "Boot",
@@ -4162,6 +4197,24 @@
     "waitingTitle": "Finish checkout in your browser",
     "waitingToSend": "Waiting to send: “{{text}}”"
   },
+  "paymentRequired": {
+    "unconfirmedTitle": "Choose a plan to keep using AbacusAI Bot",
+    "unconfirmedBody": "You're signed in, but your account needs a plan before AbacusAI Bot can work.",
+    "alreadySubscribed": "Already subscribed? {{link}}",
+    "reportIssue": "Report an issue",
+    "trialEndedTitle": "Your free trial has ended",
+    "trialEndedBody": "Upgrade to keep using AbacusAI Bot with this account.",
+    "lapsedTitle": "Your subscription has ended",
+    "lapsedBody": "Renew your plan to keep using AbacusAI Bot with this account.",
+    "upgrade": "Upgrade",
+    "renew": "Renew",
+    "webAgent": "Go to Abacus AI Agent on the web →",
+    "tryAgain": "Try again",
+    "checking": "Checking…",
+    "stillBlocked": "We can't see a payment on this account yet.",
+    "waiting": "Finish checkout in your browser. The app continues as soon as your payment goes through.",
+    "otherAccount": "Sign in with a different account"
+  },
   "visualizer": {
     "loading": "Loading visualization…"
   },
@@ -4335,5 +4388,94 @@
     "outOfCredit": "Your {{provider}} key is out of credit",
     "paidBody": "Use it in AbacusAI Agent on the web: the top models are included in your plan.",
     "rateLimited": "Your {{provider}} key hit its rate limit"
+  },
+  "outcome": {
+    "wall": {
+      "title": "Your free credits are used up",
+      "expiredTitle": "Your free credits have expired",
+      "paidTitle": "You've used this month's credits",
+      "renews": "Free credits renew every month.",
+      "balance": "{{remaining}} of {{granted}} credits left",
+      "warning": "To keep going now, the bot would switch to free models from a different provider ({{providers}}). They're much lower quality: more mistakes, can break working code, and often hit rate limits.",
+      "offer": "Upgrade to {{plan}} — {{price}}",
+      "upgradeCta": "Upgrade to {{plan}}",
+      "continueFree": "Continue with free models (lower quality)"
+    },
+    "plan": {
+      "introPrice": "{{first}} your first month, then {{monthly}}/month",
+      "monthlyPrice": "{{monthly}}/month"
+    },
+    "freeChip": "Free model · {{provider}}",
+    "freeChipAny": "another provider",
+    "freeChipUpgrade": "Upgrade for top models",
+    "connection": {
+      "title": "Connection problem",
+      "body": "Check your internet connection, VPN, or proxy and try again."
+    },
+    "cause": {
+      "context_too_long": "This conversation is too long for the model. Start a new chat, or pick a model with a larger context.",
+      "key_invalid": "Your {{provider}} key was rejected — it's invalid or expired.",
+      "own_key_quota": "Your {{provider}} key hit its quota. Switch to a different model, or check the key's plan.",
+      "model_unavailable": "This model couldn't take the request. Pick a different model.",
+      "free_pool_spent": "Every free source is used up for now. Connect another free source, or pick a different model.",
+      "rate_limited": "The free models are busy right now. Try again in a few minutes, or switch to a different model.",
+      "empty": "The model returned an empty reply. Try again, or switch to a different model.",
+      "unknown": "The model couldn't finish this. Try again, or switch to a different model."
+    },
+    "action": {
+      "newChat": "New chat",
+      "fixKey": "Check the key",
+      "viewDetails": "View details",
+      "tryAgain": "Try again",
+      "switchToAbacus": "Switch to Abacus (RouteLLM - Open)"
+    },
+    "channel": {
+      "wall": "I've paused because your free credits are used up.",
+      "expired": "I've paused because your free credits have expired.",
+      "renews": "Free credits renew every month.",
+      "offer": "{{plan}} is {{price}} and gives you:",
+      "link": "Upgrade here: {{link}}",
+      "repeat": "Still paused: {{link}}",
+      "paidOut": "I've paused because this month's credits are used up. Add credits to keep going: {{link}}",
+      "unavailable": "{{model}} isn't available anymore, so I couldn't finish that. Your message is kept: switch to RouteLLM - Open in the app's model picker to keep going.",
+      "unavailableDown": "{{model}} isn't available right now: its provider keeps failing. Your message is kept: switch to RouteLLM - Open in the app's model picker to keep going.",
+      "unavailablePlan": "{{model}} isn't included in your plan. Switch to RouteLLM - Open in the app's model picker to keep going, or upgrade to use it.",
+      "unavailableOut": "{{model}} isn't available, and your Abacus credits are used up.",
+      "ownKeyCredit": "Your {{provider}} key is out of credit.",
+      "ownKeyRateLimit": "Your {{provider}} key hit its rate limit.",
+      "ownKeyDown": "{{provider}} isn't responding right now.",
+      "ownKeyRejected": "Your {{provider}} key was rejected — it's invalid or expired. Fix it in the app under Settings → Models.",
+      "ownKeyOffer": "Use any model on AbacusAI instead: {{link}}",
+      "ownKeyWeb": "Use it in AbacusAI Agent on the web: {{link}}",
+      "busy": "The free models are busy right now.",
+      "connection": "The connection dropped, so I couldn't finish that. Please try again in a moment.",
+      "notSignedIn": "The desktop app is not signed in to Abacus.AI right now. Open the app and sign in, then message me again.",
+      "generic": "Something went wrong on my side, so I couldn't finish that. Please try again in a moment.",
+      "contactFailed": "I couldn't reply to {{name}} just now.",
+      "contactFailedGeneric": "I couldn't reply to {{name}} just now: something went wrong on my side.",
+      "someone": "someone"
+    },
+    "unavailable": {
+      "title": {
+        "retired": "{{model}} isn't available anymore",
+        "down": "{{model}} isn't available right now",
+        "plan": "{{model}} isn't included in your plan"
+      },
+      "why": {
+        "retired": "It was removed from the models you can use.",
+        "down": "Its provider keeps failing, even after retrying."
+      },
+      "kept": "Your message is kept.",
+      "switch": "Switch to RouteLLM - Open",
+      "pickModel": "Pick another model",
+      "creditsLeft": "{{credits}} Abacus credits left",
+      "creditsOut": "You've also used your free Abacus credits.",
+      "offer": "{{plan}} gets you:",
+      "upgradeIntro": "Upgrade · {{price}} first month",
+      "upgradeMonthly": "Upgrade · {{price}}/month",
+      "seePlans": "See plans",
+      "planBody": "Keep going on a free model now, or upgrade to {{plan}} to use it.",
+      "planBodyAny": "Keep going on a free model now, or upgrade your plan to use it."
+    }
   }
 }

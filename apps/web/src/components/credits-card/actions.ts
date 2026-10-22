@@ -1,4 +1,5 @@
 import { isFreePoolProvider } from "@abacus-ai/contract/free-pool";
+import { OPENLLM_ID } from "@abacus-ai/contract/models";
 
 import type { Transport } from "#renderer/data/transport";
 import { IS_ELECTRON } from "#renderer/lib/platform";
@@ -46,9 +47,13 @@ export const creditActionsFor = (
       await connected?.();
       return true;
     },
-    markCreditsExhausted: async () => {
+    refreshModels: async () => {
+      await connected?.();
+    },
+    billingPlan: () => client.account.billingPlan({}),
+    chooseFreeLane: async () => {
       await client.db.prefs.update({
-        patch: { creditsExhaustedAt: Date.now() },
+        patch: { freeLaneChosenAt: Date.now() },
       });
     },
   };
@@ -64,7 +69,7 @@ export const confirmFreePoolModel = async (
     const state = await transport.client.agent.state(scope);
     if (
       state == null ||
-      state.model === "abacus/openllm" ||
+      state.model === OPENLLM_ID ||
       state?.status === "stopped" ||
       state?.status === "error"
     )

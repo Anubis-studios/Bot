@@ -17,7 +17,7 @@ vi.mock("node:fs", () => ({ existsSync: () => true }));
 vi.stubGlobal("process", { ...process, resourcesPath: "/synthetic/resources" });
 
 vi.mock("electron-updater", () => ({
-  default: { autoUpdater },
+  default: { autoUpdater, DebUpdater: class {} },
 }));
 const electron = vi.hoisted(() => ({ version: "1.0.85-test.75" }));
 vi.mock("electron", () => ({
@@ -37,6 +37,11 @@ vi.mock("../../app-quit-state", () => ({
 vi.mock("./relaunch-hidden", () => ({
   markRelaunchHidden: () => {},
   clearRelaunchHidden: () => {},
+}));
+vi.mock("./install-record", () => ({
+  recordInstallAttempt: () => {},
+  recordInstallFailed: () => {},
+  settleInstallRecord: () => null,
 }));
 
 const { UpdateService } = await import("./update-service");

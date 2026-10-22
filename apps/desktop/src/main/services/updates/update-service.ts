@@ -7,7 +7,7 @@ import electronUpdater, {
   type UpdateInfo,
 } from "electron-updater";
 
-const { autoUpdater } = electronUpdater;
+const { autoUpdater, DebUpdater } = electronUpdater;
 import type {
   UpdateFailedPhase,
   UpdateStatus,
@@ -20,12 +20,10 @@ import { markQuitting, clearQuitting } from "../../app-quit-state";
 import { isNotchWindow } from "../../notch/registry";
 import { isTestBuild } from "../providers/abacus-host";
 import {
-  type DebInstallResult,
-  graphicalElevation,
-  installDebWithPkexec,
-  isDebPackage,
-  manualInstallCommand,
-} from "./deb-install";
+  recordInstallAttempt,
+  recordInstallFailed,
+  settleInstallRecord,
+} from "./install-record";
 import { markRelaunchHidden, clearRelaunchHidden } from "./relaunch-hidden";
 
 // Static CDN feed: one YAML naming immutable per-version artifacts. The feed
@@ -84,6 +82,36 @@ function versionLessThan(a: string, b: string): boolean {
   return false;
 }
 
+/**
+ * Whether electron-updater can become root for a .deb install. Its
+ * LinuxUpdater (runCommandWithSudoIfNeeded, determineSudoCommand) needs
+ * nothing as root, else uses the first of gksudo, kdesudo, pkexec and beesu
+ * on PATH, else plain sudo, which cannot ask for a password without a
+ * terminal. Asked of the updater itself, so this cannot drift from what
+ * quitAndInstall runs; the methods are protected in its typings only.
+ */
+const debInstallCanElevate = (): boolean => {
+  const linux = autoUpdater as unknown as {
+    isRunningAsRoot?: () => boolean;
+    determineSudoCommand?: () => string;
+  };
+  // Without them, try: a failed install is still caught and not retried.
+  if (typeof linux.determineSudoCommand !== "function") return true;
+  if (linux.isRunningAsRoot?.() === true) return true;
+  return linux.determineSudoCommand() !== "sudo";
+};
+
+const shellQuote = (value: string): string =>
+  /^[\w@%+=:,./-]+$/.test(value)
+    ? value
+    : `'${value.replaceAll("'", `'\\''`)}'`;
+
+/** What the user runs in a terminal when the app cannot install the .deb. */
+const manualInstallCommand = (packagePath: string): string =>
+  `sudo apt install ${shellQuote(packagePath)}`;
+
+const MANUAL_INSTALL_ERROR = "Install this update from a terminal";
+
 /** Host knowledge: an agent turn or live PTY makes a restart destructive. */
 export interface UpdateServiceDeps {
   isSafeToRestart?: () => boolean;
@@ -133,13 +161,20 @@ export class UpdateService {
   private installRequest: Promise<{ success: boolean; error?: string }> | null =
     null;
 
-  // A .deb installs as root, behind a password prompt: never on an automatic
-  // path, and a version whose install failed is left to the user.
-  private readonly debPackage = isDebPackage();
+  // electron-updater picks DebUpdater from resources/package-type. A .deb
+  // installs as root; a version whose install failed is left to the user.
+  private readonly debPackage = autoUpdater instanceof DebUpdater;
   private downloadedFile: string | null = null;
-  private failedDebInstalls = new Set<string>();
+  private debCanElevate = true;
+  private failedDebVersion: string | null = null;
+  private quitWatchdog: NodeJS.Timeout[] = [];
 
   constructor(private readonly deps: UpdateServiceDeps = {}) {
+    if (this.debPackage)
+      this.failedDebVersion = settleInstallRecord(
+        app.getVersion(),
+        versionLessThan
+      );
     this.setupAutoUpdater();
   }
 
@@ -157,7 +192,10 @@ export class UpdateService {
       info: () => {},
       debug: () => {},
       warn: (msg) => console.warn(`[UpdateService] ${msg}`),
-      error: (msg) => console.error(`[UpdateService] ${msg}`),
+      // Its Linux command probes log a blank stderr for every miss.
+      error: (msg) => {
+        if (String(msg).trim() !== "") console.error(`[UpdateService] ${msg}`);
+      },
     };
 
     autoUpdater.on("checking-for-update", () => {
@@ -237,6 +275,11 @@ export class UpdateService {
       // A dead transfer has no progress; a kept figure reads as a live one.
       this.status.progress = null;
       this.status.error = shortMsg;
+      // A .deb install runs inside quitAndInstall and reports failure here.
+      if (this.debPackage && this.status.installing) {
+        this.debInstallFailed(shortMsg);
+        return;
+      }
       this.emitStatusUpdate();
     });
 
@@ -261,6 +304,7 @@ export class UpdateService {
       this.status.updateInfo = { version: info.version };
       this.downloadedVersion = info.version;
       this.downloadedFile = info.downloadedFile;
+      if (this.debPackage) this.debCanElevate = debInstallCanElevate();
       this.setUpdaterHasPendingBuild(true);
       this.refreshManualInstall();
       this.emitStatusUpdate();
@@ -284,25 +328,53 @@ export class UpdateService {
 
   /**
    * A downloaded .deb the app cannot install (no graphical prompt, or its
-   * install already failed) becomes the manual-install state.
+   * install already failed) becomes the manual-install state, which nothing
+   * installs automatically.
    */
   private refreshManualInstall(): void {
     const version = this.downloadedVersion;
     const file = this.downloadedFile;
-    const manual =
-      this.debPackage &&
-      this.status.downloaded &&
-      version != null &&
-      file != null &&
-      (this.failedDebInstalls.has(version) || graphicalElevation() == null);
-    this.status.manualInstall = manual
-      ? { command: manualInstallCommand(file), packagePath: file }
-      : null;
-    if (manual) {
+    const reason =
+      !this.debPackage || !this.status.downloaded || version == null
+        ? null
+        : this.failedDebVersion === version
+          ? "its install failed"
+          : this.debCanElevate
+            ? null
+            : "no graphical password prompt";
+    this.status.manualInstall =
+      reason != null && file != null
+        ? { command: manualInstallCommand(file), packagePath: file }
+        : null;
+    if (this.status.manualInstall != null) {
       console.log(
-        `[UpdateService] ${version} needs a manual install (${this.failedDebInstalls.has(version) ? "its install failed" : "no graphical password prompt"}): ${this.status.manualInstall?.command}`
+        `[UpdateService] ${version} needs a manual install (${reason}): ${this.status.manualInstall.command}`
       );
     }
+  }
+
+  /**
+   * The .deb install failed (dismissed prompt, wrong password, no polkit
+   * agent, sudo without a terminal, dpkg error). Final for that version: no
+   * quit, no retry from the idle restart or the quit path; a newer release
+   * supersedes it.
+   */
+  private debInstallFailed(detail: string): void {
+    const version = this.downloadedVersion;
+    console.warn(
+      `[UpdateService] ${version ?? "update"} install failed (${detail}), not trying it again`
+    );
+    if (version != null) {
+      this.failedDebVersion = version;
+      recordInstallFailed(version);
+    }
+    this.clearQuitWatchdog();
+    clearQuitting();
+    clearRelaunchHidden();
+    this.status.installing = false;
+    this.refreshManualInstall();
+    this.emitStatusUpdate();
+    if (app.isPackaged) this.startPeriodicChecks();
   }
 
   /**
@@ -321,8 +393,8 @@ export class UpdateService {
   // Wait for a moment when a restart destroys nothing and take it silently;
   // the pill stays as the manual path.
   private startAutoRestartPoll(): void {
-    // A password prompt is not silent: a .deb waits for a click.
-    if (this.autoRestartTimer != null || this.debPackage) return;
+    if (this.autoRestartTimer != null || this.status.manualInstall != null)
+      return;
 
     this.autoRestartTimer = setInterval(
       () => this.tryAutoRestart(),
@@ -341,7 +413,8 @@ export class UpdateService {
     if (
       !this.status.downloaded ||
       this.status.installing ||
-      this.status.installStalled
+      this.status.installStalled ||
+      this.status.manualInstall != null
     ) {
       return;
     }
@@ -478,10 +551,7 @@ export class UpdateService {
   }
 
   installUpdate(options?: {
-    /**
-     * An automatic install (idle restart, quit): Windows runs the NSIS
-     * installer with no UI, and a .deb, which needs a password, is refused.
-     */
+    /** An automatic install (idle restart, quit): NSIS runs with no UI. */
     silent?: boolean;
     /** macOS: the window was hidden at restart, so come back hidden. */
     relaunchHidden?: boolean;
@@ -508,14 +578,9 @@ export class UpdateService {
       if (this.status.installing) {
         return { success: true };
       }
-      // Not a failure: the build stays on disk for the user's click.
-      if (this.debPackage && (options?.silent || this.status.manualInstall)) {
-        return {
-          success: false,
-          error: options?.silent
-            ? "This update installs with your password, from the update button"
-            : "Install this update from a terminal",
-        };
+      // Not a new failure: the build stays on disk for the terminal command.
+      if (this.status.manualInstall != null) {
+        return { success: false, error: MANUAL_INSTALL_ERROR };
       }
       const version = this.downloadedVersion;
       const offer = await this.checkFeed(true);
@@ -534,19 +599,25 @@ export class UpdateService {
       this.status.installing = true;
       this.emitStatusUpdate();
 
-      if (this.debPackage && version != null)
-        return await this.installDeb(version);
-
       // Declare quit intent before handing off: Squirrel.Mac only closes the
       // windows, and the macOS 'close' handler hides unless a quit is underway.
       this.stopPeriodicChecks();
       this.stopAutoRestartPoll();
       markQuitting();
       if (options?.relaunchHidden) markRelaunchHidden();
+      if (this.debPackage && version != null) recordInstallAttempt(version);
 
       try {
+        // A .deb installs synchronously in here (its LinuxUpdater picks the
+        // password prompt); a failure is an `error` event before it returns.
         autoUpdater.quitAndInstall(options?.silent ?? false, true);
       } catch (err) {
+        if (this.debPackage) {
+          this.debInstallFailed(
+            err instanceof Error ? err.message : String(err)
+          );
+          return { success: false, error: MANUAL_INSTALL_ERROR };
+        }
         // No hand-off: drop the quit intent (else the next close terminates
         // instead of hiding) and resume the watchers.
         clearQuitting();
@@ -554,6 +625,10 @@ export class UpdateService {
         if (app.isPackaged) this.startPeriodicChecks();
         this.startAutoRestartPoll();
         throw err;
+      }
+      // The .deb install failed: no quit is coming, so no watchdog forces one.
+      if (this.debPackage && !this.status.installing) {
+        return { success: false, error: MANUAL_INSTALL_ERROR };
       }
       this.startQuitWatchdog();
       return { success: true };
@@ -569,47 +644,12 @@ export class UpdateService {
     }
   }
 
-  /**
-   * The .deb goes in through pkexec's dialog while the app runs. A failure
-   * (dismissed, wrong password, dpkg error) is final for that version: the
-   * user gets the terminal command, and nothing retries it or quits the app.
-   */
-  private async installDeb(
-    version: string
-  ): Promise<{ success: boolean; error?: string }> {
-    const pkexec = graphicalElevation();
-    const file = this.downloadedFile;
-    this.stopPeriodicChecks();
-    const result: DebInstallResult =
-      pkexec != null && file != null
-        ? await installDebWithPkexec(pkexec, file)
-        : { ok: false, detail: "no graphical password prompt" };
-    if (result.ok === false) {
-      console.warn(
-        `[UpdateService] ${version} install failed (${result.detail}), not trying it again`
-      );
-      this.failedDebInstalls.add(version);
-      this.status.installing = false;
-      this.refreshManualInstall();
-      this.emitStatusUpdate();
-      // A newer release can still supersede the failed one.
-      if (app.isPackaged) this.startPeriodicChecks();
-      return { success: false, error: "Install this update from a terminal" };
-    }
-    // Installed on disk; the relaunch starts the new version.
-    console.log(`[UpdateService] ${version} installed, relaunching`);
-    markQuitting();
-    app.relaunch();
-    app.quit();
-    this.startQuitWatchdog();
-    return { success: true };
-  }
-
   // Backstop for an install that never quits: the installer applies on exit,
   // so escalate. Stage 1 keeps before-quit cleanup (the vm-helper would
   // otherwise collide with the relaunched app); stage 2 hard-exits.
   private startQuitWatchdog(): void {
-    setTimeout(() => {
+    this.clearQuitWatchdog();
+    const stall = setTimeout(() => {
       console.warn(
         `[UpdateService] Still running ${QUIT_STALL_MS / 1000}s after install hand-off, forcing quit`
       );
@@ -623,14 +663,22 @@ export class UpdateService {
           err
         );
       }
-    }, QUIT_STALL_MS).unref();
+    }, QUIT_STALL_MS);
 
-    setTimeout(() => {
+    const force = setTimeout(() => {
       console.warn(
         `[UpdateService] Still running ${QUIT_FORCE_MS / 1000}s after install hand-off, exiting`
       );
       app.exit(0);
-    }, QUIT_FORCE_MS).unref();
+    }, QUIT_FORCE_MS);
+    stall.unref();
+    force.unref();
+    this.quitWatchdog = [stall, force];
+  }
+
+  private clearQuitWatchdog(): void {
+    for (const timer of this.quitWatchdog) clearTimeout(timer);
+    this.quitWatchdog = [];
   }
 
   getStatus(): UpdateStatus {

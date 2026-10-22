@@ -544,23 +544,32 @@ describe("a bot whose network goes", () => {
     expect(cooldowns()).toBe("");
   });
 
-  it("rotates as before when the Abacus API still answers", async () => {
-    provider.script((call) =>
-      call.model === "big:free" ? { drop: true } : { say: "from small" }
-    );
-    setHostConnectivity("online");
-    setReachabilityProbe(async () => true);
-    const { session, events } = botSession();
-    await session.start();
-    await session.send("hi");
+  it("retries a dropped call while the Abacus API answers, then ends on the connection card, never rotating", async () => {
+    process.env.ABACUSAI_BOT_CONNECTION_RETRY_MS = "300";
+    try {
+      provider.script((call) =>
+        call.model === "big:free" ? { drop: true } : { say: "from small" }
+      );
+      setHostConnectivity("online");
+      setReachabilityProbe(async () => true);
+      const { session, events } = botSession();
+      await session.start();
+      await session.send("hi");
 
-    expect(provider.calls.map((call) => call.model)).toContain("small:free");
-    expect(
-      agentEvents(events).some(
-        (event) => event.type === "retry" && event.waitingForConnection === true
-      )
-    ).toBe(false);
-    expect(cooldowns()).toContain("big:free");
+      expect(provider.calls.map((call) => call.model)).not.toContain(
+        "small:free"
+      );
+      const errors = agentEvents(events).filter(
+        (event) => event.type === "error"
+      );
+      expect(errors).toHaveLength(1);
+      expect(errors[0]).toMatchObject({
+        error: { code: "network_unreachable", cause: "connection" },
+      });
+      expect(cooldowns()).toBe("");
+    } finally {
+      delete process.env.ABACUSAI_BOT_CONNECTION_RETRY_MS;
+    }
   });
 });
 

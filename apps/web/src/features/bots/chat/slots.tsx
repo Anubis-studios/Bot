@@ -2,6 +2,7 @@ import { AgentMode } from "@abacus-ai/contract/agent-types";
 import type { BotRow } from "@abacus-ai/contract/contract/rows";
 import { sessionConversationKey } from "@abacus-ai/contract/conversation-scope";
 import type { MessagingPlatformId } from "@abacus-ai/contract/messaging";
+import { OPENLLM_ID } from "@abacus-ai/contract/models";
 import { eq } from "@tanstack/db";
 import { useLiveQuery } from "@tanstack/react-db";
 import { useQuery } from "@tanstack/react-query";
@@ -258,12 +259,12 @@ export const useBotChatSlots = (
       ...(!readOnly
         ? {
             onResumeOnFreePool: async () => {
-              await setBotModel(collections.bots, bot.id, "abacus/openllm");
+              await setBotModel(collections.bots, bot.id, OPENLLM_ID);
               if (session?.workspaceId) {
                 await transport.client.agent.setModel({
                   workspaceId: session.workspaceId,
                   sessionId,
-                  model: "abacus/openllm",
+                  model: OPENLLM_ID,
                 });
                 await confirmFreePoolModel(transport, {
                   workspaceId: session.workspaceId,

@@ -1,21 +1,14 @@
 /**
- * Recovering from Debian's incomplete Python.
- *
- * Debian and Ubuntu ship python3 without the venv module. `python3 -m venv`
- * then fails AFTER writing the environment's skeleton (bin/python included),
- * so a naive "does the interpreter exist" check believes the venv is ready,
- * and every pip run after that dies with "No module named pip". Installing
- * python3-venv later did not help, because the broken skeleton was never
- * removed. These tests pin the cleanup and the recovery.
+ * The agent shell's Python on a machine without one: when it applies, the
+ * pinned build uv installs, one setup shared by concurrent callers, a pinned
+ * uv that must match its checksum, failures that name what to fix, and an
+ * environment this process never runs (sandboxed commands can write to it).
  */
-import type { execFile as ExecFileType } from "child_process";
 import fs from "fs";
 import os from "os";
 import path from "path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-import { ensurePython } from "./python-env";
 
 const mocks = vi.hoisted(() => ({
   execFile: vi.fn(),
@@ -23,172 +16,245 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("child_process", () => ({ execFile: mocks.execFile }));
 vi.mock("../../paths", () => ({ abacusBotHome: (): string => home }));
+vi.mock("../../system-network", () => ({
+  agentProxyEnv: async (): Promise<Record<string, string>> => ({}),
+}));
 
 let home: string;
 
-type Callback = Parameters<typeof ExecFileType>[3];
-
-const venvDir = (): string => path.join(home, "python");
-// Where the real `venv` puts the interpreter, which the code under test looks
-// for. Windows uses `Scripts/python.exe`; writing a POSIX skeleton there left
-// nothing for it to find, so it recreated the environment and the run counts
-// this file asserts came out one too high.
-const venvBinDir = (): string =>
-  path.join(venvDir(), process.platform === "win32" ? "Scripts" : "bin");
-const venvPython = (): string =>
+const isWindows = process.platform === "win32";
+const envDir = (): string => path.join(home, "shell-python");
+const envBin = (): string => path.join(envDir(), isWindows ? "Scripts" : "bin");
+const uvPath = (): string =>
   path.join(
-    venvBinDir(),
-    process.platform === "win32" ? "python.exe" : "python"
+    home,
+    "python-runtime",
+    "uv",
+    "0.12.24",
+    isWindows ? "uv.exe" : "uv"
   );
+const MANAGED = "/managed/cpython-3.13.16/bin/python3";
 
-/** Simulate `python -m venv`: write the skeleton the real one writes. */
-const writeSkeleton = (): void => {
-  fs.mkdirSync(venvBinDir(), { recursive: true });
-  fs.writeFileSync(venvPython(), "#!/bin/sh\n");
+type Machine = {
+  /** `${major} ${minor}` of the system Python, or null for none. */
+  system: string | null;
+  /** A uv step fails with this message. */
+  uvError?: { step: string; message: string };
 };
 
-type Behavior = {
-  /** venv creation fails with this message; the skeleton is still written. */
-  venvError?: string;
-  /** pip failures, consumed one per call; empty means pip succeeds. */
-  pipErrors: string[];
-  /** Imports the venv already satisfies; everything else is reported missing. */
-  present?: string[];
+/** Every uv invocation, as its arguments. */
+let uvRuns: string[][];
+
+/** An environment on disk whose pyvenv.cfg names `base`. */
+const writeEnv = (base: string): void => {
+  fs.mkdirSync(envBin(), { recursive: true });
+  fs.writeFileSync(
+    path.join(envBin(), isWindows ? "python.exe" : "python"),
+    ""
+  );
+  fs.writeFileSync(path.join(envDir(), "pyvenv.cfg"), `home = ${base}\n`);
 };
 
-/** How many times `python -m venv` ran, for asserting the recreate happened. */
-let venvRuns: number;
-/** The package list handed to each `pip install`, in order. */
-let pipInstalls: string[][];
-
-const install = (behavior: Behavior): void => {
-  venvRuns = 0;
-  pipInstalls = [];
+const machine = (spec: Machine): void => {
+  uvRuns = [];
   mocks.execFile.mockImplementation(
-    (file: string, args: string[], _opts: unknown, callback: Callback) => {
-      const done = (error: Error | null): void =>
-        callback?.(
-          error as never,
-          error == null ? "ok" : "",
-          error == null ? "" : (error.message ?? "")
-        );
+    (
+      file: string,
+      args: string[],
+      _opts: unknown,
+      callback: (error: Error | null, out?: unknown) => void
+    ) => {
+      const ok = (stdout = ""): void => callback(null, { stdout, stderr: "" });
+      const fail = (message: string): void => callback(new Error(message));
 
-      if (args[0] === "--version") return done(null);
-
-      if (args[0] === "-m" && args[1] === "venv") {
-        venvRuns += 1;
-        writeSkeleton();
-        return done(
-          behavior.venvError == null ? null : new Error(behavior.venvError)
-        );
+      if (file === uvPath()) {
+        uvRuns.push(args);
+        const step = args.slice(0, 2).join(" ");
+        if (spec.uvError != null && step.startsWith(spec.uvError.step))
+          return fail(spec.uvError.message);
+        if (args[0] === "venv") {
+          writeEnv(home);
+          return ok();
+        }
+        if (step === "python find") return ok(`${MANAGED}\n`);
+        return ok();
       }
 
       if (args[0] === "-c") {
-        const name = (args[1] ?? "").replace(/^import\s+/, "");
-        return done(
-          behavior.present?.includes(name) === true
-            ? null
-            : new Error(`No module named ${name}`)
-        );
+        if (spec.system == null) return fail(`spawn ${file} ENOENT`);
+        return ok(`${spec.system} /usr/bin/${file}\n`);
       }
 
-      if (args[0] === "-m" && args[1] === "pip") {
-        // Everything after the flags is the package list.
-        pipInstalls.push(args.filter((arg) => !arg.startsWith("-")).slice(2));
-        const message = behavior.pipErrors.shift();
-        return done(message == null ? null : new Error(message));
-      }
+      if (file === "xcode-select") return ok("/Library/Developer\n");
 
-      return done(new Error(`unexpected command: ${file} ${args.join(" ")}`));
+      return fail(`unexpected command: ${file} ${args.join(" ")}`);
     }
   );
 };
 
+/** A uv already downloaded, so a test that is not about the download skips it. */
+const haveUv = (): void => {
+  fs.mkdirSync(path.dirname(uvPath()), { recursive: true });
+  fs.writeFileSync(uvPath(), "");
+};
+
+const load = async (): Promise<typeof import("./python-env")> =>
+  await import("./python-env");
+
 beforeEach(() => {
   home = fs.mkdtempSync(path.join(os.tmpdir(), "python-env-"));
+  vi.resetModules();
 });
 
 afterEach(() => {
   fs.rmSync(home, { recursive: true, force: true });
   mocks.execFile.mockReset();
+  vi.unstubAllGlobals();
 });
 
-describe("venv creation failure", () => {
-  it("removes the half-written skeleton, so the next attempt starts clean", async () => {
-    install({
-      venvError:
-        "Command failed: python3 -m venv\nEnsure pip is not disabled: ensurepip is not available. " +
-        "On Debian/Ubuntu systems, you need to install the python3-venv package.",
-      pipErrors: [],
-    });
+describe("when the shell gets the app's own Python", () => {
+  it("not when the system has one that meets the floor", async () => {
+    machine({ system: "3 12" });
+    const { managedPythonEnv } = await load();
 
-    await expect(ensurePython(["pypdf"])).rejects.toThrow(/python3-venv/);
-    expect(fs.existsSync(venvDir())).toBe(false);
+    expect(await managedPythonEnv()).toBeNull();
   });
 
-  it("passes an unrelated creation failure through unchanged", async () => {
-    install({
-      venvError: "Command failed: disk quota exceeded",
-      pipErrors: [],
+  it.each([
+    ["no Python at all", null],
+    ["a Python below the floor", "3 8"],
+  ])("with %s, installing the pinned build", async (_label, system) => {
+    machine({ system });
+    haveUv();
+    const { ensureShellPython, managedPythonEnv, MANAGED_PYTHON_VERSION } =
+      await load();
+
+    expect(await managedPythonEnv()).toEqual({
+      envDir: envDir(),
+      binDir: envBin(),
     });
+    await ensureShellPython();
 
-    await expect(ensurePython(["pypdf"])).rejects.toThrow(/disk quota/);
-    expect(fs.existsSync(venvDir())).toBe(false);
-  });
-});
-
-describe("a venv left behind without pip", () => {
-  it("recreates the venv once and retries the install", async () => {
-    // The stale skeleton from before python3-venv was installed.
-    writeSkeleton();
-    install({
-      pipErrors: ["Command failed: /usr/bin/python: No module named pip"],
-    });
-
-    const result = await ensurePython(["pypdf"]);
-
-    expect(result.installed).toEqual(["pypdf"]);
-    expect(venvRuns).toBe(1);
-    expect(fs.existsSync(venvPython())).toBe(true);
-  });
-
-  it("surfaces the Debian hint when the recreate does not help either", async () => {
-    writeSkeleton();
-    install({
-      pipErrors: [
-        "Command failed: /usr/bin/python: No module named pip",
-        "Command failed: /usr/bin/python: No module named pip",
+    expect(uvRuns).toEqual([
+      [
+        "python",
+        "install",
+        MANAGED_PYTHON_VERSION,
+        "--no-bin",
+        "--no-registry",
       ],
-    });
+      [
+        "python",
+        "find",
+        "--managed-python",
+        "--no-project",
+        MANAGED_PYTHON_VERSION,
+      ],
+      ["venv", "--clear", "--seed", "--python", MANAGED, envDir()],
+    ]);
+  });
+});
 
-    await expect(ensurePython(["pypdf"])).rejects.toThrow(/python3-venv/);
+describe("the environment", () => {
+  it("is never run by this process, only read", async () => {
+    machine({ system: null });
+    writeEnv(home);
+    const { ensureShellPython } = await load();
+
+    await ensureShellPython();
+
+    const ran = mocks.execFile.mock.calls.map(([file]) => String(file));
+    expect(ran.some((file) => file.startsWith(envDir()))).toBe(false);
+    expect(uvRuns).toEqual([]);
   });
 
-  it("does not recreate on an ordinary pip failure", async () => {
-    writeSkeleton();
-    install({ pipErrors: ["Command failed: pip: network unreachable"] });
+  it("is made again when the interpreter it was made from is gone", async () => {
+    machine({ system: null });
+    haveUv();
+    writeEnv(path.join(home, "gone"));
+    const { ensureShellPython } = await load();
 
-    await expect(ensurePython(["pypdf"])).rejects.toThrow(
-      /network unreachable/
+    await ensureShellPython();
+
+    expect(uvRuns.at(-1)?.slice(0, 3)).toEqual(["venv", "--clear", "--seed"]);
+  });
+
+  it("is set up once for concurrent callers", async () => {
+    machine({ system: null });
+    haveUv();
+    const { ensureShellPython } = await load();
+
+    await Promise.all([
+      ensureShellPython(),
+      ensureShellPython(),
+      ensureShellPython(),
+    ]);
+
+    expect(uvRuns.filter((args) => args[0] === "venv")).toHaveLength(1);
+    expect(
+      uvRuns.filter((args) => args.slice(0, 2).join(" ") === "python install")
+    ).toHaveLength(1);
+  });
+});
+
+describe("uv itself", () => {
+  it("refuses a download that does not match the pinned checksum", async () => {
+    machine({ system: null });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(new Uint8Array([1, 2, 3])))
     );
-    expect(venvRuns).toBe(0);
+    const { ensureShellPython } = await load();
+
+    await expect(ensureShellPython()).rejects.toThrow(/checksum/);
+    expect(fs.existsSync(uvPath())).toBe(false);
+  });
+});
+
+describe("failures", () => {
+  it("says the download did not get through when offline, and the next caller retries", async () => {
+    machine({ system: null });
+    const fetch = vi.fn(async () => {
+      throw new TypeError("fetch failed", {
+        cause: new Error("net::ERR_INTERNET_DISCONNECTED"),
+      });
+    });
+    vi.stubGlobal("fetch", fetch);
+    const { ensureShellPython } = await load();
+
+    await expect(ensureShellPython()).rejects.toThrow(
+      /^Could not set up Python: the download did not get through/
+    );
+    await expect(ensureShellPython()).rejects.toThrow(/did not get through/);
+    expect(fetch).toHaveBeenCalledTimes(2);
   });
 
-  it("reinstalls everything asked for, not just what was missing before", async () => {
-    // The probe runs against the OLD venv, and the recovery deletes that venv
-    // whole. Installing only the previously-missing set leaves the packages the
-    // old venv already had gone, while the caller is told it succeeded, and
-    // the script then dies on ModuleNotFoundError.
-    writeSkeleton();
-    install({
-      present: ["pypdf"],
-      pipErrors: ["Command failed: /usr/bin/python: No module named pip"],
+  it("says the disk is full", async () => {
+    machine({
+      system: null,
+      uvError: {
+        step: "python install",
+        message: "failed to write file: No space left on device (os error 28)",
+      },
     });
+    haveUv();
+    const { ensureShellPython } = await load();
 
-    const result = await ensurePython(["pypdf", "fitz"]);
+    await expect(ensureShellPython()).rejects.toThrow(/the disk is full/);
+  });
 
-    expect(venvRuns).toBe(1);
-    expect(pipInstalls.at(-1)).toEqual(["pypdf", "pymupdf"]);
-    expect(result.installed).toEqual(["pypdf", "pymupdf"]);
+  it("says the download did not get through when uv's own request fails", async () => {
+    machine({
+      system: null,
+      uvError: {
+        step: "python install",
+        message:
+          "Failed to install cpython\n  cause: error sending request for url\n  cause: tcp connect error",
+      },
+    });
+    haveUv();
+    const { ensureShellPython } = await load();
+
+    await expect(ensureShellPython()).rejects.toThrow(/did not get through/);
   });
 });

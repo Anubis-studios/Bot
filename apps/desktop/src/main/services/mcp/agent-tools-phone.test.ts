@@ -469,6 +469,22 @@ describe("serve on the phone", () => {
   });
 });
 
+describe("bot_help on the phone", () => {
+  it("is the phone's own, with its places as steps and no button", async () => {
+    const listed = listTools(shared, PHONE).find(
+      (tool) => tool.name === "bot_help"
+    );
+    expect(listed?.description).toContain(
+      "Its places are in AbacusAI Bot on a computer"
+    );
+    const { text, isError } = await call("bot_help", { topic: "routines" });
+    expect(isError).toBe(false);
+    expect(text).toContain("They are on WhatsApp and cannot click here");
+    expect(text).not.toContain("A button under your reply");
+    expect(text).not.toMatch(PANE_WORDING);
+  });
+});
+
 describe("media held for an answer", () => {
   it("is never evicted for room, and no more than 48 MB waits for one answer", () => {
     const held = new MediaStore();

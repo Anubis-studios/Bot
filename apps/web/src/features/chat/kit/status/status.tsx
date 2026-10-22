@@ -3,6 +3,7 @@
  * bubble, run outcome markers, the error card with its action table (and
  * the upgrade variant), and notices.
  */
+import { OPENLLM_ID } from "@abacus-ai/contract/models";
 import { providerDisplayName } from "@abacus-ai/contract/settings";
 import type { UIMessage } from "@tanstack/ai-client";
 import { AlertTriangle, CheckCircle2, Info, X, XCircle } from "lucide-react";
@@ -10,10 +11,13 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { CreditsCard } from "#renderer/components/credits-card";
+import { ModelUnavailableCard } from "#renderer/components/credits-card/model-unavailable";
 import { GroupCard } from "#renderer/components/form-kit/page";
+import { usePrefs } from "#renderer/data/db/prefs";
 import { ABACUS_AGENT_URL } from "#renderer/lib/abacus-links";
 import { latestPresented } from "#renderer/lib/bot-turns/deliverables";
 import { cn } from "#renderer/lib/cn";
+import { CREDITS_EXHAUSTED_TTL_MS } from "#renderer/lib/credits";
 import { AppLink } from "#renderer/lib/navigation/app-link";
 import {
   ownKeyFailure,
@@ -25,6 +29,7 @@ import {
   lastUserText,
   requestUpgradeDialog,
 } from "#renderer/lib/upgrade-dialog";
+import { useNow } from "#renderer/lib/use-now";
 import { Button } from "#renderer/ui/button";
 import {
   HoverCard,
@@ -62,7 +67,21 @@ interface ErrorAction {
   link?: string;
   provider?: string;
   cause?: string;
+  /** `continue-free`: the free lane's providers, in order. */
+  providers?: string[];
 }
+
+/** Why the turn did not finish, as the agent named it (turn-outcome.ts). */
+const OUTCOME_CAUSES = new Set([
+  "context_too_long",
+  "key_invalid",
+  "own_key_quota",
+  "model_unavailable",
+  "free_pool_spent",
+  "rate_limited",
+  "empty",
+  "unknown",
+]);
 
 /** The running tool calls of the active run (the busy line's label). */
 export const runningTools = (messages: readonly UIMessage[]): string[] => {
@@ -179,7 +198,61 @@ const formatTokens = (value: number | undefined): string =>
       ? `${(value / 1000).toFixed(1)}k`
       : String(value);
 
+/**
+ * A reply the free lane gave: which provider, and the way back to the top
+ * models. Shown while the credit wall stands; gone once the credits are back.
+ */
+export const FreeLaneChip = ({ provider }: { provider: string | null }) => {
+  const { t } = useTranslation();
+  const { runtime } = useChatView();
+  const prefs = usePrefs();
+  const now = useNow();
+  if (
+    prefs.creditsExhaustedAt == null ||
+    now - prefs.creditsExhaustedAt >= CREDITS_EXHAUSTED_TTL_MS
+  )
+    return null;
+  return (
+    <div
+      data-slot="free-lane-chip"
+      className="flex w-fit flex-wrap items-center gap-1.5 rounded-md bg-[color-mix(in_oklch,var(--chat-status-attention)_12%,transparent)] px-2 py-0.5 text-xs"
+    >
+      <AlertTriangle
+        aria-hidden
+        className="size-3 text-[var(--chat-status-attention)]"
+      />
+      <span>
+        {t("outcome.freeChip", {
+          provider:
+            provider != null
+              ? providerDisplayName(provider)
+              : t("outcome.freeChipAny"),
+        })}
+      </span>
+      <Button
+        variant="link"
+        size="xs"
+        className="h-auto px-0"
+        onClick={() => void runtime.host.openUpgrade()}
+      >
+        {t("outcome.freeChipUpgrade")}
+      </Button>
+    </div>
+  );
+};
+
 export const RunMarker = ({ outcome }: { outcome: RunOutcomeRecord }) => {
+  const marker = <RunMarkerLine outcome={outcome} />;
+  if (outcome.kind !== "success" || outcome.freeLane == null) return marker;
+  return (
+    <div className="flex flex-col gap-1">
+      {marker}
+      <FreeLaneChip provider={outcome.freeLane.provider} />
+    </div>
+  );
+};
+
+const RunMarkerLine = ({ outcome }: { outcome: RunOutcomeRecord }) => {
   const { t } = useTranslation();
   if (outcome.kind === "cancelled")
     return (
@@ -254,6 +327,10 @@ const creditsExpired = (actions?: ErrorAction[]): boolean =>
   actions?.some(
     (action) => action.type === "upgrade-abacus" && action.cause === "expired"
   ) === true;
+
+/** The picked model that cannot serve the turn, when that is why it ended. */
+const modelUnavailable = (actions?: ErrorAction[]): ErrorAction | undefined =>
+  actions?.find((action) => action.type === "model-unavailable");
 
 const exhaustedScope = (actions?: ErrorAction[]): "abacus" | "pool" =>
   actions?.some((action) => action.type === "upgrade-abacus") === true
@@ -359,6 +436,7 @@ export const ErrorCard = ({
 }: ErrorCardProps) => {
   const { t } = useTranslation();
   const { session, composer, runtime, skin, slots } = useChatView();
+  const resume = useUpgradeResume();
   const [accountTier, setAccountTier] =
     useState<NonNullable<ErrorCardProps["tier"]>>("unknown");
   useEffect(() => {
@@ -383,12 +461,16 @@ export const ErrorCard = ({
     actions,
     tier === "paid" || tier === "basic"
   );
-  // A busy pool spent no credits.
-  const exhausted =
-    upgrade && !actions.some((action) => action.cause === "busy");
+  const cause = (error as { cause?: string }).cause;
+  // A model the plan does not include: main has locked it, so the picker
+  // re-reads without it.
+  const unavailable = modelUnavailable(actions);
+  const refusedModel =
+    unavailable?.cause === "plan" ? unavailable.model : undefined;
   useEffect(() => {
-    if (exhausted) void runtime.host.markCreditsExhausted?.().catch(() => {});
-  }, [exhausted, runtime]);
+    if (refusedModel != null)
+      void runtime.host.refreshModels?.().catch(() => {});
+  }, [refusedModel, runtime]);
   const crashed = error.code === "agent_exit" || error.code === "agent_crashed";
   const canReply = composer.readOnly == null;
   const retry = () =>
@@ -406,11 +488,90 @@ export const ErrorCard = ({
     !(ownKey.cause === "network" && globalThis.navigator?.onLine === false)
   )
     return <OwnKeyCard failure={ownKey} tier={tier} runId={outcome.runId} />;
+  if (unavailable != null)
+    return (
+      <div
+        role="group"
+        aria-label={t("chat.error.label")}
+        className="mx-auto w-full max-w-[calc(var(--composer-max-w)-var(--spacing)*8)]"
+        data-slot="error-card"
+        data-variant="model-unavailable"
+      >
+        <ModelUnavailableCard
+          host={runtime.host}
+          kind={
+            unavailable.cause === "plan" || unavailable.cause === "down"
+              ? unavailable.cause
+              : "retired"
+          }
+          label={unavailable.label ?? unavailable.model ?? ""}
+          creditsOut={actions.some(
+            (action) => action.type === "upgrade-abacus"
+          )}
+          {...(latest &&
+            canReply &&
+            actions.some((action) => action.type === "switch-to-abacus") && {
+              // The kept message goes again on RouteLLM - Open, by choice.
+              onSwitch: () =>
+                void session
+                  .retry(
+                    {
+                      model: OPENLLM_ID,
+                      ...(composer.fixedMode
+                        ? { mode: composer.fixedMode }
+                        : {}),
+                    },
+                    t("workspace.retryMessage")
+                  )
+                  .catch(() => {}),
+            })}
+          {...(composer.model != null &&
+            canReply && {
+              onPickModel: (from: HTMLElement) =>
+                from
+                  .closest('[data-slot="chat-view"]')
+                  ?.querySelector<HTMLButtonElement>(
+                    '[data-slot="chat-model-picker"]'
+                  )
+                  ?.click(),
+            })}
+          {...(canReply && {
+            onUpgrade: () =>
+              requestUpgradeDialog(
+                {
+                  kind: "credits",
+                  key: `model-unavailable:${outcome.runId}:${Date.now()}`,
+                  threadId: session.threadId,
+                  pendingText: lastUserText(session.hostStore.state.messages),
+                  resume,
+                },
+                true
+              ),
+          })}
+        />
+      </div>
+    );
   if (upgrade) {
     const ready =
       slots.renderDeliverables == null
         ? []
         : readyBefore(session.hostStore.state.messages, outcome.afterMessageId);
+    // The turn on the free pool goes on there once the user says so.
+    const resumeOnFreePool = async () => {
+      await runtime.host.chooseFreeLane?.();
+      await composer.onResumeOnFreePool?.();
+      await session.retry(
+        {
+          model: OPENLLM_ID,
+          ...(composer.fixedMode ? { mode: composer.fixedMode } : {}),
+        },
+        t("workspace.retryMessage")
+      );
+    };
+    const atWall = actions.some((action) => action.type === "upgrade-abacus");
+    const continueFree = actions.find(
+      (action) => action.type === "continue-free"
+    );
     return (
       <div
         role="group"
@@ -428,6 +589,30 @@ export const ErrorCard = ({
           })}
           {...(ready.length > 0 && {
             ready: slots.renderDeliverables?.(ready),
+          })}
+          {...(atWall && {
+            wall: {
+              providers: continueFree?.providers ?? [],
+              expired: creditsExpired(actions),
+              ...(continueFree != null &&
+                latest &&
+                canReply && { onContinueFree: resumeOnFreePool }),
+              ...(canReply && {
+                onUpgrade: () =>
+                  requestUpgradeDialog(
+                    {
+                      kind: "credits",
+                      key: `credit-wall:${outcome.runId}:${Date.now()}`,
+                      threadId: session.threadId,
+                      pendingText: lastUserText(
+                        session.hostStore.state.messages
+                      ),
+                      resume,
+                    },
+                    true
+                  ),
+              }),
+            },
           })}
           alternatives={
             canReply ? (
@@ -448,39 +633,87 @@ export const ErrorCard = ({
                         })}
                       </Button>
                     ))}
+                {actions.some((action) => action.type === "fix-key") && (
+                  <Button
+                    nativeButton={false}
+                    variant="secondary"
+                    data-action="fix-key"
+                    render={<AppLink to="/settings/models" />}
+                  >
+                    {t("outcome.action.fixKey")}
+                  </Button>
+                )}
               </>
             ) : undefined
           }
-          onResume={
-            latest && canReply
-              ? async () => {
-                  await composer.onResumeOnFreePool?.();
-                  await session.retry(
-                    {
-                      model: "abacus/openllm",
-                      ...(composer.fixedMode
-                        ? { mode: composer.fixedMode }
-                        : {}),
-                    },
-                    t("workspace.retryMessage")
-                  );
-                }
-              : undefined
-          }
+          // Connecting a free source from the card is choosing the free lane.
+          onResume={latest && canReply ? resumeOnFreePool : undefined}
         />
       </div>
     );
   }
+  const connection = error.code === "network_unreachable";
   const buttons = actions.flatMap((action, index) => {
     switch (action.type) {
       case "retry":
         return latest && canReply
           ? [
               <Button key={index} variant="secondary" onClick={retry}>
-                {t("chat.error.retry")}
+                {t(connection ? "outcome.action.tryAgain" : "chat.error.retry")}
               </Button>,
             ]
           : [];
+      case "new-chat":
+        return composer.onNewChat != null && canReply
+          ? [
+              <Button
+                key={index}
+                variant="secondary"
+                data-action="new-chat"
+                onClick={composer.onNewChat}
+              >
+                {t("outcome.action.newChat")}
+              </Button>,
+            ]
+          : [];
+      case "switch-to-abacus":
+        return latest && canReply
+          ? [
+              <Button
+                key={index}
+                variant="secondary"
+                data-action="switch-to-abacus"
+                onClick={() =>
+                  void (async () => {
+                    await composer.onResumeOnFreePool?.();
+                    await session.retry(
+                      {
+                        model: OPENLLM_ID,
+                        ...(composer.fixedMode
+                          ? { mode: composer.fixedMode }
+                          : {}),
+                      },
+                      t("workspace.retryMessage")
+                    );
+                  })().catch(() => {})
+                }
+              >
+                {t("outcome.action.switchToAbacus")}
+              </Button>,
+            ]
+          : [];
+      case "fix-key":
+        return [
+          <Button
+            key={index}
+            nativeButton={false}
+            variant="secondary"
+            data-action="fix-key"
+            render={<AppLink to="/settings/models" />}
+          >
+            {t("outcome.action.fixKey")}
+          </Button>,
+        ];
       case "switch-model":
         return action.model != null && composer.model != null && canReply
           ? [
@@ -568,39 +801,50 @@ export const ErrorCard = ({
           className="text-destructive mt-0.5 size-4 shrink-0"
         />
         <div className="flex min-w-0 flex-col gap-1">
-          <div className="font-medium">
+          <div className="font-medium" data-cause={cause}>
             {crashed
               ? t("chat.error.crashed")
-              : providerMessage(error.message) ||
-                t("errors.genericDescription")}
+              : connection
+                ? t("outcome.connection.title")
+                : cause != null && OUTCOME_CAUSES.has(cause)
+                  ? t(`outcome.cause.${cause}`, {
+                      provider: providerDisplayName(
+                        actions.find((action) => action.provider != null)
+                          ?.provider ?? ""
+                      ),
+                    })
+                  : providerMessage(error.message) ||
+                    t("errors.genericDescription")}
           </div>
-          {detail != null && detail !== "" ? (
+          {connection ? (
+            <p className="text-muted-foreground text-xs">
+              {t("outcome.connection.body")}
+            </p>
+          ) : detail != null && detail !== "" ? (
             <p className="text-muted-foreground text-xs break-words">
               {detail}
             </p>
           ) : null}
         </div>
       </div>
-      {providerMessage(error.message) !== error.message && (
-        <details className="ps-6 text-xs">
-          <summary className="cursor-pointer">{t("phase5.details")}</summary>
+      {connection && detail != null && detail !== "" ? (
+        <details className="ps-6 text-xs" data-slot="connection-details">
+          <summary className="cursor-pointer">
+            {t("outcome.action.viewDetails")}
+          </summary>
           <pre className="mt-2 max-h-40 overflow-auto break-all whitespace-pre-wrap">
-            {error.message}
+            {detail}
           </pre>
         </details>
-      )}
-      {/\b40[13]\b|provider.*(?:denied|rejected)/i.test(
-        error.message ?? ""
-      ) && (
-        <div className="ps-6">
-          <Button
-            nativeButton={false}
-            variant="secondary"
-            render={<AppLink to="/settings/models" />}
-          >
-            {t("settings.pages.models")}
-          </Button>
-        </div>
+      ) : (
+        providerMessage(error.message) !== error.message && (
+          <details className="ps-6 text-xs">
+            <summary className="cursor-pointer">{t("phase5.details")}</summary>
+            <pre className="mt-2 max-h-40 overflow-auto break-all whitespace-pre-wrap">
+              {error.message}
+            </pre>
+          </details>
+        )
       )}
       {buttons.length > 0 ? (
         <div className="flex flex-wrap gap-2 ps-6">{buttons}</div>

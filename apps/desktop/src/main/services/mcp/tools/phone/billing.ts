@@ -1,8 +1,14 @@
+import type { BillingPlan } from "@abacus-ai/contract/billing-plan";
+
+import { fetchBillingPlan } from "../../../providers/abacus-upgrade";
 import {
-  type BillingPlan,
-  fetchBillingPlan,
-} from "../../../providers/abacus-upgrade";
-import { bullets, credits, creditStanding, priceLine } from "../billing";
+  alwaysOnAnswer,
+  bullets,
+  credits,
+  creditStanding,
+  planFacts,
+  priceLine,
+} from "../billing";
 import type { ToolHost, ToolResult } from "../definition";
 import type { PhoneToolDefinition } from "./definition";
 
@@ -18,6 +24,7 @@ export function phoneBillingResult(
   const lines = [
     `The user's plan: ${billing.current.planName}.`,
     ...creditStanding(billing),
+    ...planFacts(billing),
   ];
   lines.push("", "The plans:");
   for (const plan of billing.plans)
@@ -43,12 +50,14 @@ export function phoneBillingResult(
   lines.push(
     "",
     "Answer what they asked, in their language, as one short WhatsApp message. When they ask about upgrading, or",
-    "are short of credits or a limit: pitch the upgrades above as a short list of what each gives, then the link.",
+    "are short of credits or a limit: pitch the upgrades above with every feature line as written (translated, never",
+    "shortened or dropped), then the link.",
     "On the free plan, offer both: Basic, and Pro as the even better choice, saying what Pro adds on top of Basic.",
     "Give each link exactly as written, on its own line. Never invent features, prices or links, and never send them",
     "to account settings or a billing page instead of these links. Never say you changed their plan: they upgrade",
     "on the page."
   );
+  lines.push("", alwaysOnAnswer(billing));
   if (billing.upgradeInMobileApp)
     lines.push(
       "Their plan is billed through the app store: they upgrade or buy credits in the mobile app, under Settings. Say so instead of sending a link."
@@ -63,10 +72,13 @@ export const PHONE_BILLING_TOOLS: PhoneToolDefinition[] = [
     toolsets: "always",
     description: [
       "The user's plan and credits, every plan with its price and what it gives, and the links to upgrade or buy",
-      "credits. Call it whenever they ask about their plan, credits or balance, prices, upgrading, or what a plan",
-      "includes, and when they run into a plan limit or run low on credits. It answers at once; send them what it",
-      "says, with its links as given. Pass upgrade: true whenever they might upgrade (they ask about upgrading or",
-      "prices, or hit a limit or run low), so the answer carries their upgrade links.",
+      "credits. Call it whenever they ask about their plan, credits or balance, prices or discounts, limits or",
+      "resets, upgrading, or what a plan includes; whenever they ask whether something keeps working while their",
+      "app or computer is off (WhatsApp, Telegram or Discord auto-replies, routines, reminders); when they ask to",
+      "analyse a video; and when they run into a plan limit or run low on credits. Never answer these from memory.",
+      "It answers at once; send them what it says, with every feature line as written and its links as given. Pass",
+      "upgrade: true whenever they might upgrade (they ask about upgrading or prices, or hit a limit or run low), so",
+      "the answer carries their upgrade links.",
     ].join("\n"),
     inputSchema: {
       type: "object",

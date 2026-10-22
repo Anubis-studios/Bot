@@ -23,7 +23,7 @@ import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { useBundledTools } from "./bundled-tools.js";
+import { useBundledTools, useScriptRuntime } from "./bundled-tools.js";
 import { childProcessEnv, childProcessEnvFor } from "./child-env.js";
 
 /** Pinned by scripts/download-tools.js; asserted here so a bump has to be deliberate. */
@@ -81,6 +81,45 @@ describe("useBundledTools", () => {
 
     expect(useBundledTools(env, dir)).toBe(true);
     expect(env.PATH).toBe(dir);
+  });
+});
+
+describe("useScriptRuntime", () => {
+  it("names the app's own Node and puts the libraries first on NODE_PATH, once", () => {
+    const dir = tempDir();
+    const env: NodeJS.ProcessEnv = { NODE_PATH: "/elsewhere" };
+
+    expect(useScriptRuntime(env, dir, "C:\\Apps\\AbacusBot.exe")).toBe(true);
+    useScriptRuntime(env, dir, "C:\\Apps\\AbacusBot.exe");
+
+    expect(env.ABACUSAI_BOT_NODE).toBe("C:/Apps/AbacusBot.exe");
+    expect(env.NODE_PATH?.split(delimiter)).toEqual([dir, "/elsewhere"]);
+  });
+
+  it("does nothing when the libraries were not built", () => {
+    const env: NodeJS.ProcessEnv = {};
+
+    expect(useScriptRuntime(env, join(tempDir(), "absent"))).toBe(false);
+    expect(env).toEqual({});
+  });
+
+  it("lets a script the agent writes require the bundled libraries", () => {
+    const dir = tempDir();
+    const script = join(dir, "check.cjs");
+    writeFileSync(
+      script,
+      'const { Document } = require("docx"); const ExcelJS = require("exceljs");' +
+        ' const mammoth = require("mammoth"); const JSZip = require("jszip");' +
+        " console.log([Document, ExcelJS.Workbook, mammoth.extractRawText, JSZip].map((x) => typeof x).join());"
+    );
+    const env: NodeJS.ProcessEnv = { ...process.env };
+    // The built bundles, as they ship: dist/ beside this source.
+    const built = fileURLToPath(new URL("../dist/modules", import.meta.url));
+    expect(useScriptRuntime(env, built)).toBe(true);
+
+    expect(
+      execFileSync(process.execPath, [script], { env, encoding: "utf8" }).trim()
+    ).toBe("function,function,function,function");
   });
 });
 

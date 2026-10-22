@@ -339,6 +339,7 @@ const PREFS_WRITABLE = [
   "lastPickedWorkspaceId",
   "recentFolders",
   "creditsExhaustedAt",
+  "freeLaneChosenAt",
   "browserHomepage",
   "onboardingStep",
   "dismissals",

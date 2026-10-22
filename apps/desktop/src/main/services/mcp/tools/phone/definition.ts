@@ -8,7 +8,7 @@ import type { ToolDefinition, ToolHost, ToolResult } from "../definition";
  */
 export interface PhoneToolDefinition extends Pick<
   ToolDefinition,
-  "name" | "toolsets" | "ready"
+  "name" | "toolsets" | "ready" | "offered"
 > {
   surface: "phone";
   description: string;

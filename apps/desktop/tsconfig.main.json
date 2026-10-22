@@ -1,7 +1,10 @@
 {
   "extends": "@abacus-ai/config/typescript/node",
   "compilerOptions": {
-    "paths": { "@abacus-ai/contract/*": ["../../packages/contract/src/*"] },
+    "paths": {
+      "@abacus-ai/contract/*": ["../../packages/contract/src/*"],
+      "#locales/*": ["../web/src/locales/*"]
+    },
     "module": "Preserve",
     "moduleResolution": "Bundler",
     "types": ["node", "electron"],
@@ -13,5 +16,10 @@
     "tsBuildInfoFile": "../../node_modules/.tmp/desktop.main.tsbuildinfo"
   },
   "references": [{ "path": "../../packages/contract" }],
-  "include": ["src/main", "src/agent-host", "src/preload/*.d.ts"]
+  "include": [
+    "src/main",
+    "src/agent-host",
+    "src/preload/*.d.ts",
+    "../web/src/locales/*.json"
+  ]
 }

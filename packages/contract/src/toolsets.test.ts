@@ -10,6 +10,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  abacusAgentPromptUrl,
   excludedBuiltinTools,
   isToolsetEnabled,
   PAID_FEATURES,
@@ -41,15 +42,29 @@ describe("whether a group is on", () => {
   });
 
   it("turns on what a paid plan serves here, unless the user switched it off", () => {
-    expect(isToolsetEnabled("image_gen", undefined)).toBe(false);
-    expect(isToolsetEnabled("image_gen", undefined, true)).toBe(true);
-    expect(isToolsetEnabled("tts", {}, true)).toBe(true);
-    expect(isToolsetEnabled("image_gen", { image_gen: false }, true)).toBe(
-      false
-    );
-    // Served only with a key of the user's own: off on every plan by default.
-    expect(isToolsetEnabled("video_gen", undefined, true)).toBe(false);
+    expect(isToolsetEnabled("video", undefined)).toBe(false);
+    expect(isToolsetEnabled("video", undefined, true)).toBe(true);
+    expect(isToolsetEnabled("video", { video: false }, true)).toBe(false);
+    // Media is the plan's on the web, made here only with a key of the user's own: off on every plan by default.
+    for (const id of ["image_gen", "tts", "video_gen", "bfl"])
+      expect(isToolsetEnabled(id, {}, true), id).toBe(false);
+    expect(isToolsetEnabled("image_gen", { image_gen: true }, true)).toBe(true);
     expect(isToolsetEnabled("device", undefined, true)).toBe(false);
+  });
+
+  it("opens Abacus AI Agent with the request in its composer, never sending it", () => {
+    expect(abacusAgentPromptUrl(null)).toBe(
+      "https://apps.abacus.ai/chatllm/agent"
+    );
+    expect(abacusAgentPromptUrl("  ")).toBe(
+      "https://apps.abacus.ai/chatllm/agent"
+    );
+    expect(abacusAgentPromptUrl("a cat & a dog?")).toBe(
+      "https://apps.abacus.ai/chatllm/agent?prompt=a+cat+%26+a+dog%3F"
+    );
+    const long = new URL(abacusAgentPromptUrl("x".repeat(5_000)));
+    expect(long.searchParams.get("prompt")).toHaveLength(1_500);
+    expect(long.searchParams.has("message")).toBe(false);
   });
 
   it("reports an unknown id as off rather than throwing", () => {
@@ -278,15 +293,21 @@ describe("the paid-plan capabilities", () => {
       },
       {
         feature: "image_gen",
-        name: "image generation",
-        inApp: true,
+        name: "image generation and editing",
+        inApp: false,
         toolsets: ["image_gen"],
       },
       {
         feature: "tts",
-        name: "text to speech",
-        inApp: true,
+        name: "speech and audio generation",
+        inApp: false,
         toolsets: ["tts"],
+      },
+      {
+        feature: "video",
+        name: "video analysis",
+        inApp: true,
+        toolsets: ["video"],
       },
     ]);
   });

@@ -22,6 +22,8 @@ interface ModelGroupItem {
   id: string;
   label: string;
   description?: string;
+  /** Not in the account's plan: greyed, and choosing it upgrades instead. */
+  locked?: { label: string; onSelect(): void };
 }
 
 export interface ModelGroup {
@@ -81,6 +83,8 @@ export interface ComposerConfig {
   skillsBaseline?: readonly SkillMetadata[];
   /** Apply the free router before replaying a dead turn. */
   onResumeOnFreePool?(): Promise<void>;
+  /** Start a fresh chat beside this one (a conversation outgrew the model). */
+  onNewChat?(): void;
   /** Move the chat onto `model` before replaying a dead turn on it. */
   onResumeOnModel?(model: string): Promise<void>;
   /** 03-bots §24.2: sent as `forwardedProps.mode` on every admission. */

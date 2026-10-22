@@ -201,13 +201,39 @@
     },
     {
       "name": "billing_plan",
-      "description": "The user's Abacus AI plan and credits, every plan with its price, any first-month discount and what it gives,\nand the links to upgrade or buy credits. Call it whenever they ask about their plan, credits or balance, prices,\ndiscounts or deals, upgrading, or what a plan includes, and when they run into a plan limit or run low on\ncredits. Pass upgrade: true whenever they might upgrade, so the answer carries their upgrade links.",
+      "description": "The source of truth for every question about money and limits: the user's Abacus AI plan, credits left and\nwhen they renew, every plan with its price, any first-month discount and what it gives, the limits, and the\nlinks to upgrade or buy credits. Call it for any question, in any wording or language, about what models or\nplans cost, prices, discounts or deals, credits or balance, limits, resets or renewals, upgrading, or what a\nplan includes; whenever they ask whether anything keeps working while the app or computer is off (WhatsApp,\nTelegram or Discord auto-replies, routines, reminders, monitoring, staying online 24/7), which a plan answers\nand is never impossible; when they ask to analyse a video (a reel, a Short, a YouTube or TikTok link, a video\nfile); and when they run into a plan limit or run low on credits. Pass upgrade: true whenever they might\nupgrade, so the answer carries their upgrade links.\nNever quote a price, discount, credit amount, limit or reset from memory: call this first, every time, and\nanswer only from what it returns, with every feature line as written (translated, never shortened).",
       "inputSchema": {
         "type": "object",
         "properties": {
           "upgrade": {
             "type": "boolean",
             "description": "True when they might upgrade: the answer then carries their upgrade links."
+          }
+        }
+      }
+    },
+    {
+      "name": "bot_help",
+      "description": "Help with this bot's own setup, answered from its live state: its routines (when and where\nthey run, and whether they run with the computer off), its models and provider keys, its\nconnections (connectors and chat apps), its bots and its capabilities. For how do I…, can I…,\nwhere is…, is X connected, does X work when the app is closed, which models can I use, how do\nI connect a chat app or rename a bot. Call it before answering any of these; never answer them\nfrom memory, and never say something is not connected or not possible without it. It names\nthe place in the app for each, which the app shows as a button.\nIt is not for building or publishing apps, websites or pages: that is the user's task, not a\nquestion about this bot. Never call it to check whether you can do a task: when the user asks\nyou to make, build or publish something, use the tools you have for it. Plan prices and\ncredits are billing_plan's. Images, video and speech\nare made in Abacus AI Agent on the web, not by this bot: for those, call paid_feature.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "topic": {
+            "type": "string",
+            "enum": [
+              "models",
+              "connectors",
+              "chat_apps",
+              "routines",
+              "bots",
+              "capabilities",
+              "plan"
+            ],
+            "description": "What the question is about; leave it out for an overview of everything."
+          },
+          "name": {
+            "type": "string",
+            "description": "The one thing asked about, when there is one: a provider (\"gemini\"), a connector (\"gmail\"), a chat app (\"telegram\"), a bot's name, or a capability."
           }
         }
       }
@@ -415,13 +441,39 @@
     },
     {
       "name": "billing_plan",
-      "description": "The user's Abacus AI plan and credits, every plan with its price, any first-month discount and what it gives,\nand the links to upgrade or buy credits. Call it whenever they ask about their plan, credits or balance, prices,\ndiscounts or deals, upgrading, or what a plan includes, and when they run into a plan limit or run low on\ncredits. Pass upgrade: true whenever they might upgrade, so the answer carries their upgrade links.",
+      "description": "The source of truth for every question about money and limits: the user's Abacus AI plan, credits left and\nwhen they renew, every plan with its price, any first-month discount and what it gives, the limits, and the\nlinks to upgrade or buy credits. Call it for any question, in any wording or language, about what models or\nplans cost, prices, discounts or deals, credits or balance, limits, resets or renewals, upgrading, or what a\nplan includes; whenever they ask whether anything keeps working while the app or computer is off (WhatsApp,\nTelegram or Discord auto-replies, routines, reminders, monitoring, staying online 24/7), which a plan answers\nand is never impossible; when they ask to analyse a video (a reel, a Short, a YouTube or TikTok link, a video\nfile); and when they run into a plan limit or run low on credits. Pass upgrade: true whenever they might\nupgrade, so the answer carries their upgrade links.\nNever quote a price, discount, credit amount, limit or reset from memory: call this first, every time, and\nanswer only from what it returns, with every feature line as written (translated, never shortened).",
       "inputSchema": {
         "type": "object",
         "properties": {
           "upgrade": {
             "type": "boolean",
             "description": "True when they might upgrade: the answer then carries their upgrade links."
+          }
+        }
+      }
+    },
+    {
+      "name": "bot_help",
+      "description": "Help with this bot's own setup, answered from its live state: its routines (when and where\nthey run, and whether they run with the computer off), its models and provider keys, its\nconnections (connectors and chat apps), its bots and its capabilities. For how do I…, can I…,\nwhere is…, is X connected, does X work when the app is closed, which models can I use, how do\nI connect a chat app or rename a bot. Call it before answering any of these; never answer them\nfrom memory, and never say something is not connected or not possible without it. It names\nthe place in the app for each, which the app shows as a button.\nIt is not for building or publishing apps, websites or pages: that is the user's task, not a\nquestion about this bot. Never call it to check whether you can do a task: when the user asks\nyou to make, build or publish something, use the tools you have for it. Plan prices and\ncredits are billing_plan's. Images, video and speech\nare made in Abacus AI Agent on the web, not by this bot: for those, call paid_feature.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "topic": {
+            "type": "string",
+            "enum": [
+              "models",
+              "connectors",
+              "chat_apps",
+              "routines",
+              "bots",
+              "capabilities",
+              "plan"
+            ],
+            "description": "What the question is about; leave it out for an overview of everything."
+          },
+          "name": {
+            "type": "string",
+            "description": "The one thing asked about, when there is one: a provider (\"gemini\"), a connector (\"gmail\"), a chat app (\"telegram\"), a bot's name, or a capability."
           }
         }
       }

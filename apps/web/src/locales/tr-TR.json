@@ -562,6 +562,7 @@
       "browser_snapshot": "Sayfayı etkileşimli öğeler listesi olarak oku.",
       "browser_tabs": "Tarayıcı sekmelerini listele, aralarında geçiş yap ve kapat.",
       "browser_task": "Bütün bir web görevini bir tarayıcı alt ajanına devret ve yanıtı al.",
+      "checkpoint_diff": "Önceki turların diskte neyi değiştirdiğini kontrol noktalarından göster.",
       "code_map": "Bir dosya veya klasördeki fonksiyonları ve sınıfları dizinle.",
       "connect_connector": "Kullanıcıdan Gmail veya Slack gibi bir hizmeti eklemesini iste, böylece araçları kullanılabilir hale gelsin.",
       "cronjob": "Zamanlanmış görevleri oluştur, listele, duraklat veya çalıştır.",
@@ -606,6 +607,7 @@
       "read_telegram_messages": "İstek üzerine son Telegram mesajlarını oku.",
       "read_whatsapp_messages": "İstek üzerine son WhatsApp mesajlarını oku.",
       "run_tests": "Projenin testlerini çalıştır ve nelerin geçip nelerin kaldığını bildir.",
+      "restore_checkpoint": "Dosyaları önceki bir turun değiştirmesinden önceki hâline geri koy.",
       "send_discord_message": "Discord'da mesaj gönder.",
       "send_telegram_message": "Telegram'da mesaj gönder.",
       "send_to_whatsapp": "AbacusAI Bot'un numarasından kendi WhatsApp'ına mesaj veya ekran görüntüsü gönder.",
@@ -2821,7 +2823,9 @@
       "providerConnectHint": "Ücretsiz olanlar dahil modellerini kullanmak için bağla.",
       "retryAttachment": "Eki yeniden dene",
       "folderItems_one": "{{count}} öğe",
-      "folderItems_other": "{{count}} öğe"
+      "folderItems_other": "{{count}} öğe",
+      "includedIn": "{{plan}} planına dahil",
+      "includedInPaid": "Ücretli planlara dahil"
     },
     "day": {
       "today": "Bugün",
@@ -3165,7 +3169,14 @@
     },
     "paidFeature": {
       "title": "{{feature}} Basic'e dahildir",
-      "webTitle": "{{feature}} Basic'e dahildir, web'deki Abacus AI Agent'ta"
+      "webTitle": "{{feature}} Basic'e dahildir, web'deki Abacus AI Agent'ta",
+      "webBody": "Basic, web'de Abacus AI Agent'ta görsel ve video oluşturmayı ve düzenlemeyi, ayrıca ses oluşturmayı içerir.",
+      "agentTitle": "{{feature}} web'de Abacus AI Agent'ta",
+      "agentBody": "Planınız, web'de Abacus AI Agent'ta görsel ve video oluşturmayı ve düzenlemeyi, ayrıca ses oluşturmayı içerir. İsteğiniz orada hazır; düzenlemek istediğiniz görseli orada ekleyin.",
+      "openAgent": "Abacus AI Agent'ta aç"
+    },
+    "botHelp": {
+      "open": "Aç"
     }
   },
   "notch": {
@@ -3850,6 +3861,30 @@
     "showLess": "Daha az göster",
     "showMore": "+{{count}} daha"
   },
+  "checkpoints": {
+    "summary_one": "{{count}} dosya değişti",
+    "summary_other": "{{count}} dosya değişti",
+    "restore": "Bu turdan önceki hâline döndür",
+    "restoreFile": "Bu dosyayı geri yükle",
+    "undoRestore": "Geri yüklemeyi geri al",
+    "busy": "Ajanın bu turu bitirmesini bekle",
+    "binary": "ikili",
+    "noCopy": "kopya tutulmadı",
+    "partial": "Bazı klasörler tamamen saklanamayacak kadar büyüktü; sınırı aşan dosyalar kapsanmıyor.",
+    "failed": "Geri yüklenemedi. Ajan bitirdikten sonra yeniden dene.",
+    "restored_one": "{{count}} dosya geri yüklendi.",
+    "restored_other": "{{count}} dosya geri yüklendi.",
+    "unrestorable_one": "{{count}} dosya kopyası tutulamayacak kadar büyüktü.",
+    "unrestorable_other": "{{count}} dosya kopyası tutulamayacak kadar büyüktü.",
+    "conflicts_one": "{{count}} dosya bu turdan sonra değişti ve olduğu gibi bırakıldı.",
+    "conflicts_other": "{{count}} dosya bu turdan sonra değişti ve olduğu gibi bırakıldı.",
+    "force": "Yine de geri yükle",
+    "kind": {
+      "modified": "Düzenlendi",
+      "created": "Eklendi",
+      "deleted": "Silindi"
+    }
+  },
   "devicePanel": {
     "axPermissionNeeded": "Simülatörü penceresini göstermeden yansıtmak için Erişilebilirlik izni gerekiyor.",
     "boot": "Başlat",
@@ -4162,6 +4197,24 @@
     "waitingTitle": "Ödemeyi tarayıcında tamamla",
     "waitingToSend": "Gönderilmeyi bekliyor: “{{text}}”"
   },
+  "paymentRequired": {
+    "unconfirmedTitle": "AbacusAI Bot'u kullanmaya devam etmek için bir plan seçin",
+    "unconfirmedBody": "Oturum açtınız, ancak AbacusAI Bot'un çalışması için hesabınızın bir plana ihtiyacı var.",
+    "alreadySubscribed": "Zaten abone misiniz? {{link}}",
+    "reportIssue": "Sorun bildirin",
+    "trialEndedTitle": "Ücretsiz denemeniz sona erdi",
+    "trialEndedBody": "AbacusAI Bot'u bu hesapla kullanmaya devam etmek için yükseltin.",
+    "lapsedTitle": "Aboneliğiniz sona erdi",
+    "lapsedBody": "AbacusAI Bot'u bu hesapla kullanmaya devam etmek için planınızı yenileyin.",
+    "upgrade": "Yükselt",
+    "renew": "Yenile",
+    "webAgent": "Web'deki Abacus AI Agent'a git →",
+    "tryAgain": "Tekrar dene",
+    "checking": "Kontrol ediliyor…",
+    "stillBlocked": "Bu hesapta henüz bir ödeme görünmüyor.",
+    "waiting": "Ödemeyi tarayıcınızda tamamlayın. Ödemeniz geçer geçmez uygulama devam eder.",
+    "otherAccount": "Farklı bir hesapla oturum açın"
+  },
   "visualizer": {
     "loading": "Görselleştirme yükleniyor…"
   },
@@ -4335,5 +4388,94 @@
     "outOfCredit": "{{provider}} anahtarının kredisi bitti",
     "paidBody": "Web’de AbacusAI Agent’ta kullan: en iyi modeller planına dahil.",
     "rateLimited": "{{provider}} anahtarın hız sınırına ulaştı"
+  },
+  "outcome": {
+    "wall": {
+      "title": "Ücretsiz kredilerin bitti",
+      "expiredTitle": "Ücretsiz kredilerinin süresi doldu",
+      "paidTitle": "Bu ayın kredilerini kullandın",
+      "renews": "Ücretsiz krediler her ay yenilenir.",
+      "balance": "{{granted}} krediden {{remaining}} kaldı",
+      "warning": "Şimdi devam etmek için bot, başka bir sağlayıcının ({{providers}}) ücretsiz modellerine geçer. Bunlar çok daha düşük kalitededir: daha çok hata yapar, çalışan kodu bozabilir ve sık sık kullanım sınırına takılır.",
+      "offer": "{{plan}} planına geç — {{price}}",
+      "upgradeCta": "{{plan}} planına geç",
+      "continueFree": "Ücretsiz modellerle devam et (daha düşük kalite)"
+    },
+    "plan": {
+      "introPrice": "İlk ay {{first}}, sonra aylık {{monthly}}",
+      "monthlyPrice": "Aylık {{monthly}}"
+    },
+    "freeChip": "Ücretsiz model · {{provider}}",
+    "freeChipAny": "başka bir sağlayıcı",
+    "freeChipUpgrade": "En iyi modeller için yükselt",
+    "connection": {
+      "title": "Bağlantı sorunu",
+      "body": "İnternet bağlantını, VPN'ini veya proxy'ni kontrol edip tekrar dene."
+    },
+    "cause": {
+      "context_too_long": "Bu konuşma model için çok uzun. Yeni bir sohbet başlat veya daha geniş bağlamlı bir model seç.",
+      "key_invalid": "{{provider}} anahtarın reddedildi: geçersiz ya da süresi dolmuş.",
+      "own_key_quota": "{{provider}} anahtarın kotasını doldurdu. Başka bir modele geç veya anahtarın planını kontrol et.",
+      "model_unavailable": "Bu model isteği kabul edemedi. Başka bir model seç.",
+      "free_pool_spent": "Şimdilik tüm ücretsiz kaynaklar tükendi. Başka bir ücretsiz kaynak bağla veya başka bir model seç.",
+      "rate_limited": "Ücretsiz modeller şu anda yoğun. Birkaç dakika sonra tekrar dene veya başka bir modele geç.",
+      "empty": "Model boş bir yanıt döndürdü. Tekrar dene veya başka bir modele geç.",
+      "unknown": "Model bunu tamamlayamadı. Tekrar dene veya başka bir modele geç."
+    },
+    "action": {
+      "newChat": "Yeni sohbet",
+      "fixKey": "Anahtarı kontrol et",
+      "viewDetails": "Ayrıntıları göster",
+      "tryAgain": "Tekrar dene",
+      "switchToAbacus": "Abacus'a geç (RouteLLM - Open)"
+    },
+    "channel": {
+      "wall": "Ücretsiz kredilerin bittiği için durakladım.",
+      "expired": "Ücretsiz kredilerinin süresi dolduğu için durakladım.",
+      "renews": "Ücretsiz krediler her ay yenilenir.",
+      "offer": "{{plan}} planı {{price}} ve sana şunları sunar:",
+      "link": "Buradan yükselt: {{link}}",
+      "repeat": "Hâlâ duraklatıldı: {{link}}",
+      "paidOut": "Bu ayın kredileri bittiği için durakladım. Devam etmek için kredi ekle: {{link}}",
+      "unavailable": "{{model}} artık kullanılamıyor, bu yüzden bunu bitiremedim. Mesajın saklandı: devam etmek için uygulamanın model seçicisinde RouteLLM - Open'a geç.",
+      "unavailableDown": "{{model}} şu anda kullanılamıyor: sağlayıcısı hata vermeye devam ediyor. Mesajın saklandı: devam etmek için uygulamanın model seçicisinde RouteLLM - Open'a geç.",
+      "unavailablePlan": "{{model}} planına dahil değil. Devam etmek için uygulamanın model seçicisinde RouteLLM - Open'a geç ya da kullanmak için planını yükselt.",
+      "unavailableOut": "{{model}} kullanılamıyor ve Abacus kredilerin bitti.",
+      "ownKeyCredit": "{{provider}} anahtarının bakiyesi bitti.",
+      "ownKeyRateLimit": "{{provider}} anahtarın kullanım sınırına ulaştı.",
+      "ownKeyDown": "{{provider}} şu anda yanıt vermiyor.",
+      "ownKeyRejected": "{{provider}} anahtarın reddedildi: geçersiz ya da süresi dolmuş. Uygulamada Ayarlar → Modeller bölümünden düzelt.",
+      "ownKeyOffer": "Bunun yerine AbacusAI'daki herhangi bir modeli kullan: {{link}}",
+      "ownKeyWeb": "Web'deki AbacusAI Agent'ta kullan: {{link}}",
+      "busy": "Ücretsiz modeller şu anda yoğun.",
+      "connection": "Bağlantı koptuğu için bunu bitiremedim. Lütfen birazdan tekrar dene.",
+      "notSignedIn": "Masaüstü uygulaması şu anda Abacus.AI'da oturum açmış değil. Uygulamayı açıp oturum aç, sonra bana tekrar yaz.",
+      "generic": "Benim tarafımda bir sorun oldu, bu yüzden bunu bitiremedim. Lütfen birazdan tekrar dene.",
+      "contactFailed": "Az önce {{name}} kişisine yanıt veremedim.",
+      "contactFailedGeneric": "Az önce {{name}} kişisine yanıt veremedim: benim tarafımda bir sorun oldu.",
+      "someone": "birisi"
+    },
+    "unavailable": {
+      "title": {
+        "retired": "{{model}} artık kullanılamıyor",
+        "down": "{{model}} şu anda kullanılamıyor",
+        "plan": "{{model}} planına dahil değil"
+      },
+      "why": {
+        "retired": "Kullanabildiğin modellerden kaldırıldı.",
+        "down": "Sağlayıcısı yeniden denemelere rağmen hata vermeye devam ediyor."
+      },
+      "kept": "Mesajın saklandı.",
+      "switch": "RouteLLM - Open'a geç",
+      "pickModel": "Başka bir model seç",
+      "creditsLeft": "{{credits}} Abacus kredisi kaldı",
+      "creditsOut": "Ücretsiz Abacus kredilerini de kullandın.",
+      "offer": "{{plan}} sana şunları sunar:",
+      "upgradeIntro": "Yükselt · ilk ay {{price}}",
+      "upgradeMonthly": "Yükselt · {{price}}/ay",
+      "seePlans": "Planları gör",
+      "planBody": "Şimdi ücretsiz bir modelle devam et ya da kullanmak için {{plan}} planına yükselt.",
+      "planBodyAny": "Şimdi ücretsiz bir modelle devam et ya da kullanmak için planını yükselt."
+    }
   }
 }

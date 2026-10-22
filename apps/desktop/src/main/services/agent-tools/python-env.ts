@@ -1,35 +1,80 @@
 /**
- * The Python environment the components use: a private virtualenv under the
- * app's own directory, never the system or user site-packages, so removing
- * the app removes everything it installed. Provisioned on first use, not at
- * startup, since most sessions never need it.
+ * Python for the agent's shell on a machine that has no usable one: a private
+ * virtualenv under the app's own directory, put first on the shell's PATH, so
+ * `python` and `pip` work and removing the app removes everything installed.
+ * The app's own tools do not use Python.
+ *
+ * Its interpreter is a pinned build that uv installs under the app's
+ * directory; uv itself is fetched on first need from its pinned release and
+ * checked against the digests below. Set up the first time a shell command
+ * runs Python, never at startup.
  */
 import { execFile } from "child_process";
+import { createHash } from "crypto";
 import fs from "fs/promises";
 import path from "path";
 import { promisify } from "util";
 
+import { childProcessEnv } from "@abacus-ai/agent/child-env";
+import extract from "extract-zip";
+
 import { abacusBotHome } from "../../paths";
+import { agentProxyEnv } from "../../system-network";
 
 const execFileAsync = promisify(execFile);
 
-const VENV_DIR = (): string => path.join(abacusBotHome(), "python");
+/** The uv release used to install Python and packages. */
+const UV_VERSION = "0.12.24";
 
-/** Import name → pip name, for the cases where they differ. */
-const PIP_NAME: Record<string, string> = {
-  fitz: "pymupdf",
-  pptx: "python-pptx",
-  PIL: "pillow",
-  yaml: "pyyaml",
+/** Release asset and its published sha256, per `${platform}-${arch}`. */
+const UV_BUILDS: Record<string, { asset: string; sha256: string }> = {
+  "darwin-arm64": {
+    asset: "uv-aarch64-apple-darwin.tar.gz",
+    sha256: "0c4346de7abdb49495b393b9ec809fe387aa43e586be20fecb972216c1e71732",
+  },
+  "darwin-x64": {
+    asset: "uv-x86_64-apple-darwin.tar.gz",
+    sha256: "4fa82e37cb94767661f532b001e470b67a186c7260e305bd84ddb78fd545c0b6",
+  },
+  "linux-arm64": {
+    asset: "uv-aarch64-unknown-linux-musl.tar.gz",
+    sha256: "7f9ab4726d743b6a92e310477a7840c8a8a7b3938cb3c4657d541342fca75011",
+  },
+  "linux-x64": {
+    asset: "uv-x86_64-unknown-linux-musl.tar.gz",
+    sha256: "48170bd200a5430298c18f3b264485a1f3a8605f01088277daf6e37633edf0f5",
+  },
+  "win32-arm64": {
+    asset: "uv-aarch64-pc-windows-msvc.zip",
+    sha256: "4b783bda5cc44bbae0651a837223873a7acee31152381aef5fc86ef6bef25997",
+  },
+  "win32-x64": {
+    asset: "uv-x86_64-pc-windows-msvc.zip",
+    sha256: "7c38608c8a18ee137d748a1773053b07ec8f3a30fab49aebaa6f4e4efeceb019",
+  },
 };
 
-const CREATE_TIMEOUT_MS = 120_000;
-const INSTALL_TIMEOUT_MS = 300_000;
+/** Installed when the machine has no usable Python; uv verifies the download. */
+export const MANAGED_PYTHON_VERSION = "3.13.16";
 
-const venvPython = (): string =>
-  process.platform === "win32"
-    ? path.join(VENV_DIR(), "Scripts", "python.exe")
-    : path.join(VENV_DIR(), "bin", "python");
+/** The oldest system Python used as is; anything older gets the managed one. */
+const PYTHON_FLOOR: readonly [number, number] = [3, 10];
+
+const PROBE_TIMEOUT_MS = 5_000;
+const SETUP_TIMEOUT_MS = 600_000;
+
+const isWindows = process.platform === "win32";
+
+/**
+ * The shell's environment. Sandboxed commands may write to it (`pip
+ * install`), so this process never runs anything from it.
+ */
+const envDir = (): string => path.join(abacusBotHome(), "shell-python");
+
+/** uv, its cache and the Python builds it installs. */
+const runtimeDir = (): string => path.join(abacusBotHome(), "python-runtime");
+
+const binDir = (): string => path.join(envDir(), isWindows ? "Scripts" : "bin");
 
 const exists = async (target: string): Promise<boolean> =>
   await fs
@@ -37,135 +82,215 @@ const exists = async (target: string): Promise<boolean> =>
     .then(() => true)
     .catch(() => false);
 
-/** The first system Python that runs, or null if there is none. */
-const systemPython = async (): Promise<string | null> => {
-  for (const candidate of ["python3", "python"]) {
-    try {
-      await execFileAsync(candidate, ["--version"], { timeout: 15_000 });
-      return candidate;
-    } catch {
-      // Not this one.
-    }
+/** The file PATH resolves `name` to, or null. */
+const onPath = async (name: string): Promise<string | null> => {
+  for (const dir of (process.env.PATH ?? "").split(path.delimiter)) {
+    if (dir.length > 0 && (await exists(path.join(dir, name))))
+      return path.join(dir, name);
   }
   return null;
 };
 
-export type PythonEnv = {
-  /** Absolute path to the interpreter to run things with. */
-  python: string;
-  /** Packages installed during this call, for reporting back to the user. */
-  installed: string[];
+/**
+ * Without the Command Line Tools, macOS's /usr/bin/python3 is a stub that
+ * opens an install dialog when run, so it is not probed.
+ */
+const isMacStub = async (candidate: string): Promise<boolean> => {
+  if (process.platform !== "darwin") return false;
+  if ((await onPath(candidate)) !== `/usr/bin/${candidate}`) return false;
+  return await execFileAsync("xcode-select", ["-p"], {
+    timeout: PROBE_TIMEOUT_MS,
+  }).then(
+    () => false,
+    () => true
+  );
 };
 
-let ensureChain: Promise<unknown> = Promise.resolve();
+/** The interpreter at `file` if it runs and meets the floor, as an absolute path. */
+const usablePython = async (file: string): Promise<string | null> => {
+  try {
+    const { stdout } = await execFileAsync(
+      file,
+      ["-c", "import sys; print(*sys.version_info[:2], sys.executable)"],
+      { timeout: PROBE_TIMEOUT_MS, windowsHide: true }
+    );
+    const [major, minor, ...rest] = stdout.trim().split(" ");
+    const version = [Number(major), Number(minor)];
+    const meets =
+      version[0] > PYTHON_FLOOR[0] ||
+      (version[0] === PYTHON_FLOOR[0] && version[1] >= PYTHON_FLOOR[1]);
+    return meets && rest.length > 0 ? rest.join(" ") : null;
+  } catch {
+    // Missing, a Store alias, or broken.
+    return null;
+  }
+};
+
+let systemProbe: Promise<string | null> | undefined;
+
+/** The first system Python that meets the floor, once per process. */
+const systemPython = (): Promise<string | null> =>
+  (systemProbe ??= (async () => {
+    for (const candidate of ["python3", "python"]) {
+      if (await isMacStub(candidate)) continue;
+      const found = await usablePython(candidate);
+      if (found != null) return found;
+    }
+    return null;
+  })());
 
 /**
- * An interpreter with `imports` available, installing what is missing. Throws
- * only when there is no Python at all or a package cannot be installed. Calls
- * are serialized: concurrent callers would race `python -m venv` against a
- * half-created environment and pip against its own lock.
+ * The shell's environment when it, not the system Python, is what `python`
+ * and `pip` should run in the agent's shell; null otherwise.
  */
-export const ensurePython = (imports: string[]): Promise<PythonEnv> => {
-  const result = ensureChain.then(
-    () => ensurePythonNow(imports),
-    () => ensurePythonNow(imports)
-  );
-  ensureChain = result.catch(() => undefined);
+export const managedPythonEnv = async (): Promise<{
+  envDir: string;
+  binDir: string;
+} | null> =>
+  (await systemPython()) == null
+    ? { envDir: envDir(), binDir: binDir() }
+    : null;
 
-  return result;
+/** uv's environment: app-owned locations only, and the system proxy and certificates. */
+const uvEnv = async (): Promise<Record<string, string>> =>
+  childProcessEnv(process.env, await agentProxyEnv("https://github.com"), {
+    UV_NO_CONFIG: "1",
+    UV_CACHE_DIR: path.join(runtimeDir(), "cache"),
+    UV_PYTHON_INSTALL_DIR: path.join(runtimeDir(), "pythons"),
+    UV_SYSTEM_CERTS: "1",
+    UV_NO_PROGRESS: "1",
+    // An environment activated around the app must not redirect uv.
+    VIRTUAL_ENV: undefined,
+    UV_PYTHON: undefined,
+  });
+
+const runUv = async (uv: string, args: string[]): Promise<string> => {
+  const { stdout } = await execFileAsync(uv, args, {
+    env: await uvEnv(),
+    timeout: SETUP_TIMEOUT_MS,
+    maxBuffer: 8 * 1024 * 1024,
+    windowsHide: true,
+  });
+  return stdout;
 };
 
-const VENV_HINT =
-  'If this is Debian or Ubuntu, run "sudo apt install python3-venv" and try again.';
+const uvBinary = (): string =>
+  path.join(runtimeDir(), "uv", UV_VERSION, isWindows ? "uv.exe" : "uv");
 
-const createVenv = async (): Promise<void> => {
-  const base = await systemPython();
-  if (base == null) {
+/** The pinned uv, downloaded and verified on first need. */
+const ensureUv = async (): Promise<string> => {
+  const target = uvBinary();
+  if (await exists(target)) return target;
+
+  const build = UV_BUILDS[`${process.platform}-${process.arch}`];
+  if (build == null)
     throw new Error(
-      "Python 3 is required and was not found. Install it from python.org and try again."
+      `Python cannot be set up on ${process.platform}-${process.arch}.`
     );
-  }
-  await fs.mkdir(path.dirname(VENV_DIR()), { recursive: true });
+  const response = await fetch(
+    `https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/${build.asset}`
+  );
+  if (!response.ok) throw new Error(`download failed: HTTP ${response.status}`);
+  const body = Buffer.from(await response.arrayBuffer());
+  if (createHash("sha256").update(body).digest("hex") !== build.sha256)
+    throw new Error(`${build.asset} did not match its checksum`);
+
+  // Unpacked beside the target and renamed in, so a half-written uv never
+  // passes the check above.
+  await fs.mkdir(runtimeDir(), { recursive: true });
+  const scratch = await fs.mkdtemp(path.join(runtimeDir(), "uv-"));
   try {
-    await execFileAsync(base, ["-m", "venv", VENV_DIR()], {
-      timeout: CREATE_TIMEOUT_MS,
-    });
-  } catch (error) {
-    // Debian ships python3 without venv, and the failed run leaves a skeleton
-    // that would pass the "already created" check forever.
-    await fs.rm(VENV_DIR(), { recursive: true, force: true });
-    const message = (error as Error).message;
-    throw new Error(
-      /ensurepip/i.test(message)
-        ? `Could not create a Python environment. ${VENV_HINT}`
-        : message
+    const archive = path.join(scratch, build.asset);
+    await fs.writeFile(archive, body);
+    if (build.asset.endsWith(".zip")) await extract(archive, { dir: scratch });
+    else await execFileAsync("tar", ["xzf", archive, "-C", scratch]);
+    const unpacked = build.asset.endsWith(".zip")
+      ? path.join(scratch, "uv.exe")
+      : path.join(scratch, build.asset.replace(/\.tar\.gz$/, ""), "uv");
+    await fs.mkdir(path.dirname(target), { recursive: true });
+    await fs.rename(unpacked, target);
+    if (!isWindows) await fs.chmod(target, 0o755);
+  } finally {
+    await fs.rm(scratch, { recursive: true, force: true });
+  }
+  return target;
+};
+
+/** The managed interpreter, installed if needed (uv resumes or skips). */
+const managedPython = async (uv: string): Promise<string> => {
+  await runUv(uv, [
+    "python",
+    "install",
+    MANAGED_PYTHON_VERSION,
+    // Nothing on the user's own PATH or in the Windows registry.
+    "--no-bin",
+    "--no-registry",
+  ]);
+  const found = await runUv(uv, [
+    "python",
+    "find",
+    "--managed-python",
+    "--no-project",
+    MANAGED_PYTHON_VERSION,
+  ]);
+  return found.trim();
+};
+
+let envReady = false;
+
+/** Judged from its files alone: the interpreter, and the base it was made from. */
+const envHealthy = async (): Promise<boolean> => {
+  if (!(await exists(path.join(binDir(), isWindows ? "python.exe" : "python"))))
+    return false;
+  const config = await fs
+    .readFile(path.join(envDir(), "pyvenv.cfg"), "utf8")
+    .catch(() => "");
+  const home = /^home\s*=\s*(.+)$/m.exec(config)?.[1]?.trim();
+  return home != null && (await exists(home));
+};
+
+/** What a failed step tells the user: the cause they can act on. */
+const setupError = (what: string, error: unknown): Error => {
+  const detail = [
+    (error as Error)?.message ?? String(error),
+    (error as { stderr?: string })?.stderr ?? "",
+  ].join("\n");
+  console.warn(`[python-env] ${what}:`, detail);
+  if (/ENOSPC|No space left|disk (is )?full|quota/i.test(detail))
+    return new Error(
+      `${what}: the disk is full. Free some space and try again.`
     );
-  }
+  if (
+    /fetch failed|ERR_(INTERNET|NAME|PROXY|CONNECTION|TIMED|ADDRESS|NETWORK)|ENOTFOUND|EAI_AGAIN|ECONN|ETIMEDOUT|dns|connect|timed out|error sending request|proxy|\b407\b/i.test(
+      detail
+    )
+  )
+    return new Error(
+      `${what}: the download did not get through. Check the internet connection (or the proxy) and try again.`
+    );
+  return new Error(`${what}: ${detail.trim().slice(0, 200)}`);
 };
 
-const installPackages = async (
-  python: string,
-  packages: string[]
-): Promise<void> => {
-  await execFileAsync(
-    python,
-    [
-      "-m",
-      "pip",
-      "install",
-      "--disable-pip-version-check",
-      "--quiet",
-      ...packages,
-    ],
-    { timeout: INSTALL_TIMEOUT_MS }
-  );
-};
+let setup: Promise<void> | undefined;
 
-const ensurePythonNow = async (imports: string[]): Promise<PythonEnv> => {
-  const python = venvPython();
+/**
+ * The shell's environment, set up if it is not there yet. Concurrent callers
+ * share one setup; a failed one is tried again by the next caller.
+ */
+export const ensureShellPython = (): Promise<void> =>
+  (setup ??= ensureShellPythonNow().catch((error: unknown) => {
+    setup = undefined;
+    throw setupError("Could not set up Python", error);
+  }));
 
-  if (!(await exists(python))) await createVenv();
-
-  const missing: string[] = [];
-  for (const name of imports) {
-    try {
-      await execFileAsync(python, ["-c", `import ${name}`], {
-        timeout: 30_000,
-      });
-    } catch {
-      missing.push(PIP_NAME[name] ?? name);
-    }
+const ensureShellPythonNow = async (): Promise<void> => {
+  if (envReady || (await envHealthy())) {
+    envReady = true;
+    return;
   }
-
-  if (missing.length > 0) {
-    try {
-      await installPackages(python, missing);
-    } catch (error) {
-      const message = (error as Error).message;
-      if (/No module named pip/i.test(message)) {
-        // A skeleton venv created while python3-venv was missing: pip never
-        // existed. Recreate it now that venv is complete.
-        await fs.rm(VENV_DIR(), { recursive: true, force: true });
-        await createVenv();
-        // `missing` was measured against the old venv; the new one is empty,
-        // so everything asked for has to be installed.
-        const wanted = [
-          ...new Set(imports.map((name) => PIP_NAME[name] ?? name)),
-        ];
-        try {
-          await installPackages(python, wanted);
-        } catch (retryError) {
-          throw new Error(
-            `Could not install ${wanted.join(", ")}: ${(retryError as Error).message.slice(0, 200)}. ${VENV_HINT}`
-          );
-        }
-        return { python, installed: wanted };
-      }
-      throw new Error(
-        `Could not install ${missing.join(", ")}: ${message.slice(0, 200)}`
-      );
-    }
-  }
-
-  return { python, installed: missing };
+  const uv = await ensureUv();
+  const base = await managedPython(uv);
+  // --seed puts pip in it; --clear replaces a broken one.
+  await runUv(uv, ["venv", "--clear", "--seed", "--python", base, envDir()]);
+  envReady = true;
 };

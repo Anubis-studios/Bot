@@ -19,7 +19,7 @@ import { wireRefusal } from "./agui/cli-wire.js";
 import { helloEvent, serialize } from "./agui/event.js";
 import { AguiHost } from "./agui/host.js";
 import { newIncarnation } from "./agui/ids.js";
-import { useBundledTools } from "./bundled-tools.js";
+import { useBundledTools, useScriptRuntime } from "./bundled-tools.js";
 import { applyStoredApiKeys } from "./config.js";
 import { followGithubToken } from "./github-token.js";
 import { sandboxAvailability } from "./sandbox/index.js";
@@ -66,6 +66,8 @@ async function main(): Promise<void> {
   // Makes the bundled ripgrep and fd reachable; without it the first search on
   // a machine lacking them goes to the GitHub releases API.
   useBundledTools();
+  // And Node with the Word and Excel libraries, for the scripts the agent writes.
+  useScriptRuntime();
 
   const argv = process.argv.slice(2);
 

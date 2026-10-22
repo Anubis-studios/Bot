@@ -8,7 +8,23 @@ renderer, a chunk split by a stray import), not against features. A feature
 that needs more is measured, reviewed and recorded here as a new baseline,
 in a commit of its own that says by how much it grew.
 
-## Current: `1096c705` (the app in Turkish)
+## Current: `e38c6a995` (turn checkpoints, #500)
+
+**405 / 7723539 / 2590381.** Records the renderer with the turn checkpoint
+card (a turn's changed files, their diffs and restore). Against `1096c705`:
++1 chunk (+0.25%), +89589 bytes (+1.17%), +25144 gzip bytes (+0.98%). Main at
+`7b091dc0f` stood at 404 / 7701643 / 2583091 (+0.89% bytes, under the 1%
+allowance); the checkpoint card adds +1 chunk, +21896 bytes (+0.28%) and
++7290 gzip bytes on top of it. The 1% allowance is unchanged.
+
+Measured with `regenerate-web-split-desktop-baseline.sh e38c6a995 e38c6a995
+7dc9b5d46877f308e5b869cf1e29aafd08d2fbf9dbbb25a87c6a84dc0eccb750` (isolated
+archives, frozen-lockfile install, Linux x64), and main the same way at
+`7b091dc0f`. This baseline-only change touches no renderer code.
+
+## History
+
+### `1096c705` (the app in Turkish)
 
 **404 / 7633950 / 2565237.** Records the renderer with the Turkish locale
 (`tr-TR`). Against `cb77304c`: +3 chunks (+0.75%), +198146 bytes (+2.66%),
@@ -21,8 +37,6 @@ Measured with `regenerate-web-split-desktop-baseline.sh 1096c705 1096c705
 bc25648568bcc79597a09c974e0a8e56e2481596411e5ae84cc9e48fdff2e3a8` (isolated
 archives, frozen-lockfile install, Linux x64); the totals equal what CI
 reported on this branch. This baseline-only change touches no renderer code.
-
-## History
 
 ### `cb77304c` (the routine page's runs, #455)
 

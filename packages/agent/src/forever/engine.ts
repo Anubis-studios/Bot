@@ -19,6 +19,7 @@ import {
 
 import { sponsoredRunActive } from "../abacus-endpoint.js";
 import { Allowances } from "../allowances.js";
+import { PYTHON_SETUP_TIMEOUT_MS, setPythonProvisioner } from "../backends.js";
 import { notifyConversationQueueCleared } from "../background-processes.js";
 import { basePrompt } from "../base-prompt.js";
 import { BotOutputSanitizer, tidyBotText } from "../bot/bot-output.js";
@@ -55,6 +56,7 @@ import toolCallRepair from "../extensions/tool-call-repair.js";
 import toolTimeouts from "../extensions/tool-timeouts.js";
 import { githubPrompt } from "../github-prompt.js";
 import { refreshGithubToken } from "../github-token.js";
+import { HostServiceClient } from "../host-services.js";
 import type { InternalAgentEvent } from "../internal-events.js";
 import {
   connectMcpServers,
@@ -69,33 +71,23 @@ import {
   BUSY_RETRY_PROMPT,
   BusyWait,
   BUSY_WAIT_ROUNDS,
-  NETWORK_UNREACHABLE_CODE,
-  NETWORK_UNREACHABLE_MESSAGE,
   NetworkWait,
   failedCallStreamed,
   networkContinuation,
   networkEvidence,
   networkSuspect,
+  connectionRetryBudgetMs,
   networkWaitBudgetMs,
   runMadeProgress,
   type NetworkSuspect,
 } from "../network-wait.js";
-import {
-  endedOnLeakedToolCall,
-  isBusyFailure,
-  networkVerdict,
-} from "../openllm-failures.js";
+import { endedOnLeakedToolCall, networkVerdict } from "../openllm-failures.js";
 import {
   OPENLLM_CONTINUATION_PROMPT,
   OPENLLM_CONTINUATION_TYPE,
   OpenLlmRouter,
 } from "../openllm-router.js";
-import {
-  creditWall,
-  isOpenLlmReference,
-  isOutOfCredits,
-  OPENLLM_ID,
-} from "../openllm.js";
+import { isOpenLlmReference, OPENLLM_ID } from "../openllm.js";
 import { refreshOpenRouterLive } from "../openrouter-live.js";
 import { PendingSteers, type PendingSteer } from "../pending-steers.js";
 import {
@@ -106,13 +98,12 @@ import {
   repairEscapedPaths,
 } from "../permissions.js";
 import { personaPrompt, readPersona } from "../persona.js";
-import { windowsShellPrompt } from "../posix-shell.js";
+import { scriptRuntimesPrompt, windowsShellPrompt } from "../posix-shell.js";
 import {
   AgentMode,
   AgentStatus,
   type AgentEvent,
   type DesktopEvent,
-  type NotificationAction,
   type PermissionDecision,
   type PermissionRequest,
   type ToolRequest,
@@ -136,20 +127,11 @@ import { MEDIA_CHECK_TOOL_NAME } from "../send-media.js";
 import { conversationSessionManager } from "../session-file.js";
 import type { TurnHandle } from "../session.js";
 import {
-  OPENLLM_POOL_EXHAUSTED_MESSAGE,
-  OPENLLM_POOL_SHUT_MESSAGE,
   capRetriesWhileRouting,
-  classifyProviderFailure,
   endedOnProviderError,
-  isProviderFailure,
-  isRateLimitFailure,
   mcpPrompt,
   mcpRosterFingerprint,
-  ownKeyFailureCause,
-  providerDetail,
-  readableFailure,
   reserveContextHeadroom,
-  terminalProviderMessage,
 } from "../session.js";
 import {
   MAX_STALL_RECOVERIES_PER_TURN,
@@ -162,6 +144,14 @@ import { ToolCallStream } from "../tool-call-stream.js";
 import { ToolHeartbeat } from "../tool-heartbeat.js";
 import { mcpToolAllowed, type UnattendedPolicy } from "../tool-policy.js";
 import { TOOLS_ARRIVED_TYPE, toolsArrivedPrompt } from "../tools-arrived.js";
+import {
+  EMPTY_REPLY_FAILURE,
+  endedEmpty,
+  isBusyCause,
+  isContextTooLong,
+  presentFailure,
+  type TurnFailure,
+} from "../turn-outcome.js";
 import { turnUsage, type TurnUsage } from "../turn-usage.js";
 import webTools from "../web/tools.js";
 import type { ForeverProfile, HiddenTurnPrompt } from "./profile.js";
@@ -187,9 +177,6 @@ const CHARS_PER_TOKEN = 4;
 /** The custom message carrying a profile's beforeTurn context. */
 const FOREVER_CONTEXT_TYPE = "abacusai-bot:forever-turn-context";
 
-/** Same failure vocabulary as the coding loop; kept locally on purpose. */
-const CONTEXT_LENGTH_PATTERN =
-  /context length|context window|maximum input token limit|input is longer than|maximum context length|too many tokens/;
 const MALFORMED_TOOL_CALL_PATTERN = /malformed[ _]?(function|tool)[ _]?call/i;
 
 const MAX_MALFORMED_CONTINUATIONS = 1;
@@ -313,6 +300,16 @@ export class ForeverEngine {
     (name) => TOOL_NAME_ALIASES[name] ?? name
   );
   private readonly toolInputs = new Map<string, Record<string, unknown>>();
+  /** The desktop's services; the bot uses only the Python setup. */
+  private readonly hostServices = new HostServiceClient(
+    (requestId, service, payload) =>
+      this.options.emit({
+        type: "host_service_request",
+        requestId,
+        service,
+        payload,
+      })
+  );
   private readonly heartbeat = new ToolHeartbeat((event) =>
     this.options.emit(event)
   );
@@ -359,6 +356,10 @@ export class ForeverEngine {
     setCurrentMode(this.mode);
     setUnattendedPolicy(
       this.mode === AgentMode.Unattended ? (options.unattended ?? null) : null
+    );
+    // A bot's shell asks the desktop for the app's Python, as a chat's does.
+    setPythonProvisioner(() =>
+      this.hostServices.request("python_env", {}, PYTHON_SETUP_TIMEOUT_MS)
     );
   }
 
@@ -409,6 +410,7 @@ export class ForeverEngine {
         REPLY_LANGUAGE_PROMPT,
         githubPrompt(),
         windowsShellPrompt(),
+        scriptRuntimesPrompt(),
       ].filter((part): part is string => part != null),
       appendSystemPromptOverride: (base: string[]): string[] => {
         const persona = personaPrompt();
@@ -705,6 +707,20 @@ export class ForeverEngine {
       status: AgentStatus.Submitted,
     });
 
+    // At the credit wall the turn waits for the user's choice: it never
+    // runs on a weaker model they have not chosen.
+    const wall =
+      this.openLlmActive && this.registry != null
+        ? this.router.wallStops(this.registry)
+        : null;
+    if (wall != null) {
+      this.emitFailure(wall);
+      this.finishTurn();
+      this.emitReply();
+      turn?.settled?.();
+      return;
+    }
+
     try {
       this.profile.noteUserWords?.(text);
       const context = await this.profile.beforeTurn(text);
@@ -734,18 +750,8 @@ export class ForeverEngine {
       // failure rather than the raw "429: {json}" envelope, and the turn ends
       // properly: a bot left "running" here answered nobody.
       const raw = describe(error);
-      this.emitAgentEvent(
-        {
-          type: "error",
-          error: {
-            message: this.failureMessage(raw),
-            code: "turn_failed",
-            ...(isProviderFailure(raw) ? providerDetail(raw) : {}),
-            ...this.errorActionsFor(raw),
-          },
-        },
-        { origin: "turn" }
-      );
+      this.router.chain.failed(raw, this.session?.model?.provider);
+      this.reportFailure();
       if (this.turnRunning) this.finishTurn();
       this.emitReply();
       turn?.settled?.();
@@ -999,7 +1005,12 @@ export class ForeverEngine {
     if (!this.openLlmActive || this.interrupted) return none;
 
     const failure =
-      endedOnProviderError(messages) ?? endedOnLeakedToolCall(messages);
+      endedOnProviderError(messages) ??
+      endedOnLeakedToolCall(messages) ??
+      // Nothing at all after an earlier call failed: another model answers.
+      (this.router.chain.hadFailure && endedEmpty(messages)
+        ? EMPTY_REPLY_FAILURE
+        : null);
     const current = this.session?.model;
 
     if (failure == null) {
@@ -1016,27 +1027,21 @@ export class ForeverEngine {
    * The pool's answer to a provider failure: the next model, or, when every
    * model is busy and the turn has a wait left, a wait for the soonest one.
    */
-  private routeAfterFailure(
-    failure: string,
-    network?: Parameters<OpenLlmRouter["failed"]>[3]
-  ): {
+  private routeAfterFailure(failure: string): {
     rotation: { failure: string; nextId: string } | null;
     busy: { failure: string } | null;
   } {
     const registry = this.registry;
     if (registry == null) return { rotation: null, busy: null };
 
-    const next = this.router.failed(
-      registry,
-      failure,
-      this.session?.model,
-      network
-    );
+    const next = this.router.failed(registry, failure, this.session?.model);
     if (next != null && "nextId" in next)
       return { rotation: { failure, nextId: next.nextId }, busy: null };
 
     const busy =
-      isBusyFailure(failure) &&
+      isBusyCause(failure, this.session?.model?.provider) &&
+      // The free lane waits for nobody: its failure is the wall's card.
+      !this.router.onFreeLane(this.session?.model?.provider) &&
       this.busyWait.available &&
       !this.router.poolShut(registry);
     process.stderr.write(
@@ -1066,17 +1071,11 @@ export class ForeverEngine {
       return;
     }
 
-    if (!network) {
-      const route = this.openLlmActive
-        ? this.routeAfterFailure(suspect.failure, evidence ?? undefined)
-        : { rotation: null, busy: null };
-      this.pendingOpenLlmRotation = route.rotation;
-      this.pendingBusyWait = route.busy;
-      if (route.rotation == null && route.busy == null) this.finishTurn();
-      return;
-    }
-
-    const budgetMs = networkWaitBudgetMs();
+    // The Abacus API answers, but this call's connection failed: a few quick
+    // retries of the same call, never a rotation as if the model were busy.
+    const budgetMs = network
+      ? networkWaitBudgetMs()
+      : connectionRetryBudgetMs();
     const outcome = await this.networkWait.next(
       budgetMs,
       (attempt, delayMs) => {
@@ -1103,17 +1102,11 @@ export class ForeverEngine {
 
     if (outcome === "gave-up") {
       this.networkFailureReported = true;
-      this.emitAgentEvent(
-        {
-          type: "error",
-          error: {
-            message: NETWORK_UNREACHABLE_MESSAGE,
-            code: NETWORK_UNREACHABLE_CODE,
-            detail: suspect.failure,
-          },
-        },
-        { origin: "turn" }
-      );
+      this.emitFailure({
+        cause: "connection",
+        provider: this.session?.model?.provider,
+        raw: suspect.failure,
+      });
       this.finishTurn();
       return;
     }
@@ -1184,17 +1177,7 @@ export class ForeverEngine {
     if (resolved.model == null) {
       // The candidate came off the live registry a moment ago; should not
       // happen. The idle event was withheld for this rotation, so end the turn.
-      this.emitAgentEvent(
-        {
-          type: "error",
-          error: {
-            message: compactFailure(rotation.failure),
-            code: "turn_failed",
-            ...this.upgradeActionsFor(rotation.failure),
-          },
-        },
-        { origin: "turn" }
-      );
+      this.reportFailure();
       this.finishTurn();
       return;
     }
@@ -1322,17 +1305,9 @@ export class ForeverEngine {
         this.pendingOpenLlmRotation = { failure, nextId: next.nextId };
         return;
       }
-      this.emitAgentEvent(
-        {
-          type: "error",
-          error: {
-            message:
-              "This conversation is too long for the model. Start a new chat, or switch to a model with a larger context.",
-            code: "turn_failed",
-          },
-        },
-        { origin: "turn" }
-      );
+      if (!this.openLlmActive)
+        this.router.chain.failed(failure, session.model?.provider);
+      this.reportFailure();
       this.finishTurn();
 
       return;
@@ -1374,78 +1349,58 @@ export class ForeverEngine {
       return;
     }
 
+    // The failure pi recorded is this turn's last call; a pinned model's is
+    // its only one. On the pool the router recorded it already.
     const message = (
       this.session?.state as { errorMessage?: unknown } | undefined
     )?.errorMessage;
+    if (
+      !this.openLlmActive &&
+      typeof message === "string" &&
+      message.length > 0
+    )
+      this.router.chain.failed(message, this.session?.model?.provider);
 
-    if (typeof message !== "string" || message.length === 0) return;
+    this.reportFailure();
+  }
 
-    const pooled = this.openLlmActive && !isOutOfCredits(message);
+  /**
+   * The one error the turn's whole chain of calls comes to, when its last
+   * call did not answer (turn-outcome.ts). The gateway words it for the
+   * chat app; an empty reply after a failure is a failure, never silence.
+   */
+  private reportFailure(): void {
+    const registry = this.registry;
+    const failure = this.router.chain.failure(
+      this.openLlmActive && registry != null && this.router.poolShut(registry)
+    );
+    if (failure != null) this.emitFailure(failure);
+  }
+
+  private emitFailure(failure: TurnFailure): void {
+    const registry = this.registry;
     this.emitAgentEvent(
       {
         type: "error",
-        error: {
-          message: this.failureMessage(message),
-          code: "turn_failed",
-          ...(pooled || !isProviderFailure(message)
-            ? {}
-            : providerDetail(message)),
-          ...this.errorActionsFor(message),
-        },
+        error: presentFailure(
+          failure,
+          registry != null
+            ? this.router.failureContext(
+                registry,
+                this.openLlmActive,
+                this.session?.model
+              )
+            : {
+                routed: this.openLlmActive,
+                freeLaneProviders: [],
+                onFreeLane: false,
+                abacusFreeModels: [],
+                abacus: null,
+              }
+        ),
       },
       { origin: "turn" }
     );
-  }
-
-  /**
-   * A failure in words the contact can read: the gateway forwards these to
-   * the phone, and a raw "429: {json}" envelope once went out as the reply.
-   * Under the router the user never chose a model, so a provider's sentence
-   * about one is noise: the pool is out, and the card says what to do. Out
-   * of credits keeps its own card.
-   */
-  private failureMessage(raw: string): string {
-    const registry = this.registry;
-    if (this.openLlmActive && !isOutOfCredits(raw)) {
-      return registry != null && this.router.poolShut(registry)
-        ? OPENLLM_POOL_SHUT_MESSAGE
-        : OPENLLM_POOL_EXHAUSTED_MESSAGE;
-    }
-    return isProviderFailure(raw)
-      ? terminalProviderMessage(raw)
-      : compactFailure(raw);
-  }
-
-  /**
-   * What the app can offer about a failed turn: the upgrade card when out of
-   * Abacus credits, the Abacus offer when the user's own key failed in a way
-   * a plan answers, the free-source card when the pool is shut, a model
-   * switch when a pinned model timed out or is overloaded.
-   */
-  private errorActionsFor(
-    raw: string
-  ): { actions: NotificationAction[] } | Record<string, never> {
-    const actions: NotificationAction[] = [
-      ...(this.upgradeActionsFor(raw).actions ?? []),
-    ];
-    if (actions.some((action) => action.type === "free-pool-out"))
-      return { actions };
-    // The user's own key failed in a way a plan answers: a session's offer.
-    const provider = this.session?.model?.provider;
-    const cause = this.openLlmActive ? null : ownKeyFailureCause(raw, provider);
-    if (provider != null && cause != null) {
-      actions.push({ type: "own-key-unavailable", provider, cause });
-      return { actions };
-    }
-    if (
-      isProviderFailure(raw) &&
-      !isOutOfCredits(raw) &&
-      (this.openLlmActive ||
-        classifyProviderFailure(raw).remedy.includes("switch"))
-    ) {
-      actions.push({ type: "switch-model" });
-    }
-    return actions.length > 0 ? { actions } : {};
   }
 
   /**
@@ -1538,48 +1493,6 @@ export class ForeverEngine {
     this.session?.clearQueue();
     this.toolInputs.clear();
     this.heartbeat.clear();
-  }
-
-  /**
-   * Included credits ran out on an Abacus-served turn: the app renders the
-   * upgrade card, not a red line.
-   */
-  private upgradeActionsFor(
-    raw: string
-  ):
-    | { actions: Array<{ type: string; link?: string; cause?: string }> }
-    | Record<string, never> {
-    const provider = this.session?.model?.provider;
-    const abacusServed = provider === "abacus" || this.openLlmActive;
-    const actions: Array<{ type: string; link?: string; cause?: string }> = [];
-    const wall = creditWall(raw);
-
-    if (abacusServed && wall != null) {
-      actions.push({
-        type: "upgrade-abacus",
-        link: "https://apps.abacus.ai/chatllm/choose-plan/",
-        cause: wall,
-      });
-    }
-    // The router with every source used up: the card that connects another
-    // free source is the way out, whichever provider spoke last.
-    const registry = this.registry;
-    if (
-      this.openLlmActive &&
-      registry != null &&
-      this.router.poolShut(registry) &&
-      !actions.some((action) => action.type === "upgrade-abacus")
-    ) {
-      actions.push({ type: "free-pool-out" });
-    } else if (this.openLlmActive && wall == null && isRateLimitFailure(raw)) {
-      // Free models rate-limited: a plan is a free account's way past it.
-      actions.push(
-        { type: "free-pool-out", cause: "busy" },
-        { type: "switch-model" }
-      );
-    }
-
-    return actions.length > 0 ? { actions } : {};
   }
 
   setMode(raw: string): void {
@@ -1841,15 +1754,16 @@ export class ForeverEngine {
   }
 
   settleHostService(
-    _requestId: string,
-    _ok: boolean,
-    _result: unknown,
-    _error: string | undefined
+    requestId: string,
+    ok: boolean,
+    result: unknown,
+    error: string | undefined
   ): void {
-    // The bot loop registers no host-service-backed tools.
+    this.hostServices.settle(requestId, ok, result, error);
   }
 
   dispose(): void {
+    this.hostServices.failAll("Interrupted.");
     this.mcp.retire?.();
     for (const client of this.mcp.clients) client.close();
 
@@ -2200,7 +2114,7 @@ export class ForeverEngine {
     if (failure == null || MALFORMED_TOOL_CALL_PATTERN.test(failure))
       return null;
 
-    return CONTEXT_LENGTH_PATTERN.test(failure.toLowerCase()) ? failure : null;
+    return isContextTooLong(failure) ? failure : null;
   }
 
   private finishTurn(): void {
@@ -2208,9 +2122,21 @@ export class ForeverEngine {
     this.stallWatch.clear();
     this.toolInputs.clear();
     this.heartbeat.clear();
+    const usage =
+      this.lastTurnUsage != null &&
+      this.openLlmActive &&
+      this.router.onFreeLane(this.session?.model?.provider)
+        ? {
+            ...this.lastTurnUsage,
+            lane: "free" as const,
+            ...(this.session?.model?.provider != null
+              ? { provider: this.session.model.provider }
+              : {}),
+          }
+        : this.lastTurnUsage;
     this.emitAgentEvent({
       type: "turn_complete",
-      ...(this.lastTurnUsage != null ? { usage: this.lastTurnUsage } : {}),
+      ...(usage != null ? { usage } : {}),
     });
     this.lastTurnUsage = null;
     this.emitAgentEvent({ type: "status_changed", status: AgentStatus.Idle });
@@ -2538,15 +2464,6 @@ function estimateChars(messages: readonly unknown[]): number {
 /** Said in the chat, never sent to a phone as-is: the gateway rewords it. */
 const NO_MODEL_CONFIGURED =
   "No model provider is configured. Add an API key in Settings.";
-
-/** First sentence of a provider failure: bots never dump provider prose. */
-function compactFailure(raw: string): string {
-  const first = readableFailure(raw).split(/[.\n]/)[0]?.trim() ?? "";
-
-  if (first.length === 0) return "The model provider had a problem.";
-
-  return first.length > 200 ? `${first.slice(0, 200)}…` : first;
-}
 
 function isAssistantMessage(message: unknown): boolean {
   return (message as { role?: unknown } | undefined)?.role === "assistant";

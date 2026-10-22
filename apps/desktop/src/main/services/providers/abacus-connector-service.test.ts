@@ -386,3 +386,31 @@ describe("a one-tap connect link", () => {
     );
   });
 });
+
+describe("the account's upgrade link", () => {
+  it("is the minted one-time link when the platform answers", async () => {
+    const { fetchUpgradeUrl } = await import("./abacus-upgrade");
+    answer("_createAbacusbotUpgradeLink", {
+      success: true,
+      result: { url: "https://example.test/once" },
+    });
+    expect(await fetchUpgradeUrl("channel")).toBe("https://example.test/once");
+  });
+
+  it("falls back to the bot's own upgrade page when minting fails, and asks again next time", async () => {
+    vi.resetModules();
+    const { fetchUpgradeUrl } = await import("./abacus-upgrade");
+    answer("_createAbacusbotUpgradeLink", null);
+    const fallback = new URL((await fetchUpgradeUrl("channel"))!);
+    expect(fallback.pathname).toBe("/bot/link/upgrade");
+    expect(fallback.searchParams.get("src")).toBe("channel");
+    expect(fallback.toString()).not.toContain("choose-plan");
+
+    // Back online: minted again, not the cached fallback.
+    answer("_createAbacusbotUpgradeLink", {
+      success: true,
+      result: { url: "https://example.test/once" },
+    });
+    expect(await fetchUpgradeUrl("app")).toBe("https://example.test/once");
+  });
+});

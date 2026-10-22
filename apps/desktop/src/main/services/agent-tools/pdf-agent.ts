@@ -2,12 +2,10 @@
  * The pdf component, behind one tool. The `document` sub-agent writes content
  * and calls back for `renderDocument`, which takes sections, never a page, so
  * a caller cannot produce a document that fails to lay out. Reading and
- * editing shell out to a bundled Python script (pypdf, pdfplumber).
+ * editing run in process (pdf-ops.ts).
  */
-import { execFile } from "child_process";
 import fs from "fs/promises";
 import path from "path";
-import { promisify } from "util";
 
 import { modelPath } from "@abacus-ai/agent/model-path";
 
@@ -15,11 +13,6 @@ import { resourcePath } from "#main/resources";
 
 import { localiseImages, rewriteImageSources } from "./document-images";
 import { exportDocumentPdf } from "./document-pdf";
-import { ensurePython } from "./python-env";
-
-const execFileAsync = promisify(execFile);
-
-const SCRIPT_TIMEOUT_MS = 120_000;
 
 /** More than this is a book, not a brief. */
 const MAX_SECTIONS = 15;
@@ -572,57 +565,4 @@ export const reprintPdf = async (request: {
     bytes: exported.bytes,
     seconds: Math.round((Date.now() - startedAt) / 100) / 10,
   };
-};
-
-// ---------------------------------------------------------------------------
-// Reading and editing
-// ---------------------------------------------------------------------------
-
-export type PdfScriptResult = Record<string, unknown> & { ok: boolean };
-
-/**
- * Runs a subcommand of the bundled script, on the app's own Python
- * environment, so nobody runs pip before reading a PDF.
- */
-export const runPdfScript = async (
-  args: string[]
-): Promise<PdfScriptResult> => {
-  const resources = await pdfResourcesDir();
-  const script = path.join(resources, "scripts", "pdf_ops.py");
-
-  // Heavier libraries are installed only for the actions that need them.
-  const imports =
-    args[0] === "tables"
-      ? ["pypdf", "pdfplumber"]
-      : args[0] === "stamp"
-        ? ["pypdf", "reportlab"]
-        : ["pypdf"];
-
-  let env;
-  try {
-    env = await ensurePython(imports);
-  } catch (error) {
-    return { ok: false, error: (error as Error).message };
-  }
-
-  try {
-    const { stdout } = await execFileAsync(env.python, [script, ...args], {
-      timeout: SCRIPT_TIMEOUT_MS,
-      maxBuffer: 32 * 1024 * 1024,
-    });
-    const parsed = JSON.parse(stdout) as PdfScriptResult;
-    return env.installed.length > 0
-      ? { ...parsed, installed: env.installed }
-      : parsed;
-  } catch (error) {
-    const stdout = (error as { stdout?: string }).stdout ?? "";
-    if (stdout.trim().startsWith("{")) {
-      try {
-        return JSON.parse(stdout) as PdfScriptResult;
-      } catch {
-        /* fall through */
-      }
-    }
-    return { ok: false, error: (error as Error).message.slice(0, 400) };
-  }
 };

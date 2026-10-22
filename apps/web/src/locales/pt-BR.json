@@ -562,6 +562,7 @@
       "browser_snapshot": "Ler a página como uma lista de elementos interativos.",
       "browser_tabs": "Listar, alternar e fechar as abas do navegador.",
       "browser_task": "Hand a whole web task to a browser sub-agent and get back the answer.",
+      "checkpoint_diff": "Show what earlier turns changed on disk, from their checkpoints.",
       "code_map": "Index the functions and classes in a file or folder.",
       "connect_connector": "Ask the user to attach a service, such as Gmail or Slack, so its tools become available.",
       "cronjob": "Create, list, pause, or run scheduled tasks.",
@@ -606,6 +607,7 @@
       "read_telegram_messages": "Ler mensagens recentes do Telegram, quando pedido.",
       "read_whatsapp_messages": "Ler mensagens recentes do WhatsApp, quando pedido.",
       "run_tests": "Run the project's tests and report what passed and failed.",
+      "restore_checkpoint": "Put files back as they were before an earlier turn changed them.",
       "send_discord_message": "Enviar uma mensagem pelo Discord.",
       "send_telegram_message": "Enviar uma mensagem pelo Telegram.",
       "send_to_whatsapp": "Envia uma mensagem para o seu WhatsApp pelo número do AbacusAI Bot.",
@@ -2821,7 +2823,9 @@
       "providerConnectHint": "Conecte-o para usar seus modelos, incluindo os gratuitos.",
       "retryAttachment": "Retry attachment",
       "folderItems_one": "{{count}} item",
-      "folderItems_other": "{{count}} items"
+      "folderItems_other": "{{count}} items",
+      "includedIn": "Incluído no {{plan}}",
+      "includedInPaid": "Incluído nos planos pagos"
     },
     "day": {
       "today": "Today",
@@ -3165,7 +3169,14 @@
     },
     "paidFeature": {
       "title": "{{feature}} está incluída no Basic",
-      "webTitle": "{{feature}} está incluída no Basic, no Abacus AI Agent na web"
+      "webTitle": "{{feature}} está incluída no Basic, no Abacus AI Agent na web",
+      "webBody": "O Basic inclui criar e editar imagens e vídeos, e gerar áudio, na web no Abacus AI Agent.",
+      "agentTitle": "{{feature}} está no Abacus AI Agent na web",
+      "agentBody": "Seu plano inclui criar e editar imagens e vídeos, e gerar áudio, na web no Abacus AI Agent. Seu pedido já está preenchido lá; anexe lá qualquer imagem que quiser editar.",
+      "openAgent": "Abrir no Abacus AI Agent"
+    },
+    "botHelp": {
+      "open": "Abrir"
     }
   },
   "notch": {
@@ -3850,6 +3861,30 @@
     "showLess": "Show less",
     "showMore": "+{{count}} more"
   },
+  "checkpoints": {
+    "summary_one": "Changed {{count}} file",
+    "summary_other": "Changed {{count}} files",
+    "restore": "Restore to before this turn",
+    "restoreFile": "Restore this file",
+    "undoRestore": "Undo restore",
+    "busy": "Wait for the agent to finish this turn",
+    "binary": "binary",
+    "noCopy": "no copy kept",
+    "partial": "Some folders were too large to keep whole; files past the limit are not covered.",
+    "failed": "Could not restore. Try again once the agent has finished.",
+    "restored_one": "Restored {{count}} file.",
+    "restored_other": "Restored {{count}} files.",
+    "unrestorable_one": "{{count}} file was too large to keep a copy of.",
+    "unrestorable_other": "{{count}} files were too large to keep a copy of.",
+    "conflicts_one": "{{count}} file changed after this turn and was left as it is.",
+    "conflicts_other": "{{count}} files changed after this turn and were left as they are.",
+    "force": "Restore anyway",
+    "kind": {
+      "modified": "Edited",
+      "created": "Added",
+      "deleted": "Deleted"
+    }
+  },
   "devicePanel": {
     "axPermissionNeeded": "A permissão de Acessibilidade é necessária para espelhar o simulador sem exibir sua janela.",
     "boot": "Iniciar",
@@ -4162,6 +4197,24 @@
     "waitingTitle": "Conclua o pagamento no seu navegador",
     "waitingToSend": "Aguardando envio: “{{text}}”"
   },
+  "paymentRequired": {
+    "unconfirmedTitle": "Escolha um plano para continuar usando o AbacusAI Bot",
+    "unconfirmedBody": "Você entrou, mas sua conta precisa de um plano para o AbacusAI Bot funcionar.",
+    "alreadySubscribed": "Já tem assinatura? {{link}}",
+    "reportIssue": "Relatar um problema",
+    "trialEndedTitle": "Seu teste gratuito terminou",
+    "trialEndedBody": "Faça upgrade para continuar usando o AbacusAI Bot com esta conta.",
+    "lapsedTitle": "Sua assinatura terminou",
+    "lapsedBody": "Renove seu plano para continuar usando o AbacusAI Bot com esta conta.",
+    "upgrade": "Fazer upgrade",
+    "renew": "Renovar",
+    "webAgent": "Ir para o Abacus AI Agent na web →",
+    "tryAgain": "Tentar de novo",
+    "checking": "Verificando…",
+    "stillBlocked": "Ainda não vemos um pagamento nesta conta.",
+    "waiting": "Conclua o pagamento no navegador. O app continua assim que o pagamento for aprovado.",
+    "otherAccount": "Entrar com outra conta"
+  },
   "visualizer": {
     "loading": "Carregando visualização…"
   },
@@ -4335,5 +4388,94 @@
     "outOfCredit": "Your {{provider}} key is out of credit",
     "paidBody": "Use it in AbacusAI Agent on the web: the top models are included in your plan.",
     "rateLimited": "Your {{provider}} key hit its rate limit"
+  },
+  "outcome": {
+    "wall": {
+      "title": "Seus créditos grátis acabaram",
+      "expiredTitle": "Seus créditos grátis expiraram",
+      "paidTitle": "Você usou os créditos deste mês",
+      "renews": "Os créditos grátis renovam todo mês.",
+      "balance": "Restam {{remaining}} de {{granted}} créditos",
+      "warning": "Para continuar agora, o bot mudaria para modelos gratuitos de outro provedor ({{providers}}). Eles têm qualidade bem menor: mais erros, podem quebrar código que funciona e muitas vezes atingem limites de uso.",
+      "offer": "Faça upgrade para o {{plan}} — {{price}}",
+      "upgradeCta": "Fazer upgrade para o {{plan}}",
+      "continueFree": "Continuar com modelos gratuitos (qualidade menor)"
+    },
+    "plan": {
+      "introPrice": "{{first}} no primeiro mês, depois {{monthly}}/mês",
+      "monthlyPrice": "{{monthly}}/mês"
+    },
+    "freeChip": "Modelo gratuito · {{provider}}",
+    "freeChipAny": "outro provedor",
+    "freeChipUpgrade": "Faça upgrade para os melhores modelos",
+    "connection": {
+      "title": "Problema de conexão",
+      "body": "Verifique sua conexão com a internet, VPN ou proxy e tente de novo."
+    },
+    "cause": {
+      "context_too_long": "Esta conversa ficou longa demais para o modelo. Comece um novo chat ou escolha um modelo com contexto maior.",
+      "key_invalid": "Sua chave do {{provider}} foi recusada: ela é inválida ou expirou.",
+      "own_key_quota": "Sua chave do {{provider}} atingiu a cota. Mude para outro modelo ou confira o plano da chave.",
+      "model_unavailable": "Este modelo não conseguiu aceitar o pedido. Escolha outro modelo.",
+      "free_pool_spent": "Todas as fontes gratuitas se esgotaram por enquanto. Conecte outra fonte gratuita ou escolha outro modelo.",
+      "rate_limited": "Os modelos gratuitos estão ocupados agora. Tente de novo em alguns minutos ou mude para outro modelo.",
+      "empty": "O modelo devolveu uma resposta vazia. Tente de novo ou mude para outro modelo.",
+      "unknown": "O modelo não conseguiu terminar isso. Tente de novo ou mude para outro modelo."
+    },
+    "action": {
+      "newChat": "Novo chat",
+      "fixKey": "Conferir a chave",
+      "viewDetails": "Ver detalhes",
+      "tryAgain": "Tentar de novo",
+      "switchToAbacus": "Mudar para o Abacus (RouteLLM - Open)"
+    },
+    "channel": {
+      "wall": "Pausei porque seus créditos grátis acabaram.",
+      "expired": "Pausei porque seus créditos grátis expiraram.",
+      "renews": "Os créditos grátis renovam todo mês.",
+      "offer": "O {{plan}} custa {{price}} e oferece:",
+      "link": "Faça upgrade aqui: {{link}}",
+      "repeat": "Ainda pausado: {{link}}",
+      "paidOut": "Pausei porque os créditos deste mês acabaram. Adicione créditos para continuar: {{link}}",
+      "unavailable": "{{model}} não está mais disponível, então não consegui terminar. Sua mensagem foi mantida: mude para RouteLLM - Open no seletor de modelos do app para continuar.",
+      "unavailableDown": "{{model}} não está disponível agora: o provedor continua falhando. Sua mensagem foi mantida: mude para RouteLLM - Open no seletor de modelos do app para continuar.",
+      "unavailablePlan": "{{model}} não está incluído no seu plano. Mude para RouteLLM - Open no seletor de modelos do app para continuar, ou faça upgrade para usá-lo.",
+      "unavailableOut": "{{model}} não está disponível e seus créditos da Abacus acabaram.",
+      "ownKeyCredit": "Sua chave do {{provider}} ficou sem saldo.",
+      "ownKeyRateLimit": "Sua chave do {{provider}} atingiu o limite de uso.",
+      "ownKeyDown": "O {{provider}} não está respondendo agora.",
+      "ownKeyRejected": "Sua chave do {{provider}} foi recusada: ela é inválida ou expirou. Corrija no app, em Configurações → Modelos.",
+      "ownKeyOffer": "Use qualquer modelo no AbacusAI: {{link}}",
+      "ownKeyWeb": "Use no AbacusAI Agent na web: {{link}}",
+      "busy": "Os modelos gratuitos estão ocupados agora.",
+      "connection": "A conexão caiu, então não consegui terminar. Tente de novo daqui a pouco.",
+      "notSignedIn": "O app para computador não está conectado ao Abacus.AI agora. Abra o app, entre na sua conta e me mande mensagem de novo.",
+      "generic": "Algo deu errado do meu lado, então não consegui terminar. Tente de novo daqui a pouco.",
+      "contactFailed": "Não consegui responder a {{name}} agora há pouco.",
+      "contactFailedGeneric": "Não consegui responder a {{name}} agora há pouco: algo deu errado do meu lado.",
+      "someone": "alguém"
+    },
+    "unavailable": {
+      "title": {
+        "retired": "{{model}} não está mais disponível",
+        "down": "{{model}} não está disponível agora",
+        "plan": "{{model}} não está incluído no seu plano"
+      },
+      "why": {
+        "retired": "Ele foi removido dos modelos que você pode usar.",
+        "down": "O provedor continua falhando, mesmo depois de novas tentativas."
+      },
+      "kept": "Sua mensagem foi mantida.",
+      "switch": "Mudar para RouteLLM - Open",
+      "pickModel": "Escolher outro modelo",
+      "creditsLeft": "{{credits}} créditos da Abacus restantes",
+      "creditsOut": "Você também já usou seus créditos gratuitos da Abacus.",
+      "offer": "O {{plan}} oferece:",
+      "upgradeIntro": "Fazer upgrade · {{price}} no primeiro mês",
+      "upgradeMonthly": "Fazer upgrade · {{price}}/mês",
+      "seePlans": "Ver planos",
+      "planBody": "Continue agora com um modelo gratuito, ou faça upgrade para o {{plan}} para usá-lo.",
+      "planBodyAny": "Continue agora com um modelo gratuito, ou faça upgrade do seu plano para usá-lo."
+    }
   }
 }

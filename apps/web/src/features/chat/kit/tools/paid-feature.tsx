@@ -1,11 +1,15 @@
 /**
- * `paid_feature`'s card: a capability the paid plans include, named, with the
- * plan's price and the upgrade. Shown to a free account only.
+ * `paid_feature`'s card: a capability the paid plans include, named. A free
+ * account gets the plan's price and the upgrade; a paid one whose plan makes
+ * it on the web gets Abacus AI Agent there, with the request filled in.
  */
-import { PAID_FEATURES } from "@abacus-ai/contract/toolsets";
+import {
+  abacusAgentPromptUrl,
+  PAID_FEATURES,
+} from "@abacus-ai/contract/toolsets";
 import { parsePartialJSON } from "@tanstack/ai-client";
 import type { ToolProps } from "@tanstack/ai-react/ui";
-import { Sparkles } from "lucide-react";
+import { ExternalLink, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -16,23 +20,30 @@ import type { ChatHostActions } from "../../runtime/host-actions";
 import { useChatView } from "../context";
 import { toolInput } from "./normalize";
 
+type Tier = Awaited<ReturnType<ChatHostActions["accountTier"]>>;
+
 export const PaidFeatureCard = ({
   feature,
+  prompt,
   host,
 }: {
   feature: string;
-  host: Pick<ChatHostActions, "accountTier" | "openUpgrade">;
+  /** The request in the user's words, carried to the web. */
+  prompt?: string;
+  host: Pick<ChatHostActions, "accountTier" | "openUpgrade" | "openExternal">;
 }) => {
   const { t } = useTranslation();
-  const [free, setFree] = useState(false);
+  const [tier, setTier] = useState<Tier>("unknown");
   const known = PAID_FEATURES.find((entry) => entry.feature === feature);
+  const free = tier === "free";
+  const web = (tier === "basic" || tier === "paid") && known?.inApp === false;
   const promotionRef = useVisibleContextualUpsell(free && known != null);
   useEffect(() => {
     let live = true;
     void host
       .accountTier()
-      .then((tier) => {
-        if (live) setFree(tier === "free");
+      .then((next) => {
+        if (live) setTier(next);
       })
       .catch(() => {});
     return () => {
@@ -43,7 +54,7 @@ export const PaidFeatureCard = ({
   const name = t(`capabilities.toolsets.${known.feature}.label`);
   return (
     <div ref={promotionRef} data-slot="paid-feature" data-feature={feature}>
-      {free && (
+      {(free || web) && (
         <div className="bg-card my-2 flex w-full max-w-[520px] flex-col gap-2 rounded-xl border p-3">
           <div className="flex items-center gap-2">
             <Sparkles
@@ -52,20 +63,43 @@ export const PaidFeatureCard = ({
             />
             <span className="text-sm font-medium">
               {t(
-                known.inApp
-                  ? "chat.paidFeature.title"
-                  : "chat.paidFeature.webTitle",
+                web
+                  ? "chat.paidFeature.agentTitle"
+                  : known.inApp
+                    ? "chat.paidFeature.title"
+                    : "chat.paidFeature.webTitle",
                 { feature: name }
               )}
             </span>
           </div>
-          <p className="text-muted-foreground text-xs leading-4">
-            {`${t("upgradeDialog.price")} ${t("upgradeDialog.pricePeriod")} · ${t("upgradeDialog.plan")}`}
-          </p>
+          {!known.inApp && (
+            <p className="text-muted-foreground text-xs leading-4">
+              {t(
+                web ? "chat.paidFeature.agentBody" : "chat.paidFeature.webBody"
+              )}
+            </p>
+          )}
+          {free && (
+            <p className="text-muted-foreground text-xs leading-4">
+              {`${t("upgradeDialog.price")} ${t("upgradeDialog.pricePeriod")} · ${t("upgradeDialog.plan")}`}
+            </p>
+          )}
           <div>
-            <Button size="sm" onClick={() => void host.openUpgrade()}>
-              {t("upgradeDialog.upgradeCta")}
-            </Button>
+            {web ? (
+              <Button
+                size="sm"
+                onClick={() =>
+                  void host.openExternal(abacusAgentPromptUrl(prompt))
+                }
+              >
+                {t("chat.paidFeature.openAgent")}
+                <ExternalLink aria-hidden className="size-3" />
+              </Button>
+            ) : (
+              <Button size="sm" onClick={() => void host.openUpgrade()}>
+                {t("upgradeDialog.upgradeCta")}
+              </Button>
+            )}
           </div>
         </div>
       )}
@@ -78,6 +112,10 @@ export const PaidFeatureToolCard = ({ part }: ToolProps<unknown>) => {
   const { runtime } = useChatView();
   const input = toolInput(part, parsePartialJSON);
   return part.input == null || typeof input.feature !== "string" ? null : (
-    <PaidFeatureCard feature={input.feature} host={runtime.host} />
+    <PaidFeatureCard
+      feature={input.feature}
+      {...(typeof input.prompt === "string" ? { prompt: input.prompt } : {})}
+      host={runtime.host}
+    />
   );
 };

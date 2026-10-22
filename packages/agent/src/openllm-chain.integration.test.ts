@@ -28,8 +28,17 @@ vi.mock("./abacus-endpoint.js", async (importActual) => ({
 const { AgentMode } = await import("./protocol.js");
 type DesktopEvent = import("./protocol.js").DesktopEvent;
 type AgentEvent = import("./protocol.js").AgentEvent;
-const { AbacusBotSession, OPENLLM_POOL_SHUT_MESSAGE } =
-  await import("./session.js");
+const { AbacusBotSession } = await import("./session.js");
+const { OPENLLM_POOL_SHUT_MESSAGE } = await import("./turn-outcome.js");
+const { creditWallState, noteCreditsBack, setHostCreditWall } =
+  await import("./credit-wall.js");
+
+/** What the desktop does when the user picks "Continue with free models". */
+const chooseFreeLane = (): void =>
+  setHostCreditWall({
+    ...creditWallState(),
+    freeLaneChosenAt: Date.now(),
+  });
 
 let provider: FakeProvider;
 let home: string;
@@ -206,9 +215,20 @@ describe("RouteLLM - Open from first credit to last source", () => {
       "upgrade-abacus"
     );
 
-    // 3. Google AI Studio connected: the next turn runs on Gemini.
+    // 3. Google AI Studio connected: no turn moves onto it before the user
+    //    has seen the wall and chosen the free models.
     connect("gemini");
     await chat.session.refreshProviders();
+    turn = await chat.turn("third task");
+    expect(turn.models.filter((model) => model !== ABACUS_MODEL)).toEqual([]);
+    expect(turn.error?.cause).toBe("credits_exhausted");
+    expect(turn.error?.actions).toContainEqual({
+      type: "continue-free",
+      providers: ["gemini"],
+    });
+
+    // Chosen: the turn runs on Gemini, labelled as the free lane.
+    chooseFreeLane();
     turn = await chat.turn("third task");
     expect(turn.models.filter((model) => model !== ABACUS_MODEL)).toEqual([
       "gemini-3.6-flash",
@@ -217,15 +237,25 @@ describe("RouteLLM - Open from first credit to last source", () => {
     expect(turn.reply).toContain("answered on gemini-3.6-flash");
     expect(turn.error).toBeUndefined();
 
-    // Abacus stays shut for the turns after: no wasted call on it.
+    expect(chat.agent("turn_complete").at(-1)?.usage).toMatchObject({
+      lane: "free",
+      provider: "gemini",
+    });
+
+    // Abacus stays shut for the turns after: no wasted call on it, and the
+    // choice is not asked for again.
+    const errorsBefore = chat.agent("error").length;
     turn = await chat.turn("fourth task");
     expect(turn.models).toEqual(["gemini-3.6-flash", "gemini-3.6-flash"]);
+    expect(chat.agent("error")).toHaveLength(errorsBefore);
 
     // 4. The Studio quota runs out too: shut, and saying so.
     behaviour.set("gemini-3.6-flash", GEMINI_QUOTA_SPENT);
     turn = await chat.turn("fifth task");
     expect(turn.models).toEqual(["gemini-3.6-flash"]);
     expect(turn.error?.message).toBe(OPENLLM_POOL_SHUT_MESSAGE);
+    // On the free lane a failed turn comes back to the wall's card.
+    expect(turn.error?.actions?.[0]).toMatchObject({ type: "upgrade-abacus" });
 
     // 5. OpenRouter connected: its free models take over.
     connect("openrouter");
@@ -242,7 +272,7 @@ describe("RouteLLM - Open from first credit to last source", () => {
     expect(turn.error?.message).toBe(OPENLLM_POOL_SHUT_MESSAGE);
     // A free account is offered the plan rather than "try again".
     expect(turn.error?.actions?.map((action) => action.type)).toContain(
-      "free-pool-out"
+      "upgrade-abacus"
     );
 
     // 7. The rest connected at once: Mistral first.
@@ -292,6 +322,7 @@ describe("the same chain in a bot's chat", () => {
     );
     for (const file of ["openllm-cooldowns.json", "openllm-quota.json"])
       fs.rmSync(path.join(home, file), { force: true });
+    noteCreditsBack();
     const botDir = path.join(home, "bots", "bot-1");
     fs.mkdirSync(botDir, { recursive: true });
     process.env.ABACUSAI_BOT_BOT_DIR = botDir;
@@ -350,8 +381,14 @@ describe("the same chain in a bot's chat", () => {
     result = await turn("again");
     expect(result.failed).toBe(true);
 
+    // A connected source is not taken up before the free lane is chosen.
     connect("gemini");
     await bot.refreshProviders();
+    result = await turn("again");
+    expect(result.failed, result.trace).toBe(true);
+    expect(result.models).not.toContain("gemini-3.6-flash");
+
+    chooseFreeLane();
     result = await turn("again");
     expect(result.reply, result.trace).toContain(
       "answered on gemini-3.6-flash"
@@ -373,5 +410,47 @@ describe("the same chain in a bot's chat", () => {
 
     await bot.stop?.();
     delete process.env.ABACUSAI_BOT_BOT_DIR;
+  }, 60_000);
+});
+
+describe("the credit wall, around the pool", () => {
+  it("leaves an account with credits unchanged: Abacus answers, no notice, no free-lane label", async () => {
+    behaviour.clear();
+    noteCreditsBack();
+    for (const file of ["openllm-cooldowns.json", "openllm-quota.json"])
+      fs.rmSync(path.join(home, file), { force: true });
+    fs.writeFileSync(
+      path.join(home, "config.json"),
+      JSON.stringify({ defaultModel: "openllm/auto", customProviders: [] })
+    );
+    connect("gemini");
+    const chat = new Chat();
+    await chat.session.start();
+
+    const turn = await chat.turn("a task");
+    expect(turn.models).toEqual([ABACUS_MODEL, ABACUS_MODEL]);
+    expect(turn.error).toBeUndefined();
+    expect(chat.agent("turn_complete").at(-1)?.usage?.lane).toBeUndefined();
+  }, 60_000);
+
+  it("leaves a pinned Abacus model as it was: its own card, no free lane, no other provider asked", async () => {
+    behaviour.clear();
+    noteCreditsBack();
+    for (const file of ["openllm-cooldowns.json", "openllm-quota.json"])
+      fs.rmSync(path.join(home, file), { force: true });
+    const chat = new Chat();
+    await chat.session.start();
+    await chat.session.setModel(`abacus/${ABACUS_MODEL}`);
+    behaviour.set(ABACUS_MODEL, OUT_OF_ABACUS_CREDITS);
+
+    const turn = await chat.turn("a task");
+    expect(turn.models).toEqual([ABACUS_MODEL]);
+    expect(turn.error?.actions?.[0]).toEqual({
+      type: "upgrade-abacus",
+      cause: "exhausted",
+    });
+    expect(
+      turn.error?.actions?.some((action) => action.type === "continue-free")
+    ).toBe(false);
   }, 60_000);
 });

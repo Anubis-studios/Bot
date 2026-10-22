@@ -130,16 +130,6 @@ export function networkVerdict(
   return evidence.abacusReachable ? "provider" : "network";
 }
 
-/** Busy, not broken: worth waiting for when every model says it. */
-export function isBusyFailure(failure: string): boolean {
-  const code = status(failure);
-  if (code === 429) return !DAILY.test(failure);
-  if (code != null && code >= 500) return true;
-  return /overloaded|rate.?limit|too many requests|at capacity|server is busy/i.test(
-    failure
-  );
-}
-
 /** What `failure` from a model under `provider` means; see FailureVerdict. */
 export function classifyFailure(
   failure: string,

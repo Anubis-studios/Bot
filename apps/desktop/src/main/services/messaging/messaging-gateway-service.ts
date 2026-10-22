@@ -1,4 +1,5 @@
 import { modelPath } from "@abacus-ai/agent/model-path";
+import { readUserLanguage } from "@abacus-ai/agent/user-language";
 import type { UserTextTags } from "@abacus-ai/contract/agent-types";
 import { AgentMode, AgentStatus } from "@abacus-ai/contract/agent-types";
 import type { DesktopEvent } from "@abacus-ai/contract/agent-types";
@@ -28,9 +29,14 @@ import {
 import type { HostPlatform } from "../../platform/capabilities";
 import { readDefaultAgentMode } from "../config/settings";
 import { cachedAbacusAccount, onFreePlan } from "../providers/abacus";
-import { fetchUpgradeUrl } from "../providers/abacus-upgrade";
+import {
+  botUpgradePage,
+  fetchBillingPlan,
+  fetchUpgradeUrl,
+} from "../providers/abacus-upgrade";
 import { environmentNoticeService } from "../providers/environment-notice-service";
 import { AbacusChannelsConnector } from "./abacus-channels-connector";
+import { channelLocale, channelWords } from "./channel-words";
 import {
   chatReplyForFailure,
   contactFailureNotice,
@@ -207,6 +213,8 @@ type GatewayOptions = {
   emitChanged: () => void;
   /** The failure-reply throttle's clock; tests pass a fake one. */
   now?: () => number;
+  /** The app's language (a BCP 47 tag), for lines the bot itself words. */
+  appLanguage?: () => string | null;
   /**
    * A platform started or stopped, so the messaging tools just came or went.
    * For the running agent, not the pane: the send tools are withheld from
@@ -1468,24 +1476,50 @@ export class MessagingGatewayService {
     }
 
     const account = accountKind();
-    const upgradeUrl = wantsUpgradeUrl(failure, account)
-      ? await upgradeUrlWithin(UPGRADE_URL_WAIT_MS)
-      : null;
+    const offering = wantsUpgradeUrl(failure, account);
+    // Fetched afresh every time: a link that failed while offline is asked
+    // for again, and the bot's own upgrade page stands in when it cannot be.
+    const [upgradeUrl, billing] = await Promise.all([
+      offering
+        ? withinMs(fetchUpgradeUrl("channel"), UPGRADE_URL_WAIT_MS)
+        : null,
+      offering ||
+      failureKind(failure) === "upgrade-abacus" ||
+      failureKind(failure) === "model-gone"
+        ? withinMs(fetchBillingPlan(false), UPGRADE_URL_WAIT_MS)
+        : null,
+    ]);
+    const words = await channelWords(
+      channelLocale(
+        readUserLanguage()?.name ?? null,
+        this.options.appLanguage?.() ?? null
+      )
+    );
     // The offer is throttled per chat it lands in, always the user's own.
     const ownChatKey = isOwn
       ? `${route.platform}:${route.chatId}`
       : `${own.platform}:${own.chatId}`;
+    const fallback = botUpgradePage("channel");
     const line = chatReplyForFailure(
       failure,
       "own",
       account,
-      upgradeUrl,
+      words,
+      {
+        upgradeUrl: upgradeUrl ?? fallback,
+        topUpUrl: billing?.topUpUrl ?? upgradeUrl ?? fallback,
+        billing,
+      },
       this.failureThrottle.repeat(ownChatKey, failureKind(failure))
     );
     if (line == null) return;
     if (isOwn) this.deliver(route, line);
     // Someone else's chat hears nothing; the user's own chat hears who.
-    else this.deliverToSelf(own, contactFailureNotice(route.userName, line));
+    else
+      this.deliverToSelf(
+        own,
+        contactFailureNotice(words, route.userName, line)
+      );
   }
 
   /**
@@ -2674,10 +2708,10 @@ const senderLabel = (
  */
 const UPGRADE_URL_WAIT_MS = 5_000;
 
-/** The account's upgrade link, or null when it fails or takes too long. */
-const upgradeUrlWithin = (ms: number): Promise<string | null> =>
+/** What a call answers, or null when it fails or takes too long. */
+const withinMs = <T>(call: Promise<T | null>, ms: number): Promise<T | null> =>
   Promise.race([
-    fetchUpgradeUrl().catch(() => null),
+    call.catch(() => null),
     new Promise<null>((resolve) => setTimeout(() => resolve(null), ms).unref()),
   ]);
 

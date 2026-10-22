@@ -17,7 +17,11 @@ import {
 import { sponsoredRunActive } from "./abacus-endpoint.js";
 import { Allowances } from "./allowances.js";
 import { allowedPathsFromEnv } from "./allowed-paths.js";
-import { backendOperations } from "./backends.js";
+import {
+  backendOperations,
+  PYTHON_SETUP_TIMEOUT_MS,
+  setPythonProvisioner,
+} from "./backends.js";
 import { notifyConversationQueueCleared } from "./background-processes.js";
 import { basePrompt } from "./base-prompt.js";
 /**
@@ -27,8 +31,15 @@ import { basePrompt } from "./base-prompt.js";
  * the user decides; edit diffs are computed from the on-disk "before".
  */
 import { timezonePrompt } from "./bot/bot-time-tool.js";
+import {
+  checkpointSessionId,
+  checkpointsDirFor,
+  CheckpointStore,
+  CheckpointTracker,
+} from "./checkpoint-store.js";
 import { anchorCompactions } from "./compaction-anchor.js";
 import {
+  abacusBotDir,
   agentDir,
   applyStoredApiKeys,
   defaultModelFor,
@@ -40,6 +51,7 @@ import {
 } from "./config.js";
 import { hostConnectivity, hostIsGone } from "./connectivity.js";
 import { setCreditRefresher } from "./credit-balance.js";
+import { creditWallActive, freeLaneChosen } from "./credit-wall.js";
 import { setCurrentMode, setUnattendedPolicy } from "./current-mode.js";
 import {
   customInstructionsPrompt,
@@ -55,6 +67,7 @@ import astTools from "./extensions/ast-tools.js";
 import background from "./extensions/background.js";
 import batchReadTool from "./extensions/batch-read-tool.js";
 import budgets, { budgetStopReason } from "./extensions/budgets.js";
+import { checkpoints } from "./extensions/checkpoints.js";
 import compactionPruner from "./extensions/compaction-pruner.js";
 import editTool from "./extensions/edit-tool.js";
 import emailFormat from "./extensions/email-format.js";
@@ -63,11 +76,11 @@ import knowledge from "./extensions/knowledge.js";
 import orientation from "./extensions/orientation.js";
 import outputRepair from "./extensions/output-repair.js";
 import spill from "./extensions/spill.js";
-import syntaxCheck from "./extensions/syntax-check.js";
+import { syntaxCheck } from "./extensions/syntax-check.js";
 import testRunner from "./extensions/test-runner.js";
 import toolCallRepair from "./extensions/tool-call-repair.js";
 import toolTimeouts from "./extensions/tool-timeouts.js";
-import verifyLoop from "./extensions/verify-loop.js";
+import { verifyLoop } from "./extensions/verify-loop.js";
 import { githubPrompt } from "./github-prompt.js";
 import { refreshGithubToken } from "./github-token.js";
 import { HostServiceClient } from "./host-services.js";
@@ -88,36 +101,23 @@ import {
   BUSY_RETRY_PROMPT,
   BusyWait,
   BUSY_WAIT_ROUNDS,
-  NETWORK_UNREACHABLE_CODE,
-  NETWORK_UNREACHABLE_MESSAGE,
   NetworkWait,
   failedCallStreamed,
   networkContinuation,
   networkEvidence,
   networkSuspect,
+  connectionRetryBudgetMs,
   networkWaitBudgetMs,
   runMadeProgress,
   type NetworkSuspect,
 } from "./network-wait.js";
-import {
-  endedOnLeakedToolCall,
-  isBusyFailure,
-  networkVerdict,
-} from "./openllm-failures.js";
+import { endedOnLeakedToolCall, networkVerdict } from "./openllm-failures.js";
 import {
   OPENLLM_CONTINUATION_PROMPT,
   OPENLLM_CONTINUATION_TYPE,
   OpenLlmRouter,
 } from "./openllm-router.js";
-import {
-  OPENLLM_ID,
-  creditWall,
-  failureStatus,
-  isOutOfCredits,
-  isOpenLlmReference,
-  isOwnKeyOutOfCredit,
-  namesEmptyBalance,
-} from "./openllm.js";
+import { OPENLLM_ID, failureStatus, isOpenLlmReference } from "./openllm.js";
 import { refreshOpenRouterLive } from "./openrouter-live.js";
 import { PendingSteers } from "./pending-steers.js";
 import {
@@ -128,13 +128,12 @@ import {
   repairEscapedPaths,
 } from "./permissions.js";
 import { personaPrompt, readPersona } from "./persona.js";
-import { windowsShellPrompt } from "./posix-shell.js";
+import { scriptRuntimesPrompt, windowsShellPrompt } from "./posix-shell.js";
 import {
   AgentMode,
   AgentStatus,
   type AgentEvent,
   type DesktopEvent,
-  type NotificationAction,
   type PermissionDecision,
   type PermissionRequest,
   type SkillMetadata,
@@ -142,7 +141,6 @@ import {
 } from "./protocol.js";
 import {
   createModelRuntime,
-  listModels,
   registerAbacusProvider,
   registerCustomProviders,
   registerGeminiProvider,
@@ -183,6 +181,20 @@ import { ToolCallStream } from "./tool-call-stream.js";
 import { ToolHeartbeat } from "./tool-heartbeat.js";
 import { type ToolOrigin, type UnattendedPolicy } from "./tool-policy.js";
 import { TOOLS_ARRIVED_TYPE, toolsArrivedPrompt } from "./tools-arrived.js";
+import {
+  EMPTY_REPLY_FAILURE,
+  OPENLLM_POOL_EMPTY_MESSAGE,
+  OPENLLM_POOL_SHUT_MESSAGE,
+  REQUEST_TOO_LARGE_PATTERN,
+  endedEmpty,
+  isBusyCause,
+  isAuthFailure,
+  isContextTooLong,
+  presentFailure,
+  providerFailureSummary,
+  readableProviderError,
+  type TurnFailure,
+} from "./turn-outcome.js";
 import { turnUsage, type TurnUsage } from "./turn-usage.js";
 import { learnUserLanguage, userLanguagePrompt } from "./user-language.js";
 import { webHostPrompt } from "./web-host-prompt.js";
@@ -712,6 +724,12 @@ export class AbacusBotSession {
    * Services only the desktop can perform. Long-lived: tools rebuilt on reset
    * would otherwise each capture a client with its own pending map.
    */
+  /** This session's turn checkpoints, the undo for every file change. */
+  private readonly checkpoints = new CheckpointTracker(
+    new CheckpointStore(checkpointsDirFor(abacusBotDir())),
+    checkpointSessionId()
+  );
+
   private readonly hostServices = new HostServiceClient(
     (requestId, service, payload) => {
       this.options.emit({
@@ -864,11 +882,23 @@ export class AbacusBotSession {
     this.mcp.onStatusChange = () => this.emitMcpServers();
     this.mcp.onToolsAdded = () => this.mcpTools.changed();
 
+    // Housekeeping, throttled inside; a failure only delays it.
+    void this.checkpoints.store
+      .collectGarbage(this.checkpoints.sessionId)
+      .catch(() => {});
+
     const hostServices = this.options.hostServices !== false;
     // The budgets extension asks for a fresh balance while billed credits run.
     setCreditRefresher(
       hostServices
         ? () => this.hostServices.request("credit_balance", {})
+        : null
+    );
+    // The desktop owns the app's Python; a shell command that needs it asks.
+    setPythonProvisioner(
+      hostServices
+        ? () =>
+            this.hostServices.request("python_env", {}, PYTHON_SETUP_TIMEOUT_MS)
         : null
     );
     const toolNames = new Set([
@@ -921,6 +951,7 @@ export class AbacusBotSession {
         displayPrompt(),
         // Null everywhere the tool is a real bash.
         windowsShellPrompt(),
+        scriptRuntimesPrompt(),
         planModePrompt(toolNames),
         githubPrompt(),
         serviceRoutingPrompt(),
@@ -973,6 +1004,12 @@ export class AbacusBotSession {
               name: "abacusai-bot-tool-timeouts",
               factory: toolTimeouts as unknown as (pi: ExtensionAPI) => void,
             },
+            // Before the guardrails and every extension that reads a turn's
+            // changes: it keeps the files a call can reach before the call runs.
+            {
+              name: "abacusai-bot-checkpoints",
+              factory: checkpoints(this.checkpoints),
+            },
             {
               name: "abacusai-bot-guardrails",
               factory: guardrails as unknown as (pi: ExtensionAPI) => void,
@@ -1023,7 +1060,7 @@ export class AbacusBotSession {
             },
             {
               name: "abacusai-bot-syntax-check",
-              factory: syntaxCheck as unknown as (pi: ExtensionAPI) => void,
+              factory: syntaxCheck(this.checkpoints),
             },
             // Before output-repair: a text tool call this recovers into a real
             // one leaves nothing for the nudge to complain about.
@@ -1041,7 +1078,7 @@ export class AbacusBotSession {
             },
             {
               name: "abacusai-bot-verify-loop",
-              factory: verifyLoop as unknown as (pi: ExtensionAPI) => void,
+              factory: verifyLoop(this.checkpoints),
             },
             {
               name: "abacusai-bot-budgets",
@@ -1318,6 +1355,8 @@ export class AbacusBotSession {
     // it. Nothing is awaited between here and the prompt.
     await session.waitForIdle();
 
+    // What this turn changes is its own checkpoint, named by the message that asked.
+    this.checkpoints.beginTurn(turn?.messageId);
     // Per turn: the same provider failing next turn is news again.
     this.retriedCalls = 0;
     this.interrupted = false;
@@ -1344,6 +1383,13 @@ export class AbacusBotSession {
     // A new message is a new answer; last turn's decline does not carry over.
     this.planDeclinedThisTurn = false;
 
+    // At the credit wall the turn waits for the user's choice: it never
+    // starts on a weaker model they have not chosen.
+    if (await this.stopAtCreditWall()) {
+      turn?.settled?.();
+      return;
+    }
+
     // Where this turn is routed, said as it starts, unless a line is open.
     if (this.openLlmActive && !this.openLlmRouting) {
       const model = this.session?.model;
@@ -1367,20 +1413,8 @@ export class AbacusBotSession {
       // A thrown provider error gets the same words as a reported turn
       // failure rather than the raw "429: {json}" envelope.
       const raw = describe(error);
-      const provider = isProviderFailure(raw);
-      this.emitAgentEvent(
-        {
-          type: "error",
-          error: {
-            message: provider
-              ? terminalProviderMessage(raw)
-              : readableFailure(raw),
-            ...(provider ? providerDetail(raw) : {}),
-            ...this.errorActionsFor(raw),
-          },
-        },
-        { origin: "turn" }
-      );
+      this.router.chain.failed(raw, this.session?.model?.provider);
+      this.reportFailure();
       turn?.settled?.();
     }
   }
@@ -1414,129 +1448,113 @@ export class AbacusBotSession {
       return;
     }
 
+    // The failure pi recorded is this turn's last call; a pinned model's is
+    // its only one. On the pool the router recorded it already.
     const message = (
       this.session?.state as { errorMessage?: unknown } | undefined
     )?.errorMessage;
+    if (
+      !this.openLlmActive &&
+      typeof message === "string" &&
+      message.length > 0
+    )
+      this.router.chain.failed(message, this.session?.model?.provider);
 
-    if (typeof message !== "string" || message.length === 0) {
-      return;
-    }
+    this.reportFailure();
+  }
 
-    // Under the router the user never chose a model, so a provider's sentence
-    // about one is noise: the pool is out, and the card says what to do. Out
-    // of credits keeps its own card.
-    const poolExhausted = this.openLlmActive && !isOutOfCredits(message);
-    const poolShut = this.openLlmActive && this.isPoolShut();
+  /**
+   * End the turn's story: when its last call did not answer, the one error
+   * the whole chain of calls comes to (turn-outcome.ts). A turn whose last
+   * call answered reports nothing, and an empty reply after a failure is a
+   * failure, never a silent end.
+   */
+  private reportFailure(): void {
+    const failure = this.router.chain.failure(
+      this.openLlmActive && this.isPoolShut()
+    );
+    if (failure == null) return;
+    this.emitFailure(failure);
+  }
 
+  private emitFailure(failure: TurnFailure): void {
+    // Credits or credentials: whatever the user does about them (a key, a
+    // top-up, an upgrade) is re-read before the next turn.
+    if (
+      failure.cause === "credits_exhausted" ||
+      failure.cause === "credits_expired" ||
+      failure.cause === "key_invalid" ||
+      isAuthFailure(failure.raw)
+    )
+      this.providersStale = true;
+    const registry = this.registry;
     this.emitAgentEvent(
       {
         type: "error",
-        error: {
-          message: poolShut
-            ? OPENLLM_POOL_SHUT_MESSAGE
-            : poolExhausted
-              ? OPENLLM_POOL_EXHAUSTED_MESSAGE
-              : terminalProviderMessage(message),
-          code: "turn_failed",
-          ...(poolExhausted || poolShut ? {} : providerDetail(message)),
-          ...this.errorActionsFor(message),
-        },
+        error: presentFailure(
+          failure,
+          registry != null
+            ? this.router.failureContext(
+                registry,
+                this.openLlmActive,
+                this.session?.model
+              )
+            : {
+                routed: this.openLlmActive,
+                freeLaneProviders: [],
+                onFreeLane: false,
+                abacusFreeModels: [],
+                abacus: null,
+              }
+        ),
       },
       { origin: "turn" }
     );
   }
 
   /**
-   * The one error the app can fix for the user: Abacus credits ran out, which
-   * renders as the upgrade card. Abacus-served turns only; an OpenRouter user
-   * out of credits would be sold the wrong thing.
+   * At the credit wall, before the free lane is chosen, a turn on the pool
+   * runs on Abacus or not at all: it moves back to Abacus when Abacus is
+   * there to ask, and otherwise ends at once on the wall's card.
    */
-  private upgradeActionsFor(
-    raw: string
-  ): { actions: NotificationAction[] } | Record<string, never> {
-    const provider = this.session?.model?.provider;
-    const abacusServed = provider === "abacus" || this.openLlmActive;
-    const wall = creditWall(raw);
-    if (wall != null || isAuthFailure(raw)) this.providersStale = true;
-    if (!abacusServed || wall == null) return {};
-    return {
-      actions: [
-        { type: "upgrade-abacus", link: ABACUS_PLAN_URL, cause: wall },
-        ...this.freeModelSwitches(),
-      ],
-    };
-  }
-
-  /**
-   * The models the platform still serves once the balance is gone, as
-   * switches the upgrade card can offer by name. Read off the catalog, so
-   * which they are is the platform's to change.
-   */
-  private freeModelSwitches(): Array<{
-    type: string;
-    model: string;
-    label: string;
-  }> {
+  private async stopAtCreditWall(): Promise<boolean> {
     const registry = this.registry;
-    if (registry == null) return [];
-
-    return listModels(registry)
-      .filter((choice) => choice.provider === "abacus" && choice.free)
-      .map((choice) => ({
-        type: "switch-model",
-        model: choice.id,
-        label: choice.label,
-      }));
-  }
-
-  /**
-   * What the app can offer about a failed turn: the upgrade card when out of
-   * Abacus credits, the Abacus offer when the user's own key failed in a way
-   * a plan answers, a model switch when a pinned model timed out or is
-   * overloaded.
-   */
-  private errorActionsFor(
-    raw: string
-  ): { actions: NotificationAction[] } | Record<string, never> {
-    const actions: NotificationAction[] = [
-      ...(this.upgradeActionsFor(raw).actions ?? []),
-    ];
-    // The user's own key failed in a way a plan answers: the app offers
-    // Abacus instead of a switch that leads back to the same key.
-    const provider = this.session?.model?.provider;
-    const cause = this.openLlmActive ? null : ownKeyFailureCause(raw, provider);
-    if (provider != null && cause != null) {
-      actions.push({ type: "own-key-unavailable", provider, cause });
-      return { actions };
-    }
-    // The router with every source used up: the card that connects another
-    // free source, rather than a switch button leading to the same empty pool.
-    if (this.openLlmActive && this.isPoolShut()) {
-      if (!actions.some((action) => action.type === "upgrade-abacus")) {
-        actions.push({ type: "free-pool-out" }, ...this.freeModelSwitches());
-      }
-      return { actions };
-    }
-    // The router's free models rate-limited: for a free account the way past
-    // a busy pool is a plan, so the same card; a paid one keeps the switch.
-    if (this.openLlmActive && isRateLimitFailure(raw) && !isOutOfCredits(raw)) {
-      actions.push(
-        { type: "free-pool-out", cause: "busy" },
-        { type: "switch-model" }
-      );
-      return { actions };
-    }
-    // A pinned model that timed out or is overloaded; or the router with its
-    // whole pool down, where switching is the only move left.
+    const runtime = this.modelRuntime;
+    const session = this.session;
     if (
-      isProviderFailure(raw) &&
-      !isOutOfCredits(raw) &&
-      (this.openLlmActive ||
-        classifyProviderFailure(raw).remedy.includes("switch"))
-    ) {
-      actions.push({ type: "switch-model" });
+      !this.openLlmActive ||
+      registry == null ||
+      session == null ||
+      !creditWallActive() ||
+      freeLaneChosen()
+    )
+      return false;
+    const stop = this.router.wallStops(registry);
+    if (stop != null) {
+      this.emitAgentEvent({
+        type: "status_changed",
+        status: AgentStatus.Submitted,
+      });
+      this.emitFailure(stop);
+      this.finishTurn();
+      return true;
     }
-    return actions.length > 0 ? { actions } : {};
+    const best = this.router.pick(registry);
+    const current = session.model;
+    if (
+      best == null ||
+      runtime == null ||
+      current == null ||
+      best.provider === current.provider
+    )
+      return false;
+    // Only a move back to Abacus: the free lane's own order is the router's.
+    if (best.provider !== "abacus") return false;
+    const resolved = resolveModel(runtime, best.id, this.maxOutputTokens);
+    if (resolved.model == null) return false;
+    await session.setModel(resolved.model);
+    this.openLlmModelId = best.id;
+    return false;
   }
 
   /** Whether every model the router could run is in a class the account refused. */
@@ -1792,16 +1810,13 @@ export class AbacusBotSession {
 
       if (this.pendingOpenLlmRotation != null) return;
 
-      this.emitAgentEvent(
-        {
-          type: "error",
-          error: {
-            message: terminalProviderMessage(pending.failure),
-            code: "turn_failed",
-          },
-        },
-        { origin: "turn" }
-      );
+      // On the pool the router recorded the failure as it looked for room.
+      if (!this.openLlmActive)
+        this.router.chain.failed(
+          pending.failure,
+          this.session?.model?.provider
+        );
+      this.reportFailure();
       this.finishTurn();
 
       return;
@@ -1838,9 +1853,7 @@ export class AbacusBotSession {
 
     if (failure == null) return null;
 
-    return CONTEXT_LENGTH_PATTERN.test(failure.toLowerCase())
-      ? { failure, messages }
-      : null;
+    return isContextTooLong(failure) ? { failure, messages } : null;
   }
 
   /**
@@ -1875,19 +1888,7 @@ export class AbacusBotSession {
         `Routing failed (${compactProviderError(rotation.failure)}): no model left in the pool.`,
         "warning"
       );
-      this.emitAgentEvent(
-        {
-          type: "error",
-          error: {
-            message: this.isPoolShut()
-              ? OPENLLM_POOL_SHUT_MESSAGE
-              : OPENLLM_POOL_EXHAUSTED_MESSAGE,
-            code: "turn_failed",
-            ...this.errorActionsFor(rotation.failure),
-          },
-        },
-        { origin: "turn" }
-      );
+      this.reportFailure();
       this.finishTurn();
 
       return;
@@ -1941,7 +1942,12 @@ export class AbacusBotSession {
     if (!this.openLlmActive || this.interrupted) return none;
 
     const failure =
-      endedOnProviderError(messages) ?? endedOnLeakedToolCall(messages);
+      endedOnProviderError(messages) ??
+      endedOnLeakedToolCall(messages) ??
+      // Nothing at all after an earlier call failed: another model answers.
+      (this.router.chain.hadFailure && endedEmpty(messages)
+        ? EMPTY_REPLY_FAILURE
+        : null);
 
     if (failure == null) return none;
 
@@ -1952,10 +1958,7 @@ export class AbacusBotSession {
    * The pool's answer to a provider failure: the next model, or, when every
    * model is busy and the turn has a wait left, a wait for the soonest one.
    */
-  private routeAfterFailure(
-    failure: string,
-    network?: Parameters<OpenLlmRouter["failed"]>[3]
-  ): {
+  private routeAfterFailure(failure: string): {
     rotation: { failure: string; nextId: string } | null;
     busy: { failure: string } | null;
   } {
@@ -1963,15 +1966,17 @@ export class AbacusBotSession {
     const current = this.session?.model;
     const currentId = current ? `${current.provider}/${current.id}` : undefined;
     const next =
-      registry != null
-        ? this.router.failed(registry, failure, current, network)
-        : null;
+      registry != null ? this.router.failed(registry, failure, current) : null;
 
     if (next != null && "nextId" in next)
       return { rotation: { failure, nextId: next.nextId }, busy: null };
 
     const busy =
-      isBusyFailure(failure) && this.busyWait.available && !this.isPoolShut();
+      isBusyCause(failure, current?.provider) &&
+      // The free lane waits for nobody: its failure is the wall's card.
+      !this.router.onFreeLane(current?.provider) &&
+      this.busyWait.available &&
+      !this.isPoolShut();
     process.stderr.write(
       `[abacusai-bot-agent] pool not rotating after "${failure.slice(0, 80)}": no other candidate (current ${currentId ?? "?"})${busy ? "; waiting for the soonest" : ""}\n`
     );
@@ -1981,8 +1986,10 @@ export class AbacusBotSession {
 
   /**
    * The call failed in a way that may be the network's. If it is, the turn
-   * waits for the connection and picks up where it stopped; if the Abacus
-   * API answers, it is a provider failure and goes the usual way.
+   * waits for the connection and picks up where it stopped. If the Abacus
+   * API answers, the same call is still a dropped connection, not a busy
+   * model: it is asked again a few times, never rotated away from, and the
+   * turn ends on the connection card when it keeps failing.
    */
   private async recoverFromNetworkFailure(
     suspect: NetworkSuspect
@@ -1999,17 +2006,9 @@ export class AbacusBotSession {
       return;
     }
 
-    if (!network) {
-      const route = this.openLlmActive
-        ? this.routeAfterFailure(suspect.failure, evidence ?? undefined)
-        : { rotation: null, busy: null };
-      this.pendingOpenLlmRotation = route.rotation;
-      this.pendingBusyWait = route.busy;
-      if (route.rotation == null && route.busy == null) this.finishTurn();
-      return;
-    }
-
-    const budgetMs = networkWaitBudgetMs();
+    const budgetMs = network
+      ? networkWaitBudgetMs()
+      : connectionRetryBudgetMs();
     const outcome = await this.networkWait.next(
       budgetMs,
       (attempt, delayMs) => {
@@ -2038,17 +2037,11 @@ export class AbacusBotSession {
       this.networkFailureReported = true;
       if (this.openLlmRouting)
         this.closeRoutingLine("Routing stopped: no network.", "warning");
-      this.emitAgentEvent(
-        {
-          type: "error",
-          error: {
-            message: NETWORK_UNREACHABLE_MESSAGE,
-            code: NETWORK_UNREACHABLE_CODE,
-            detail: suspect.failure,
-          },
-        },
-        { origin: "turn" }
-      );
+      this.emitFailure({
+        cause: "connection",
+        provider: this.session?.model?.provider,
+        raw: suspect.failure,
+      });
       this.finishTurn();
       return;
     }
@@ -2141,7 +2134,11 @@ export class AbacusBotSession {
     const target = this.openLlmRoutingTarget;
 
     // Proof this model works; otherwise its failure count only ever climbs.
-    if (target != null) this.router.succeeded(target);
+    // The model answering, not the line's guess at it: Abacus answering is
+    // what lifts the credit wall.
+    const model = this.session?.model;
+    const answered = model != null ? `${model.provider}/${model.id}` : target;
+    if (answered != null) this.router.succeeded(answered);
     this.emitRoutingLine(
       target == null ? "Routed." : `Routed to ${target}.`,
       "info"
@@ -2192,7 +2189,7 @@ export class AbacusBotSession {
 
     // An outgrown window is compacted silently (compactAndRetry); if even a
     // summary will not fit, the turn ends on an error that says what to do.
-    if (CONTEXT_LENGTH_PATTERN.test(text.toLowerCase())) {
+    if (isContextTooLong(text)) {
       return;
     }
 
@@ -2233,9 +2230,21 @@ export class AbacusBotSession {
     this.componentSubtasks.clear();
     this.toolInputs.clear();
     this.heartbeat.clear();
+    const usage =
+      this.lastTurnUsage != null &&
+      this.openLlmActive &&
+      this.router.onFreeLane(this.session?.model?.provider)
+        ? {
+            ...this.lastTurnUsage,
+            lane: "free" as const,
+            ...(this.session?.model?.provider != null
+              ? { provider: this.session.model.provider }
+              : {}),
+          }
+        : this.lastTurnUsage;
     this.emitAgentEvent({
       type: "turn_complete",
-      ...(this.lastTurnUsage != null ? { usage: this.lastTurnUsage } : {}),
+      ...(usage != null ? { usage } : {}),
     });
     this.lastTurnUsage = null;
     this.emitAgentEvent({
@@ -2516,6 +2525,14 @@ export class AbacusBotSession {
         : undefined;
 
     if (resolved?.model == null) {
+      // At the credit wall the card that offers the choice.
+      const wall = this.router.wallStops(registry);
+      if (wall != null) {
+        // Chosen, and held at the wall: the next turn stops on its card.
+        this.openLlmActive = true;
+        this.emitFailure(wall);
+        return;
+      }
       // The picker is the way out: its free-plan rows connect the sources. A
       // pool that has sources but every one used up says so, and the card
       // offers what is still to connect.
@@ -2529,7 +2546,7 @@ export class AbacusBotSession {
               : OPENLLM_POOL_EMPTY_MESSAGE,
             code: "model_unavailable",
             actions: shut
-              ? [{ type: "free-pool-out" }, ...this.freeModelSwitches()]
+              ? [{ type: "free-pool-out" }]
               : [{ type: "switch-model" }],
           },
         },
@@ -3737,26 +3754,6 @@ const MALFORMED_TOOL_CALL_PATTERN = /malformed[ _]?(function|tool)[ _]?call/i;
 /** Continuations spent on a malformed tool call, per user turn. */
 const MAX_MALFORMED_CONTINUATIONS = 1;
 
-/**
- * A provider saying the request did not fit. These all arrive as a plain 400,
- * so the sentence is the only identifier. Matched against lowercased text by
- * both the user-facing message and the compact-and-retry decision.
- */
-const CONTEXT_LENGTH_PATTERN =
-  /context length|context window|maximum input token limit|input is longer than|maximum context length|too many tokens/;
-
-/**
- * A provider refusing the request for its size against a tier limit rather
- * than the model's window: a 413, or the sentence Groq puts on one. Retrying
- * sends the same bytes again, so it is not narrated as a retry.
- */
-const REQUEST_TOO_LARGE_PATTERN =
-  /request too large|request entity too large|payload too large|reduce your message size/;
-
-/** A model refusing tools: a 400 with the reason only in the prose. */
-const TOOLS_UNSUPPORTED_PATTERN =
-  /does not support tool|support tool calling|tool use is not supported|does not support function calling/;
-
 /** Marks the continuation in the session log as ours rather than the user's. */
 const MALFORMED_CONTINUATION_TYPE = "abacusai-bot:malformed-tool-call";
 
@@ -3862,350 +3859,6 @@ function compactProviderError(raw: string): string {
   if (first.length === 0) return "provider error";
 
   return first.length > 60 ? `${first.slice(0, 60)}…` : first;
-}
-
-/**
- * A provider failure in the words a user can act on: the category and nothing
- * else, since the provider's text is written for whoever holds the key. The
- * unrecognized case stays vague rather than falling back to the raw text.
- */
-function providerFailureSummary(raw: string): string {
-  return classifyProviderFailure(raw).summary;
-}
-
-const ABACUS_PLAN_URL = "https://apps.abacus.ai/chatllm/choose-plan/";
-
-/**
- * What the chat says when the router has nothing left to try. Fixed lines:
- * under the router the user did not pick a model, so no provider's wording
- * about one belongs in front of them: the card's button is the answer.
- */
-export const OPENLLM_POOL_EXHAUSTED_MESSAGE =
-  "All free models are busy right now. Switch to a different model, or try again in a few minutes.";
-export const OPENLLM_POOL_SHUT_MESSAGE =
-  "Every free source is used up for now. Connect another free source, or pick a different model to keep going.";
-export const OPENLLM_POOL_EMPTY_MESSAGE =
-  "RouteLLM - Open has no model to run on yet. Pick a model, or connect Abacus.AI, Google AI Studio or OpenRouter from the model list.";
-
-/** The provider rejected the credential, rather than the account's balance. */
-function isAuthFailure(raw: string): boolean {
-  const status = failureStatus(raw);
-
-  return (
-    status === "401" ||
-    status === "403" ||
-    /no api key|invalid api key|unauthorized|authentication/i.test(raw)
-  );
-}
-
-/**
- * Why a turn on the user's own key (any provider but Abacus and the router)
- * failed, when an Abacus plan answers it: the key's balance is spent, its rate
- * limit is hit, or its provider is down, overloaded or not answering. Read
- * only off a terminal error, after the app's own retries. Null for what no
- * plan fixes (a model without tools, a conversation or request too big, a
- * rejected key) and for Abacus-served turns, which have their own card.
- */
-export type OwnKeyFailureCause = "credit" | "rate_limit" | "down" | "network";
-
-export function ownKeyFailureCause(
-  raw: string,
-  provider: string | undefined
-): OwnKeyFailureCause | null {
-  if (provider == null || provider === "abacus" || provider === "openllm") {
-    return null;
-  }
-
-  if (isOwnKeyOutOfCredit(raw, provider)) return "credit";
-
-  const status = Number(failureStatus(raw) ?? Number.NaN);
-  const text = raw.toLowerCase();
-
-  if (
-    TOOLS_UNSUPPORTED_PATTERN.test(text) ||
-    CONTEXT_LENGTH_PATTERN.test(text) ||
-    status === 413 ||
-    REQUEST_TOO_LARGE_PATTERN.test(text) ||
-    isAuthFailure(raw)
-  ) {
-    return null;
-  }
-
-  // Gemini's RESOURCE_EXHAUSTED and OpenRouter's free daily allowance are
-  // limits on the key, whatever else their sentence says about billing.
-  if (
-    status === 429 ||
-    /rate.?limit|too many requests|resource_exhausted|free-models-per-day|quota exceeded/.test(
-      text
-    )
-  ) {
-    return "rate_limit";
-  }
-
-  // Anthropic answers an overloaded fleet with a 529.
-  if (
-    (status >= 500 && status <= 504) ||
-    status === 529 ||
-    /overloaded/.test(text)
-  ) {
-    return "down";
-  }
-
-  if (
-    /timed out|timeout|econnreset|econnrefused|socket hang up|fetch failed|network/.test(
-      text
-    )
-  ) {
-    return "network";
-  }
-
-  return null;
-}
-
-/** A rate limit or a spent free quota, rather than a fault. */
-export function isRateLimitFailure(raw: string): boolean {
-  return (
-    failureStatus(raw) === "429" ||
-    /rate.?limit|too many requests|quota exceeded|free-models-per-day/i.test(
-      raw
-    )
-  );
-}
-
-/** A provider error, by its shape: an HTTP status code, up front or in its body. */
-export function isProviderFailure(raw: string): boolean {
-  return failureStatus(raw) != null;
-}
-
-/**
- * The same failure when the turn is actually over: the whole answer the user
- * gets, so it carries the status code (what makes a support conversation
- * possible) and the one thing they can do about it.
- */
-/**
- * The provider's own sentence, when the app's reading of it does not already
- * carry it. "The model provider had a problem (400)" is the message a support
- * report arrives with, and on its own there is nothing to diagnose: whether
- * the request was too long, malformed, or refused for a reason nobody has
- * seen yet is in the text the provider sent, which is otherwise discarded.
- */
-export function providerDetail(raw: string): { detail?: string } {
-  const readable = readableProviderError(raw).trim();
-  const message = terminalProviderMessage(raw);
-
-  return readable.length === 0 || message.includes(readable)
-    ? {}
-    : { detail: readable };
-}
-
-export function terminalProviderMessage(raw: string, context?: string): string {
-  const { summary, remedy } = classifyProviderFailure(raw);
-  const status = failureStatus(raw);
-
-  return [`${summary}${status == null ? "" : ` (${status})`}.`, context, remedy]
-    .filter((part) => part != null)
-    .join(" ");
-}
-
-export function classifyProviderFailure(raw: string): {
-  summary: string;
-  remedy: string;
-} {
-  const status = Number(failureStatus(raw) ?? Number.NaN);
-  const text = raw.toLowerCase();
-
-  // Before the rate-limit branch: an out-of-credits account answers 429 too,
-  // and "try again in a moment" is exactly the wrong advice for it.
-  const wall = creditWall(raw);
-  if (wall === "expired") {
-    return {
-      summary: "Your free credits have expired",
-      remedy: `Upgrade your plan at ${ABACUS_PLAN_URL} to keep going.`,
-    };
-  }
-  if (wall === "exhausted") {
-    return {
-      summary: "You're out of credits",
-      remedy: `Upgrade your plan at ${ABACUS_PLAN_URL}, or switch to a model with its own key.`,
-    };
-  }
-
-  // Before the rate-limit branch too: OpenAI's empty balance answers 429
-  // `insufficient_quota`, and waiting a moment never refills it.
-  if (namesEmptyBalance(raw)) {
-    return {
-      summary: "The model provider is out of quota",
-      remedy: "Add credits with the provider, or switch to a different model.",
-    };
-  }
-
-  // Before the rate-limit branch too: Groq's free tier answers a request over
-  // its per-minute token cap with a 413 whose sentence mentions "tokens per
-  // minute", and no amount of waiting makes the same request smaller.
-  if (status === 413 || REQUEST_TOO_LARGE_PATTERN.test(text)) {
-    return {
-      summary: "This request is too large for the model's limit",
-      remedy:
-        "Start a new chat, switch to a model with a higher limit, or raise the limit with the provider.",
-    };
-  }
-
-  if (status === 429 || /rate.?limit|too many requests/.test(text)) {
-    return {
-      summary: "The model provider is rate-limited",
-      remedy: "Try again in a moment, or switch to a different model.",
-    };
-  }
-
-  // These arrive as a 400 with the reason only in the prose. Behind the rate
-  // limit, since a 429 means the rate limit whatever else the sentence says.
-  if (TOOLS_UNSUPPORTED_PATTERN.test(text)) {
-    return {
-      summary: "This model can't use tools",
-      remedy: "Switch to a model that supports tool calling.",
-    };
-  }
-
-  if (CONTEXT_LENGTH_PATTERN.test(text)) {
-    return {
-      summary: "This conversation is too long for the model",
-      remedy: "Start a new chat, or switch to a model with a larger context.",
-    };
-  }
-
-  if (status === 402 || /credit|quota|billing|insufficient/.test(text)) {
-    return {
-      summary: "The model provider is out of quota",
-      remedy: "Add credits with the provider, or switch to a different model.",
-    };
-  }
-
-  // The platform's answer to a key of the wrong kind (a terminal/CodeLLM key
-  // on a bot endpoint); the key itself is fine, and Settings → Models is the
-  // wrong place to look.
-  if (status === 403 && /not allowed for this api/i.test(text)) {
-    return {
-      summary: "This key isn't an AbacusAI Bot key",
-      remedy:
-        "Sign out in Settings → Account and sign in again to get a bot key.",
-    };
-  }
-
-  if (status === 403) {
-    return {
-      summary: "The model provider denied access",
-      remedy:
-        "Check your model access in Settings → Models, or choose another model.",
-    };
-  }
-  if (status === 401 || /api key|unauthorized/.test(text)) {
-    return {
-      summary: "The model provider rejected the key",
-      remedy: "Check the key in Settings → Models.",
-    };
-  }
-
-  if (/timed out|timeout|econnreset|network/.test(text)) {
-    return {
-      summary: "The model provider did not respond",
-      remedy: "Try again in a moment, or switch to a different model.",
-    };
-  }
-
-  if (status >= 500 || /overloaded|unavailable/.test(text)) {
-    return {
-      summary: "The model provider is temporarily unavailable",
-      remedy: "Try again in a moment, or switch to a different model.",
-    };
-  }
-
-  return {
-    summary: "The model provider had a problem",
-    remedy: "Try again, or switch to a different model.",
-  };
-}
-
-/**
- * The sentence a provider error is actually trying to say, pulled out of the
- * JSON envelope that buries it: `429: {json}`, bare `{json}`, or JSON after
- * any prefix, with the sentence at `message`, `error.message` or `error`.
- * Prose with no envelope is returned as-is (capped), so errors nobody has
- * seen yet still say something; the JSON itself never comes back.
- */
-function readableProviderError(raw: string): string {
-  const cap = (text: string): string =>
-    text.length > 300 ? `${text.slice(0, 300)}…` : text;
-  const start = raw.indexOf("{");
-  const end = raw.lastIndexOf("}") + 1;
-  // No closing brace: cut short in transit, the rest is all there is.
-  const json =
-    start === -1 ? "" : raw.slice(start, end > start ? end : undefined);
-
-  if (!/"\w+"\s*:/.test(json)) return cap(raw);
-
-  const head = raw.slice(0, start).replace(/[\s:]+$/, "");
-  const sentence = envelopeSentence(json);
-
-  return cap(
-    [head.length > 0 ? `${head}:` : "", sentence]
-      .filter((part) => part.length > 0)
-      .join(" ")
-      .replace(/:$/, "")
-  );
-}
-
-/** The human words in a JSON error envelope, or "" when it carries none. */
-function envelopeSentence(json: string, nested = false): string {
-  let body: unknown;
-  try {
-    body = JSON.parse(json);
-  } catch {
-    // Cut short in transit: the message is still there to read.
-    const message = json.match(/"message"\s*:\s*"((?:[^"\\]|\\.)*)"/)?.[1];
-    try {
-      return message == null ? "" : (JSON.parse(`"${message}"`) as string);
-    } catch {
-      return message ?? "";
-    }
-  }
-
-  const read = (value: unknown): string => {
-    if (typeof value === "string") return value;
-    if (Array.isArray(value)) return read(value[0]);
-    if (value == null || typeof value !== "object") return "";
-    const record = value as {
-      error?: unknown;
-      message?: unknown;
-      metadata?: { raw?: unknown; remedy_hint?: unknown };
-    };
-    const inner = read(record.error);
-    if (inner.length > 0) return inner;
-    const message = typeof record.message === "string" ? record.message : "";
-    let detail =
-      typeof record.metadata?.raw === "string"
-        ? record.metadata.raw
-        : typeof record.metadata?.remedy_hint === "string"
-          ? record.metadata.remedy_hint
-          : "";
-    // OpenRouter relays the upstream's own envelope as a string.
-    const relayed = detail.slice(
-      detail.indexOf("{"),
-      detail.lastIndexOf("}") + 1
-    );
-    if (!nested && /"\w+"\s*:/.test(relayed)) {
-      detail = envelopeSentence(relayed, true);
-    }
-    return [message, detail].filter((part) => part.length > 0).join(" ");
-  };
-
-  return read(body);
-}
-
-/** A thrown failure that is not a provider's, in words rather than JSON. */
-export function readableFailure(raw: string): string {
-  const readable = readableProviderError(raw).trim();
-
-  return readable.length > 0 ? readable : terminalProviderMessage(raw);
 }
 
 /**

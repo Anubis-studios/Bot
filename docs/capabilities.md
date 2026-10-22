@@ -7,12 +7,15 @@ Most sessions start with workspace files, terminal and process control, task
 planning, browser automation, web access, deliverables, memory, skills,
 delegation, and document tools enabled. Device control, media generation, smart
 home access, and other tools that need extra software or credentials start off.
-On a paid Abacus.AI plan, image generation and text to speech start on, since the
-plan runs them. The page in the installed app shows the current defaults.
+The page in the installed app shows the current defaults.
 
-When a paid plan includes a capability this account does not have here, such as
-media generation on the free plan, the agent says which plan includes it and
-where, and the app shows an upgrade card instead of a refusal.
+Creating and editing images, making videos and making speech or audio run in
+the app only on a provider key of your own (OpenAI, FAL, Black Forest Labs or
+ElevenLabs). On an Abacus.AI plan they run in Abacus AI Agent on the web: asked
+for one, the agent says so, and the app shows an upgrade card on the free plan,
+or an Open in Abacus AI Agent card with the request filled in on a paid one.
+Chat apps, the phone and routines get the same answer as a link. Reading
+images, screenshots and videos is unchanged.
 
 Most built-in tool changes apply when the next agent process starts. Memory,
 skills, task planning, web search, MCP, and newly connected services can refresh

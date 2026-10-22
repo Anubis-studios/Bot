@@ -324,6 +324,15 @@ describe("turns and visibility", () => {
     ).toEqual(["notice", "subagent"]);
   });
 
+  it("bot_help's card is part of the reply, under its server's prefix or bare", () => {
+    for (const name of ["bot_help", "agent-tools_bot_help"])
+      expect(
+        spokenParts(
+          assistant(liveTool(name, { topic: "models", name: "gemini" }))
+        ).map((part) => part.kind)
+      ).toEqual(["bot-help"]);
+  });
+
   it("a tool-only turn is silent; one that made a file is not", () => {
     expect(turnIsSilent([assistant(liveTool("bash", { command: "ls" }))])).toBe(
       true

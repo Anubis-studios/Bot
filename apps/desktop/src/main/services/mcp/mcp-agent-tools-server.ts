@@ -29,6 +29,7 @@ import {
   resolveConnector,
   type Connector,
 } from "@abacus-ai/connectors/registry";
+import { type BotHelpBot, botHelpRequest } from "@abacus-ai/contract/bot-help";
 import {
   HOME_CHANNEL_NAMES,
   HOME_CHANNELS,
@@ -45,7 +46,10 @@ import {
   type MessagingPlatformId,
   describePlatformForAgent,
 } from "@abacus-ai/contract/messaging";
-import type { AbacusPlanTier } from "@abacus-ai/contract/models";
+import type {
+  AbacusPlanTier,
+  ModelAvailability,
+} from "@abacus-ai/contract/models";
 import type {
   Routine,
   RoutineCreateInput,
@@ -95,7 +99,7 @@ import {
   type MemoryTarget,
 } from "../agent-tools/memory-store";
 import { analyze } from "../agent-tools/model-analysis";
-import { reprintPdf, runPdfScript } from "../agent-tools/pdf-agent";
+import { reprintPdf } from "../agent-tools/pdf-agent";
 import {
   listServed,
   serveDirectory,
@@ -103,6 +107,7 @@ import {
   htmlPagesIn,
 } from "../agent-tools/static-server";
 import { renderTodos, readTodos, setTodos } from "../agent-tools/todo-store";
+import { hasCredential } from "../config/settings";
 import type { BotNumberOutcome } from "../messaging/bot-number";
 import { MAX_ATTACHMENT_BYTES } from "../messaging/connector";
 import {
@@ -119,6 +124,7 @@ import type { SkillsService } from "../workspace/skills-service";
 import { McpHttpServer, type McpToolListing } from "./mcp-http-server";
 import { agentTool, AGENT_TOOL_NAMES, AGENT_TOOLS } from "./tools";
 import { withUpgradeNudge } from "./tools/billing";
+import { botHelpResult, modelProviders } from "./tools/bot-help";
 import type {
   ConnectOutcome,
   DisconnectOutcome,
@@ -138,7 +144,11 @@ import type {
   ToolDefinition,
   ToolResult,
 } from "./tools/definition";
-import { paidFeatureResult, withheldFeatures } from "./tools/paid-features";
+import {
+  type PaidFeatureReply,
+  paidFeatureResult,
+  withheldFeatures,
+} from "./tools/paid-features";
 import {
   NOT_YET_PHONE_OWNED,
   PHONE_AGENT_TOOLS,
@@ -242,6 +252,12 @@ export interface McpAgentToolsServerOptions {
   enabledToolsets: () => Set<string>;
   /** The account's plan as last read; absent or unknown, no plan-locked capability is offered. */
   planTier?: () => AbacusPlanTier;
+  /** The plan's name as last read, for bot_help; null before the first read. */
+  planName?: () => string | null;
+  /** The model catalog with what runs now, for bot_help. */
+  models?: () => Promise<ModelAvailability[]>;
+  /** The user's bots, for bot_help. */
+  bots?: () => BotHelpBot[];
   workspacePath: () => string | null;
   workspaceId?: () => string | null;
   /** `trigger` lets the run log tell "Run now" from the first fire at creation. */
@@ -510,7 +526,7 @@ export class McpAgentToolsServer extends McpHttpServer {
     const forBot = this.isBotCaller(callerSession);
     const forEditor = this.isRoutineEditor(callerSession);
     const channel = this.channelFor(callerSession);
-    const host = this.hostCapabilities();
+    const host = this.hostCapabilities(callerSession);
     // A run nobody is watching is offered only what it may call.
     const held = this.isHeld(callerSession);
 
@@ -520,7 +536,7 @@ export class McpAgentToolsServer extends McpHttpServer {
           ? false
           : forEditor
             ? definition.name === "cronjob"
-            : this.isListedTool(definition, enabled, forBot) &&
+            : this.isListedTool(definition, enabled, forBot, callerSession) &&
               this.reachesCaller(definition, callerSession)
       )
       .map((definition) => ({
@@ -536,12 +552,12 @@ export class McpAgentToolsServer extends McpHttpServer {
       }));
   }
 
-  private hostCapabilities(): HostCapabilities {
+  private hostCapabilities(callerSession?: string): HostCapabilities {
     const enabled = this.options.enabledToolsets();
     return {
       hostedRoutines: this.options.hostedRoutines?.() === true,
       withheldFeatures: withheldFeatures(this.planTier(), (feature) =>
-        this.featureListed(feature.toolsets, enabled)
+        this.featureListed(feature.toolsets, enabled, callerSession)
       ),
     };
   }
@@ -550,17 +566,25 @@ export class McpAgentToolsServer extends McpHttpServer {
     return this.options.planTier?.() ?? "unknown";
   }
 
-  /** Whether any tool of these toolsets is listed: switched on, with what it needs set. */
+  /**
+   * Whether any tool of these toolsets reaches this caller: switched on, with
+   * what it needs set, and served to its lane (the phone and a routine nobody
+   * watches make no media).
+   */
   private featureListed(
     toolsets: readonly string[],
-    enabled: Set<string>
+    enabled: Set<string>,
+    callerSession?: string
   ): boolean {
+    const held = this.isHeld(callerSession);
     return AGENT_TOOLS.some(
       (definition) =>
         definition.toolsets !== "always" &&
         definition.toolsets.some((toolset) => toolsets.includes(toolset)) &&
         isToolEnabled(definition, enabled) &&
-        this.isToolConfigured(definition)
+        this.isToolConfigured(definition) &&
+        this.toolFor(definition.name, callerSession) != null &&
+        !(held && !Object.hasOwn(UNATTENDED_TOOLS, definition.name))
     );
   }
 
@@ -1460,12 +1484,11 @@ export class McpAgentToolsServer extends McpHttpServer {
         );
       }
 
-      const result = await runPdfScript([action, ...scriptArgs]);
-      if (result.ok !== true) {
-        const install =
-          typeof result.install === "string" ? ` Run: ${result.install}` : "";
-        return this.err(`${result.error ?? "The operation failed."}${install}`);
-      }
+      // Loaded on first use: pdf.js is too large to parse at startup.
+      const { runPdfOperation } = await import("../agent-tools/pdf-ops");
+      const result = await runPdfOperation([action, ...scriptArgs]);
+      if (result.ok !== true)
+        return this.err(String(result.error ?? "The operation failed."));
 
       const rendered = JSON.stringify(result, null, 2);
 
@@ -2009,11 +2032,14 @@ export class McpAgentToolsServer extends McpHttpServer {
   private isListedTool(
     definition: ListedTool,
     enabled: Set<string>,
-    forBot: boolean
+    forBot: boolean,
+    callerSession?: string
   ): boolean {
     if ("surface" in definition)
       return (
-        isToolEnabled(definition, enabled) && this.isToolConfigured(definition)
+        isToolEnabled(definition, enabled) &&
+        this.isToolConfigured(definition) &&
+        (definition.offered?.(this.hostCapabilities(callerSession)) ?? true)
       );
     if (definition.hidden === true) return false;
     return (
@@ -2021,7 +2047,7 @@ export class McpAgentToolsServer extends McpHttpServer {
         (forBot && definition.botAlways === true)) &&
       this.isToolConfigured(definition) &&
       (forBot || definition.botsOnly !== true) &&
-      (definition.offered?.(this.hostCapabilities()) ?? true)
+      (definition.offered?.(this.hostCapabilities(callerSession)) ?? true)
     );
   }
 
@@ -2900,16 +2926,100 @@ export class McpAgentToolsServer extends McpHttpServer {
     const tier = this.planTier();
     const listed = this.featureListed(
       feature.toolsets,
-      this.options.enabledToolsets()
+      this.options.enabledToolsets(),
+      callerSession
     );
-    // A bot answering in a chat app has no card to show: its reply carries the link.
-    const card =
-      !this.isBotCaller(callerSession) ||
-      (callerSession != null &&
-        this.options.isAppBotChat?.(callerSession) === true);
+    const reply = this.paidFeatureReply(callerSession);
+    // Only a person's reply mints a one-time upgrade link; the card brings its own.
     const plan =
-      tier === "free" && !listed ? await fetchBillingPlan(!card) : null;
-    return paidFeatureResult(this, { feature, tier, listed, card, plan });
+      tier === "free" && !listed
+        ? await fetchBillingPlan(reply === "chat")
+        : null;
+    const prompt =
+      typeof args.prompt === "string" && args.prompt.trim().length > 0
+        ? args.prompt
+        : null;
+    return paidFeatureResult(this, {
+      feature,
+      tier,
+      listed,
+      reply,
+      plan,
+      prompt,
+    });
+  }
+
+  /** A chat app, the phone or a routine has no card to show: the reply carries the link. */
+  private paidFeatureReply(callerSession?: string): PaidFeatureReply {
+    if (this.isHeld(callerSession)) return "routine";
+    if (this.isPhoneCaller(callerSession)) return "chat";
+    const chatApp =
+      this.isBotCaller(callerSession) &&
+      !(
+        callerSession != null &&
+        this.options.isAppBotChat?.(callerSession) === true
+      );
+    return chatApp ? "chat" : "card";
+  }
+
+  // ── The app itself ───────────────────────────────────────────────────────
+
+  /**
+   * `bot_help`: the app's state for the asked topic, read now. A part that
+   * cannot be read is said as unreadable, never left for the model to guess.
+   */
+  async botHelp(
+    args: Record<string, unknown>,
+    callerSession?: string
+  ): Promise<ToolResult> {
+    const { topic, name } = botHelpRequest(args.topic, args.name);
+    const needs = (wanted: string): boolean =>
+      topic == null || topic === wanted;
+    const phone = this.isPhoneCaller(callerSession);
+    const card =
+      !phone &&
+      (!this.isBotCaller(callerSession) ||
+        (callerSession != null &&
+          this.options.isAppBotChat?.(callerSession) === true));
+    const routines = this.options.routines;
+    const hostedRunner =
+      routines?.hostedOnly?.() === true ||
+      routines?.defaultRunner() === "hosted";
+    const connectorsNeeded = needs("connectors") || needs("chat_apps");
+    const [connectors, models] = await Promise.all([
+      connectorsNeeded
+        ? this.connectConnectorOutcome({}, callerSession, { card: false })
+            .then((outcome) =>
+              outcome.code === "list" ? outcome.entries : null
+            )
+            .catch(() => null)
+        : Promise.resolve(null),
+      needs("models") && this.options.models != null
+        ? this.options.models().catch(() => null)
+        : Promise.resolve(null),
+    ]);
+    return botHelpResult(this, {
+      topic,
+      name,
+      hosted: import.meta.env.ABACUS_WEB_HOST === true,
+      tier: this.planTier(),
+      card,
+      phone,
+      planName: this.options.planName?.() ?? null,
+      runner: hostedRunner ? "hosted" : "local",
+      routines: needs("routines")
+        ? {
+            local: listJobs().length,
+            hosted: routines?.hosted.list().length ?? 0,
+          }
+        : null,
+      connectors,
+      models,
+      providers: modelProviders(hasCredential),
+      bots: this.options.bots?.() ?? [],
+      enabledToolsets: this.options.enabledToolsets(),
+      withheldFeatures: this.hostCapabilities().withheldFeatures,
+    });
   }
 
   // ── Integrations ─────────────────────────────────────────────────────────

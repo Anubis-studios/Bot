@@ -96,7 +96,7 @@ export const useSessionComposerModel = (
   return {
     onResumeOnFreePool: async () => {
       if (!row) return;
-      await setSessionModel(db, transport.client, row, "abacus/openllm");
+      await setSessionModel(db, transport.client, row, OPENLLM_ID);
       if (row.status === "running")
         await confirmFreePoolModel(transport, {
           workspaceId: row.workspaceId,
@@ -162,7 +162,12 @@ export const useSessionComposerModel = (
           connectGoogleAi: t("sessions.model.connectGoogleAi"),
           tierFree: t("sessions.model.free"),
           tierLocal: t("sessions.model.local"),
+          includedIn: (plan) =>
+            plan == null
+              ? t("chat.composer.includedInPaid")
+              : t("chat.composer.includedIn", { plan }),
         },
+        onUpgrade: () => void openUpgrade(transport.client),
         onConnect: (provider) =>
           void navigate({
             to: "/settings/models",

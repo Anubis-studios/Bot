@@ -50,6 +50,8 @@ export const PHONE_AGENT_TOOL_NAMES: readonly string[] = [
   "connect_connector",
   "disconnect_connector",
   "billing_plan",
+  "paid_feature",
+  "bot_help",
 ];
 
 /**
@@ -105,7 +107,6 @@ export const PHONE_EXCLUDED_MCP_TOOLS: Readonly<Record<string, string>> = {
   bfl_flux3_video_continuation: MEDIA_OFF,
   bfl_flux3_get_result: MEDIA_OFF,
   bfl_flux3_prompting_guide: MEDIA_OFF,
-  paid_feature: "offers media, which cannot go to the chat whatever the plan",
   ha_list_entities: "a home on the user's own network",
   ha_get_state: "a home on the user's own network",
   ha_list_services: "a home on the user's own network",
@@ -195,6 +196,8 @@ export const UNATTENDED_TOOLS: Readonly<Record<string, UnattendedRule>> = {
   // picks; a model's own search tool is refused (web/search.ts restOnly).
   web_search: "allow",
   x_search: "allow",
+  // Text only: where the plan makes media, with a web link; it mints no upgrade link.
+  paid_feature: "allow",
   // A spilled tool result, read back: the bytes are already in the run.
   read_output: "allow",
   read: "workspace-read",
@@ -228,6 +231,8 @@ export const UNATTENDED_EXCLUDED_TOOLS: Readonly<Record<string, string>> = {
   notebook_edit: NO_CODE,
   delete: NO_CODE,
   run_tests: NO_CODE,
+  restore_checkpoint: NO_CODE,
+  checkpoint_diff: "an unattended run changes no files, so has no checkpoints",
   pdf: NO_CODE,
   deck_export_pdf: NO_CODE,
   fetch_background_output: "no background process exists without the shell",
@@ -240,7 +245,7 @@ export const UNATTENDED_EXCLUDED_TOOLS: Readonly<Record<string, string>> = {
   session_search: "past conversations are not this run's input",
   my_activity: "past conversations are not this run's input",
   billing_plan: "mints one-time upgrade links for a person, not a routine",
-  paid_feature: "an upgrade offer for a person, not a routine",
+  bot_help: "answers a person's questions about the app, not a routine's",
   offer_session: "a card the user clicks in the bot's chat",
   exit_plan_mode: "never in plan mode",
   delegate_task: NO_SUBAGENT,

@@ -10,29 +10,37 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const autoUpdater = new EventEmitter() as EventEmitter &
   Record<string, unknown>;
 
+// electron-updater picks DebUpdater from resources/package-type.
+const deb = vi.hoisted(() => ({ isDeb: false }));
 vi.mock("electron-updater", () => ({
-  default: { autoUpdater },
+  default: {
+    autoUpdater,
+    DebUpdater: class {
+      static [Symbol.hasInstance]() {
+        return deb.isDeb;
+      }
+    },
+  },
+}));
+// electron-store, in memory: what install-record keeps across a relaunch.
+const store = vi.hoisted(() => new Map<string, unknown>());
+vi.mock("electron-store", () => ({
+  default: class {
+    get(key: string) {
+      return store.get(key);
+    }
+    set(key: string, value: unknown) {
+      store.set(key, value);
+    }
+    delete(key: string) {
+      store.delete(key);
+    }
+  },
 }));
 const electronApp = vi.hoisted(() => ({
   relaunch: vi.fn(),
   quit: vi.fn(),
   exit: vi.fn(),
-}));
-// A .deb install, with or without pkexec; off unless a test turns it on.
-const deb = vi.hoisted(() => ({
-  isDeb: false,
-  pkexec: null as string | null,
-  install: vi.fn(
-    async (): Promise<{ ok: true } | { ok: false; detail: string }> => ({
-      ok: true,
-    })
-  ),
-}));
-vi.mock("./deb-install", () => ({
-  isDebPackage: () => deb.isDeb,
-  graphicalElevation: () => deb.pkexec,
-  installDebWithPkexec: deb.install,
-  manualInstallCommand: (path: string) => `sudo apt install ${path}`,
 }));
 vi.mock("electron", () => ({
   app: {
@@ -46,9 +54,14 @@ vi.mock("electron", () => ({
   BaseWindow: { getAllWindows: () => [] },
   powerMonitor: { on: () => {}, getSystemIdleTime: () => 0 },
 }));
+const quitState = vi.hoisted(() => ({ quitting: false }));
 vi.mock("../../app-quit-state", () => ({
-  markQuitting: () => {},
-  clearQuitting: () => {},
+  markQuitting: () => {
+    quitState.quitting = true;
+  },
+  clearQuitting: () => {
+    quitState.quitting = false;
+  },
 }));
 vi.mock("./relaunch-hidden", () => ({
   markRelaunchHidden: () => {},
@@ -61,8 +74,8 @@ const { UpdateService, failedPhaseOf } = await import("./update-service");
 
 beforeEach(() => {
   deb.isDeb = false;
-  deb.pkexec = null;
-  deb.install.mockReset().mockResolvedValue({ ok: true });
+  store.clear();
+  quitState.quitting = false;
   electronApp.relaunch.mockClear();
   electronApp.quit.mockClear();
   electronApp.exit.mockClear();
@@ -209,12 +222,28 @@ describe("UpdateStatus.failedPhase", () => {
 });
 
 /**
- * Linux .deb. electron-updater installs it with `sudo dpkg -i`, which has no
- * password prompt in a GUI app, so every attempt failed, the quit watchdog
- * force-quit the app and the next idle restart tried again, forever.
+ * Linux .deb, through electron-updater's own DebUpdater. Its quitAndInstall
+ * runs dpkg synchronously behind the prompt its LinuxUpdater picks, and a
+ * failure is an `error` event before it returns. That failure used to be
+ * followed by the quit watchdog's force-quit and, after the relaunch, the
+ * idle restart's retry: a loop.
  */
 describe("a .deb update", () => {
   const PACKAGE = "/home/u/.cache/abacusai-bot-updater/pending/bot.deb";
+  // What electron-updater's LinuxUpdater would elevate with.
+  let sudoCommand = "pkexec";
+  let installFails = false;
+  const quitAndInstall = vi.fn((_silent?: boolean, _forceRun?: boolean) => {
+    if (installFails) {
+      autoUpdater.emit(
+        "error",
+        new Error("Command pkexec exited with code 126")
+      );
+      return;
+    }
+    electronApp.relaunch();
+    electronApp.quit();
+  });
   const debDownloaded = (version = "1.0.19") => {
     const service = new UpdateService();
     autoUpdater.emit("update-available", { version });
@@ -226,10 +255,16 @@ describe("a .deb update", () => {
   };
   beforeEach(() => {
     deb.isDeb = true;
-    autoUpdater.quitAndInstall = vi.fn();
+    sudoCommand = "pkexec";
+    installFails = false;
+    quitAndInstall.mockClear();
+    autoUpdater.quitAndInstall = quitAndInstall;
+    autoUpdater.isRunningAsRoot = () => false;
+    autoUpdater.determineSudoCommand = () => sudoCommand;
   });
 
-  it("without a graphical password prompt is a manual install from the start", async () => {
+  it("with no graphical prompt (plain sudo) is a manual install from the start", async () => {
+    sudoCommand = "sudo";
     const service = debDownloaded();
     expect(service.getStatus()).toMatchObject({
       downloaded: true,
@@ -241,39 +276,46 @@ describe("a .deb update", () => {
       },
     });
 
-    // Nothing to try: no sudo, no quit.
-    const result = await service.installUpdate();
-    expect(result.success).toBe(false);
-    expect(deb.install).not.toHaveBeenCalled();
-    expect(autoUpdater.quitAndInstall).not.toHaveBeenCalled();
+    // Neither a click nor the quit path attempts it.
+    await expect(service.installUpdate()).resolves.toEqual({
+      success: false,
+      error: "Install this update from a terminal",
+    });
+    await service.installUpdate({ silent: true });
+    expect(quitAndInstall).not.toHaveBeenCalled();
     expect(electronApp.quit).not.toHaveBeenCalled();
     expect(service.getStatus().installing).toBe(false);
   });
 
-  it("with pkexec, a click installs through it and relaunches", async () => {
-    deb.pkexec = "/usr/bin/pkexec";
+  it("running as root needs no prompt and installs", async () => {
+    sudoCommand = "sudo";
+    autoUpdater.isRunningAsRoot = () => true;
+    const service = debDownloaded();
+    expect(service.getStatus().manualInstall).toBeNull();
+    await expect(service.installUpdate()).resolves.toEqual({ success: true });
+    expect(quitAndInstall).toHaveBeenCalledTimes(1);
+  });
+
+  it("with a prompt, installs through electron-updater's quitAndInstall", async () => {
     const service = debDownloaded();
     expect(service.getStatus().manualInstall).toBeNull();
 
-    await expect(service.installUpdate()).resolves.toEqual({
-      success: true,
-    });
-    expect(deb.install).toHaveBeenCalledWith("/usr/bin/pkexec", PACKAGE);
-    // electron-updater's sudo path is never taken.
-    expect(autoUpdater.quitAndInstall).not.toHaveBeenCalled();
+    await expect(service.installUpdate()).resolves.toEqual({ success: true });
+    expect(quitAndInstall).toHaveBeenCalledWith(false, true);
     expect(electronApp.relaunch).toHaveBeenCalledTimes(1);
-    expect(electronApp.quit).toHaveBeenCalledTimes(1);
+    expect(store.get("attemptedVersion")).toBe("1.0.19");
   });
 
-  it("a failed pkexec install marks the version failed and never retries or force-quits", async () => {
+  it("a failed install marks the version failed, never force-quits and never retries", async () => {
     vi.useFakeTimers();
     try {
-      deb.pkexec = "/usr/bin/pkexec";
-      deb.install.mockResolvedValue({ ok: false, detail: "exit 126" });
+      installFails = true;
       const service = debDownloaded();
 
-      const result = await service.installUpdate();
-      expect(result.success).toBe(false);
+      await expect(service.installUpdate()).resolves.toEqual({
+        success: false,
+        error: "Install this update from a terminal",
+      });
       expect(service.getStatus()).toMatchObject({
         installing: false,
         installStalled: false,
@@ -282,6 +324,9 @@ describe("a .deb update", () => {
           packagePath: PACKAGE,
         },
       });
+      // The quit intent is dropped: a window close hides again.
+      expect(quitState.quitting).toBe(false);
+      expect(store.get("failedVersion")).toBe("1.0.19");
 
       // No watchdog: the app stays up.
       await vi.advanceTimersByTimeAsync(10 * 60_000);
@@ -289,26 +334,63 @@ describe("a .deb update", () => {
       expect(electronApp.exit).not.toHaveBeenCalled();
       expect(service.getStatus().installStalled).toBe(false);
 
-      // Another click, the quit path and a re-offer of the same version do
-      // not try it again.
+      // A click, the quit path and a re-offer of the same version do not try
+      // it again.
       await service.installUpdate();
       await service.installUpdate({ silent: true });
       autoUpdater.emit("update-available", { version: "1.0.19" });
       await service.installUpdate();
-      expect(deb.install).toHaveBeenCalledTimes(1);
+      expect(quitAndInstall).toHaveBeenCalledTimes(1);
       expect(service.getStatus().manualInstall).not.toBeNull();
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it("a newer release after a failed one installs again from a click", async () => {
-    deb.pkexec = "/usr/bin/pkexec";
-    deb.install.mockResolvedValueOnce({ ok: false, detail: "exit 127" });
+  it("a failure from the quit path lets the quit go on", async () => {
+    installFails = true;
+    const service = debDownloaded();
+    await expect(service.installUpdate({ silent: true })).resolves.toEqual({
+      success: false,
+      error: "Install this update from a terminal",
+    });
+    expect(quitAndInstall).toHaveBeenCalledWith(true, true);
+    expect(service.getStatus().manualInstall).not.toBeNull();
+  });
+
+  it("the failure survives a restart, and so does a hand-off that relaunched into the old version", async () => {
+    installFails = true;
+    await debDownloaded().installUpdate();
+    // Relaunched, still 1.0.18: the failed version stays manual.
+    expect(debDownloaded().getStatus().manualInstall).not.toBeNull();
+
+    store.clear();
+    installFails = false;
+    await debDownloaded().installUpdate();
+    expect(store.get("attemptedVersion")).toBe("1.0.19");
+    // The install "succeeded" but this launch is still 1.0.18.
+    const relaunched = debDownloaded();
+    expect(relaunched.getStatus().manualInstall).not.toBeNull();
+    expect(store.get("failedVersion")).toBe("1.0.19");
+    expect(store.get("attemptedVersion")).toBeUndefined();
+    // The two hand-offs above; this launch attempts nothing.
+    await relaunched.installUpdate({ silent: true });
+    expect(quitAndInstall).toHaveBeenCalledTimes(2);
+  });
+
+  it("a launch on the failed version or later clears the mark", () => {
+    store.set("failedVersion", "1.0.18");
+    debDownloaded();
+    expect(store.get("failedVersion")).toBeUndefined();
+  });
+
+  it("a newer release after a failed one installs again", async () => {
+    installFails = true;
     const service = debDownloaded("1.0.19");
     await service.installUpdate();
     expect(service.getStatus().manualInstall).not.toBeNull();
 
+    installFails = false;
     autoUpdater.checkForUpdates = async () => ({
       isUpdateAvailable: true,
       updateInfo: { version: "1.0.20" },
@@ -320,21 +402,7 @@ describe("a .deb update", () => {
       downloadedFile: PACKAGE,
     });
     expect(service.getStatus().manualInstall).toBeNull();
-    await expect(service.installUpdate()).resolves.toEqual({
-      success: true,
-    });
-    expect(deb.install).toHaveBeenCalledTimes(2);
-  });
-
-  it("an automatic install (quit, idle) is refused without touching the state", async () => {
-    deb.pkexec = "/usr/bin/pkexec";
-    const service = debDownloaded();
-    const before = service.getStatus();
-
-    const result = await service.installUpdate({ silent: true });
-    expect(result.success).toBe(false);
-    expect(deb.install).not.toHaveBeenCalled();
-    expect(electronApp.quit).not.toHaveBeenCalled();
-    expect(service.getStatus()).toEqual(before);
+    await expect(service.installUpdate()).resolves.toEqual({ success: true });
+    expect(quitAndInstall).toHaveBeenCalledTimes(2);
   });
 });

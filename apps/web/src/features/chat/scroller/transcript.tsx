@@ -39,6 +39,7 @@ import {
   BusyLine,
   busyLabel,
   ErrorCard,
+  FreeLaneChip,
   RunMarker,
   runningTools,
   Typing,
@@ -86,8 +87,11 @@ const outcomeShown = (
     const code = outcome.error?.code;
     return latest || (code !== "agent_exit" && code !== "agent_crashed");
   }
-  // The bot skin renders no RunMarker (03-bots §24.2).
-  return skin !== "bot";
+  // The bot skin renders no RunMarker (03-bots §24.2), only a free-lane
+  // reply's label.
+  return (
+    skin !== "bot" || (outcome.kind === "success" && outcome.freeLane != null)
+  );
 };
 
 const Outcome = ({
@@ -101,6 +105,8 @@ const Outcome = ({
   if (!outcomeShown(outcome, latest, skin)) return null;
   if (outcome.kind === "error")
     return <ErrorCard outcome={outcome} latest={latest} />;
+  if (skin === "bot" && outcome.freeLane != null)
+    return <FreeLaneChip provider={outcome.freeLane.provider} />;
   return <RunMarker outcome={outcome} />;
 };
 

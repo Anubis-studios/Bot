@@ -7,6 +7,7 @@ import type {
   IpcEvent,
   AbacusAccountInfo,
   AbacusAuthOutcome,
+  AbacusPaymentRequired,
   AbacusSignOutResult,
   OpenRouterAuthOutcome,
 } from "@abacus-ai/contract/contracts";
@@ -36,8 +37,11 @@ import {
 } from "./services/config/settings";
 import {
   abacusCredentialRejected,
+  abacusPaymentRequired,
   clearAbacusCache,
   fetchAbacusAccount,
+  onAbacusPaymentChange,
+  requestAbacusAccount,
 } from "./services/providers/abacus";
 import { abacusRoutellmV1 } from "./services/providers/abacus-host";
 import {
@@ -46,7 +50,10 @@ import {
   sendReferralEmailInvites,
   sendReferralWhatsappInvites,
 } from "./services/providers/abacus-referral-service";
-import { fetchUpgradeUrl } from "./services/providers/abacus-upgrade";
+import {
+  fetchBillingPlan,
+  fetchUpgradeUrl,
+} from "./services/providers/abacus-upgrade";
 import {
   adoptWebAccount,
   signOut as clearLocalAccount,
@@ -59,7 +66,7 @@ import { accountStashKey } from "./services/session/account-session-stash";
 
 type AdoptCredentialResult =
   | { ok: true; accountDetailsPending?: boolean }
-  | { ok: false; error: "unidentified-account" };
+  | { ok: false; error: "unidentified-account" | "payment-required" };
 
 /** The browser sign-in a web host offers; desktop hosts sign in natively. */
 export interface WebAuth {
@@ -151,6 +158,21 @@ export const createHostOperations = (
     });
   };
 
+  /** The Abacus key's state changed without a key being stored: the renderer re-reads. */
+  const announceAbacusAccount = (): void => {
+    dispatchEvent({
+      type: "credentials-changed",
+      provider: "abacus",
+      configured: storedAbacusKey().length > 0,
+      emittedAt: new Date().toISOString(),
+    });
+  };
+  onAbacusPaymentChange(announceAbacusAccount);
+
+  /** A sign-in the payment gate refused: held, never stored, as it has no identity for a profile yet. */
+  let paymentHold: { key: string; payment: AbacusPaymentRequired } | null =
+    null;
+
   let adoptionRevision = 0;
   let identificationTimer: ReturnType<typeof setTimeout> | undefined;
   const cancelIdentification = () => {
@@ -192,7 +214,12 @@ export const createHostOperations = (
   /** Resolve a newly stored key past the short propagation delay after signup. */
   const identifyAbacusAccount = async (): Promise<AbacusAccountInfo | null> => {
     let account = await fetchAbacusAccount(true);
-    for (let attempt = 0; account == null && attempt < 3; attempt += 1) {
+    // A payment refusal is final until the account pays; retrying cannot help.
+    for (
+      let attempt = 0;
+      account == null && abacusPaymentRequired() == null && attempt < 3;
+      attempt += 1
+    ) {
       await new Promise((resolve) => setTimeout(resolve, 1200));
       account = await fetchAbacusAccount(true);
     }
@@ -209,6 +236,7 @@ export const createHostOperations = (
     surface?: "web"
   ): Promise<AdoptCredentialResult> => {
     cancelIdentification();
+    paymentHold = null;
     const revision = adoptionRevision;
     const key = rawKey.trim();
     const previousKey =
@@ -241,6 +269,8 @@ export const createHostOperations = (
       );
       return { ok: true, accountDetailsPending: false };
     }
+    const payment = account == null ? abacusPaymentRequired() : null;
+    if (payment != null) return holdForPayment(key, previousKey, payment);
     const profileKey = account != null ? profileKeyFor(account) : null;
     if (account == null || profileKey == null) {
       // A failed switch must not sign the previous account out.
@@ -279,6 +309,28 @@ export const createHostOperations = (
     return { ok: true };
   };
 
+  /** Hold the key of an account that must pay; the account it replaces is signed out, not restored. */
+  const holdForPayment = async (
+    key: string,
+    previousKey: string,
+    payment: AbacusPaymentRequired
+  ): Promise<AdoptCredentialResult> => {
+    saveApiKey("abacus", previousKey);
+    if (previousKey === key) {
+      // Already this profile's key: it stays, and the app shows it must pay.
+      credentialsChanged("abacus", key);
+      return { ok: false, error: "payment-required" };
+    }
+    if (previousKey.length > 0) await clearAbacusCredential();
+    else credentialsChanged("abacus", "");
+    paymentHold = { key, payment };
+    announceAbacusAccount();
+    console.log(
+      `[account] sign-in held: payment required (${payment.reason ?? "unknown"})`
+    );
+    return { ok: false, error: "payment-required" };
+  };
+
   /** End the current account session without deleting its conversations. */
   const clearAbacusCredential = async (
     knownAccount?: AbacusAccountInfo | null
@@ -287,6 +339,7 @@ export const createHostOperations = (
     settings: ReturnType<typeof readSettings>;
   }> => {
     cancelIdentification();
+    paymentHold = null;
     const departingKey =
       readSettings().apiKeys?.[PROVIDER_ENV_VARS.abacus]?.trim() ?? "";
     const account =
@@ -330,6 +383,44 @@ export const createHostOperations = (
     await clearAbacusCredential(account);
 
     return null;
+  };
+
+  /** Whether the held sign-in or the stored key must pay; `refresh` asks again, and a paid hold signs in. */
+  const getAbacusPayment = async (
+    refresh?: boolean
+  ): Promise<AbacusPaymentRequired | null> => {
+    const held = paymentHold;
+    if (held == null) {
+      await getAbacusAccount(refresh);
+      return abacusPaymentRequired();
+    }
+    if (refresh !== true) return held.payment;
+
+    const read = await requestAbacusAccount(held.key);
+    if (paymentHold !== held) return paymentHold?.payment ?? null;
+    if (read.kind === "unavailable") return held.payment;
+    if (read.kind === "payment-required") {
+      paymentHold = { key: held.key, payment: read.payment };
+      return read.payment;
+    }
+    if (read.kind === "rejected") {
+      paymentHold = null;
+      announceAbacusAccount();
+      return null;
+    }
+    // Paid: the held key signs in like any other, profile and all.
+    const adopted = await adoptAbacusCredential(held.key);
+    return adopted.ok ? null : (paymentHold?.payment ?? null);
+  };
+
+  /** Give up on the account that must pay: drop a held sign-in, or sign out. */
+  const releaseAbacusPayment = async (): Promise<void> => {
+    if (paymentHold != null) {
+      paymentHold = null;
+      announceAbacusAccount();
+      return;
+    }
+    if (abacusPaymentRequired() != null) await clearAbacusCredential();
   };
 
   const storeApiKey = async (
@@ -434,6 +525,8 @@ export const createHostOperations = (
     credentialsChanged,
     syncAbacusGateway,
     getAbacusAccount,
+    getAbacusPayment,
+    releaseAbacusPayment,
     saveApiKey: storeApiKey,
     startOpenRouterAuth: signInToOpenRouter,
     startAbacusAuth: signInToAbacus,
@@ -447,7 +540,9 @@ export const createHostOperations = (
     listModels: (refresh?: boolean) => listAvailableModels(refresh === true),
     getUsageSnapshot: () => getUsageSnapshot(),
     getVaultManageUrl: () => serviceHost.vaultManageUrl(),
-    getUpgradeUrl: () => fetchUpgradeUrl(),
+    // A held sign-in's own links: its key is the only one that can mint them.
+    getUpgradeUrl: () => fetchUpgradeUrl("app", paymentHold?.key),
+    getBillingPlan: () => fetchBillingPlan(false, paymentHold?.key),
     readSettings: () => readSettings(),
     readPromptHistory: (scope: string) => readPromptHistory(scope),
     addPromptToHistory: (scope: string, prompt: string) =>

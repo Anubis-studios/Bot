@@ -3,6 +3,8 @@ import { EventEmitter } from "node:events";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 const autoUpdater = Object.assign(new EventEmitter(), {
+  isRunningAsRoot: () => false,
+  determineSudoCommand: () => deb.sudo,
   setFeedURL: vi.fn(),
   checkForUpdates: vi.fn(async () => ({
     isUpdateAvailable: true,
@@ -12,19 +14,31 @@ const autoUpdater = Object.assign(new EventEmitter(), {
 });
 const markRelaunchHidden = vi.fn();
 const windows = vi.hoisted(() => ({ visible: false }));
-const deb = vi.hoisted(() => ({
-  isDeb: false,
-  pkexec: null as string | null,
-  install: vi.fn(async () => ({ ok: true as const })),
+const deb = vi.hoisted(() => ({ isDeb: false, sudo: "sudo" }));
+vi.mock("electron-updater", () => ({
+  default: {
+    autoUpdater,
+    DebUpdater: class {
+      static [Symbol.hasInstance]() {
+        return deb.isDeb;
+      }
+    },
+  },
 }));
-vi.mock("./deb-install", () => ({
-  isDebPackage: () => deb.isDeb,
-  graphicalElevation: () => deb.pkexec,
-  installDebWithPkexec: deb.install,
-  manualInstallCommand: (path: string) => `sudo apt install ${path}`,
+const store = vi.hoisted(() => new Map<string, unknown>());
+vi.mock("electron-store", () => ({
+  default: class {
+    get(key: string) {
+      return store.get(key);
+    }
+    set(key: string, value: unknown) {
+      store.set(key, value);
+    }
+    delete(key: string) {
+      store.delete(key);
+    }
+  },
 }));
-
-vi.mock("electron-updater", () => ({ default: { autoUpdater } }));
 vi.mock("electron", () => ({
   app: { getVersion: () => "1.0.81", isPackaged: false },
   BaseWindow: {
@@ -53,8 +67,8 @@ beforeEach(() => {
   markRelaunchHidden.mockClear();
   windows.visible = false;
   deb.isDeb = false;
-  deb.pkexec = null;
-  deb.install.mockClear();
+  deb.sudo = "sudo";
+  store.clear();
 });
 
 afterEach(() => {
@@ -98,30 +112,49 @@ it("a hidden macOS window still restarts hidden", async () => {
   expect(markRelaunchHidden).toHaveBeenCalledTimes(1);
 });
 
-it.each([
-  ["without a graphical password prompt", null],
-  ["with pkexec", "/usr/bin/pkexec"],
-])(
-  "an idle .deb %s never restarts by itself: the password prompt needs a click",
-  async (_, pkexec) => {
-    vi.spyOn(process, "platform", "get").mockReturnValue("linux");
-    windows.visible = true;
-    deb.isDeb = true;
-    deb.pkexec = pkexec;
-    const service = new UpdateService({ isSafeToRestart: () => true });
-    autoUpdater.emit("update-downloaded", {
-      version: "1.0.82",
-      downloadedFile: "/tmp/bot.deb",
-    });
+const idleDeb = async (sudo: string) => {
+  vi.spyOn(process, "platform", "get").mockReturnValue("linux");
+  windows.visible = true;
+  deb.isDeb = true;
+  deb.sudo = sudo;
+  const service = new UpdateService({ isSafeToRestart: () => true });
+  autoUpdater.emit("update-downloaded", {
+    version: "1.0.82",
+    downloadedFile: "/tmp/bot.deb",
+  });
+  await vi.advanceTimersByTimeAsync(60_000);
+  return service;
+};
 
-    await vi.advanceTimersByTimeAsync(30 * 60_000);
+it("an idle .deb with a graphical prompt restarts through electron-updater", async () => {
+  const service = await idleDeb("pkexec");
+  expect(autoUpdater.quitAndInstall).toHaveBeenCalledWith(true, true);
+  expect(service.getStatus().installing).toBe(true);
+});
 
-    expect(autoUpdater.quitAndInstall).not.toHaveBeenCalled();
-    expect(deb.install).not.toHaveBeenCalled();
-    expect(service.getStatus()).toMatchObject({
-      downloaded: true,
-      installing: false,
-      manualInstall: pkexec == null ? { packagePath: "/tmp/bot.deb" } : null,
-    });
-  }
-);
+it("an idle .deb with only sudo never restarts by itself: it is a manual install", async () => {
+  const service = await idleDeb("sudo");
+  await vi.advanceTimersByTimeAsync(30 * 60_000);
+  expect(autoUpdater.quitAndInstall).not.toHaveBeenCalled();
+  expect(service.getStatus()).toMatchObject({
+    downloaded: true,
+    installing: false,
+    manualInstall: { packagePath: "/tmp/bot.deb" },
+  });
+});
+
+it("an idle .deb whose install failed is not retried by the idle restart", async () => {
+  autoUpdater.quitAndInstall.mockImplementationOnce(() => {
+    autoUpdater.emit("error", new Error("Command pkexec exited with code 127"));
+  });
+  const service = await idleDeb("pkexec");
+  expect(autoUpdater.quitAndInstall).toHaveBeenCalledTimes(1);
+  expect(service.getStatus()).toMatchObject({
+    installing: false,
+    installStalled: false,
+    manualInstall: { packagePath: "/tmp/bot.deb" },
+  });
+  await vi.advanceTimersByTimeAsync(30 * 60_000);
+  expect(autoUpdater.quitAndInstall).toHaveBeenCalledTimes(1);
+  expect(service.getStatus().installStalled).toBe(false);
+});

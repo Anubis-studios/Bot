@@ -59,12 +59,14 @@ export interface FailureScope {
 }
 
 /**
- * The HTTP status a failure carries: up front (`429: …`), else inside a bare
- * JSON body (`{"error":{"code":429}}`) or named in prose (`HTTP 429`).
+ * The HTTP status a failure carries: up front (`429: …`), in pi's provider
+ * prefix (`OpenAI API error (429): …`), else inside a bare JSON body
+ * (`{"error":{"code":429}}`) or named in prose (`HTTP 429`).
  */
 export function failureStatus(raw: string): string | undefined {
   return (
     raw.match(/^\s*(\d{3})\b/)?.[1] ??
+    raw.match(/^[\w .-]*\bAPI error \((\d{3})\)/)?.[1] ??
     raw.match(/^\s*[[{][\s\S]*?"(?:code|status)"\s*:\s*"?(\d{3})\b/)?.[1] ??
     raw.match(/\b(?:HTTP|status(?: code)?)\s*:?\s*(\d{3})\b/i)?.[1]
   );
@@ -95,6 +97,17 @@ export function creditWall(raw: string): CreditWall | null {
   )
     ? "exhausted"
     : null;
+}
+
+/**
+ * The platform refusing a model the account's plan does not include (a free
+ * key asking for a paid model), as opposed to the key itself being bad: the
+ * same key runs every model its own /v1/models lists.
+ */
+export function isPlanRejection(raw: string): boolean {
+  return /not available on (?:the|your) (?:free tier|plan)|not included in your plan/i.test(
+    raw
+  );
 }
 
 /** Out of Abacus credits for any reason: never a mere rate limit. */
