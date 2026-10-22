@@ -405,6 +405,40 @@ describe("a turn", () => {
     );
   });
 
+  it("asks again after an empty reply, and the answer is the turn's", async () => {
+    const harness = session({ mode: "yolo" });
+    let calls = 0;
+    provider.script(() => {
+      calls += 1;
+      return calls === 1 ? { say: "" } : { say: "Here is the answer." };
+    });
+    await harness.session.start();
+    await harness.session.send("hi");
+    await harness.until(
+      () =>
+        harness.agent("status_changed").at(-1)?.status === AgentStatus.Idle &&
+        harness.agent("turn_complete").length > 0
+    );
+
+    expect(harness.text).toContain("Here is the answer.");
+    expect(harness.agent("error")).toEqual([]);
+    expect(calls).toBe(2);
+  });
+
+  it("never ends silently: a model that keeps answering with nothing ends on the empty-reply error", async () => {
+    const harness = session({ mode: "yolo" });
+    provider.script(() => ({ say: "" }));
+    await harness.session.start();
+    await harness.session.send("hi");
+    await harness.until(() => harness.agent("error").length > 0);
+
+    const reported = harness.agent("error").map((event) => event.error);
+    expect(reported).toHaveLength(1);
+    expect(reported[0]?.cause).toBe("empty");
+    // Output repair asks twice; then the turn says so instead of going quiet.
+    expect(provider.calls.length).toBe(3);
+  });
+
   it("brackets a tool call with a start and a settled result", async () => {
     const harness = session({ mode: "yolo" });
 

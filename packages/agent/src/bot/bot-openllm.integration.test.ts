@@ -675,6 +675,43 @@ describe("a turn's reply", () => {
     ]);
   });
 
+  it("asks once more after an empty reply, and that answer is the reply", async () => {
+    provider.calls.length = 0;
+    provider.scriptSequence([{ say: "" }, { say: "Here it is." }]);
+    const { session, events } = botSession("openrouter/small:free");
+    await session.start();
+
+    await session.send("hi", { messageId: "m3" });
+
+    expect(replies(events)).toMatchObject([
+      { messageIds: ["m3"], text: "Here it is.", failed: false },
+    ]);
+    expect(provider.calls).toHaveLength(2);
+    provider.script(() => ({ say: "ok" }));
+  });
+
+  it("never ends in silence: a model that keeps answering with nothing fails the turn", async () => {
+    provider.calls.length = 0;
+    provider.script(() => ({ say: "" }));
+    const { session, events } = botSession("openrouter/small:free");
+    await session.start();
+
+    await session.send("hi", { messageId: "m4" });
+
+    const errors = events.flatMap((event) =>
+      event.type === "event" && event.event.type === "error"
+        ? [event.event.error]
+        : []
+    );
+    expect(errors).toMatchObject([{ cause: "empty" }]);
+    expect(replies(events)).toMatchObject([
+      { messageIds: ["m4"], failed: true },
+    ]);
+    // One ask on a model the user picked: the turn is not moved off it.
+    expect(provider.calls).toHaveLength(2);
+    provider.script(() => ({ say: "ok" }));
+  });
+
   it("says the turn failed, after the error, once", async () => {
     provider.calls.length = 0;
     provider.script(() => ({

@@ -21,6 +21,8 @@ import {
 import {
   BOT_COMPACTION_CONTINUATION_PROMPT,
   BOT_COMPACTION_CONTINUATION_TYPE,
+  BOT_EMPTY_REPLY_PROMPT,
+  BOT_EMPTY_REPLY_TYPE,
   BOT_LANGUAGE_REPAIR_TYPE,
   BOT_MALFORMED_CONTINUATION_PROMPT,
   BOT_MALFORMED_CONTINUATION_TYPE,
@@ -122,6 +124,10 @@ export function createBotProfile(): ForeverProfile {
         content: BOT_MALFORMED_CONTINUATION_PROMPT,
       },
       languageRepairType: BOT_LANGUAGE_REPAIR_TYPE,
+      emptyReply: {
+        customType: BOT_EMPTY_REPLY_TYPE,
+        content: BOT_EMPTY_REPLY_PROMPT,
+      },
     },
     // A details stop the user answered binds where saved travelers fill.
     browserTask: { userWords: recentUserText.read },

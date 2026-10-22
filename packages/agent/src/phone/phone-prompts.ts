@@ -227,6 +227,13 @@ export const PHONE_COMPACTION_CONTINUATION_PROMPT =
 
 export const PHONE_LANGUAGE_REPAIR_TYPE = "abacusai-bot:phone-reply-language";
 
+/** One more ask after a response with no text and no tool call. */
+export const PHONE_EMPTY_REPLY_TYPE = "abacusai-bot:phone-empty-reply";
+
+export const PHONE_EMPTY_REPLY_PROMPT =
+  "Your last response was empty, so the user got nothing. Answer their last " +
+  "message now, the way you always answer them, in their language.";
+
 export const PHONE_MALFORMED_CONTINUATION_TYPE =
   "abacusai-bot:phone-malformed-tool-call";
 

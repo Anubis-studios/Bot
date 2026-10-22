@@ -226,6 +226,14 @@ export const BOT_COMPACTION_CONTINUATION_PROMPT =
 
 export const BOT_LANGUAGE_REPAIR_TYPE = "abacusai-bot:bot-reply-language";
 
+/** One more ask after a response with no text and no tool call. */
+export const BOT_EMPTY_REPLY_TYPE = "abacusai-bot:bot-empty-reply";
+
+export const BOT_EMPTY_REPLY_PROMPT =
+  "Your last response was empty: no text and no tool call, so nobody got an " +
+  "answer. Answer the last message now, the way you always answer it, in the " +
+  "sender's language. If work was done, say what came of it. Do not start over.";
+
 /** Same recovery as the coding loop: one more chance after a mangled call. */
 export const BOT_MALFORMED_CONTINUATION_TYPE =
   "abacusai-bot:bot-malformed-tool-call";
