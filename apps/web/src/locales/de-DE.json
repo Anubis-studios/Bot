@@ -2701,7 +2701,9 @@
       "providerConnectHint": "Verbinde ihn, um seine Modelle zu nutzen, auch die kostenlosen.",
       "retryAttachment": "Retry attachment",
       "folderItems_one": "{{count}} item",
-      "folderItems_other": "{{count}} items"
+      "folderItems_other": "{{count}} items",
+      "includedIn": "In {{plan}} enthalten",
+      "includedInPaid": "In bezahlten Tarifen enthalten"
     },
     "day": {
       "today": "Today",
@@ -4271,6 +4273,10 @@
       "link": "Hier upgraden: {{link}}",
       "repeat": "Weiterhin pausiert: {{link}}",
       "paidOut": "Ich habe pausiert, weil die Credits dieses Monats aufgebraucht sind. Füge Credits hinzu, um weiterzumachen: {{link}}",
+      "unavailable": "{{model}} ist nicht mehr verfügbar, daher konnte ich das nicht abschließen. Deine Nachricht bleibt erhalten: Wechsle in der Modellauswahl der App zu RouteLLM - Open, um weiterzumachen.",
+      "unavailableDown": "{{model}} ist gerade nicht verfügbar: Sein Anbieter schlägt weiterhin fehl. Deine Nachricht bleibt erhalten: Wechsle in der Modellauswahl der App zu RouteLLM - Open, um weiterzumachen.",
+      "unavailablePlan": "{{model}} ist in deinem Tarif nicht enthalten. Wechsle in der Modellauswahl der App zu RouteLLM - Open, um weiterzumachen, oder führe ein Upgrade durch, um es zu nutzen.",
+      "unavailableOut": "{{model}} ist nicht verfügbar, und deine Abacus-Credits sind aufgebraucht.",
       "ownKeyCredit": "Dein {{provider}}-Schlüssel hat kein Guthaben mehr.",
       "ownKeyRateLimit": "Dein {{provider}}-Schlüssel hat sein Ratenlimit erreicht.",
       "ownKeyDown": "{{provider}} antwortet gerade nicht.",
@@ -4284,6 +4290,28 @@
       "contactFailed": "Ich konnte {{name}} gerade nicht antworten.",
       "contactFailedGeneric": "Ich konnte {{name}} gerade nicht antworten: Bei mir ist etwas schiefgelaufen.",
       "someone": "jemandem"
+    },
+    "unavailable": {
+      "title": {
+        "retired": "{{model}} ist nicht mehr verfügbar",
+        "down": "{{model}} ist gerade nicht verfügbar",
+        "plan": "{{model}} ist in deinem Tarif nicht enthalten"
+      },
+      "why": {
+        "retired": "Es wurde aus den Modellen entfernt, die du nutzen kannst.",
+        "down": "Sein Anbieter schlägt weiterhin fehl, auch nach erneuten Versuchen."
+      },
+      "kept": "Deine Nachricht bleibt erhalten.",
+      "switch": "Zu RouteLLM - Open wechseln",
+      "pickModel": "Anderes Modell wählen",
+      "creditsLeft": "Noch {{credits}} Abacus-Credits",
+      "creditsOut": "Du hast außerdem deine kostenlosen Abacus-Credits aufgebraucht.",
+      "offer": "{{plan}} bietet dir:",
+      "upgradeIntro": "Upgrade · {{price}} im ersten Monat",
+      "upgradeMonthly": "Upgrade · {{price}}/Monat",
+      "seePlans": "Tarife ansehen",
+      "planBody": "Mach jetzt mit einem kostenlosen Modell weiter oder wechsle zu {{plan}}, um es zu nutzen.",
+      "planBodyAny": "Mach jetzt mit einem kostenlosen Modell weiter oder führe ein Upgrade durch, um es zu nutzen."
     }
   }
 }

@@ -17,6 +17,7 @@ import {
   creditWall,
   failureStatus,
   isOwnKeyOutOfCredit,
+  isPlanRejection,
   namesEmptyBalance,
 } from "./openllm.js";
 import type { NotificationAction } from "./protocol.js";
@@ -37,6 +38,8 @@ export type FailureCause =
   | "context_too_long"
   /** The provider refused the key itself. */
   | "key_invalid"
+  /** Abacus refused a model the account's plan does not include. */
+  | "not_in_plan"
   /** The user's own key (not Abacus) spent its quota or balance. */
   | "own_key_quota"
   /** The model is gone, cannot take tools, or rejects the request's format. */
@@ -104,6 +107,10 @@ export function classifyAttempt(
 
   if (networkShaped(raw)) return "connection";
 
+  // The key is fine; the plan does not include the model. Before the key
+  // and 403 branches, which would send the user to the keys page.
+  if (provider === "abacus" && isPlanRejection(raw)) return "not_in_plan";
+
   if (raw === EMPTY_REPLY_FAILURE) return "empty";
 
   if (
@@ -148,6 +155,7 @@ const CAUSE_PRIORITY: readonly FailureCause[] = [
   "connection",
   "context_too_long",
   "key_invalid",
+  "not_in_plan",
   // Every free source refused: connecting another says more than any one
   // source's quota line.
   "free_pool_spent",
@@ -238,6 +246,8 @@ export interface FailureContext {
    * the way on), or no Abacus account here at all.
    */
   abacus: "credits" | "out" | null;
+  /** The model the user picked, for a card about it (one outside the plan). */
+  model?: { model: string; label: string };
 }
 
 /** The error a failed turn ends with, as the desktop receives it. */
@@ -284,6 +294,7 @@ const routedMessage = (failure: TurnFailure): string => {
       return `Your ${providerName(failure.provider)} key was rejected — it's invalid or expired.`;
     case "own_key_quota":
       return `Your ${providerName(failure.provider)} key hit its quota. Switch to a different model, or check the key's plan.`;
+    case "not_in_plan":
     case "model_unavailable":
       return "The free model couldn't take this request. Pick a different model.";
     case "free_pool_spent":
@@ -297,6 +308,19 @@ const routedMessage = (failure: TurnFailure): string => {
   }
 };
 
+/** The English line for the model-unavailable card; the app shows its own. */
+const unavailableMessage = (action: NotificationAction): string => {
+  const model = action.label ?? action.model ?? "This model";
+  switch (action.cause) {
+    case "plan":
+      return `${model} isn't included in your plan. Your message is kept.`;
+    case "down":
+      return `${model} isn't available right now: its provider keeps failing. Your message is kept.`;
+    default:
+      return `${model} isn't available anymore. Your message is kept.`;
+  }
+};
+
 /** The one line that says "busy": every failed call was a real rate limit. */
 export const OPENLLM_POOL_BUSY_MESSAGE =
   "All free models are busy right now. Try again in a few minutes, or switch to a different model.";
@@ -307,12 +331,54 @@ export const EMPTY_REPLY_MESSAGE =
 const isCredits = (cause: FailureCause): boolean =>
   cause === "credits_exhausted" || cause === "credits_expired";
 
+/** Why the model the user picked cannot serve the turn, as its card says it. */
+const UNAVAILABLE_KIND: Partial<Record<FailureCause, string>> = {
+  model_unavailable: "retired",
+  rate_limited: "down",
+  not_in_plan: "plan",
+};
+
+/**
+ * The one card for a model the user picked that cannot serve the turn (gone,
+ * outside the plan, or still failing after the retries): it names the model
+ * and why. With Abacus credits left the way on is RouteLLM - Open, chosen by
+ * the user, never switched to; with them used up it is the plan. The user's
+ * own key keeps its own card; on the pool the router picked no model.
+ */
+const modelUnavailableActions = (
+  failure: TurnFailure,
+  context: FailureContext
+): NotificationAction[] | null => {
+  const kind = UNAVAILABLE_KIND[failure.cause];
+  if (
+    kind == null ||
+    context.routed ||
+    context.model == null ||
+    context.abacus == null ||
+    failure.provider !== "abacus"
+  )
+    return null;
+  return [
+    {
+      type: "model-unavailable",
+      cause: kind,
+      model: context.model.model,
+      label: context.model.label,
+    },
+    context.abacus === "credits"
+      ? { type: "switch-to-abacus" }
+      : { type: "upgrade-abacus", cause: "exhausted" },
+  ];
+};
+
 /** The actions a cause offers; see NotificationAction for how each renders. */
 const failureActions = (
   failure: TurnFailure,
   context: FailureContext
 ): NotificationAction[] => {
   const provider = failure.provider;
+  const unavailable = modelUnavailableActions(failure, context);
+  if (unavailable != null) return unavailable;
   switch (failure.cause) {
     case "credits_exhausted":
     case "credits_expired":
@@ -370,6 +436,7 @@ const failureActions = (
         ? [{ type: "own-key-unavailable", provider, cause: own }]
         : [{ type: "switch-model" }];
     }
+    case "not_in_plan":
     case "model_unavailable":
       return [{ type: "switch-model" }];
     case "empty":
@@ -417,11 +484,17 @@ export function presentFailure(
     ownKey(failure.provider);
   const pooledLine =
     context.routed || connection || ownKeyLine || failure.cause === "empty";
-  const message = pooledLine
-    ? routedMessage(failure)
-    : isProviderFailure(failure.raw)
-      ? terminalProviderMessage(failure.raw)
-      : readableFailure(failure.raw);
+  const unavailable = actions.find(
+    (action) => action.type === "model-unavailable"
+  );
+  const message =
+    unavailable != null
+      ? unavailableMessage(unavailable)
+      : pooledLine
+        ? routedMessage(failure)
+        : isProviderFailure(failure.raw)
+          ? terminalProviderMessage(failure.raw)
+          : readableFailure(failure.raw);
   // The connection card's details say what failed; on the pool the user
   // picked no model, so no provider's sentence is shown.
   const detail = connection
@@ -662,6 +735,15 @@ export function classifyProviderFailure(raw: string): {
     return {
       summary: "The model provider is out of quota",
       remedy: "Add credits with the provider, or switch to a different model.",
+    };
+  }
+
+  // Before the 403 branches: the key is fine, the plan does not include the
+  // model, and "check your model access" would send the user to the keys page.
+  if (isPlanRejection(raw)) {
+    return {
+      summary: "This model isn't included in your plan",
+      remedy: "Upgrade your plan to use it, or choose another model.",
     };
   }
 

@@ -44,6 +44,8 @@ export interface CreditActions {
   billingPlan?(): Promise<BillingPlan | null>;
   /** The user chose the free models at the credit wall (main tells the agents). */
   chooseFreeLane?(): Promise<void>;
+  /** Re-reads the model catalog, after a model was refused for the plan. */
+  refreshModels?(): Promise<void>;
 }
 
 /**

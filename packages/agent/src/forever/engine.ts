@@ -1388,7 +1388,7 @@ export class ForeverEngine {
             ? this.router.failureContext(
                 registry,
                 this.openLlmActive,
-                this.session?.model?.provider
+                this.session?.model
               )
             : {
                 routed: this.openLlmActive,

@@ -2701,7 +2701,9 @@
       "providerConnectHint": "연결하면 무료 모델을 포함해 그 모델을 사용할 수 있습니다.",
       "retryAttachment": "Retry attachment",
       "folderItems_one": "{{count}} item",
-      "folderItems_other": "{{count}} items"
+      "folderItems_other": "{{count}} items",
+      "includedIn": "{{plan}}에 포함",
+      "includedInPaid": "유료 요금제에 포함"
     },
     "day": {
       "today": "Today",
@@ -4271,6 +4273,10 @@
       "link": "여기서 업그레이드하세요: {{link}}",
       "repeat": "아직 멈춰 있어요: {{link}}",
       "paidOut": "이번 달 크레딧을 모두 사용해서 잠시 멈췄어요. 계속하려면 크레딧을 추가하세요: {{link}}",
+      "unavailable": "{{model}}을(를) 더 이상 사용할 수 없어서 마무리하지 못했어요. 메시지는 그대로 보관돼요. 앱의 모델 선택에서 RouteLLM - Open으로 전환하면 계속할 수 있어요.",
+      "unavailableDown": "{{model}}을(를) 지금 사용할 수 없어요. 제공업체에서 계속 오류가 나요. 메시지는 그대로 보관돼요. 앱의 모델 선택에서 RouteLLM - Open으로 전환하면 계속할 수 있어요.",
+      "unavailablePlan": "{{model}}은(는) 현재 요금제에 포함되어 있지 않아요. 앱의 모델 선택에서 RouteLLM - Open으로 전환해 계속하거나, 업그레이드해서 사용하세요.",
+      "unavailableOut": "{{model}}을(를) 사용할 수 없고, Abacus 크레딧도 모두 사용했어요.",
       "ownKeyCredit": "{{provider}} 키의 잔액이 없어요.",
       "ownKeyRateLimit": "{{provider}} 키가 사용 한도에 도달했어요.",
       "ownKeyDown": "{{provider}}이(가) 지금 응답하지 않아요.",
@@ -4284,6 +4290,28 @@
       "contactFailed": "방금 {{name}}님에게 답장하지 못했어요.",
       "contactFailedGeneric": "방금 {{name}}님에게 답장하지 못했어요: 제 쪽에서 문제가 생겼어요.",
       "someone": "상대방"
+    },
+    "unavailable": {
+      "title": {
+        "retired": "{{model}}을(를) 더 이상 사용할 수 없어요",
+        "down": "{{model}}을(를) 지금 사용할 수 없어요",
+        "plan": "{{model}}은(는) 현재 요금제에 포함되어 있지 않아요"
+      },
+      "why": {
+        "retired": "사용할 수 있는 모델에서 제외되었어요.",
+        "down": "다시 시도해도 제공업체에서 계속 오류가 나요."
+      },
+      "kept": "메시지는 그대로 보관돼요.",
+      "switch": "RouteLLM - Open으로 전환",
+      "pickModel": "다른 모델 선택",
+      "creditsLeft": "Abacus 크레딧 {{credits}} 남음",
+      "creditsOut": "무료 Abacus 크레딧도 모두 사용했어요.",
+      "offer": "{{plan}}에서 받을 수 있는 것:",
+      "upgradeIntro": "업그레이드 · 첫 달 {{price}}",
+      "upgradeMonthly": "업그레이드 · 월 {{price}}",
+      "seePlans": "요금제 보기",
+      "planBody": "지금은 무료 모델로 계속하거나, {{plan}}(으)로 업그레이드해서 사용하세요.",
+      "planBodyAny": "지금은 무료 모델로 계속하거나, 요금제를 업그레이드해서 사용하세요."
     }
   }
 }

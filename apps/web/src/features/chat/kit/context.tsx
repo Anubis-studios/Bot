@@ -22,6 +22,8 @@ interface ModelGroupItem {
   id: string;
   label: string;
   description?: string;
+  /** Not in the account's plan: greyed, and choosing it upgrades instead. */
+  locked?: { label: string; onSelect(): void };
 }
 
 export interface ModelGroup {

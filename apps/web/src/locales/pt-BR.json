@@ -2701,7 +2701,9 @@
       "providerConnectHint": "Conecte-o para usar seus modelos, incluindo os gratuitos.",
       "retryAttachment": "Retry attachment",
       "folderItems_one": "{{count}} item",
-      "folderItems_other": "{{count}} items"
+      "folderItems_other": "{{count}} items",
+      "includedIn": "Incluído no {{plan}}",
+      "includedInPaid": "Incluído nos planos pagos"
     },
     "day": {
       "today": "Today",
@@ -4271,6 +4273,10 @@
       "link": "Faça upgrade aqui: {{link}}",
       "repeat": "Ainda pausado: {{link}}",
       "paidOut": "Pausei porque os créditos deste mês acabaram. Adicione créditos para continuar: {{link}}",
+      "unavailable": "{{model}} não está mais disponível, então não consegui terminar. Sua mensagem foi mantida: mude para RouteLLM - Open no seletor de modelos do app para continuar.",
+      "unavailableDown": "{{model}} não está disponível agora: o provedor continua falhando. Sua mensagem foi mantida: mude para RouteLLM - Open no seletor de modelos do app para continuar.",
+      "unavailablePlan": "{{model}} não está incluído no seu plano. Mude para RouteLLM - Open no seletor de modelos do app para continuar, ou faça upgrade para usá-lo.",
+      "unavailableOut": "{{model}} não está disponível e seus créditos da Abacus acabaram.",
       "ownKeyCredit": "Sua chave do {{provider}} ficou sem saldo.",
       "ownKeyRateLimit": "Sua chave do {{provider}} atingiu o limite de uso.",
       "ownKeyDown": "O {{provider}} não está respondendo agora.",
@@ -4284,6 +4290,28 @@
       "contactFailed": "Não consegui responder a {{name}} agora há pouco.",
       "contactFailedGeneric": "Não consegui responder a {{name}} agora há pouco: algo deu errado do meu lado.",
       "someone": "alguém"
+    },
+    "unavailable": {
+      "title": {
+        "retired": "{{model}} não está mais disponível",
+        "down": "{{model}} não está disponível agora",
+        "plan": "{{model}} não está incluído no seu plano"
+      },
+      "why": {
+        "retired": "Ele foi removido dos modelos que você pode usar.",
+        "down": "O provedor continua falhando, mesmo depois de novas tentativas."
+      },
+      "kept": "Sua mensagem foi mantida.",
+      "switch": "Mudar para RouteLLM - Open",
+      "pickModel": "Escolher outro modelo",
+      "creditsLeft": "{{credits}} créditos da Abacus restantes",
+      "creditsOut": "Você também já usou seus créditos gratuitos da Abacus.",
+      "offer": "O {{plan}} oferece:",
+      "upgradeIntro": "Fazer upgrade · {{price}} no primeiro mês",
+      "upgradeMonthly": "Fazer upgrade · {{price}}/mês",
+      "seePlans": "Ver planos",
+      "planBody": "Continue agora com um modelo gratuito, ou faça upgrade para o {{plan}} para usá-lo.",
+      "planBodyAny": "Continue agora com um modelo gratuito, ou faça upgrade do seu plano para usá-lo."
     }
   }
 }

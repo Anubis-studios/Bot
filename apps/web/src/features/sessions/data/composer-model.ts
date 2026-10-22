@@ -162,7 +162,12 @@ export const useSessionComposerModel = (
           connectGoogleAi: t("sessions.model.connectGoogleAi"),
           tierFree: t("sessions.model.free"),
           tierLocal: t("sessions.model.local"),
+          includedIn: (plan) =>
+            plan == null
+              ? t("chat.composer.includedInPaid")
+              : t("chat.composer.includedIn", { plan }),
         },
+        onUpgrade: () => void openUpgrade(transport.client),
         onConnect: (provider) =>
           void navigate({
             to: "/settings/models",

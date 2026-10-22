@@ -349,15 +349,34 @@ export const TIER_ORDER: ModelTier[] = [
   "local",
 ];
 
+/**
+ * Whether this account can run a model: it can, its plan does not include it,
+ * or its provider has no key yet. `configured` is true exactly when runnable.
+ */
+export type ModelAccess = "runnable" | "locked" | "needs-key";
+
 /** A catalog entry plus whether it can actually run right now. */
 export interface ModelAvailability extends AbacusBotModel {
   configured: boolean;
+  /** Absent reads off `configured`: runnable, else needs-key. */
+  access?: ModelAccess;
+  /** A locked model: the plan the platform offers that includes it, if known. */
+  unlockPlan?: string;
   /**
    * Auto-selected when no valid pick exists. Set on at most one entry, from
    * the Abacus.AI plan tier; absent when no Abacus account is signed in.
    */
   recommended?: boolean;
 }
+
+export const modelAccess = (
+  model: Pick<ModelAvailability, "configured" | "access">
+): ModelAccess =>
+  model.configured
+    ? "runnable"
+    : model.access === "locked"
+      ? "locked"
+      : "needs-key";
 
 export const DEFAULT_MODEL_ID = "deepseek/deepseek-v4-flash";
 

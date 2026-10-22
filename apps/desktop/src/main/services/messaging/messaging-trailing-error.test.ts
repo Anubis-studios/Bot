@@ -748,6 +748,51 @@ describe("the credit wall's cause", () => {
   });
 });
 
+describe("a picked model that cannot serve the turn", () => {
+  const gone = (cause: string, out = false) => ({
+    cause: "model_unavailable",
+    actions: [
+      {
+        type: "model-unavailable",
+        cause,
+        model: "abacus/s5",
+        label: "Sonnet 5",
+      },
+      out
+        ? { type: "upgrade-abacus", cause: "exhausted" }
+        : { type: "switch-to-abacus" },
+    ],
+  });
+
+  it("with credits left, names the model and points to RouteLLM - Open in the app", () => {
+    const line =
+      "Sonnet 5 isn't available anymore, so I couldn't finish that. Your message is kept: switch to RouteLLM - Open in the app's model picker to keep going.";
+    expect(reply(gone("retired"), "free")).toBe(line);
+    expect(reply(gone("retired"), "paid")).toBe(line);
+    // No reply keyword, and no pause: the credits are fine.
+    expect(line).not.toMatch(/reply|paused/i);
+    expect(reply(gone("down"), "free")).toContain("isn't available right now");
+  });
+
+  it("with the credits used up, offers the plan from billing_plan", () => {
+    expect(reply(gone("retired", true), "free")).toBe(
+      `Sonnet 5 isn't available, and your Abacus credits are used up.\n${offerLines(UPGRADE_URL)}`
+    );
+    expect(reply(gone("retired", true), "free", true)).toBe(
+      `Still paused: ${UPGRADE_URL}`
+    );
+  });
+
+  it("a model the plan does not include leads with RouteLLM - Open, then the plan", () => {
+    expect(reply(gone("plan"), "free")).toBe(
+      `Sonnet 5 isn't included in your plan. Switch to RouteLLM - Open in the app's model picker to keep going, or upgrade to use it.\n${offerLines(UPGRADE_URL)}`
+    );
+    expect(reply(gone("plan"), "free", true)).toBe(
+      "Sonnet 5 isn't included in your plan. Switch to RouteLLM - Open in the app's model picker to keep going, or upgrade to use it."
+    );
+  });
+});
+
 describe("a busy free pool", () => {
   const BUSY = {
     actions: [
