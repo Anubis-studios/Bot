@@ -1005,6 +1005,7 @@ export class ThreadRelay {
     this.#checkPending(event);
     this.#record(chunk, event);
     if (isTerminal(event)) this.#finishRun(event, chunk.seq);
+    else if (this.#endsUserMessage(event)) this.#checkpoint();
 
     // A copy: a listener may unsubscribe itself (a joined run ends).
     for (const listener of Array.from(this.#listeners)) listener(chunk);
@@ -1093,6 +1094,38 @@ export class ThreadRelay {
       if (events <= FINISHED_EVENTS_KEPT || this.#finished.size <= 1) break;
       events -= finished.log.length;
       this.#forgetFinished(runId);
+    }
+  }
+
+  /** The open run's user message (the admitted one, or a steer) is complete. */
+  #endsUserMessage(event: RelayEvent): boolean {
+    if (this.#active == null || event.type !== "TEXT_MESSAGE_END") return false;
+    const id = event.messageId;
+    return this.#processor
+      .getMessages()
+      .some((message) => message.id === id && message.role === "user");
+  }
+
+  /**
+   * The transcript so far, written as soon as the user's message is in. The
+   * file is otherwise written at a run's terminal, so a crash or a quit
+   * mid-run lost the message itself; the next start closes such a run
+   * (AguiRelayService.closeInterruptedRun) after the message it answered.
+   */
+  #checkpoint(): void {
+    const active = this.#active;
+    if (active == null || active.historyEpoch !== this.#historyEpoch) return;
+    try {
+      this.#persist({
+        messages: structuredClone(this.#processor.getMessages()),
+        runs: this.#runs,
+        ...(this.#migratedFrom != null && { migratedFrom: this.#migratedFrom }),
+      });
+      this.#v1Derived = false;
+    } catch (error) {
+      this.#log(
+        `${this.threadId}: persisting the transcript failed: ${String(error)}`
+      );
     }
   }
 

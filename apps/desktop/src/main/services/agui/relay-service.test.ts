@@ -1564,3 +1564,62 @@ it("keeps the accepted send successful when naming cannot be persisted", async (
     })
   ).resolves.toMatchObject({ status: "started" });
 });
+
+describe("a run the app closed under", () => {
+  it("gets its terminal on the next start, after the message it answered, once", () => {
+    const { relay, store } = setup();
+    store.writeAgui("s1", {
+      messages: [userMessage("u-1", "build the site")] as never,
+      runs: [],
+    });
+    const turn = { turnId: "t-1", startedAt: 1, endedAt: 2 };
+
+    relay.closeInterruptedRun("s1", turn);
+    relay.closeInterruptedRun("s1", turn);
+
+    expect(store.readCurrentFile("s1")?.runs).toEqual([
+      expect.objectContaining({
+        runId: "app-closed-t-1",
+        kind: "error",
+        error: expect.objectContaining({ code: "agent_exit" }),
+        afterMessageId: "u-1",
+      }),
+    ]);
+  });
+
+  it("adds nothing when the turn's run already has its terminal", () => {
+    const { relay, store } = setup();
+    const closed = {
+      runId: "r-1",
+      kind: "error",
+      startedAt: 5,
+      endedAt: 6,
+      steps: 1,
+      error: {
+        message: "The agent exited before the reply finished.",
+        code: "agent_exit",
+      },
+      afterMessageId: "u-1",
+    };
+    store.writeAgui("s1", {
+      messages: [userMessage("u-1", "build the site")] as never,
+      runs: [closed],
+    });
+    relay.closeInterruptedRun("s1", {
+      turnId: "t-1",
+      startedAt: 4,
+      endedAt: 9,
+    });
+    expect(store.readCurrentFile("s1")?.runs).toEqual([closed]);
+  });
+
+  it("leaves a thread the relay never wrote alone", () => {
+    const { relay, store } = setup();
+    relay.closeInterruptedRun("s1", {
+      turnId: "t-1",
+      startedAt: 1,
+      endedAt: 2,
+    });
+    expect(store.readCurrentFile("s1")).toBeNull();
+  });
+});

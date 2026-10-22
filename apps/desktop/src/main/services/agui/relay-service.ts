@@ -375,6 +375,49 @@ export class AguiRelayService implements AguiSource {
     this.#busyCheck();
   }
 
+  /**
+   * A run the app closed under (a quit, an update, a crash), found on the
+   * next start: the thread's file gets its terminal, an error after the
+   * message it answered, so the thread shows the run ended and offers the
+   * retry an agent exit does. Once: not when a run the turn started already
+   * has its terminal (a quit that let the relay close it), nor on a replay.
+   */
+  closeInterruptedRun(
+    threadId: string,
+    turn: { turnId: string; startedAt: number; endedAt: number }
+  ): void {
+    const file = this.#files.readCurrentFile(threadId);
+    if (file == null || file.source.kind !== "agui") return;
+    const runId = `app-closed-${turn.turnId}`;
+    const runs = (file.runs ?? []) as RunOutcomeRecord[];
+    // A run starts after its turn opened (markSent, then RUN_STARTED).
+    if (
+      runs.some((run) => run.runId === runId || run.startedAt >= turn.startedAt)
+    )
+      return;
+    this.#files.writeAgui(threadId, {
+      messages: file.messages,
+      runs: [
+        ...runs,
+        {
+          runId,
+          kind: "error",
+          startedAt: turn.startedAt,
+          endedAt: turn.endedAt,
+          steps: 0,
+          error: {
+            message: "The app closed before the reply finished.",
+            code: "agent_exit",
+          },
+          afterMessageId: file.messages.at(-1)?.id ?? null,
+        },
+      ],
+      ...(file.source.migratedFrom != null && {
+        migratedFrom: file.source.migratedFrom,
+      }),
+    });
+  }
+
   /** `AgentManagerService.emitAguiExit`: an agui runtime's process closed. */
   runtimeExited(
     threadId: string,

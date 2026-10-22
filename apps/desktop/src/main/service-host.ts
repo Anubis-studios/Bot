@@ -577,6 +577,9 @@ export class ServiceHost {
     // Every turn's one ending (TurnLedger) is what each sink acts on: the chat
     // app it answers, the routine run it is, a caller waiting on its text.
     this.turnLedger.onClose((record) => {
+      // The app's own thread: a run the app closed under gets its terminal.
+      if (record.kind === "app_closed")
+        this.aguiRelay.closeInterruptedRun(record.sessionId, record);
       this.messagingGatewayService.noteTurnClosed(record);
       this.settleRoutineRun(record);
       this.settleTurnWaiter(record);
