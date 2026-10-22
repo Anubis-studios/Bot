@@ -4,7 +4,10 @@ import { useState } from "react";
 
 import { CreditThresholdCard } from "./threshold";
 
-/** The dev gallery's plan: a free account offered Basic with a first-month price. */
+/**
+ * The dev gallery's plan: a free account offered Basic with a first-month
+ * price, its features worded as billing_plan words them.
+ */
 const GALLERY_BILLING: BillingPlan = {
   current: {
     planName: "Free",
@@ -32,7 +35,7 @@ const GALLERY_BILLING: BillingPlan = {
       firstMonthPriceCents: 700,
       priceCents: 1000,
       features: [
-        "Top models including GPT-6.1 Sol, Gemini 4 Argon, Grok 5, DeepSeek V4 and Kimi K2.7",
+        "Top models including GPT-6.1 Sol, Claude Opus 5.5, Claude Fable 5.1 and Gemini 4 Argon",
         "Image and video generation",
       ],
       url: null,
