@@ -533,6 +533,21 @@ describe("one cause per turn, read from the whole chain of calls", () => {
       "429 You have exceeded your daily request limit (requests per day).",
       "own_key_quota",
     ],
+    [
+      "abacus",
+      'OpenAI API error (403): {"message":"Model \'gpt-6-luna\' is not available on the free tier.","type":"permission_denied","param":null,"code":null}',
+      "not_in_plan",
+    ],
+    [
+      "abacus",
+      'OpenAI API error (500): {"message":"An unexpected error occurred.","type":"api_error","param":null,"code":null}',
+      "rate_limited",
+    ],
+    [
+      "abacus",
+      '403 {"type":"error","error":{"type":"permission_error","message":"Model \'claude-sonnet-5-5\' is not available on the free tier."}}',
+      "not_in_plan",
+    ],
   ] as const)("%s: %s → %s", (provider, raw, cause) => {
     expect(classifyAttempt(raw, provider)).toBe(cause);
   });

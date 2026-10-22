@@ -22,7 +22,11 @@ import {
   type AbacusBotConfig,
   type CustomProviderConfig,
 } from "./config.js";
-import { missingCatalogSupplements } from "./model-catalog.js";
+import {
+  missingCatalogSupplements,
+  vendorWireTraits,
+  type VendorWireTraits,
+} from "./model-catalog.js";
 
 /** Providers AbacusAI Bot surfaces by name, in the order the UI shows them. */
 export const BUILTIN_PROVIDERS = [
@@ -210,7 +214,11 @@ interface AbacusPiModel {
   contextWindow: number;
   maxTokens: number;
   compat: { supportsDeveloperRole: false };
+  /** The vendor API RouteLLM serves this model on natively; absent is chat completions. */
+  wire?: AbacusWire;
 }
+
+type AbacusWire = "openai-responses" | "anthropic-messages";
 
 interface AbacusCatalogEntry {
   id?: string;
@@ -224,11 +232,32 @@ interface AbacusCatalogEntry {
   input_token_rate?: number | string;
   output_token_rate?: number | string;
   thinking?: boolean;
+  /** The model's vendor (`openai`, `anthropic`, `deepseek`, `abacus` for routers...). */
+  provider?: string;
+  /** The wires RouteLLM accepts it on: `openai` (chat completions), `responses`, `anthropic`. */
+  api_formats?: string[];
   /** Priced $0/$0 by the platform: bills nothing, and keeps serving once the balance is gone. */
   free?: boolean;
   /** `route-llm-open` only: the Abacus models the pool tries, in order. */
   pool?: string[];
 }
+
+/**
+ * OpenAI models on the Responses API and Claude on the Messages API, which carry
+ * reasoning, effort and prompt caching that chat completions drops. Only the
+ * vendor's own models: RouteLLM accepts `responses` for others too, by
+ * converting back to chat completions. Anything unrecognised stays there.
+ */
+export const abacusWire = (
+  entry: Pick<AbacusCatalogEntry, "provider" | "api_formats">
+): AbacusWire | undefined => {
+  const formats = entry.api_formats ?? [];
+  if (entry.provider === "openai" && formats.includes("responses"))
+    return "openai-responses";
+  if (entry.provider === "anthropic" && formats.includes("anthropic"))
+    return "anthropic-messages";
+  return undefined;
+};
 
 const abacusModel = (
   id: string,
@@ -323,34 +352,46 @@ const STATIC_ABACUS_MODELS: AbacusPiModel[] = [
     1_000_000,
     64_000
   ),
-  abacusModel(
-    "claude-sonnet-5",
-    "Claude Sonnet 5",
-    { input: 2, output: 10 },
-    1_000_000,
-    64_000
-  ),
-  abacusModel(
-    "claude-opus-5",
-    "Claude Opus 5",
-    { input: 5, output: 25 },
-    1_000_000,
-    128_000
-  ),
-  abacusModel(
-    "claude-haiku-4-5-20251001",
-    "Claude Haiku 4.5",
-    { input: 1, output: 5 },
-    200_000,
-    64_000
-  ),
-  abacusModel(
-    "gpt-5.6-terra",
-    "GPT-5.6 Terra",
-    { input: 2, output: 12 },
-    1_000_000,
-    128_000
-  ),
+  {
+    ...abacusModel(
+      "claude-sonnet-5",
+      "Claude Sonnet 5",
+      { input: 2, output: 10 },
+      1_000_000,
+      64_000
+    ),
+    wire: "anthropic-messages",
+  },
+  {
+    ...abacusModel(
+      "claude-opus-5",
+      "Claude Opus 5",
+      { input: 5, output: 25 },
+      1_000_000,
+      128_000
+    ),
+    wire: "anthropic-messages",
+  },
+  {
+    ...abacusModel(
+      "claude-haiku-4-5-20251001",
+      "Claude Haiku 4.5",
+      { input: 1, output: 5 },
+      200_000,
+      64_000
+    ),
+    wire: "anthropic-messages",
+  },
+  {
+    ...abacusModel(
+      "gpt-5.6-terra",
+      "GPT-5.6 Terra",
+      { input: 2, output: 12 },
+      1_000_000,
+      128_000
+    ),
+    wire: "openai-responses",
+  },
   abacusModel(
     "gemini-3.6-flash",
     "Gemini 3.6 Flash",
@@ -473,6 +514,7 @@ const fetchAbacusCatalog = async (apiKey: string): Promise<AbacusPiModel[]> => {
         // The platform's word, not a price test: an entry with no rate arrives
         // as cost zero, which is not the same as free.
         free: entry.free === true,
+        wire: abacusWire(entry),
       }))
       .sort((a, b) => abacusRank(a.id) - abacusRank(b.id));
   } catch {
@@ -523,6 +565,48 @@ const writeLastGoodCatalog = (
   }
 };
 
+/** Claude newer than pi's bundled data, like every Claude since 4.6, thinks adaptively. */
+const UNKNOWN_CLAUDE_TRAITS: VendorWireTraits = {
+  compat: { forceAdaptiveThinking: true },
+};
+/** An unknown GPT gets no effort it might refuse: no "none", no "minimal". */
+const UNKNOWN_GPT_TRAITS: VendorWireTraits = {
+  thinkingLevelMap: { off: null, minimal: null },
+};
+
+/**
+ * The model on its native wire: the API, the base that API's client expects
+ * (Anthropic's SDK appends `/v1/messages` itself), and pi's thinking levels and
+ * quirks for the vendor model of that id. Others inherit chat completions.
+ */
+const onAbacusWire = (model: AbacusPiModel, v1BaseUrl: string) => {
+  const origin = v1BaseUrl.match(/^(.*)\/v1\/?$/)?.[1];
+  if (model.wire == null || (model.wire === "anthropic-messages" && !origin))
+    return model;
+
+  const anthropic = model.wire === "anthropic-messages";
+  const traits =
+    vendorWireTraits(anthropic ? "anthropic" : "openai", model.id) ??
+    (anthropic ? UNKNOWN_CLAUDE_TRAITS : UNKNOWN_GPT_TRAITS);
+  // Fallback models and mid-conversation effort are first-party Anthropic
+  // betas a relay is not promised to carry.
+  const {
+    allowedFallbackModels: _fallbacks,
+    supportsMidConvoEffort: _midConvo,
+    ...compat
+  } = traits.compat ?? {};
+
+  return {
+    ...model,
+    api: model.wire,
+    baseUrl: anthropic ? origin : v1BaseUrl,
+    ...(traits.thinkingLevelMap
+      ? { thinkingLevelMap: traits.thinkingLevelMap }
+      : {}),
+    compat,
+  };
+};
+
 /**
  * Abacus.AI, gated on a key like Gemini but with its model list FETCHED: the
  * desktop picker offers every model `/v1/models` returns, and pi can only run
@@ -539,18 +623,24 @@ export async function registerAbacusProvider(
   if (live.length > 0) writeLastGoodCatalog(apiKey, live);
   const lastGood = live.length > 0 ? [] : readLastGoodCatalog(apiKey);
   const sponsored = sponsoredRunHeaders();
+  const baseUrl = abacusBaseUrl();
+  const models =
+    live.length > 0
+      ? live
+      : lastGood.length > 0
+        ? lastGood
+        : STATIC_ABACUS_MODELS;
+  // The platform honours the sponsored marker on chat completions only.
+  const native = Object.keys(sponsored).length === 0;
 
   registry.registerProvider("abacus", {
     name: "Abacus.AI",
-    baseUrl: abacusBaseUrl(),
+    baseUrl,
     apiKey,
     api: "openai-completions" as const,
-    models:
-      live.length > 0
-        ? live
-        : lastGood.length > 0
-          ? lastGood
-          : STATIC_ABACUS_MODELS,
+    models: native
+      ? models.map((model) => onAbacusWire(model, baseUrl))
+      : models,
     ...(Object.keys(sponsored).length > 0 ? { headers: sponsored } : {}),
   });
 }
