@@ -4524,7 +4524,9 @@
       "generic": "Ada yang salah di sisiku, jadi aku tidak bisa menyelesaikannya. Coba lagi sebentar lagi.",
       "contactFailed": "Aku tidak bisa membalas {{name}} barusan.",
       "contactFailedGeneric": "Aku tidak bisa membalas {{name}} barusan: ada yang salah di sisiku.",
-      "someone": "seseorang"
+      "someone": "seseorang",
+      "fileNotSent_one": "{{files}} tidak bisa dikirim di sini. File ada di aplikasi AbacusAI Bot di komputermu.",
+      "fileNotSent_other": "{{files}} tidak bisa dikirim di sini. File-file itu ada di aplikasi AbacusAI Bot di komputermu."
     },
     "unavailable": {
       "title": {

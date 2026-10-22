@@ -4524,7 +4524,9 @@
       "generic": "Something went wrong on my side, so I couldn't finish that. Please try again in a moment.",
       "contactFailed": "I couldn't reply to {{name}} just now.",
       "contactFailedGeneric": "I couldn't reply to {{name}} just now: something went wrong on my side.",
-      "someone": "someone"
+      "someone": "someone",
+      "fileNotSent_one": "{{files}} couldn't be sent here. It's in the AbacusAI Bot app on your computer.",
+      "fileNotSent_other": "{{files}} couldn't be sent here. They're in the AbacusAI Bot app on your computer."
     },
     "unavailable": {
       "title": {

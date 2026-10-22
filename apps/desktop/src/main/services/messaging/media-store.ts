@@ -18,6 +18,7 @@ import {
   checkedImage,
   checkedImageFile,
   isMediaId,
+  type ChatFileLimits,
   type ResolvedMedia,
 } from "@abacus-ai/agent/send-media";
 
@@ -60,7 +61,8 @@ export class MediaStore {
   putFile(
     sessionId: string,
     data: Buffer,
-    filename: string
+    filename: string,
+    limits?: ChatFileLimits
   ): { id: string } | { reason: string } {
     const image = checkedImageFile(data);
     // An image file that cannot go as one says why, not "not a document".
@@ -68,7 +70,7 @@ export class MediaStore {
       sessionId,
       image.ok || IMAGE_NAME.test(filename)
         ? image
-        : checkedDocument(data, filename),
+        : checkedDocument(data, filename, limits),
       true
     );
   }

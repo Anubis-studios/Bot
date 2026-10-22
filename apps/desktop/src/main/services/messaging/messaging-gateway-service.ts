@@ -1,4 +1,11 @@
+import os from "os";
+
 import { modelPath } from "@abacus-ai/agent/model-path";
+import {
+  type ChatFileLimits,
+  declaredMedia,
+  type ResolvedMedia,
+} from "@abacus-ai/agent/send-media";
 import { readUserLanguage } from "@abacus-ai/agent/user-language";
 import type { UserTextTags } from "@abacus-ai/contract/agent-types";
 import { AgentMode, AgentStatus } from "@abacus-ai/contract/agent-types";
@@ -48,9 +55,13 @@ import {
   type AccountKind,
   type TurnFailure,
 } from "./chat-failure-reply";
-import { forChat } from "./chat-markdown";
-import { backoffDelayMs, looksLikeBotOutput } from "./connector";
-import type { InboundMessage, MessagingConnector } from "./connector";
+import { forChat, phoneSafeReply } from "./chat-markdown";
+import {
+  backoffDelayMs,
+  looksLikeBotOutput,
+  withStagedFile,
+} from "./connector";
+import type { ChatTurn, InboundMessage, MessagingConnector } from "./connector";
 import { DiscordWebConnector } from "./discord-web-connector";
 import {
   approvePairing,
@@ -213,6 +224,19 @@ type GatewayOptions = {
   ) => void;
   /** Broadcast so the Messaging pane re-reads its snapshot. */
   emitChanged: () => void;
+  /** A media id `present_deliverable` declared, as bytes, for its session. */
+  resolveMedia?: (ref: string, sessionId: string) => ResolvedMedia;
+  /** The media went (or will not): it may be evicted again. */
+  releaseMedia?: (ref: string, sessionId: string) => void;
+  /**
+   * A file a reply named by its path, kept as the session's media under the
+   * same checks present_deliverable applies; null when it may not go.
+   */
+  attachNamedFile?: (
+    sessionId: string,
+    filePath: string,
+    limits: ChatFileLimits
+  ) => Promise<string | null>;
   /** The failure-reply throttle's clock; tests pass a fake one. */
   now?: () => number;
   /** The app's language (a BCP 47 tag), for lines the bot itself words. */
@@ -385,6 +409,10 @@ type Route = {
 const PROBE_LIVE_TIMEOUT_MS = 3000;
 
 export class MessagingGatewayService {
+  /** Media ids each route's running turn handed to its chat; they go after its words. */
+  private readonly turnMedia = new WeakMap<Route, string[]>();
+  /** Local paths each route's running turn named in its words to the user's own chat. */
+  private readonly namedPaths = new WeakMap<Route, string[]>();
   private readonly connectors = new Map<
     MessagingPlatformId,
     MessagingConnector
@@ -1200,6 +1228,7 @@ export class MessagingGatewayService {
     route.buffer = "";
     route.bufferMessageId = null;
     route.taggedReply = null;
+    this.dropMedia(route);
     // A fresh turn may fill the queue again, and deserves to say so again.
     route.queueFullNotified = false;
     // Set at dispatch time, not arrival: the context must describe the message
@@ -1303,6 +1332,20 @@ export class MessagingGatewayService {
       return;
     }
 
+    // What present_deliverable accepted goes to the chat after the words.
+    if (event.type === "tool_execution_complete") {
+      if (
+        route.busy &&
+        event.result.rejected !== true &&
+        isPresentTool(event.tool.name)
+      )
+        this.turnMedia.set(route, [
+          ...(this.turnMedia.get(route) ?? []),
+          ...declaredMedia(event.result.content),
+        ]);
+      return;
+    }
+
     // Text before a tool call is narration, not the reply, except a reply the
     // model already wrapped, which a later tool call must not throw away.
     if (event.type === "tool_call_start") {
@@ -1380,6 +1423,139 @@ export class MessagingGatewayService {
     route.buffer = "";
     route.bufferMessageId = null;
     route.taggedReply = null;
+    this.dropMedia(route);
+  }
+
+  /**
+   * The chat the session's running turn answers, for its tools: null when no
+   * relayed turn is running (an app turn, a routine), which is an app chat.
+   */
+  chatTurn(sessionId: string): ChatTurn | null {
+    const route = this.routesBySession.get(sessionId);
+    if (route == null || !route.busy) return null;
+    return {
+      app: chatAppName(route.platform),
+      owner: route.owner,
+      files: route.owner
+        ? (this.connectors.get(route.platform)?.fileLimits?.() ?? null)
+        : null,
+    };
+  }
+
+  /** Forget the turn's files unsent. */
+  private dropMedia(route: Route): void {
+    for (const ref of this.turnMedia.get(route) ?? [])
+      this.options.releaseMedia?.(ref, route.sessionId);
+    this.turnMedia.delete(route);
+    this.namedPaths.delete(route);
+  }
+
+  /**
+   * The turn's files, each after the words and the one before it. One that
+   * does not go is named to the user once, in their language, as being in
+   * the app: never silence where they expect a file.
+   */
+  private async sendTurnFiles(
+    route: Route,
+    after: Promise<void>
+  ): Promise<void> {
+    const refs = this.turnMedia.get(route) ?? [];
+    const named = [...new Set(this.namedPaths.get(route) ?? [])];
+    this.turnMedia.delete(route);
+    this.namedPaths.delete(route);
+    if (refs.length === 0 && named.length === 0) return;
+    // The route is reused by the next turn; these files answer this one.
+    const target = { ...route };
+    await after;
+    // A file the words named by its path goes too, unless it already does.
+    const limits = this.connectors.get(target.platform)?.fileLimits?.() ?? null;
+    const going = new Set(
+      refs.map((ref) => {
+        const held = this.options.resolveMedia?.(ref, target.sessionId);
+        return held?.ok === true && held.kind === "document"
+          ? held.filename
+          : ref;
+      })
+    );
+    for (const filePath of limits == null ? [] : named) {
+      const leaf = filePath.split(/[\\/]/).pop() ?? filePath;
+      if (going.has(leaf)) continue;
+      const ref = await this.options.attachNamedFile?.(
+        target.sessionId,
+        filePath,
+        limits!
+      );
+      if (ref == null) continue;
+      going.add(leaf);
+      refs.push(ref);
+    }
+    const failed: string[] = [];
+    for (const ref of refs) {
+      const media = this.options.resolveMedia?.(ref, target.sessionId);
+      this.options.releaseMedia?.(ref, target.sessionId);
+      if (media == null) continue;
+      if (media.ok === false) {
+        console.error(
+          `[messaging] ${target.platform}:${target.chatId} file not sent: ${media.reason}`
+        );
+        continue;
+      }
+      const name =
+        media.kind === "document"
+          ? media.filename
+          : `image.${media.mimeType === "image/jpeg" ? "jpg" : media.mimeType.slice(6)}`;
+      try {
+        await this.sendStagedFile(target, media.data, name);
+      } catch (error) {
+        console.error(
+          `[messaging] ${target.platform}:${target.chatId} file ${name} not sent:`,
+          error
+        );
+        failed.push(name);
+      }
+    }
+    if (failed.length === 0) return;
+    const words = await channelWords(
+      channelLocale(
+        readUserLanguage()?.name ?? null,
+        this.options.appLanguage?.() ?? null
+      )
+    );
+    await this.safeSend(
+      target.platform,
+      target.chatId,
+      forChat(
+        words.t("outcome.channel.fileNotSent", {
+          count: failed.length,
+          files: failed.join(", "),
+        }),
+        target.platform
+      ),
+      target.replyContext
+    );
+  }
+
+  /** One file to the route's chat through its connector, logged like a send. */
+  private async sendStagedFile(
+    route: Route,
+    data: Buffer,
+    name: string
+  ): Promise<void> {
+    const connector = this.connectors.get(route.platform);
+    if (connector?.sendFile == null)
+      throw new Error(`${route.platform} cannot send files`);
+    await withStagedFile(data, name, (file) =>
+      connector.sendFile!(route.chatId, file, undefined, route.replyContext)
+    );
+    this.appendLog({
+      platform: route.platform,
+      chatId: route.chatId,
+      userId: "me",
+      userName: null,
+      text: `[sent file: ${name}]`,
+      direction: "out",
+      at: new Date().toISOString(),
+    });
   }
 
   /** Send whatever the turn has produced so far and clear the buffer. */
@@ -1392,9 +1568,18 @@ export class MessagingGatewayService {
         : outgoingWords(route.buffer);
     route.buffer = "";
     route.taggedReply = null;
+    // Files go only to the user's own chat, after the words.
+    if (!route.owner) this.dropMedia(route);
+    let sent: Promise<void> = Promise.resolve();
+    const deliverWords = (text: string): void => {
+      sent = this.deliver(route, text);
+    };
 
     // The agent's way of sending nothing; the sentinel must never reach a chat.
-    if (reply === "NO_REPLY") return;
+    if (reply === "NO_REPLY") {
+      void this.sendTurnFiles(route, sent);
+      return;
+    }
 
     // Words addressed to the user, about to be said to their friend. The
     // preamble forbids it, but an instruction the model can forget is not a
@@ -1413,13 +1598,13 @@ export class MessagingGatewayService {
     }
 
     if (reply.length > 0) {
-      this.deliver(
-        route,
+      deliverWords(
         reply.length > MAX_REPLY_LENGTH
           ? `${reply.slice(0, MAX_REPLY_LENGTH)}\n\n[truncated]`
           : reply
       );
     }
+    void this.sendTurnFiles(route, sent);
   }
 
   /**
@@ -1427,15 +1612,34 @@ export class MessagingGatewayService {
    * app, not what the model wrote around it: on a bot route the turn's own
    * text is withheld (see relayingSession) precisely so this stands alone.
    */
-  private deliver(route: Route, text: string): void {
-    const words = forChat(text, route.platform);
-    void this.safeSend(route.platform, route.chatId, words, route.replyContext);
-    if (!route.viaBot) return;
-    this.options.emitAgentMessage?.(
-      route.workspaceId,
-      route.sessionId,
-      `${RESPONSE_LABEL} ${words}`
+  private deliver(route: Route, text: string): Promise<void> {
+    // A phone opens no local path or localhost link: they go as the file's
+    // name (the file itself, in the user's own chat) and 💻.
+    const safe = phoneSafeReply(text, os.homedir());
+    if (safe.text !== text) {
+      console.log(
+        `[messaging] ${route.platform}:${route.chatId} reply named ${safe.paths.length} local path(s) or a loopback link; rewritten for the phone`
+      );
+      if (route.owner)
+        this.namedPaths.set(route, [
+          ...(this.namedPaths.get(route) ?? []),
+          ...safe.paths,
+        ]);
+    }
+    const words = forChat(safe.text, route.platform);
+    const sent = this.safeSend(
+      route.platform,
+      route.chatId,
+      words,
+      route.replyContext
     );
+    if (route.viaBot)
+      this.options.emitAgentMessage?.(
+        route.workspaceId,
+        route.sessionId,
+        `${RESPONSE_LABEL} ${words}`
+      );
+    return sent;
   }
 
   /**
@@ -2770,6 +2974,18 @@ const accountKind = (): AccountKind => {
   if (account == null) return "unknown";
   return onFreePlan(account) ? "free" : "paid";
 };
+
+/** The chat app a platform's messages land in, as the user names it. */
+const chatAppName = (platformId: MessagingPlatformId): string => {
+  const app = platformId.replace(/^abacus_/, "");
+  return app === "whatsapp"
+    ? "WhatsApp"
+    : app.charAt(0).toUpperCase() + app.slice(1);
+};
+
+/** present_deliverable, by its name or under the app's tool server. */
+const isPresentTool = (name: string): boolean =>
+  name === "present_deliverable" || name.endsWith("_present_deliverable");
 
 const platformLabel = (platformId: MessagingPlatformId): string =>
   platformId === "abacus_discord"

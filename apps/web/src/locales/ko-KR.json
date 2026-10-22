@@ -4524,7 +4524,9 @@
       "generic": "제 쪽에서 문제가 생겨 끝내지 못했어요. 잠시 후 다시 시도해 주세요.",
       "contactFailed": "방금 {{name}}님에게 답장하지 못했어요.",
       "contactFailedGeneric": "방금 {{name}}님에게 답장하지 못했어요: 제 쪽에서 문제가 생겼어요.",
-      "someone": "상대방"
+      "someone": "상대방",
+      "fileNotSent_one": "{{files}} 파일을 여기로 보내지 못했어요. 컴퓨터의 AbacusAI Bot 앱에 있어요.",
+      "fileNotSent_other": "{{files}} 파일을 여기로 보내지 못했어요. 컴퓨터의 AbacusAI Bot 앱에 있어요."
     },
     "unavailable": {
       "title": {

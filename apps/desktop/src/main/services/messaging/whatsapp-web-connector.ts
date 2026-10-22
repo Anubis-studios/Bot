@@ -1,3 +1,9 @@
+import {
+  CODE_EXTENSIONS,
+  DOCUMENT_EXTENSIONS,
+  DOCUMENT_MAX_BYTES,
+  type ChatFileLimits,
+} from "@abacus-ai/agent/send-media";
 import type { MessagingPlatformId } from "@abacus-ai/contract/messaging";
 import { BrowserWindow, net, powerMonitor } from "electron";
 
@@ -99,6 +105,12 @@ type LoginState = { loggedIn: boolean; loginVisible?: boolean };
 
 const delay = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
+
+/** WhatsApp Web uploads any file as a document; held to what a phone opens, and to 16 MB like the bot's number. */
+const WHATSAPP_WEB_FILE_LIMITS: ChatFileLimits = {
+  documentTypes: [...DOCUMENT_EXTENSIONS, ...CODE_EXTENSIONS],
+  documentMaxBytes: DOCUMENT_MAX_BYTES,
+};
 
 export class WhatsAppWebConnector implements MessagingConnector {
   readonly id: MessagingPlatformId = "whatsapp";
@@ -849,6 +861,11 @@ export class WhatsAppWebConnector implements MessagingConnector {
    * `<input type="file">` through the debugger (no native picker opens), then
    * a real Enter to confirm the preview.
    */
+  /** The user's own chat takes documents of any common type, and code. */
+  fileLimits(): ChatFileLimits | null {
+    return this.loggedIn ? WHATSAPP_WEB_FILE_LIMITS : null;
+  }
+
   async sendFile(
     chatId: string,
     filePath: string,

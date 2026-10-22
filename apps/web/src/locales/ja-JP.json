@@ -4524,7 +4524,9 @@
       "generic": "こちらで問題が起きたため、完了できませんでした。少し待ってからもう一度お試しください。",
       "contactFailed": "先ほど {{name}} さんに返信できませんでした。",
       "contactFailedGeneric": "先ほど {{name}} さんに返信できませんでした: こちらで問題が起きました。",
-      "someone": "相手"
+      "someone": "相手",
+      "fileNotSent_one": "{{files}} はここに送れませんでした。パソコンの AbacusAI Bot アプリにあります。",
+      "fileNotSent_other": "{{files}} はここに送れませんでした。パソコンの AbacusAI Bot アプリにあります。"
     },
     "unavailable": {
       "title": {

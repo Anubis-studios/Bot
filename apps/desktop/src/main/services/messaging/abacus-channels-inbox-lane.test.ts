@@ -126,3 +126,93 @@ describe("an inbox entry", () => {
     expect(delivered).toEqual([{ lane: "discord", text: "Hey", from: "S" }]);
   });
 });
+
+/**
+ * A file answer through the shared bot: sent only where the server says its
+ * replies carry files, as the answer to the user's message.
+ */
+describe("a file answer", () => {
+  const withServer = async (
+    status: Record<string, unknown>,
+    run: (connector: {
+      fileLimits: () => unknown;
+      sendFile: (
+        chatId: string,
+        filePath: string,
+        caption?: string,
+        replyContext?: Record<string, string>
+      ) => Promise<void>;
+    }) => Promise<void>
+  ): Promise<Array<Record<string, unknown>>> => {
+    const saved = globalThis.fetch;
+    const calls: Array<Record<string, unknown>> = [];
+    globalThis.fetch = vi.fn(async (_url: unknown, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "{}"));
+      calls.push(body);
+      const answer =
+        body.action === "status"
+          ? {
+              available: ["telegram"],
+              channels: { telegram: { status: "linked" } },
+              ...status,
+            }
+          : { ok: true };
+      return new Response(JSON.stringify(answer), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+    const connector = new AbacusChannelsConnector(
+      { onMessage: () => {}, onState: () => {}, onLog: () => {} },
+      "telegram"
+    );
+    try {
+      await (
+        connector as unknown as { refreshStatus: () => Promise<void> }
+      ).refreshStatus();
+      await run(connector as never);
+    } finally {
+      globalThis.fetch = saved;
+      await connector.stop();
+    }
+    return calls;
+  };
+
+  it("goes as a document reply where the server takes files", async () => {
+    const { mkdtemp, writeFile, rm } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const path = await import("node:path");
+    const dir = await mkdtemp(path.join(tmpdir(), "shared-file-"));
+    const file = path.join(dir, "notes.docx");
+    await writeFile(file, "PK notes");
+    let limits: unknown;
+    const calls = await withServer(
+      {
+        reply_media: {
+          telegram: { image: 5, document: 16, document_types: ["docx"] },
+        },
+      },
+      async (connector) => {
+        limits = connector.fileLimits();
+        await connector.sendFile("me", file, "Here", { message_id: "e1" });
+      }
+    );
+    await rm(dir, { recursive: true, force: true });
+    expect(limits).toEqual({ documentTypes: ["docx"], documentMaxBytes: 16 });
+    expect(calls.at(-1)).toEqual({
+      action: "reply",
+      message_id: "e1",
+      document_b64: Buffer.from("PK notes").toString("base64"),
+      filename: "notes.docx",
+      text: "Here",
+    });
+  });
+
+  it("is not offered by a server whose replies carry no files", async () => {
+    let limits: unknown = "unset";
+    await withServer({}, async (connector) => {
+      limits = connector.fileLimits();
+    });
+    expect(limits).toBeNull();
+  });
+});

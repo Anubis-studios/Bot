@@ -4524,7 +4524,9 @@
       "generic": "Qualcosa è andato storto da parte mia, quindi non ho potuto finire. Riprova tra un momento.",
       "contactFailed": "Non sono riuscito a rispondere a {{name}} poco fa.",
       "contactFailedGeneric": "Non sono riuscito a rispondere a {{name}} poco fa: qualcosa è andato storto da parte mia.",
-      "someone": "qualcuno"
+      "someone": "qualcuno",
+      "fileNotSent_one": "Non è stato possibile inviare {{files}} qui. È nell'app AbacusAI Bot sul tuo computer.",
+      "fileNotSent_other": "Non è stato possibile inviare {{files}} qui. Sono nell'app AbacusAI Bot sul tuo computer."
     },
     "unavailable": {
       "title": {

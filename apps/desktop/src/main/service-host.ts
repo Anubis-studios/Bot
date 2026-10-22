@@ -833,6 +833,8 @@ export class ServiceHost {
     target: () => this.browserTargetSource(),
     // Only the hosted computer carries a chat that takes media (WhatsApp).
     media: () => (this.platform === "web-host" ? this.mediaStore : null),
+    // A served page's screenshot for a chat turn, on either platform.
+    chatMedia: () => this.mediaStore,
     conversationKeyForSession: (sessionId) =>
       this.conversationKeyForSession(sessionId),
     vault: () => this.vault,
@@ -1215,16 +1217,14 @@ export class ServiceHost {
               this.mediaStore.resolve(ref, sessionId),
           };
     },
-    // Only the hosted computer carries a chat that takes media (WhatsApp).
-    chatMedia: () =>
-      this.platform === "web-host"
-        ? {
-            keep: (sessionId, data, filename) =>
-              this.mediaStore.putFile(sessionId, data, filename),
-            screenshot: (url, origin, sessionId) =>
-              this.mcpBrowserServer.screenshotForChat(url, origin, sessionId),
-          }
-        : null,
+    // The hosted phone's WhatsApp, and every chat app a relayed turn answers.
+    chatMedia: () => ({
+      keep: (sessionId, data, filename, limits) =>
+        this.mediaStore.putFile(sessionId, data, filename, limits),
+      screenshot: (url, origin, sessionId) =>
+        this.mcpBrowserServer.screenshotForChat(url, origin, sessionId),
+    }),
+    chatTurn: (sessionId) => this.messagingGatewayService.chatTurn(sessionId),
     routineEditorFor: (sessionId) =>
       this.agentSessionManagerService.get(sessionId)?.editorFor ?? null,
     isUnattended: (sessionId) => this.isUnattendedSession(sessionId),
@@ -2072,6 +2072,12 @@ export class ServiceHost {
         emittedAt: new Date().toISOString(),
       });
     },
+    resolveMedia: (ref, sessionId) => this.mediaStore.resolve(ref, sessionId),
+    releaseMedia: (ref, sessionId) => {
+      this.mediaStore.unpin(ref, sessionId);
+    },
+    attachNamedFile: (sessionId, filePath, limits) =>
+      this.mcpAgentToolsServer.keepNamedFile(filePath, sessionId, limits),
     emitChanged: () => {
       this.emitEvent({
         type: "messaging-updated",
