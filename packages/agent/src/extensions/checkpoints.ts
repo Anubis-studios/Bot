@@ -25,6 +25,7 @@ import {
   type TurnRecord,
 } from "../checkpoint-store.js";
 import { modelPath } from "../model-path.js";
+import { removeToTrash } from "../trash.js";
 import { isInsideDirectory } from "../workspace-path.js";
 import { bashWriteTargets, SEGMENT_SPLIT, shellWords } from "./guardrails.js";
 import { pathsNamedIn, shellPathOperands } from "./scope-guard.js";
@@ -734,6 +735,8 @@ export function checkpoints(
                 : {}),
               force: params.force === true,
               insideTurn: true,
+              // What the turn created goes to the trash, not away for good.
+              remove: removeToTrash,
             }
           );
           const parts = [
@@ -750,6 +753,7 @@ export function checkpoints(
             parts.push(
               `No copy was kept of: ${result.unrestorable.map((p) => modelPath(p)).join(", ")}.`
             );
+          parts.push(...(result.notes ?? []));
           return text(
             parts.join("\n"),
             result.restored.length === 0 &&

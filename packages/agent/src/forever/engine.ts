@@ -144,6 +144,7 @@ import { ToolCallStream } from "../tool-call-stream.js";
 import { ToolHeartbeat } from "../tool-heartbeat.js";
 import { mcpToolAllowed, type UnattendedPolicy } from "../tool-policy.js";
 import { TOOLS_ARRIVED_TYPE, toolsArrivedPrompt } from "../tools-arrived.js";
+import { setTrashMover, TRASH_TIMEOUT_MS } from "../trash.js";
 import {
   EMPTY_REPLY_FAILURE,
   endedEmpty,
@@ -361,6 +362,14 @@ export class ForeverEngine {
     setPythonProvisioner(() =>
       this.hostServices.request("python_env", {}, PYTHON_SETUP_TIMEOUT_MS)
     );
+    // And its deletes go to the trash the same way.
+    setTrashMover(async (file) => {
+      await this.hostServices.request(
+        "trash_item",
+        { path: file },
+        TRASH_TIMEOUT_MS
+      );
+    });
   }
 
   async start(): Promise<void> {

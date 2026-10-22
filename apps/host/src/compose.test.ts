@@ -1,4 +1,10 @@
-import { readFileSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 
 import { afterAll, describe, expect, it, vi } from "vitest";
@@ -98,6 +104,17 @@ it("initializes and starts under the shim; migrates workspace stores without tou
         template: "nonexistent",
       })
     ).rejects.not.toBeInstanceOf(HostUnsupportedError);
+    // The agent's deletes: into the host's trash, never by a relative path.
+    const doomed = join(fixture.home, "doomed.txt");
+    writeFileSync(doomed, "x");
+    await expect(
+      host.serviceHost.runAgentHostService("trash_item", { path: doomed })
+    ).resolves.toBeNull();
+    expect(existsSync(doomed)).toBe(false);
+    expect(readdirSync(join(fixture.home, "trash"))).toHaveLength(1);
+    await expect(
+      host.serviceHost.runAgentHostService("trash_item", { path: "x.txt" })
+    ).rejects.toThrow(/absolute/);
     await expect(
       host.serviceHost.mcpOAuthSignIn({ mode: "code", name: "x" })
     ).rejects.toMatchObject({ code: "UNSUPPORTED" });

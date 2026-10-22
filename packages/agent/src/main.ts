@@ -24,6 +24,7 @@ import { applyStoredApiKeys } from "./config.js";
 import { followGithubToken } from "./github-token.js";
 import { sandboxAvailability } from "./sandbox/index.js";
 import { parseUnattendedPolicy } from "./tool-policy.js";
+import { useTrashLaunchers } from "./trash.js";
 
 /** The AG-UI host, once there is one: its open run gets last words at exit. */
 let aguiHost: AguiHost | undefined;
@@ -80,6 +81,9 @@ async function main(): Promise<void> {
     process.stdout.write(`${verdict}\n`, () => process.exit(0));
     return;
   }
+
+  // Every shell this process starts deletes to the trash (trash.ts).
+  useTrashLaunchers();
 
   const model = readFlag(argv, "--model");
   const mode = readFlag(argv, "--permission-mode");

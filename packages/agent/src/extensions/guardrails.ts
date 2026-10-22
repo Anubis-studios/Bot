@@ -16,6 +16,7 @@ import {
   isToolCallEventType,
 } from "@earendil-works/pi-coding-agent";
 
+import { emptiesTrash, emptyTrashMessage } from "../trash.js";
 import { isInsideDirectory, realPathOf } from "../workspace-path.js";
 
 const PROTECTED_PATH_PATTERNS: RegExp[] = [
@@ -285,6 +286,9 @@ export default function (pi: ExtensionAPI) {
 
     if (isToolCallEventType("bash", event)) {
       const cmd = event.input.command ?? "";
+      // The shell refuses this too; here it also covers pi's own bash.
+      if (emptiesTrash(cmd, ctx.cwd))
+        return { block: true, reason: emptyTrashMessage() };
       for (const { re, reason } of BASH_DENY_PATTERNS) {
         if (re.test(cmd)) {
           return {

@@ -46,6 +46,7 @@ import {
   settleOnExit,
 } from "./sandbox/shell.js";
 import { zoneContext } from "./sandbox/zones.js";
+import { trashShimEnv, withTrashGuard, type TrashScope } from "./trash.js";
 
 export type BackendId =
   | "local"
@@ -253,9 +254,26 @@ function localSandboxedOperations(
     // not, and its children must find the applets (posix-shell.ts).
     const bundledShell =
       process.platform === "win32" ? posixShell() : undefined;
-    const spawnEnv =
-      bundledShell != null ? posixShellEnv(childEnv, bundledShell) : childEnv;
+    // What a delete may send to the trash: what the sandbox lets it write,
+    // until the decision says the command runs unconfined (trash.ts).
+    const trash: TrashScope = {
+      roots:
+        policy.enforcement === "off"
+          ? null
+          : [
+              ...(policy.mode === "workspace-write"
+                ? [policy.workspaceRoot, ...policy.toolHomes]
+                : []),
+              ...policy.writableTemp,
+              ...policy.approvedWrites,
+            ],
+    };
+    const spawnEnv = trashShimEnv(
+      bundledShell != null ? posixShellEnv(childEnv, bundledShell) : childEnv,
+      trash
+    );
     const decision = await decide(policy, command, cwd, spawnEnv, commandId);
+    if (decision.kind === "unconfined") trash.roots = null;
 
     if (decision.kind === "refused") {
       options.onData(Buffer.from(`${decision.message}\n`));
@@ -546,9 +564,11 @@ export function backendOperations(
       );
     }
 
-    return dockerOperations(
-      (process.env.ABACUSAI_BOT_DOCKER_IMAGE ?? "").trim() ||
-        "debian:bookworm-slim"
+    return withTrashGuard(
+      dockerOperations(
+        (process.env.ABACUSAI_BOT_DOCKER_IMAGE ?? "").trim() ||
+          "debian:bookworm-slim"
+      )
     );
   }
 
@@ -557,9 +577,24 @@ export function backendOperations(
   if (backend !== "local") return null;
 
   const local = localOperations(approvals);
-  if (managedPythonEnv() == null) return local;
+  if (managedPythonEnv() == null)
+    return local == null ? null : withTrashGuard(local);
 
-  return withManagedPython(local ?? createLocalBashOperations());
+  return withTrashGuard(
+    withManagedPython(local ?? createLocalBashOperations())
+  );
+}
+
+/**
+ * The shell a tool runs commands through: this backend's, or pi's own local
+ * one where that is right, both refusing to empty the trash (trash.ts).
+ */
+export function agentShellOperations(
+  approvals?: SandboxApprovals
+): BashOperations {
+  return (
+    backendOperations(approvals) ?? withTrashGuard(createLocalBashOperations())
+  );
 }
 
 /** The local backend's operations, or null for pi's own shell. */
