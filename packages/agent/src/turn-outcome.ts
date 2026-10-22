@@ -13,12 +13,13 @@ import {
 } from "./network-wait.js";
 import { networkShaped } from "./openllm-failures.js";
 import {
+  abacusRefusal,
   accountWideFailure,
-  creditWall,
   failureStatus,
   isOwnKeyOutOfCredit,
   isPlanRejection,
   namesEmptyBalance,
+  paymentRefusalReason,
 } from "./openllm.js";
 import type { NotificationAction } from "./protocol.js";
 
@@ -32,6 +33,8 @@ export type FailureCause =
   | "credits_exhausted"
   /** The Abacus credit gate refused: a free tier past its window. */
   | "credits_expired"
+  /** Abacus's billing gate refused: a payment not confirmed, or lapsed. */
+  | "payment_required"
   /** The request never reached a server, or its connection died. */
   | "connection"
   /** The transcript does not fit the model's window or size cap. */
@@ -97,13 +100,12 @@ export function classifyAttempt(
   const status = Number(failureStatus(raw) ?? Number.NaN);
   const text = raw.toLowerCase();
 
-  // The credit gate is Abacus's; another provider's balance sentence is
-  // the user's own key, which no Abacus plan refills.
-  if (!ownKey(provider)) {
-    const wall = creditWall(raw);
-    if (wall === "expired") return "credits_expired";
-    if (wall === "exhausted") return "credits_exhausted";
-  }
+  // The credit and billing gates are Abacus's, decided by who refused:
+  // another provider's balance sentence is the user's own key.
+  const refusal = abacusRefusal(raw, provider);
+  if (refusal === "payment") return "payment_required";
+  if (refusal === "expired") return "credits_expired";
+  if (refusal === "exhausted") return "credits_exhausted";
 
   if (networkShaped(raw)) return "connection";
 
@@ -152,6 +154,7 @@ export function classifyAttempt(
 const CAUSE_PRIORITY: readonly FailureCause[] = [
   "credits_exhausted",
   "credits_expired",
+  "payment_required",
   "connection",
   "context_too_long",
   "key_invalid",
@@ -286,6 +289,8 @@ const routedMessage = (failure: TurnFailure): string => {
       return "You're out of Abacus.AI credits.";
     case "credits_expired":
       return "Your free credits have expired.";
+    case "payment_required":
+      return paymentMessage(failure.raw);
     case "connection":
       return NETWORK_UNREACHABLE_MESSAGE;
     case "context_too_long":
@@ -307,6 +312,12 @@ const routedMessage = (failure: TurnFailure): string => {
       return "The free models couldn't finish this. Try again, or switch to a different model.";
   }
 };
+
+/** The billing gate's line, in the app's words; the card shows its own. */
+const paymentMessage = (raw: string): string =>
+  paymentRefusalReason(raw) === "lapsed"
+    ? "Your Abacus.AI subscription has ended. Renew it to keep going."
+    : "We couldn't confirm your last payment. If your subscription is active, contact support@abacus.ai. Please don't purchase again.";
 
 /** The English line for the model-unavailable card; the app shows its own. */
 const unavailableMessage = (action: NotificationAction): string => {
@@ -404,6 +415,12 @@ const failureActions = (
               label: choice.label,
             }))),
       ];
+    case "payment_required":
+      // The account must settle its billing; another model is the way on now.
+      return [
+        { type: "payment-required", cause: paymentRefusalReason(failure.raw) },
+        { type: "switch-model" },
+      ];
     case "connection":
       return [{ type: "retry" }];
     case "context_too_long":
@@ -449,7 +466,9 @@ const failureActions = (
         return [{ type: "own-key-unavailable", provider, cause: own }];
       return context.routed ||
         (isProviderFailure(failure.raw) &&
-          classifyProviderFailure(failure.raw).remedy.includes("switch"))
+          classifyProviderFailure(failure.raw, provider).remedy.includes(
+            "switch"
+          ))
         ? [{ type: "switch-model" }]
         : [];
     }
@@ -473,6 +492,7 @@ export function presentFailure(
     context.onFreeLane &&
     failure.cause !== "connection" &&
     failure.cause !== "context_too_long" &&
+    failure.cause !== "payment_required" &&
     !isCredits(failure.cause);
   const actions = wallAgain
     ? failureActions({ ...failure, cause: "credits_exhausted" }, context)
@@ -483,7 +503,11 @@ export function presentFailure(
     (failure.cause === "key_invalid" || failure.cause === "own_key_quota") &&
     ownKey(failure.provider);
   const pooledLine =
-    context.routed || connection || ownKeyLine || failure.cause === "empty";
+    context.routed ||
+    connection ||
+    ownKeyLine ||
+    failure.cause === "empty" ||
+    failure.cause === "payment_required";
   const unavailable = actions.find(
     (action) => action.type === "model-unavailable"
   );
@@ -493,14 +517,14 @@ export function presentFailure(
       : pooledLine
         ? routedMessage(failure)
         : isProviderFailure(failure.raw)
-          ? terminalProviderMessage(failure.raw)
-          : readableFailure(failure.raw);
+          ? terminalProviderMessage(failure.raw, undefined, failure.provider)
+          : readableFailure(failure.raw, failure.provider);
   // The connection card's details say what failed; on the pool the user
   // picked no model, so no provider's sentence is shown.
   const detail = connection
     ? readableProviderError(failure.raw).trim()
     : !context.routed && isProviderFailure(failure.raw)
-      ? (providerDetail(failure.raw).detail ?? "")
+      ? (providerDetail(failure.raw, failure.provider).detail ?? "")
       : "";
   return {
     message,
@@ -544,8 +568,8 @@ const TOOLS_UNSUPPORTED_PATTERN =
  * else, since the provider's text is written for whoever holds the key. The
  * unrecognized case stays vague rather than falling back to the raw text.
  */
-export function providerFailureSummary(raw: string): string {
-  return classifyProviderFailure(raw).summary;
+export function providerFailureSummary(raw: string, provider?: string): string {
+  return classifyProviderFailure(raw, provider).summary;
 }
 
 /** The free pool with every source refused account-wide. */
@@ -646,17 +670,24 @@ export function isProviderFailure(raw: string): boolean {
  * the request was too long, malformed, or refused for a reason nobody has
  * seen yet is in the text the provider sent, which is otherwise discarded.
  */
-export function providerDetail(raw: string): { detail?: string } {
+export function providerDetail(
+  raw: string,
+  provider?: string
+): { detail?: string } {
   const readable = readableProviderError(raw).trim();
-  const message = terminalProviderMessage(raw);
+  const message = terminalProviderMessage(raw, undefined, provider);
 
   return readable.length === 0 || message.includes(readable)
     ? {}
     : { detail: readable };
 }
 
-export function terminalProviderMessage(raw: string, context?: string): string {
-  const { summary, remedy } = classifyProviderFailure(raw);
+export function terminalProviderMessage(
+  raw: string,
+  context?: string,
+  provider?: string
+): string {
+  const { summary, remedy } = classifyProviderFailure(raw, provider);
   const status = failureStatus(raw);
 
   return [`${summary}${status == null ? "" : ` (${status})`}.`, context, remedy]
@@ -664,7 +695,15 @@ export function terminalProviderMessage(raw: string, context?: string): string {
     .join(" ");
 }
 
-export function classifyProviderFailure(raw: string): {
+/**
+ * A provider failure as a summary and a remedy. `provider` is who answered:
+ * only Abacus's refusals read as the Abacus credit or billing wall; absent,
+ * the answer is read as Abacus's would be, as before it was passed.
+ */
+export function classifyProviderFailure(
+  raw: string,
+  provider?: string
+): {
   summary: string;
   remedy: string;
 } {
@@ -673,7 +712,20 @@ export function classifyProviderFailure(raw: string): {
 
   // Before the rate-limit branch: an out-of-credits account answers 429 too,
   // and "try again in a moment" is exactly the wrong advice for it.
-  const wall = creditWall(raw);
+  const wall = abacusRefusal(raw, provider);
+  if (wall === "payment") {
+    return paymentRefusalReason(raw) === "lapsed"
+      ? {
+          summary: "Your Abacus.AI subscription has ended",
+          remedy:
+            "Renew it to keep going, or switch to a model with its own key.",
+        }
+      : {
+          summary: "We couldn't confirm your last payment",
+          remedy:
+            "If your subscription is active, contact support@abacus.ai. Please don't purchase again.",
+        };
+  }
   if (wall === "expired") {
     return {
       summary: "Your free credits have expired",
@@ -869,8 +921,10 @@ function envelopeSentence(json: string, nested = false): string {
 }
 
 /** A thrown failure that is not a provider's, in words rather than JSON. */
-export function readableFailure(raw: string): string {
+export function readableFailure(raw: string, provider?: string): string {
   const readable = readableProviderError(raw).trim();
 
-  return readable.length > 0 ? readable : terminalProviderMessage(raw);
+  return readable.length > 0
+    ? readable
+    : terminalProviderMessage(raw, undefined, provider);
 }

@@ -4524,7 +4524,9 @@
       "generic": "Algo deu errado do meu lado, então não consegui terminar. Tente de novo daqui a pouco.",
       "contactFailed": "Não consegui responder a {{name}} agora há pouco.",
       "contactFailedGeneric": "Não consegui responder a {{name}} agora há pouco: algo deu errado do meu lado.",
-      "someone": "alguém"
+      "someone": "alguém",
+      "payment": "Pausei porque não conseguimos confirmar seu último pagamento. Se sua assinatura estiver ativa, fale com support@abacus.ai e não compre de novo. Cobrança: {{link}}",
+      "paymentLapsed": "Pausei porque sua assinatura da Abacus.AI terminou. Renove aqui: {{link}}"
     },
     "unavailable": {
       "title": {
@@ -4547,6 +4549,11 @@
       "seePlans": "Ver planos",
       "planBody": "Continue agora com um modelo gratuito, ou faça upgrade para o {{plan}} para usá-lo.",
       "planBodyAny": "Continue agora com um modelo gratuito, ou faça upgrade do seu plano para usá-lo."
+    },
+    "payment": {
+      "title": "Não conseguimos confirmar seu último pagamento",
+      "body": "Se sua assinatura estiver ativa, fale com support@abacus.ai. Não compre de novo.",
+      "billing": "Abrir cobrança"
     }
   },
   "creditThreshold": {

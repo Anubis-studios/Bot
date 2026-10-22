@@ -4524,7 +4524,9 @@
       "generic": "Something went wrong on my side, so I couldn't finish that. Please try again in a moment.",
       "contactFailed": "I couldn't reply to {{name}} just now.",
       "contactFailedGeneric": "I couldn't reply to {{name}} just now: something went wrong on my side.",
-      "someone": "someone"
+      "someone": "someone",
+      "payment": "मैं रुक गया हूँ क्योंकि हम आपके पिछले भुगतान की पुष्टि नहीं कर सके। अगर आपकी सदस्यता सक्रिय है, तो support@abacus.ai से संपर्क करें और कृपया दोबारा खरीदारी न करें। बिलिंग: {{link}}",
+      "paymentLapsed": "मैं रुक गया हूँ क्योंकि आपकी Abacus.AI सदस्यता समाप्त हो गई है। यहाँ नवीनीकरण करें: {{link}}"
     },
     "unavailable": {
       "title": {
@@ -4547,6 +4549,11 @@
       "seePlans": "See plans",
       "planBody": "Keep going on a free model now, or upgrade to {{plan}} to use it.",
       "planBodyAny": "Keep going on a free model now, or upgrade your plan to use it."
+    },
+    "payment": {
+      "title": "हम आपके पिछले भुगतान की पुष्टि नहीं कर सके",
+      "body": "अगर आपकी सदस्यता सक्रिय है, तो support@abacus.ai से संपर्क करें। कृपया दोबारा खरीदारी न करें।",
+      "billing": "बिलिंग खोलें"
     }
   },
   "creditThreshold": {

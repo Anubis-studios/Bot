@@ -431,6 +431,43 @@ describe("the user's own chat, any plan", () => {
     ]);
   });
 
+  it("Abacus's billing gate: support and the billing page, never a purchase", async () => {
+    mocks.fetchUpgradeUrl = vi.fn(async () => UPGRADE_URL);
+    const h = harness({ self: true });
+    await h.inbound("hi");
+    h.fail({
+      message: "We couldn't confirm your last payment.",
+      code: "turn_failed",
+      cause: "payment_required",
+      actions: [
+        { type: "payment-required", cause: "unconfirmed" },
+        { type: "switch-model" },
+      ],
+    });
+    await settle();
+
+    expect(h.sent()).toEqual([
+      "I've paused because we couldn't confirm your last payment. If your subscription is active, contact support@abacus.ai, and please don't purchase again. Billing: https://apps.abacus.ai/chatllm/admin/profile",
+    ]);
+    expect(mocks.fetchUpgradeUrl).not.toHaveBeenCalled();
+  });
+
+  it("a lapsed subscription is asked to renew", async () => {
+    const h = harness({ self: true });
+    await h.inbound("hi");
+    h.fail({
+      message: "Your Abacus.AI subscription has ended.",
+      code: "turn_failed",
+      cause: "payment_required",
+      actions: [{ type: "payment-required", cause: "lapsed" }],
+    });
+    await settle();
+
+    expect(h.sent()).toEqual([
+      "I've paused because your Abacus.AI subscription has ended. Renew it here: https://apps.abacus.ai/chatllm/admin/profile",
+    ]);
+  });
+
   it("raw credit-wall text without the action is just a failure", async () => {
     const h = harness({ self: true });
     await h.inbound("hi");

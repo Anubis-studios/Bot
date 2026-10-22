@@ -4524,7 +4524,9 @@
       "generic": "Ada yang salah di sisiku, jadi aku tidak bisa menyelesaikannya. Coba lagi sebentar lagi.",
       "contactFailed": "Aku tidak bisa membalas {{name}} barusan.",
       "contactFailedGeneric": "Aku tidak bisa membalas {{name}} barusan: ada yang salah di sisiku.",
-      "someone": "seseorang"
+      "someone": "seseorang",
+      "payment": "Saya berhenti sejenak karena kami tidak dapat mengonfirmasi pembayaran terakhir Anda. Jika langganan Anda aktif, hubungi support@abacus.ai dan jangan membeli lagi. Penagihan: {{link}}",
+      "paymentLapsed": "Saya berhenti sejenak karena langganan Abacus.AI Anda telah berakhir. Perpanjang di sini: {{link}}"
     },
     "unavailable": {
       "title": {
@@ -4547,6 +4549,11 @@
       "seePlans": "Lihat paket",
       "planBody": "Lanjutkan sekarang dengan model gratis, atau upgrade ke {{plan}} untuk memakainya.",
       "planBodyAny": "Lanjutkan sekarang dengan model gratis, atau upgrade paketmu untuk memakainya."
+    },
+    "payment": {
+      "title": "Kami tidak dapat mengonfirmasi pembayaran terakhir Anda",
+      "body": "Jika langganan Anda aktif, hubungi support@abacus.ai. Jangan membeli lagi.",
+      "billing": "Buka penagihan"
     }
   },
   "creditThreshold": {

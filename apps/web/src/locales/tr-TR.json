@@ -4524,7 +4524,9 @@
       "generic": "Benim tarafımda bir sorun oldu, bu yüzden bunu bitiremedim. Lütfen birazdan tekrar dene.",
       "contactFailed": "Az önce {{name}} kişisine yanıt veremedim.",
       "contactFailedGeneric": "Az önce {{name}} kişisine yanıt veremedim: benim tarafımda bir sorun oldu.",
-      "someone": "birisi"
+      "someone": "birisi",
+      "payment": "Son ödemenizi doğrulayamadığımız için durakladım. Aboneliğiniz etkinse support@abacus.ai ile iletişime geçin ve lütfen tekrar satın almayın. Faturalandırma: {{link}}",
+      "paymentLapsed": "Abacus.AI aboneliğiniz sona erdiği için durakladım. Buradan yenileyin: {{link}}"
     },
     "unavailable": {
       "title": {
@@ -4547,6 +4549,11 @@
       "seePlans": "Planları gör",
       "planBody": "Şimdi ücretsiz bir modelle devam et ya da kullanmak için {{plan}} planına yükselt.",
       "planBodyAny": "Şimdi ücretsiz bir modelle devam et ya da kullanmak için planını yükselt."
+    },
+    "payment": {
+      "title": "Son ödemenizi doğrulayamadık",
+      "body": "Aboneliğiniz etkinse support@abacus.ai ile iletişime geçin. Lütfen tekrar satın almayın.",
+      "billing": "Faturalandırmayı aç"
     }
   },
   "creditThreshold": {

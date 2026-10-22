@@ -4524,7 +4524,9 @@
       "generic": "Algo falló por mi parte y no pude terminar. Inténtalo de nuevo en un momento.",
       "contactFailed": "No pude responder a {{name}} hace un momento.",
       "contactFailedGeneric": "No pude responder a {{name}} hace un momento: algo falló por mi parte.",
-      "someone": "alguien"
+      "someone": "alguien",
+      "payment": "Me he detenido porque no hemos podido confirmar tu último pago. Si tu suscripción está activa, escribe a support@abacus.ai y no vuelvas a comprar. Facturación: {{link}}",
+      "paymentLapsed": "Me he detenido porque tu suscripción de Abacus.AI ha terminado. Renuévala aquí: {{link}}"
     },
     "unavailable": {
       "title": {
@@ -4547,6 +4549,11 @@
       "seePlans": "Ver planes",
       "planBody": "Sigue ahora con un modelo gratis o mejora a {{plan}} para usarlo.",
       "planBodyAny": "Sigue ahora con un modelo gratis o mejora tu plan para usarlo."
+    },
+    "payment": {
+      "title": "No hemos podido confirmar tu último pago",
+      "body": "Si tu suscripción está activa, escribe a support@abacus.ai. No vuelvas a comprar.",
+      "billing": "Abrir facturación"
     }
   },
   "creditThreshold": {

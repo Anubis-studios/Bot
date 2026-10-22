@@ -533,6 +533,40 @@ describe("the turn's outcome card", () => {
     expect(screen.queryByRole("button", { name: /Upgrade to/ })).toBeNull();
   });
 
+  it("Abacus's billing gate is a payment card: support, the billing page, no purchase", async () => {
+    const openExternal = vi.fn(async () => {});
+    const openUpgrade = vi.fn(async () => {});
+    current = await renderRelay(
+      failed({
+        message: "We couldn't confirm your last payment.",
+        cause: "payment_required",
+        actions: [
+          { type: "payment-required", cause: "unconfirmed" },
+          { type: "switch-model" },
+        ],
+      }),
+      "session",
+      {},
+      {},
+      host("free", { openExternal, openUpgrade })
+    );
+    await screen.findByText("We couldn't confirm your last payment");
+    expect(
+      screen.getByText(
+        "If your subscription is active, contact support@abacus.ai. Please don't purchase again."
+      )
+    ).toBeTruthy();
+    screen.getByRole("button", { name: "Open billing" }).click();
+    expect(openExternal).toHaveBeenCalledWith(
+      "https://apps.abacus.ai/chatllm/admin/profile"
+    );
+    expect(openUpgrade).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: /Upgrade/ })).toBeNull();
+    expect(
+      screen.queryByText(/used your free credits|out of credits/i)
+    ).toBeNull();
+  });
+
   it("a dropped connection is the connection card, with its details and a retry", async () => {
     current = await renderRelay(
       failed({

@@ -14,7 +14,10 @@ import { CreditsCard } from "#renderer/components/credits-card";
 import { ModelUnavailableCard } from "#renderer/components/credits-card/model-unavailable";
 import { GroupCard } from "#renderer/components/form-kit/page";
 import { usePrefs } from "#renderer/data/db/prefs";
-import { ABACUS_AGENT_URL } from "#renderer/lib/abacus-links";
+import {
+  ABACUS_AGENT_URL,
+  ABACUS_BILLING_URL,
+} from "#renderer/lib/abacus-links";
 import { latestPresented } from "#renderer/lib/bot-turns/deliverables";
 import { cn } from "#renderer/lib/cn";
 import { CREDITS_EXHAUSTED_TTL_MS } from "#renderer/lib/credits";
@@ -412,6 +415,66 @@ const OwnKeyCard = ({
   );
 };
 
+/**
+ * Abacus's billing gate refused the turn: a payment it could not confirm
+ * (support, never a second purchase) or a subscription that ended (renew).
+ * Not the credits card: buying more would not let this account through.
+ */
+const PaymentCard = ({ lapsed }: { lapsed: boolean }) => {
+  const { t } = useTranslation();
+  const { runtime, composer } = useChatView();
+  return (
+    <div
+      role="group"
+      aria-label={t("chat.error.label")}
+      className="mx-auto w-full max-w-[calc(var(--composer-max-w)-var(--spacing)*8)]"
+      data-slot="error-card"
+      data-variant="payment-required"
+      data-cause={lapsed ? "lapsed" : "unconfirmed"}
+    >
+      <GroupCard
+        title={t(
+          lapsed ? "paymentRequired.lapsedTitle" : "outcome.payment.title"
+        )}
+      >
+        <p className="text-muted-foreground p-3 text-sm">
+          {t(lapsed ? "paymentRequired.lapsedBody" : "outcome.payment.body")}
+        </p>
+        <div className="flex flex-wrap gap-2 p-3">
+          <Button
+            size="sm"
+            data-action={lapsed ? "renew" : "open-billing"}
+            onClick={() =>
+              void (lapsed
+                ? runtime.host.openUpgrade()
+                : runtime.host.openExternal(ABACUS_BILLING_URL))
+            }
+          >
+            {t(lapsed ? "paymentRequired.renew" : "outcome.payment.billing")}
+          </Button>
+          {composer.model != null && composer.readOnly == null && (
+            <Button
+              size="sm"
+              variant="secondary"
+              data-action="switch-model"
+              onClick={(event) =>
+                event.currentTarget
+                  .closest('[data-slot="chat-view"]')
+                  ?.querySelector<HTMLButtonElement>(
+                    '[data-slot="chat-model-picker"]'
+                  )
+                  ?.click()
+              }
+            >
+              {t("chat.error.switchModel")}
+            </Button>
+          )}
+        </div>
+      </GroupCard>
+    </div>
+  );
+};
+
 /** What the turn a wall cut off handed over, up to the outcome's anchor. */
 const readyBefore = (
   messages: readonly UIMessage[],
@@ -480,6 +543,9 @@ export const ErrorCard = ({
         t("workspace.retryMessage")
       )
       .catch(() => {});
+  const payment = actions.find((action) => action.type === "payment-required");
+  if (payment != null)
+    return <PaymentCard lapsed={payment.cause === "lapsed"} />;
   // A provider that seems silent while the computer is offline is the
   // connection's fault, not the key's: the plain error says so.
   const ownKey = ownKeyFailure(actions);

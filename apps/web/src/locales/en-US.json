@@ -4524,7 +4524,9 @@
       "generic": "Something went wrong on my side, so I couldn't finish that. Please try again in a moment.",
       "contactFailed": "I couldn't reply to {{name}} just now.",
       "contactFailedGeneric": "I couldn't reply to {{name}} just now: something went wrong on my side.",
-      "someone": "someone"
+      "someone": "someone",
+      "payment": "I've paused because we couldn't confirm your last payment. If your subscription is active, contact support@abacus.ai, and please don't purchase again. Billing: {{link}}",
+      "paymentLapsed": "I've paused because your Abacus.AI subscription has ended. Renew it here: {{link}}"
     },
     "unavailable": {
       "title": {
@@ -4547,6 +4549,11 @@
       "seePlans": "See plans",
       "planBody": "Keep going on a free model now, or upgrade to {{plan}} to use it.",
       "planBodyAny": "Keep going on a free model now, or upgrade your plan to use it."
+    },
+    "payment": {
+      "title": "We couldn't confirm your last payment",
+      "body": "If your subscription is active, contact support@abacus.ai. Please don't purchase again.",
+      "billing": "Open billing"
     }
   },
   "creditThreshold": {

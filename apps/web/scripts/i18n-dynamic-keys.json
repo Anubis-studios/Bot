@@ -1613,7 +1613,9 @@
       "generic",
       "contactFailed",
       "contactFailedGeneric",
-      "someone"
+      "someone",
+      "payment",
+      "paymentLapsed"
     ],
     "sources": [
       "../../desktop/src/main/services/messaging/chat-failure-reply.ts"

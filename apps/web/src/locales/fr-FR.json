@@ -4524,7 +4524,9 @@
       "generic": "Un problème est survenu de mon côté, je n'ai donc pas pu terminer. Réessayez dans un instant.",
       "contactFailed": "Je n'ai pas pu répondre à {{name}} tout à l'heure.",
       "contactFailedGeneric": "Je n'ai pas pu répondre à {{name}} tout à l'heure : un problème est survenu de mon côté.",
-      "someone": "quelqu'un"
+      "someone": "quelqu'un",
+      "payment": "Je suis en pause car nous n'avons pas pu confirmer votre dernier paiement. Si votre abonnement est actif, contactez support@abacus.ai et n'achetez pas à nouveau. Facturation : {{link}}",
+      "paymentLapsed": "Je suis en pause car votre abonnement Abacus.AI a pris fin. Renouvelez-le ici : {{link}}"
     },
     "unavailable": {
       "title": {
@@ -4547,6 +4549,11 @@
       "seePlans": "Voir les offres",
       "planBody": "Continuez maintenant avec un modèle gratuit, ou passez à {{plan}} pour l'utiliser.",
       "planBodyAny": "Continuez maintenant avec un modèle gratuit, ou passez à une offre supérieure pour l'utiliser."
+    },
+    "payment": {
+      "title": "Nous n'avons pas pu confirmer votre dernier paiement",
+      "body": "Si votre abonnement est actif, contactez support@abacus.ai. N'achetez pas à nouveau.",
+      "billing": "Ouvrir la facturation"
     }
   },
   "creditThreshold": {

@@ -4524,7 +4524,9 @@
       "generic": "제 쪽에서 문제가 생겨 끝내지 못했어요. 잠시 후 다시 시도해 주세요.",
       "contactFailed": "방금 {{name}}님에게 답장하지 못했어요.",
       "contactFailedGeneric": "방금 {{name}}님에게 답장하지 못했어요: 제 쪽에서 문제가 생겼어요.",
-      "someone": "상대방"
+      "someone": "상대방",
+      "payment": "마지막 결제를 확인할 수 없어 일시 중지했습니다. 구독이 활성 상태라면 support@abacus.ai로 문의하시고 다시 구매하지 마세요. 결제: {{link}}",
+      "paymentLapsed": "Abacus.AI 구독이 종료되어 일시 중지했습니다. 여기에서 갱신하세요: {{link}}"
     },
     "unavailable": {
       "title": {
@@ -4547,6 +4549,11 @@
       "seePlans": "요금제 보기",
       "planBody": "지금은 무료 모델로 계속하거나, {{plan}}(으)로 업그레이드해서 사용하세요.",
       "planBodyAny": "지금은 무료 모델로 계속하거나, 요금제를 업그레이드해서 사용하세요."
+    },
+    "payment": {
+      "title": "마지막 결제를 확인할 수 없습니다",
+      "body": "구독이 활성 상태라면 support@abacus.ai로 문의하세요. 다시 구매하지 마세요.",
+      "billing": "결제 페이지 열기"
     }
   },
   "creditThreshold": {

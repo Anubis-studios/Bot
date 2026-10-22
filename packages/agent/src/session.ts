@@ -1498,11 +1498,12 @@ export class AbacusBotSession {
   }
 
   private emitFailure(failure: TurnFailure): void {
-    // Credits or credentials: whatever the user does about them (a key, a
-    // top-up, an upgrade) is re-read before the next turn.
+    // Credits, billing or credentials: whatever the user does about them (a
+    // key, a top-up, an upgrade, a payment) is re-read before the next turn.
     if (
       failure.cause === "credits_exhausted" ||
       failure.cause === "credits_expired" ||
+      failure.cause === "payment_required" ||
       failure.cause === "key_invalid" ||
       isAuthFailure(failure.raw)
     )
@@ -2224,7 +2225,7 @@ export class AbacusBotSession {
 
     this.retriedCalls += 1;
     process.stderr.write(
-      `[provider] ${providerFailureSummary(text)}; retrying (attempt ${this.retriedCalls + 1}).\n`
+      `[provider] ${providerFailureSummary(text, this.session?.model?.provider)}; retrying (attempt ${this.retriedCalls + 1}).\n`
     );
   }
 

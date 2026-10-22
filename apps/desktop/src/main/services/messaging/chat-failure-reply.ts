@@ -49,6 +49,7 @@ export type FailureKind =
   | "upgrade-abacus"
   | "own-key"
   | "key-rejected"
+  | "payment"
   | "free-pool-out"
   | "model-unavailable"
   | "connection"
@@ -67,6 +68,9 @@ export interface ChannelOffer {
 /** AbacusAI Agent on the web. */
 const ABACUS_AGENT_URL = "https://apps.abacus.ai/chatllm";
 
+/** The account's billing page, where a payment is checked or a plan renewed. */
+const ABACUS_BILLING_URL = "https://apps.abacus.ai/chatllm/admin/profile";
+
 const NETWORK_UNREACHABLE_CODE = "network_unreachable";
 
 /** Whose own key failed: the own-key offer, or the key to fix. */
@@ -79,6 +83,8 @@ export const failureKind = (error: TurnFailure): FailureKind => {
   // The picked model cannot serve the turn: its own line, credits or not.
   if (types.has("model-unavailable")) return "model-gone";
   if (types.has("upgrade-abacus")) return "upgrade-abacus";
+  // Abacus's billing gate: never the out-of-credits line, nor a purchase.
+  if (types.has("payment-required")) return "payment";
   if (error.cause === "key_invalid" && types.has("fix-key"))
     return "key-rejected";
   if (ownKeyAction(error)?.provider != null) return "own-key";
@@ -213,6 +219,14 @@ export const chatReplyForFailure = (
       return repeat
         ? ownKeyLead(words, error)
         : `${ownKeyLead(words, error)} ${t("outcome.channel.ownKeyWeb", { link: ABACUS_AGENT_URL })}`;
+    case "payment":
+      return t(
+        error.actions?.find((action) => action.type === "payment-required")
+          ?.cause === "lapsed"
+          ? "outcome.channel.paymentLapsed"
+          : "outcome.channel.payment",
+        { link: ABACUS_BILLING_URL }
+      );
     case "key-rejected":
       return t("outcome.channel.ownKeyRejected", {
         provider: providerDisplayName(ownKeyAction(error)?.provider ?? ""),

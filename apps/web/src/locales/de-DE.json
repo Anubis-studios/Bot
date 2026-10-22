@@ -4524,7 +4524,9 @@
       "generic": "Bei mir ist etwas schiefgelaufen, daher konnte ich das nicht abschließen. Bitte versuche es gleich noch einmal.",
       "contactFailed": "Ich konnte {{name}} gerade nicht antworten.",
       "contactFailedGeneric": "Ich konnte {{name}} gerade nicht antworten: Bei mir ist etwas schiefgelaufen.",
-      "someone": "jemandem"
+      "someone": "jemandem",
+      "payment": "Ich habe pausiert, weil wir deine letzte Zahlung nicht bestätigen konnten. Wenn dein Abo aktiv ist, wende dich an support@abacus.ai und kaufe bitte nicht erneut. Abrechnung: {{link}}",
+      "paymentLapsed": "Ich habe pausiert, weil dein Abacus.AI-Abo abgelaufen ist. Hier verlängern: {{link}}"
     },
     "unavailable": {
       "title": {
@@ -4547,6 +4549,11 @@
       "seePlans": "Tarife ansehen",
       "planBody": "Mach jetzt mit einem kostenlosen Modell weiter oder wechsle zu {{plan}}, um es zu nutzen.",
       "planBodyAny": "Mach jetzt mit einem kostenlosen Modell weiter oder führe ein Upgrade durch, um es zu nutzen."
+    },
+    "payment": {
+      "title": "Wir konnten deine letzte Zahlung nicht bestätigen",
+      "body": "Wenn dein Abo aktiv ist, wende dich an support@abacus.ai. Bitte kaufe nicht erneut.",
+      "billing": "Abrechnung öffnen"
     }
   },
   "creditThreshold": {
