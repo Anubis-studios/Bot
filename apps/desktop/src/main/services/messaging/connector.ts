@@ -5,7 +5,7 @@ import type {
   MessagingPlatformId,
   MessagingPlatformState,
 } from "@abacus-ai/contract/messaging";
-import type { BrowserWindow } from "electron";
+import type { BrowserWindow, WebContents } from "electron";
 
 import { abacusBotHome } from "../../paths";
 
@@ -167,6 +167,40 @@ export const backoffDelayMs = (attempt: number): number => {
   const base = Math.min(60_000, 1_000 * 2 ** Math.min(attempt, 6));
   return base / 2 + Math.random() * (base / 2);
 };
+
+declare const pageScriptBrand: unique symbol;
+/** Page code from this repo. Only `pageScript` makes one, and it splices in
+ * nothing but other page scripts, so data can never become code. */
+export type PageScript = string & { readonly [pageScriptBrand]: true };
+
+export const pageScript = (
+  strings: TemplateStringsArray,
+  ...parts: PageScript[]
+): PageScript =>
+  strings.reduce(
+    (code, text, i) => code + (i > 0 ? parts[i - 1] : "") + text,
+    ""
+  ) as PageScript;
+
+/** Data as a script literal: JSON with the characters that could end a
+ * string, a line or a <script> escaped (only ever inside JSON strings). */
+export const scriptLiteral = (value: unknown): string =>
+  (JSON.stringify(value) ?? "null").replace(
+    /[<>/&\u2028\u2029]/g,
+    (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`
+  );
+
+/** Run one of our page scripts as an async function of `args`, which reach it
+ * as data. Top-level `await` works inside. */
+export const runPageScript = (
+  contents: Pick<WebContents, "executeJavaScript">,
+  script: PageScript,
+  args: Record<string, unknown>
+): Promise<unknown> =>
+  contents.executeJavaScript(
+    `(async function(args){ ${script} })(${scriptLiteral(args)})`,
+    true
+  );
 
 /**
  * A page poll that never piles up: the next run is armed only once the last

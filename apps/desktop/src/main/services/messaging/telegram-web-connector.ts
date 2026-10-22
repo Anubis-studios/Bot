@@ -18,7 +18,10 @@ import {
   normalizeScrapedText,
   type ConnectorCallbacks,
   type MessagingConnector,
+  type PageScript,
+  pageScript,
   PollScheduler,
+  runPageScript,
 } from "./connector";
 
 /**
@@ -499,16 +502,13 @@ export class TelegramWebConnector implements MessagingConnector {
    * use top-level `await`, a syntax error in a plain wrapper swallowed here.
    */
   private async run<T>(
-    script: string,
+    script: PageScript,
     args: Record<string, unknown>
   ): Promise<T | null> {
     const win = this.ensureWindow();
     if (win == null || win.isDestroyed()) return null;
     try {
-      const value = (await win.webContents.executeJavaScript(
-        `(async function(args){ ${script} })(${JSON.stringify(args)})`,
-        true
-      )) as T;
+      const value = (await runPageScript(win.webContents, script, args)) as T;
       return value ?? null;
     } catch (error) {
       this.callbacks.onLog(
@@ -524,7 +524,7 @@ export class TelegramWebConnector implements MessagingConnector {
 // returns a JSON-serialisable value.
 
 /** Logged in ⇢ the auth pages are gone. The sturdiest signal Telegram gives. */
-const LOGIN_STATE_SCRIPT = `
+const LOGIN_STATE_SCRIPT = pageScript`
   const loginVisible = document.body.classList.contains('has-auth-pages');
   // Signed in means the chat UI is actually there, never merely "not the
   // login page". A blank or half-booted page has no auth class either, and
@@ -546,7 +546,7 @@ const LOGIN_STATE_SCRIPT = `
 `;
 
 /** The dialog list as contacts: chat id (peer id) and title. */
-const CONTACTS_SCRIPT = `
+const CONTACTS_SCRIPT = pageScript`
   const rows = [];
   const seen = new Set();
   for (const el of document.querySelectorAll('#chatlist-container a.chatlist-chat, ul.chatlist a.chatlist-chat, a.chatlist-chat')) {
@@ -567,7 +567,7 @@ const CONTACTS_SCRIPT = `
  * pointer sequence a send uses, wait for bubbles, return direction, text and
  * timestamp for the last `args.limit`. [] if the chat cannot be opened.
  */
-const READ_CHAT_SCRIPT = `
+const READ_CHAT_SCRIPT = pageScript`
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const press = (el) => {
     const r = el.getBoundingClientRect();
@@ -607,7 +607,7 @@ const READ_CHAT_SCRIPT = `
 `;
 
 /** Unread dialog previews, as best-effort inbound signal. */
-const INBOUND_SCRIPT = `
+const INBOUND_SCRIPT = pageScript`
   const rows = [];
   for (const el of document.querySelectorAll('a.chatlist-chat')) {
     const badge = el.querySelector('.dialog-subtitle-badge-unread, .badge-unread, .unread');
@@ -628,7 +628,7 @@ const INBOUND_SCRIPT = `
  * Open a chat from the list and send `args.text`. With `args.requirePeerId`
  * only the row with that exact peer id is pressed: titles can collide.
  */
-const TALK_SCRIPT = `
+const TALK_SCRIPT = pageScript`
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const press = (el) => {
     const r = el.getBoundingClientRect();

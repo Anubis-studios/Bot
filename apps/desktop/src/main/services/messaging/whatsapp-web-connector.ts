@@ -20,8 +20,11 @@ import {
   type MessagingConnector,
   PageLock,
   type PageLockOptions,
+  type PageScript,
+  pageScript,
   PageStalledError,
   PollScheduler,
+  runPageScript,
   setFileInput,
 } from "./connector";
 import {
@@ -1587,7 +1590,7 @@ export class WhatsAppWebConnector implements MessagingConnector {
    * and return its JSON value. A throw resolves to null: not ready yet. A
    * call cut short throws; a page that stops answering starts a relink. */
   private async run<T>(
-    script: string,
+    script: PageScript,
     args: Record<string, unknown>
   ): Promise<T | null> {
     const signal = this.lock.signal;
@@ -1596,10 +1599,7 @@ export class WhatsAppWebConnector implements MessagingConnector {
     if (win == null || win.isDestroyed()) return null;
     try {
       const value = (await boundedWait(
-        win.webContents.executeJavaScript(
-          `(async function(args){ ${script} })(${JSON.stringify(args)})`,
-          true
-        ),
+        runPageScript(win.webContents, script, args),
         SCRIPT_STALL_MS,
         signal
       )) as T;
@@ -1621,7 +1621,7 @@ export class WhatsAppWebConnector implements MessagingConnector {
 
 /** `#pane-side` exists only inside the linked app, never on the QR page or
  * mid-boot: a positive marker immune to the boot flash. */
-const LOGIN_STATE_SCRIPT = `
+const LOGIN_STATE_SCRIPT = pageScript`
   const loggedIn = !!document.querySelector('#pane-side');
   // Only consulted while logged out, where a canvas can only be the QR.
   const loginVisible = !loggedIn &&
@@ -1630,7 +1630,7 @@ const LOGIN_STATE_SCRIPT = `
 `;
 
 /** Shared helpers, inlined at the top of the scripts that need them. */
-const HELPERS = `
+const HELPERS = pageScript`
   // Primary: the role-attributed rows. Fallback, for builds where the roles
   // vanished (contacts read as empty and the sweep went blind): every chat
   // row carries exactly one title span, so rows are rediscovered as the
@@ -1668,7 +1668,7 @@ const HELPERS = `
  * stores its identity under count: a scan for anything WID-shaped can crown a
  * cached business contact as "me", and every self-send goes to a stranger.
  */
-const OWN_DIGITS_SCRIPT = `
+const OWN_DIGITS_SCRIPT = pageScript`
   // Only WhatsApp's own record of the LINKED account counts: these are the
   // keys WhatsApp Web stores its login identity under. Scanning every
   // stored value for anything WID-shaped once crowned a cached business
@@ -1687,7 +1687,7 @@ const OWN_DIGITS_SCRIPT = `
 
 /** What the chat-list pane is made of, logged once per connect: selector
  * generations die silently. Counts only; no personal data. */
-const PANE_SHAPE_SCRIPT = `
+const PANE_SHAPE_SCRIPT = pageScript`
   const q = (sel) => document.querySelectorAll(sel).length;
   const pane = document.querySelector('#pane-side');
   return {
@@ -1704,7 +1704,7 @@ const PANE_SHAPE_SCRIPT = `
 
 /** The chat list as contacts. The DOM exposes no jids, so the display name
  * doubles as the id, which is also what openChat resolves. */
-const CONTACTS_SCRIPT = `
+const CONTACTS_SCRIPT = pageScript`
   ${HELPERS}
   const rows = [];
   const seen = new Set();
@@ -1723,7 +1723,7 @@ const CONTACTS_SCRIPT = `
  * reported even without one: a message the user sends themself is born read,
  * so its preview doubles as the change signal.
  */
-const INBOUND_SCRIPT = `
+const INBOUND_SCRIPT = pageScript`
   ${HELPERS}
   const rows = [];
   for (const el of chatRows()) {
@@ -1749,7 +1749,7 @@ const INBOUND_SCRIPT = `
  * through search, set via the native value setter + input event (plain
  * assignment is swallowed by the controlled component).
  */
-const FIND_CHAT_SCRIPT = `
+const FIND_CHAT_SCRIPT = pageScript`
   ${HELPERS}
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const target = String(args.target || '').trim();
@@ -1829,7 +1829,7 @@ const FIND_CHAT_SCRIPT = `
 `;
 
 /** Re-scan search results for the target row after trusted typing. */
-const FIND_ROW_AFTER_TYPE_SCRIPT = `
+const FIND_ROW_AFTER_TYPE_SCRIPT = pageScript`
   ${HELPERS}
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const wanted = String(args.target || '').trim().toLowerCase();
@@ -1863,12 +1863,12 @@ const FIND_ROW_AFTER_TYPE_SCRIPT = `
 const COMPOSER_RETRY_DELAY_MS = 2_000;
 
 /** Whether a composer is on screen right now: the "still on that chat" check. */
-const COMPOSER_PRESENT_SCRIPT = `
+const COMPOSER_PRESENT_SCRIPT = pageScript`
   return { ok: !!document.querySelector('footer [contenteditable="true"]') };
 `;
 
 /** After /send?phone=: the conversation (or WhatsApp's error) mounted. */
-const NUMBER_OPEN_SETTLED_SCRIPT = `
+const NUMBER_OPEN_SETTLED_SCRIPT = pageScript`
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const end = Date.now() + 30000;
   while (Date.now() < end) {
@@ -1886,7 +1886,7 @@ const NUMBER_OPEN_SETTLED_SCRIPT = `
  * land on a different chat as the markup drifts, and a send typed into
  * whatever opened goes to the wrong human.
  */
-const CHAT_MATCHES_SCRIPT = `
+const CHAT_MATCHES_SCRIPT = pageScript`
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim().toLowerCase();
   const wanted = norm(args.name).slice(0, 24);
@@ -1912,7 +1912,7 @@ const CHAT_MATCHES_SCRIPT = `
 `;
 
 /** The open chat's composer position, ready for a trusted click + paste. */
-const COMPOSER_SCRIPT = `
+const COMPOSER_SCRIPT = pageScript`
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const end = Date.now() + 6000;
   while (Date.now() < end) {
@@ -1930,7 +1930,7 @@ const COMPOSER_SCRIPT = `
  * Whether the text just sent is now an OUTGOING BUBBLE in the open chat: the
  * read-back that makes a send a fact, since an empty composer proves nothing.
  */
-const SENT_VERIFY_SCRIPT = `
+const SENT_VERIFY_SCRIPT = pageScript`
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   // Doubled backslashes, as everywhere in these scripts.
   const norm = (s) => (s || '').replace(/[\\u200B\\uFEFF]/g, '').replace(/\\s+/g, ' ').trim();
@@ -1992,13 +1992,13 @@ const SENT_VERIFY_SCRIPT = `
 `;
 
 /** How many bubbles the open chat shows: the read-back's "new" baseline. */
-const BUBBLE_COUNT_SCRIPT = `
+const BUBBLE_COUNT_SCRIPT = pageScript`
   const primary = document.querySelectorAll('#main [data-testid="msg-container"], #main .message-in, #main .message-out').length;
   return { bubbles: primary > 0 ? primary : document.querySelectorAll('#main [role="row"]').length };
 `;
 
 /** How many outgoing bubbles already carry the text: the pre-send baseline. */
-const MATCHING_OUT_COUNT_SCRIPT = `
+const MATCHING_OUT_COUNT_SCRIPT = pageScript`
   const norm = (s) => (s || '').replace(/[\\u200B\\uFEFF]/g, '').replace(/\\s+/g, ' ').trim();
   const head = norm(args.head);
   if (head.length === 0) return { count: 0 };
@@ -2020,7 +2020,7 @@ const MATCHING_OUT_COUNT_SCRIPT = `
 /** Is the sent text among the chat's RECENT outgoing bubbles: the post-heal
  * check between "landed after all" and "resend". Wider than the last bubble
  * on purpose, since other messages may have arrived since. */
-const RECENT_OUT_SCRIPT = `
+const RECENT_OUT_SCRIPT = pageScript`
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const norm = (s) => (s || '').replace(/[\\u200B\\uFEFF]/g, '').replace(/\\s+/g, ' ').trim();
   const head = norm(args.head);
@@ -2057,7 +2057,7 @@ const RECENT_OUT_SCRIPT = `
 
 /** The composer's send button, which works whatever the "Enter is send"
  * setting says. Icon names drift, so match on the prefix inside the footer. */
-const SEND_BUTTON_SCRIPT = `
+const SEND_BUTTON_SCRIPT = pageScript`
   const footer = document.querySelector('#main footer');
   if (!footer) return { ok: false };
   const icon = footer.querySelector('[data-icon="send"], [data-icon^="wds-ic-send"], button[aria-label] span[data-icon*="send"]');
@@ -2069,7 +2069,7 @@ const SEND_BUTTON_SCRIPT = `
 `;
 
 /** Whether the composer is empty: a fast pre-check before the read-back. */
-const COMPOSER_EMPTY_SCRIPT = `
+const COMPOSER_EMPTY_SCRIPT = pageScript`
   const box = document.querySelector('footer [contenteditable="true"]');
   if (!box) return { empty: true };
   // Doubled backslashes: written singly, TypeScript would eat the escapes and
@@ -2083,7 +2083,7 @@ const COMPOSER_EMPTY_SCRIPT = `
  * and time; direction is geometric, since the right-aligned layout is the
  * product and does not churn the way class names do.
  */
-const READ_CHAT_SCRIPT = `
+const READ_CHAT_SCRIPT = pageScript`
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const limit = Number(args.limit) || 30;
   const t0 = Date.now();
@@ -2176,7 +2176,7 @@ const READ_CHAT_SCRIPT = `
  * the results is content. The box is CLEARED before returning: search mode
  * takes the chat list, the login probe's evidence, off the DOM.
  */
-const SEARCH_MESSAGES_SCRIPT = `
+const SEARCH_MESSAGES_SCRIPT = pageScript`
   ${HELPERS}
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const query = String(args.query || '').trim();
@@ -2230,7 +2230,7 @@ const SEARCH_MESSAGES_SCRIPT = `
 `;
 
 /** The footer's attach control, under every name it has worn. */
-const ATTACH_BUTTON_SCRIPT = `
+const ATTACH_BUTTON_SCRIPT = pageScript`
   const el = document.querySelector(
     'footer [data-testid="attach-menu-plus"], footer [data-icon="plus"], footer [data-icon="attach-menu-plus"], footer [data-icon="clip"], footer button[title*="Attach" i], footer [aria-label*="Attach" i]'
   );
@@ -2240,6 +2240,6 @@ const ATTACH_BUTTON_SCRIPT = `
 `;
 
 /** Whether the media-preview overlay (caption box + its own send) is up. */
-const MEDIA_PREVIEW_OPEN_SCRIPT = `
+const MEDIA_PREVIEW_OPEN_SCRIPT = pageScript`
   return { open: !!document.querySelector('[data-testid="media-caption-input-container"], [data-animate-modal-body] [data-icon="send"], div[aria-label*="caption" i]') };
 `;

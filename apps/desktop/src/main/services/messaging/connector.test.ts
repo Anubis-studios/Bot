@@ -6,14 +6,18 @@
  * a badge left by an earlier real message keeps the row in the sweep, and
  * the preview then shows whatever was said LAST, direction unknown.
  */
+import vm from "node:vm";
+
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   isEphemeralPreview,
   normalizeScrapedText,
   PageLock,
+  pageScript,
   PollScheduler,
   previewMatchesSent,
+  runPageScript,
 } from "./connector";
 
 describe("isEphemeralPreview", () => {
@@ -234,5 +238,46 @@ describe("PageLock", () => {
     expect(aborted).toBe(true);
     expect(ranLate).toBe(false);
     expect(lock.busy).toBe(false);
+  });
+});
+
+describe("runPageScript", () => {
+  // Arguments are data from chats and the agent; none may become code.
+  const hostile = {
+    quote: `he said "hi" and 'bye'`,
+    tag: "</script><script>globalThis.pwned = 1</script>",
+    separators: "line\u2028para\u2029end",
+    backtick: "`${globalThis.pwned = 1}`",
+    breakout: '"})();globalThis.pwned = 1;(async function(){ //',
+    nested: { list: ["<!--", "-->", "&amp;", "\\", "\n"] },
+  };
+
+  it("hands arguments over unchanged, and none of them runs", async () => {
+    let code = "";
+    const context = vm.createContext({});
+    const contents = {
+      executeJavaScript: async (source: string) => {
+        code = source;
+        return vm.runInContext(source, context);
+      },
+    };
+
+    const echoed = await runPageScript(
+      contents,
+      pageScript`return args;`,
+      hostile
+    );
+
+    expect(echoed).toEqual(hostile);
+    expect(vm.runInContext("globalThis.pwned", context)).toBeUndefined();
+    // Safe to sit in an HTML script block or a single line, too.
+    expect(code).not.toMatch(/[<>&\u2028\u2029]/);
+  });
+
+  it("splices only page scripts into page scripts", () => {
+    const helper = pageScript`const twice = (n) => n * 2;`;
+    expect(pageScript`${helper} return twice(args.n);`).toBe(
+      "const twice = (n) => n * 2; return twice(args.n);"
+    );
   });
 });

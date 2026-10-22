@@ -1,6 +1,7 @@
 import fs from "fs";
 
 import { resourcePath } from "../../resources";
+import { type PageScript, pageScript } from "./connector";
 
 /**
  * WhatsApp through its own store, not its pixels: wa-js (wppconnect-team,
@@ -45,7 +46,10 @@ export type BridgeSendResult = {
 
 /** How the bridge runs page scripts: the connector's `run()` and a raw eval. */
 export type BridgeHost = {
-  run: <T>(script: string, args: Record<string, unknown>) => Promise<T | null>;
+  run: <T>(
+    script: PageScript,
+    args: Record<string, unknown>
+  ) => Promise<T | null>;
   raw: (code: string) => Promise<void>;
   log: (line: string) => void;
 };
@@ -298,7 +302,7 @@ export class QueuedSendError extends Error {
 // Each runs inside `(async function(args){ ... })(args)` in the page and
 // returns a JSON value. `WPP` is the library's global once injected.
 
-const PRESENCE_SCRIPT = `
+const PRESENCE_SCRIPT = pageScript`
   const present = typeof WPP !== "undefined" && WPP != null;
   const ready = present && WPP.isFullReady === true &&
     !!(window.__abacusWa && window.__abacusWa.listening);
@@ -306,7 +310,7 @@ const PRESENCE_SCRIPT = `
 `;
 
 /** The mailbox WAIT_READY_SCRIPT fills; the page cannot call into main. */
-const INIT_SCRIPT = `
+const INIT_SCRIPT = pageScript`
   window.__abacusWa = window.__abacusWa || {
     queue: [], loggedOut: false, listening: false,
   };
@@ -315,7 +319,7 @@ const INIT_SCRIPT = `
 
 /** Wait for the library to find WhatsApp's modules, then hook it. The global
  * carries isFullReady but not webpack.onFullReady, so readiness is polled. */
-const WAIT_READY_SCRIPT = `
+const WAIT_READY_SCRIPT = pageScript`
   const state = window.__abacusWa || (window.__abacusWa = {
     queue: [], loggedOut: false, listening: false,
   });
@@ -371,14 +375,14 @@ const WAIT_READY_SCRIPT = `
   return { ready: false, version: "" };
 `;
 
-const MY_ID_SCRIPT = `
+const MY_ID_SCRIPT = pageScript`
   const me = WPP.conn.getMyUserId();
   if (!me) return { jid: null, digits: null };
   const jid = me._serialized || (me.user + "@" + me.server);
   return { jid, digits: String(me.user || "") };
 `;
 
-const LIST_CHATS_SCRIPT = `
+const LIST_CHATS_SCRIPT = pageScript`
   const options = { count: 5000 };
   if (args.onlyUnread) options.onlyUnread = true;
   // Bounded: a listing that outlives the wait keeps running in the page,
@@ -413,7 +417,7 @@ const LIST_CHATS_SCRIPT = `
 
 /** Send, then wait for the server ack. The poll after \`waitForAck\` catches
  * an ack that lands a moment late; one that never arrives is not assumed. */
-const SEND_SCRIPT = `
+const SEND_SCRIPT = pageScript`
   let result;
   try {
     result = await WPP.chat.sendTextMessage(args.jid, args.text, { waitForAck: true });
@@ -437,14 +441,14 @@ const SEND_SCRIPT = `
   return { ok: true, id, ack };
 `;
 
-const ACK_SCRIPT = `
+const ACK_SCRIPT = pageScript`
   try {
     const msg = await WPP.chat.getMessageById(args.messageId);
     return { ack: typeof msg?.ack === "number" ? msg.ack : -1 };
   } catch (e) { return { ack: -1 }; }
 `;
 
-const READ_SCRIPT = `
+const READ_SCRIPT = pageScript`
   const fetch = (jid) => WPP.chat.getMessages(jid, { count: args.limit || 30 });
   // WhatsApp now files a person's chat under a lid, and the phone-number
   // id the list handed out may not be a key in the store at all. Before
@@ -499,7 +503,7 @@ const READ_SCRIPT = `
   return { ok: true, rows };
 `;
 
-const PROBE_SCRIPT = `
+const PROBE_SCRIPT = pageScript`
   const out = { type: typeof WPP };
   try {
     if (typeof WPP !== "undefined" && WPP != null) {
@@ -518,7 +522,7 @@ const PROBE_SCRIPT = `
 
 /** Is this chat the user's own? Asked of the chat, the phone id and the lid,
  * so the answer does not wait on a chat list still behind history sync. */
-const IS_OWN_CHAT_SCRIPT = `
+const IS_OWN_CHAT_SCRIPT = pageScript`
   const wid = WPP.whatsapp.WidFactory.createWid(args.jid);
   let isMe = false;
   try {
@@ -537,7 +541,7 @@ const IS_OWN_CHAT_SCRIPT = `
   return { isMe };
 `;
 
-const DRAIN_SCRIPT = `
+const DRAIN_SCRIPT = pageScript`
   const state = window.__abacusWa;
   if (!state) return { messages: [], loggedOut: false };
   const messages = state.queue.splice(0, state.queue.length);
