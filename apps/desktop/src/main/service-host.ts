@@ -443,6 +443,11 @@ import {
 } from "./services/providers/abacus-host";
 import { readAccountState } from "./services/providers/account-service";
 import {
+  CreditThresholdWatch,
+  settledTurnListener,
+  type SettledTurnKind,
+} from "./services/providers/credit-thresholds";
+import {
   creditWallOf,
   wallAfterAccountRead,
   wallAfterError,
@@ -589,6 +594,14 @@ export class ServiceHost {
       );
       if (patch != null) prefs.update(patch);
     });
+    // A billed turn that settles on a free account checks the free grant's
+    // milestones.
+    this.onAgentEvent(
+      settledTurnListener(this.creditThresholds, {
+        onFreePlan: () => abacusPlanTier(cachedAbacusAccount()) === "free",
+        kindOf: (id) => this.settledTurnKind(id),
+      })
+    );
     // Usage counts for the daily report; the listener never throws.
     this.onAgentEvent(
       createUsageReporter(platform === "web-host" ? "web" : "desktop", {
@@ -904,6 +917,22 @@ export class ServiceHost {
 
   attachPrefs(prefs: () => Pick<PrefsStore, "get" | "update">): void {
     this.prefs = prefs;
+  }
+
+  /** The free grant's milestones, checked after each billed turn settles. */
+  private readonly creditThresholds = new CreditThresholdWatch({
+    prefs: () => this.prefs?.() ?? null,
+    readAccount: () => fetchAbacusAccount(true),
+    tellInChat: (sessionId, mark) =>
+      this.messagingGatewayService.tellCreditThreshold(sessionId, mark),
+  });
+
+  /** What a turn in `sessionId` counts as for the milestone card's estimate. */
+  private settledTurnKind(sessionId: string): SettledTurnKind {
+    const sessions = this.agentSessionManagerService;
+    if (sessions.laneOf(sessionId) != null) return null;
+    if (sessions.isRoutineSession(sessionId)) return null;
+    return sessions.isBotSession(sessionId) ? "message" : "build";
   }
 
   /** A prefs write: the agents hear a credit wall that moved. */

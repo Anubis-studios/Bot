@@ -1,8 +1,15 @@
-import type { PrefsRow } from "@abacus-ai/contract/contract/rows";
+import { AgentStatus } from "@abacus-ai/contract/agent-types";
+import type { PrefsPatch, PrefsRow } from "@abacus-ai/contract/contract/rows";
 import type { RoutineRunItem } from "@abacus-ai/contract/contracts";
+import type { CreditThresholdMark } from "@abacus-ai/contract/credit-thresholds";
 import type { RoutineRun } from "@abacus-ai/contract/routines";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
+import {
+  CreditThresholdWatch,
+  markAfterRead,
+  settledTurnListener,
+} from "../providers/credit-thresholds";
 import {
   creditWallOf,
   wallAfterAccountRead,
@@ -299,5 +306,140 @@ describe("the agent running a routine again", () => {
         NOW
       )
     ).toMatch(/you have run it 3 times today/i);
+  });
+});
+
+describe("the free grant's credit milestones", () => {
+  const ACCOUNT = {
+    user_id: "u1",
+    organization_id: "o1",
+    subscription_tier: "free",
+    credits_granted: 2000,
+    credits_used: 0,
+  };
+  const KEY = "o1:u1";
+  const setup = (tellInChat = vi.fn(async () => false)) => {
+    let row = { id: "app", creditThresholds: {} } as unknown as PrefsRow;
+    const account = { ...ACCOUNT };
+    const clock = { now: new Date(2026, 9, 22, 10).getTime() };
+    const watch = new CreditThresholdWatch({
+      prefs: () => ({
+        get: () => row,
+        update: (patch: PrefsPatch) => {
+          row = { ...row, ...patch } as PrefsRow;
+        },
+      }),
+      readAccount: async () => ({ ...account }) as never,
+      tellInChat,
+      now: () => clock.now,
+    });
+    const settle = async (
+      used: number,
+      kind: "build" | "message" = "build"
+    ) => {
+      account.credits_used = used;
+      clock.now += 60_000;
+      await watch.turnSettled("s1", kind);
+      return row.creditThresholds?.[KEY];
+    };
+    return {
+      watch,
+      settle,
+      account,
+      tellInChat,
+      mark: () => row.creditThresholds?.[KEY],
+    };
+  };
+
+  it("stamps half, then four fifths, each once", async () => {
+    const h = setup();
+    expect(await h.settle(900)).toBeUndefined();
+    const half = await h.settle(1000);
+    expect(half).toMatchObject({ reached: 50, used: 1000, granted: 2000 });
+    expect(await h.settle(1200)).toBe(half);
+    expect(await h.settle(1600)).toMatchObject({ reached: 80, used: 1600 });
+    const low = h.mark();
+    expect(await h.settle(1700)).toBe(low);
+  });
+
+  it("estimates from today's post-turn reads: credits per completed turn, and what they were", async () => {
+    const h = setup();
+    await h.settle(800);
+    await h.settle(900);
+    expect(await h.settle(1000)).toMatchObject({
+      reached: 50,
+      perTask: 100,
+      kind: "builds",
+    });
+    const mixed = setup();
+    await mixed.settle(1000, "message");
+    expect(mixed.mark()).toMatchObject({ perTask: null, kind: null });
+    await mixed.settle(1300, "build");
+    await mixed.settle(1600, "message");
+    expect(mixed.mark()).toMatchObject({
+      reached: 80,
+      perTask: 300,
+      kind: "tasks",
+    });
+  });
+
+  it("never for a paid plan, and not at the whole grant, where the out-of-credits card speaks", async () => {
+    const paid = setup();
+    paid.account.subscription_tier = "basic";
+    expect(await paid.settle(1900)).toBeUndefined();
+    const spent = setup();
+    expect(await spent.settle(2000)).toBeUndefined();
+    expect(
+      markAfterRead(undefined, { used: 2400, granted: 2000, at: 1 }, null)
+    ).toBeNull();
+    // An 80 mark is never stepped back to 50.
+    expect(
+      markAfterRead(
+        { reached: 80 } as CreditThresholdMark,
+        { used: 1000, granted: 2000, at: 1 },
+        null
+      )
+    ).toBeNull();
+  });
+
+  it("tells a chat-app turn's chat once per threshold and remembers it", async () => {
+    const tell = vi.fn(async () => true);
+    const h = setup(tell);
+    await h.settle(1000);
+    await h.settle(1100);
+    expect(tell).toHaveBeenCalledTimes(1);
+    expect(h.mark()).toMatchObject({ reached: 50, told: 50 });
+    await h.settle(1600);
+    await h.settle(1700);
+    expect(tell).toHaveBeenCalledTimes(2);
+    expect(h.mark()).toMatchObject({ reached: 80, told: 80 });
+  });
+
+  it("checks only when a billed turn settles, never mid-turn", () => {
+    const turnSettled = vi.fn(async () => {});
+    const listen = settledTurnListener(
+      { turnSettled },
+      { onFreePlan: () => true, kindOf: () => "build" }
+    );
+    const event = (e: Record<string, unknown>) =>
+      listen("s1", { type: "event", event: e } as never);
+    const usage = {
+      input: 1,
+      output: 1,
+      cacheRead: 0,
+      cacheWrite: 0,
+      requests: 1,
+      model: "m",
+    };
+    // A round of tool calls ends; the turn goes on.
+    event({ type: "turn_complete", usage });
+    expect(turnSettled).not.toHaveBeenCalled();
+    event({ type: "status_changed", status: AgentStatus.Idle });
+    expect(turnSettled).toHaveBeenCalledExactlyOnceWith("s1", "build");
+    // Idle again with no billed turn, or a turn on the free lane: nothing.
+    event({ type: "status_changed", status: AgentStatus.Idle });
+    event({ type: "turn_complete", usage: { ...usage, lane: "free" } });
+    event({ type: "status_changed", status: AgentStatus.Idle });
+    expect(turnSettled).toHaveBeenCalledTimes(1);
   });
 });

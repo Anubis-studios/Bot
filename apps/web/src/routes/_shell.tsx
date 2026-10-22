@@ -7,6 +7,7 @@ import {
 import { lazy, Suspense, useEffect } from "react";
 
 import { WhatsAppIntro } from "#platform/whatsapp-bot";
+import { CreditThresholdHost } from "#renderer/components/credits-card/threshold";
 import { PaymentRequiredDialog } from "#renderer/components/payment-required";
 import { DEFAULT_PREFS } from "#renderer/data/db/prefs";
 import { BotsGlobals } from "#renderer/features/bots/watcher";
@@ -94,6 +95,7 @@ const ShellRoute = () => {
       {!provisional && tour == null && <NewLookNotice />}
       <SessionsGlobals preview={dispatchPreview} />
       <UpgradeDialogHost />
+      {!provisional && tour == null && <CreditThresholdHost />}
       {!provisional && <PaymentRequiredDialog />}
     </>
   );

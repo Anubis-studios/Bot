@@ -247,6 +247,7 @@ describe("PrefsStore", () => {
       routinesAlwaysOnToldAt: null,
       routinesAlwaysOnCardAt: null,
       routinesMissedSeenAt: null,
+      creditThresholdCards: {},
     });
     expect(store.provenance()).toMatchObject({
       "dismissals.upsell": "legacy",

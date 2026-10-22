@@ -4539,5 +4539,41 @@
       "planBody": "Keep going on a free model now, or upgrade to {{plan}} to use it.",
       "planBodyAny": "Keep going on a free model now, or upgrade your plan to use it."
     }
+  },
+  "creditThreshold": {
+    "half": {
+      "title": "You've used half your free credits",
+      "body": "You have {{left}} of {{total}} left.",
+      "estimateBuilds_one": "That's about {{count}} more build like today's.",
+      "estimateBuilds_other": "That's about {{count}} more builds like today's.",
+      "estimateMessages_one": "That's about {{count}} more bot message like today's.",
+      "estimateMessages_other": "That's about {{count}} more bot messages like today's.",
+      "estimateTasks_one": "That's about {{count}} more task like today's.",
+      "estimateTasks_other": "That's about {{count}} more tasks like today's."
+    },
+    "low": {
+      "title": "Only {{left}} free credits left",
+      "urge": "Upgrade now so your work doesn't stop halfway.",
+      "estimateBuilds_one": "Enough for about {{count}} more build.",
+      "estimateBuilds_other": "Enough for about {{count}} more builds.",
+      "estimateMessages_one": "Enough for about {{count}} more bot message.",
+      "estimateMessages_other": "Enough for about {{count}} more bot messages.",
+      "estimateTasks_one": "Enough for about {{count}} more task.",
+      "estimateTasks_other": "Enough for about {{count}} more tasks."
+    },
+    "meterLabel": "{{used}} of {{total}} free credits used",
+    "used": "{{used}} used",
+    "left": "{{left}} left",
+    "benefit": {
+      "credits": "{{credits}} credits every month, {{times}}x the free plan",
+      "creditsOnly": "{{credits}} credits every month",
+      "models": "Top models: {{models}}",
+      "media": "Image and video generation",
+      "agents": "Personal agents in Abacus AI Agent on the web that run 24/7: WhatsApp, Discord and Telegram auto-replies, all your routines, and everything your bot does"
+    },
+    "upgradeIntro": "Upgrade · {{price}} first month",
+    "upgradeMonthly": "Upgrade · {{price}}/month",
+    "upgrade": "Upgrade",
+    "continueFree": "Continue free"
   }
 }

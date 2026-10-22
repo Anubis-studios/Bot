@@ -15,8 +15,10 @@
       "appearance.translucency": "default",
       "appearance.uiFont": "default",
       "browserHomepage": "legacy",
+      "creditThresholds": "default",
       "creditsExhaustedAt": "default",
       "defaultMode": "default",
+      "dismissals.creditThresholdCards": "default",
       "dismissals.newLookSeenAt": "default",
       "dismissals.referralCardUntil": "default",
       "dismissals.routeLlmNudgeAt": "default",
@@ -78,9 +80,11 @@
         "uiFont": ""
       },
       "browserHomepage": null,
+      "creditThresholds": {},
       "creditsExhaustedAt": null,
       "defaultMode": "YOLO",
       "dismissals": {
+        "creditThresholdCards": {},
         "newLookSeenAt": null,
         "referralCardUntil": null,
         "routeLlmNudgeAt": null,

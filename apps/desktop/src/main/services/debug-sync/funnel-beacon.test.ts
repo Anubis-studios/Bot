@@ -2,6 +2,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 
+import { isFunnelStep } from "@abacus-ai/contract/funnel";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const home = vi.hoisted(() => ({ current: "" }));
@@ -98,6 +99,21 @@ describe("reportFunnelStep", () => {
 
     expect(() => reportFunnelStep("app_opened")).not.toThrow();
     await Promise.resolve();
+  });
+});
+
+describe("the credit milestone card's steps", () => {
+  it("are on the fixed list, and each is sent as itself", () => {
+    const steps = [50, 80].flatMap((threshold) =>
+      ["shown", "upgrade", "continue"].map(
+        (choice) => `credit_card_${threshold}_${choice}`
+      )
+    );
+    for (const step of steps) expect(isFunnelStep(step)).toBe(true);
+    reportFunnelStep("credit_card_80_continue");
+    expect(requested().searchParams.get("step")).toBe(
+      "credit_card_80_continue"
+    );
   });
 });
 

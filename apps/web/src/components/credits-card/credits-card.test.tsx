@@ -1,9 +1,27 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
+import type { BillingPlan } from "@abacus-ai/contract/billing-plan";
+import { contract } from "@abacus-ai/contract/contract";
+import type { PrefsRow } from "@abacus-ai/contract/contract/rows";
+import type { CreditThresholdMark } from "@abacus-ai/contract/credit-thresholds";
+import { implement } from "@orpc/server";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { RouterContextProvider } from "@tanstack/react-router";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { DbProvider } from "#renderer/data/db";
+import { fixturePrefs } from "#renderer/data/fixture-db/rows";
+import { createHarness, defaultSeed } from "#renderer/test-support/app-harness";
 
 import { renderWithDb } from "../../features/chat/testing";
 import { DeliverablesCard } from "../file-preview";
 import { CreditsCard, missingFreeSources } from "./index";
+import { CreditThresholdCard, CreditThresholdHost } from "./threshold";
 
 let cleanup: (() => Promise<void>) | undefined;
 afterEach(async () => {
@@ -169,4 +187,268 @@ it("has no ready section when nothing was handed over", async () => {
   cleanup = rendered.cleanup;
   expect(document.querySelector('[data-slot="credits-ready"]')).toBeNull();
   expect(screen.queryByText("What's ready")).toBeNull();
+});
+
+describe("the free grant's milestone card", () => {
+  const BILLING: BillingPlan = {
+    current: {
+      planName: "Free",
+      creditsRemaining: 1000,
+      creditsGranted: 2000,
+      freeTierExpiresAt: null,
+    },
+    plans: [
+      {
+        plan: "basic",
+        planName: "Basic",
+        priceText: "$10/mo",
+        firstMonthPriceCents: 700,
+        priceCents: 1000,
+        features: [],
+        creditsPerMonth: 20000,
+        current: false,
+      },
+    ],
+    upgrades: [
+      {
+        plan: "basic",
+        planName: "Basic",
+        priceText: "$10/mo",
+        firstMonthPriceCents: 700,
+        priceCents: 1000,
+        features: [
+          "Unlimited chatting with the bot (20,000 credits a month)",
+          "Top models including Model A, Model B, Model C, Model D and Model E",
+        ],
+        url: null,
+      },
+    ],
+    topUpUrl: null,
+    upgradeInMobileApp: false,
+  };
+  const card = (
+    threshold: 50 | 80,
+    used: number,
+    extra: Partial<Parameters<typeof CreditThresholdCard>[0]> = {}
+  ) => (
+    <CreditThresholdCard
+      threshold={threshold}
+      used={used}
+      total={2000}
+      estimate={null}
+      billing={BILLING}
+      onUpgrade={() => {}}
+      onContinue={() => {}}
+      {...extra}
+    />
+  );
+
+  it("at half: the balance, today's estimate, the meter, the plan's gains and its first-month price", async () => {
+    const rendered = await renderWithDb(
+      card(50, 1000, { estimate: { count: 12, kind: "builds" } })
+    );
+    cleanup = rendered.cleanup;
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      screen.getByRole("heading", {
+        name: "You've used half your free credits",
+      })
+    ).toBeTruthy();
+    expect(dialog.textContent).toContain(
+      "You have 1,000 of 2,000 left. That's about 12 more builds like today's."
+    );
+    const meter = screen.getByRole("meter");
+    expect(meter.getAttribute("aria-valuenow")).toBe("1000");
+    expect(meter.getAttribute("aria-label")).toBe(
+      "1,000 of 2,000 free credits used"
+    );
+    expect(
+      [
+        ...document.querySelectorAll(
+          '[data-slot="credit-threshold-benefits"] li'
+        ),
+      ].map((item) => item.textContent)
+    ).toEqual([
+      "20,000 credits every month, 10x the free plan",
+      "Top models: Model A, Model B, Model C, Model D",
+      "Image and video generation",
+      "Personal agents in Abacus AI Agent on the web that run 24/7: WhatsApp, Discord and Telegram auto-replies, all your routines, and everything your bot does",
+    ]);
+    expect(
+      screen.getByRole("button", { name: "Upgrade · $7 first month" })
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Continue free" })).toBeTruthy();
+  });
+
+  it("at four fifths: what is left and the urge, with no estimate it cannot make", async () => {
+    const rendered = await renderWithDb(card(80, 1640));
+    cleanup = rendered.cleanup;
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      screen.getByRole("heading", { name: "Only 360 free credits left" })
+    ).toBeTruthy();
+    expect(dialog.textContent).toContain(
+      "Upgrade now so your work doesn't stop halfway."
+    );
+    expect(dialog.textContent).not.toContain("Enough for about");
+  });
+
+  it("stays until a button is picked; Esc is Continue free", async () => {
+    const onContinue = vi.fn();
+    const rendered = await renderWithDb(card(50, 1000, { onContinue }));
+    cleanup = rendered.cleanup;
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    await waitFor(() => expect(onContinue).toHaveBeenCalledOnce());
+  });
+
+  const ACCOUNT = {
+    user_id: "u1",
+    organization_id: "o1",
+    name: null,
+    email: null,
+    picture: null,
+    organization: null,
+    org_user_count: null,
+    plan: null,
+    subscription_tier: "free",
+    credits_granted: 2000,
+    credits_used: 1000,
+  };
+  const MARK: CreditThresholdMark = {
+    reached: 50,
+    at: 1,
+    used: 1000,
+    granted: 2000,
+    perTask: 100,
+    kind: "messages",
+    told: null,
+  };
+  const host = async ({
+    account = ACCOUNT as typeof ACCOUNT | null,
+    prefs = {} as Partial<PrefsRow>,
+    busy = false,
+  } = {}) => {
+    const os = implement(contract);
+    const seed = defaultSeed();
+    const harness = await createHarness("/", {
+      seed: {
+        ...seed,
+        sessions: busy ? seed.sessions : [],
+        prefs: fixturePrefs({
+          creditThresholds: { "o1:u1": MARK },
+          ...prefs,
+        }),
+      },
+      procedures: {
+        account: {
+          abacus: os.account.abacus.handler(() => account),
+          billingPlan: os.account.billingPlan.handler(() => BILLING),
+        },
+      },
+    });
+    const queryClient = harness.router.options.context.queryClient;
+    const view = (
+      <QueryClientProvider client={queryClient}>
+        <RouterContextProvider router={harness.router}>
+          <DbProvider value={harness.appDb}>
+            <CreditThresholdHost />
+          </DbProvider>
+        </RouterContextProvider>
+      </QueryClientProvider>
+    );
+    let rendered!: ReturnType<typeof render>;
+    await act(async () => {
+      rendered = render(view);
+    });
+    cleanup = async () => {
+      rendered.unmount();
+      await harness.cleanup();
+    };
+    const steps = () =>
+      harness.calls
+        .filter(([name]) => name === "system.funnelStep")
+        .map(([, input]) => (input as { step: string }).step);
+    const cards = () =>
+      harness.appDb.collections.prefs.get("app")?.dismissals
+        .creditThresholdCards;
+    return { harness, steps, cards };
+  };
+
+  it("shows once for a free account between turns, and Continue free keeps it away", async () => {
+    const h = await host();
+    await screen.findByRole("heading", {
+      name: "You've used half your free credits",
+    });
+    expect(screen.getByRole("dialog").textContent).toContain(
+      "That's about 10 more bot messages like today's."
+    );
+    await waitFor(() => expect(h.steps()).toEqual(["credit_card_50_shown"]));
+    fireEvent.click(screen.getByRole("button", { name: "Continue free" }));
+    await waitFor(() =>
+      expect(h.cards()).toEqual({ "o1:u1": { shown: 50, answered: 50 } })
+    );
+    expect(h.steps()).toEqual([
+      "credit_card_50_shown",
+      "credit_card_50_continue",
+    ]);
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
+  it("a dismissed threshold stays dismissed; the next one still shows", async () => {
+    const answered = {
+      dismissals: {
+        ...fixturePrefs().dismissals,
+        creditThresholdCards: { "o1:u1": { shown: 50, answered: 50 } },
+      },
+    } as Partial<PrefsRow>;
+    await host({ prefs: answered });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await cleanup?.();
+    cleanup = undefined;
+    await host({
+      account: { ...ACCOUNT, credits_used: 1640 },
+      prefs: {
+        ...answered,
+        creditThresholds: { "o1:u1": { ...MARK, reached: 80, used: 1640 } },
+      },
+    });
+    expect(
+      await screen.findByRole("heading", { name: "Only 360 free credits left" })
+    ).toBeTruthy();
+  });
+
+  it("never for a paid plan, a spent grant (the out-of-credits card's) or over a running turn", async () => {
+    const settle = () =>
+      act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+    for (const options of [
+      { account: { ...ACCOUNT, subscription_tier: "basic" } },
+      { account: { ...ACCOUNT, credits_used: 2000 } },
+      { busy: true },
+    ]) {
+      const h = await host(options);
+      await settle();
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(h.steps()).toEqual([]);
+      await cleanup?.();
+      cleanup = undefined;
+    }
+  });
+
+  it("Upgrade opens the upgrade flow and answers the card", async () => {
+    const h = await host();
+    const upgrade = await screen.findByRole("button", {
+      name: "Upgrade · $7 first month",
+    });
+    fireEvent.click(upgrade);
+    await waitFor(() => expect(h.steps()).toContain("credit_card_50_upgrade"));
+    await waitFor(() =>
+      expect(h.cards()).toEqual({ "o1:u1": { shown: 50, answered: 50 } })
+    );
+  });
 });

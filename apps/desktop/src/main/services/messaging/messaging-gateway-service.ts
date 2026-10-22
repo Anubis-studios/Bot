@@ -7,6 +7,7 @@ import type {
   AgentSessionListItem,
   StartAgentSessionResult,
 } from "@abacus-ai/contract/contracts";
+import type { CreditThresholdMark } from "@abacus-ai/contract/credit-thresholds";
 import {
   MESSAGING_PLATFORM_CATALOG,
   SHARED_BOT_PLATFORM_OF,
@@ -38,6 +39,7 @@ import { environmentNoticeService } from "../providers/environment-notice-servic
 import { AbacusChannelsConnector } from "./abacus-channels-connector";
 import { channelLocale, channelWords } from "./channel-words";
 import {
+  chatLineForCreditThreshold,
   chatReplyForFailure,
   contactFailureNotice,
   FailureReplyThrottle,
@@ -395,6 +397,8 @@ export class MessagingGatewayService {
   private readonly routes = new Map<string, Route>();
   /** sessionId -> route, for the NDJSON hot path. */
   private readonly routesBySession = new Map<string, Route>();
+  /** sessionId -> when its last chat-app turn ended. */
+  private readonly chatTurnEndedAt = new Map<string, number>();
   /**
    * In-flight route creation per `platform:chatId`, so two messages arriving
    * together share one session instead of racing `ensureRoute` into two.
@@ -1567,7 +1571,49 @@ export class MessagingGatewayService {
 
     this.flushReply(route);
     route.busy = false;
+    this.chatTurnEndedAt.set(
+      route.sessionId,
+      this.options.now?.() ?? Date.now()
+    );
     this.startQueued(route);
+  }
+
+  /**
+   * A free account crossed a credit milestone right after a chat-app turn in
+   * `sessionId`: one line in the user's own chat on that app, never in a
+   * contact's. Whether it went; false when the turn was not a chat app's.
+   */
+  async tellCreditThreshold(
+    sessionId: string,
+    mark: CreditThresholdMark
+  ): Promise<boolean> {
+    const route = this.routesBySession.get(sessionId);
+    const ended = this.chatTurnEndedAt.get(sessionId);
+    const now = this.options.now?.() ?? Date.now();
+    if (route == null || ended == null || now - ended > CHAT_TURN_RECENT_MS)
+      return false;
+    const own = this.selfChatOf(route.platform);
+    if (own == null) return false;
+    const isOwn =
+      own.platform === route.platform && own.chatId === route.userId;
+    const [upgradeUrl, billing] = await Promise.all([
+      withinMs(fetchUpgradeUrl("channel"), UPGRADE_URL_WAIT_MS),
+      withinMs(fetchBillingPlan(false), UPGRADE_URL_WAIT_MS),
+    ]);
+    const words = await channelWords(
+      channelLocale(
+        readUserLanguage()?.name ?? null,
+        this.options.appLanguage?.() ?? null
+      )
+    );
+    const line = chatLineForCreditThreshold(
+      words,
+      mark,
+      billing?.upgrades[0]?.url ?? upgradeUrl ?? botUpgradePage("channel")
+    );
+    if (isOwn) this.deliver(route, line);
+    else this.deliverToSelf(own, line);
+    return true;
   }
 
   /** Start the next message waiting on the route's session, its own first. */
@@ -2707,6 +2753,9 @@ const senderLabel = (
  * until the line has gone, and the plans page is a fine answer too.
  */
 const UPGRADE_URL_WAIT_MS = 5_000;
+
+/** A milestone read this soon after a chat-app turn ended belongs to that turn. */
+const CHAT_TURN_RECENT_MS = 2 * 60_000;
 
 /** What a call answers, or null when it fails or takes too long. */
 const withinMs = <T>(call: Promise<T | null>, ms: number): Promise<T | null> =>

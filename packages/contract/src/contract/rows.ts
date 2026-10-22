@@ -15,6 +15,10 @@ import type {
   SessionTurnPhase,
   WorkspaceListItem,
 } from "../contracts";
+import type {
+  CreditThresholdCard,
+  CreditThresholdMark,
+} from "../credit-thresholds";
 import type { RoutineListItem, RoutineRun } from "../routines";
 
 /** Random per main-process start; seqs compare only within one epoch. */
@@ -162,6 +166,8 @@ export interface PrefsRow {
   creditsExhaustedAt: number | null;
   /** When the user chose the free models at the credit wall; see credit-wall.ts. */
   freeLaneChosenAt?: number | null;
+  /** Per account (creditAccountKey): the free grant's latest milestone, stamped by main. */
+  creditThresholds?: Record<string, CreditThresholdMark>;
   browserHomepage: string | null;
   showLinkPreviews?: boolean;
   /** Absent reads as on. */
@@ -178,6 +184,8 @@ export interface PrefsRow {
     routinesAlwaysOnToldAt: number | null;
     routinesAlwaysOnCardAt: number | null;
     routinesMissedSeenAt: number | null;
+    /** Per account: the credit milestone card shown and answered. */
+    creditThresholdCards?: Record<string, CreditThresholdCard>;
   };
   /** Panel widths. */
   panes: Record<string, number>;

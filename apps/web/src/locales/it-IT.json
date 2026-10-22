@@ -4539,5 +4539,41 @@
       "planBody": "Continua ora con un modello gratuito, oppure passa a {{plan}} per usarlo.",
       "planBodyAny": "Continua ora con un modello gratuito, oppure passa a un piano superiore per usarlo."
     }
+  },
+  "creditThreshold": {
+    "half": {
+      "title": "Hai usato metà dei tuoi crediti gratuiti",
+      "body": "Te ne restano {{left}} su {{total}}.",
+      "estimateBuilds_one": "Bastano per circa {{count}} altra build come quelle di oggi.",
+      "estimateBuilds_other": "Bastano per circa {{count}} altre build come quelle di oggi.",
+      "estimateMessages_one": "Bastano per circa {{count}} altro messaggio del bot come quelli di oggi.",
+      "estimateMessages_other": "Bastano per circa {{count}} altri messaggi del bot come quelli di oggi.",
+      "estimateTasks_one": "Bastano per circa {{count}} altra attività come quelle di oggi.",
+      "estimateTasks_other": "Bastano per circa {{count}} altre attività come quelle di oggi."
+    },
+    "low": {
+      "title": "Solo {{left}} crediti gratuiti rimasti",
+      "urge": "Fai l'upgrade ora così il tuo lavoro non si ferma a metà.",
+      "estimateBuilds_one": "Bastano per circa {{count}} altra build.",
+      "estimateBuilds_other": "Bastano per circa {{count}} altre build.",
+      "estimateMessages_one": "Bastano per circa {{count}} altro messaggio del bot.",
+      "estimateMessages_other": "Bastano per circa {{count}} altri messaggi del bot.",
+      "estimateTasks_one": "Bastano per circa {{count}} altra attività.",
+      "estimateTasks_other": "Bastano per circa {{count}} altre attività."
+    },
+    "meterLabel": "{{used}} crediti gratuiti usati su {{total}}",
+    "used": "{{used}} usati",
+    "left": "{{left}} rimasti",
+    "benefit": {
+      "credits": "{{credits}} crediti ogni mese, {{times}} volte il piano gratuito",
+      "creditsOnly": "{{credits}} crediti ogni mese",
+      "models": "Modelli migliori: {{models}}",
+      "media": "Generazione di immagini e video",
+      "agents": "Agenti personali in Abacus AI Agent sul web attivi 24/7: risposte automatiche su WhatsApp, Discord e Telegram, tutte le tue routine e tutto ciò che fa il tuo bot"
+    },
+    "upgradeIntro": "Upgrade · {{price}} il primo mese",
+    "upgradeMonthly": "Upgrade · {{price}}/mese",
+    "upgrade": "Upgrade",
+    "continueFree": "Continua gratis"
   }
 }

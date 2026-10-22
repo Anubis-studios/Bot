@@ -4539,5 +4539,41 @@
       "planBody": "Şimdi ücretsiz bir modelle devam et ya da kullanmak için {{plan}} planına yükselt.",
       "planBodyAny": "Şimdi ücretsiz bir modelle devam et ya da kullanmak için planını yükselt."
     }
+  },
+  "creditThreshold": {
+    "half": {
+      "title": "Ücretsiz kredilerinin yarısını kullandın",
+      "body": "{{total}} krediden {{left}} kaldı.",
+      "estimateBuilds_one": "Bugünkü gibi yaklaşık {{count}} derleme daha yapmaya yeter.",
+      "estimateBuilds_other": "Bugünkü gibi yaklaşık {{count}} derleme daha yapmaya yeter.",
+      "estimateMessages_one": "Bugünkü gibi yaklaşık {{count}} bot mesajına daha yeter.",
+      "estimateMessages_other": "Bugünkü gibi yaklaşık {{count}} bot mesajına daha yeter.",
+      "estimateTasks_one": "Bugünkü gibi yaklaşık {{count}} görev daha yapmaya yeter.",
+      "estimateTasks_other": "Bugünkü gibi yaklaşık {{count}} görev daha yapmaya yeter."
+    },
+    "low": {
+      "title": "Yalnızca {{left}} ücretsiz kredi kaldı",
+      "urge": "İşin yarıda kalmasın diye şimdi yükselt.",
+      "estimateBuilds_one": "Yaklaşık {{count}} derleme daha yapmaya yeter.",
+      "estimateBuilds_other": "Yaklaşık {{count}} derleme daha yapmaya yeter.",
+      "estimateMessages_one": "Yaklaşık {{count}} bot mesajına daha yeter.",
+      "estimateMessages_other": "Yaklaşık {{count}} bot mesajına daha yeter.",
+      "estimateTasks_one": "Yaklaşık {{count}} görev daha yapmaya yeter.",
+      "estimateTasks_other": "Yaklaşık {{count}} görev daha yapmaya yeter."
+    },
+    "meterLabel": "{{total}} ücretsiz krediden {{used}} kullanıldı",
+    "used": "{{used}} kullanıldı",
+    "left": "{{left}} kaldı",
+    "benefit": {
+      "credits": "Her ay {{credits}} kredi, ücretsiz planın {{times}} katı",
+      "creditsOnly": "Her ay {{credits}} kredi",
+      "models": "En iyi modeller: {{models}}",
+      "media": "Görsel ve video oluşturma",
+      "agents": "Web'deki Abacus AI Agent'ta 7/24 çalışan kişisel ajanlar: WhatsApp, Discord ve Telegram otomatik yanıtları, tüm rutinlerin ve botunun yaptığı her şey"
+    },
+    "upgradeIntro": "Yükselt · ilk ay {{price}}",
+    "upgradeMonthly": "Yükselt · aylık {{price}}",
+    "upgrade": "Yükselt",
+    "continueFree": "Ücretsiz devam et"
   }
 }

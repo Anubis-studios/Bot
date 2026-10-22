@@ -43,6 +43,13 @@ export const FUNNEL_STEPS = [
   "routellm_nudge_shown",
   "routellm_nudge_switched",
   "routellm_nudge_kept",
+  // A free account's credit milestone card (credit-thresholds.ts).
+  "credit_card_50_shown",
+  "credit_card_50_upgrade",
+  "credit_card_50_continue",
+  "credit_card_80_shown",
+  "credit_card_80_upgrade",
+  "credit_card_80_continue",
 ] as const;
 
 export type FunnelStep = (typeof FUNNEL_STEPS)[number];

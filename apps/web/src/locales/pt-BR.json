@@ -4539,5 +4539,41 @@
       "planBody": "Continue agora com um modelo gratuito, ou faça upgrade para o {{plan}} para usá-lo.",
       "planBodyAny": "Continue agora com um modelo gratuito, ou faça upgrade do seu plano para usá-lo."
     }
+  },
+  "creditThreshold": {
+    "half": {
+      "title": "Você usou metade dos seus créditos grátis",
+      "body": "Restam {{left}} de {{total}}.",
+      "estimateBuilds_one": "Dá para cerca de {{count}} build a mais como os de hoje.",
+      "estimateBuilds_other": "Dá para cerca de {{count}} builds a mais como os de hoje.",
+      "estimateMessages_one": "Dá para cerca de {{count}} mensagem do bot a mais como as de hoje.",
+      "estimateMessages_other": "Dá para cerca de {{count}} mensagens do bot a mais como as de hoje.",
+      "estimateTasks_one": "Dá para cerca de {{count}} tarefa a mais como as de hoje.",
+      "estimateTasks_other": "Dá para cerca de {{count}} tarefas a mais como as de hoje."
+    },
+    "low": {
+      "title": "Restam só {{left}} créditos grátis",
+      "urge": "Faça upgrade agora para o seu trabalho não parar no meio.",
+      "estimateBuilds_one": "Dá para cerca de {{count}} build a mais.",
+      "estimateBuilds_other": "Dá para cerca de {{count}} builds a mais.",
+      "estimateMessages_one": "Dá para cerca de {{count}} mensagem do bot a mais.",
+      "estimateMessages_other": "Dá para cerca de {{count}} mensagens do bot a mais.",
+      "estimateTasks_one": "Dá para cerca de {{count}} tarefa a mais.",
+      "estimateTasks_other": "Dá para cerca de {{count}} tarefas a mais."
+    },
+    "meterLabel": "{{used}} de {{total}} créditos grátis usados",
+    "used": "{{used}} usados",
+    "left": "{{left}} restantes",
+    "benefit": {
+      "credits": "{{credits}} créditos todo mês, {{times}}x o plano grátis",
+      "creditsOnly": "{{credits}} créditos todo mês",
+      "models": "Melhores modelos: {{models}}",
+      "media": "Geração de imagens e vídeos",
+      "agents": "Agentes pessoais no Abacus AI Agent na web que funcionam 24/7: respostas automáticas no WhatsApp, Discord e Telegram, todas as suas rotinas e tudo o que o seu bot faz"
+    },
+    "upgradeIntro": "Fazer upgrade · {{price}} no primeiro mês",
+    "upgradeMonthly": "Fazer upgrade · {{price}}/mês",
+    "upgrade": "Fazer upgrade",
+    "continueFree": "Continuar grátis"
   }
 }
