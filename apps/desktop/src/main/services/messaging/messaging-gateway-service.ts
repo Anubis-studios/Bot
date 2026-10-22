@@ -42,6 +42,7 @@ import {
   chatLineForCreditThreshold,
   chatReplyForFailure,
   contactFailureNotice,
+  EMPTY_REPLY_CODE,
   FailureReplyThrottle,
   failureKind,
   wantsUpgradeUrl,
@@ -64,12 +65,14 @@ import {
   readFieldValue,
   readGatewaySettings,
   readStoredMessageLog,
+  readStoredOutbox,
   recordPairingRequest,
   revokePairing,
   saveGatewaySettings,
   savePlatformValues,
   setPlatformEnabled,
   writeStoredMessageLog,
+  writeStoredOutbox,
 } from "./messaging-config-service";
 import type { SenderCandidate } from "./sender-resolution";
 import { TelegramWebConnector } from "./telegram-web-connector";
@@ -326,6 +329,28 @@ const SYNC_WATCH_POLL_MS = 2_000;
 /** How long appendLog batches writes before the log touches disk. */
 const MESSAGE_LOG_SAVE_DELAY_MS = 1_000;
 
+/**
+ * A message that failed every immediate attempt is kept on disk and tried
+ * again after these waits (and whenever its platform connects), across a
+ * restart too. Past the last, or a day old, the user is told it never went.
+ */
+const OUTBOX_RETRY_MS = [5 * 60_000, 30 * 60_000];
+const OUTBOX_MAX_AGE_MS = 24 * 60 * 60_000;
+/** After a start, the connectors get this long to come up before a retry. */
+const OUTBOX_STARTUP_DELAY_MS = 60_000;
+
+type OutboxEntry = {
+  platform: MessagingPlatformId;
+  chatId: string;
+  text: string;
+  replyContext?: Record<string, string>;
+  /** Who it was for, for the notice if it never goes. */
+  userName: string | null;
+  firstFailedAt: number;
+  /** Later attempts made; the immediate ones are not counted. */
+  tries: number;
+};
+
 /** A conversation in flight: which session it owns and what it's waiting on. */
 type Route = {
   platform: MessagingPlatformId;
@@ -379,6 +404,14 @@ type Route = {
    * The turn does not finish until it has gone, so nothing overtakes it.
    */
   failureReply: Promise<void> | null;
+  /**
+   * This turn has reached the chat: a reply, the agent's own send, or its
+   * decision not to answer (NO_REPLY). A turn that ends without any of these,
+   * and without a failure line, has said nothing, and the chat hears why.
+   */
+  delivered: boolean;
+  /** This turn's failure line is going or has gone; at most one per turn. */
+  failureSaid: boolean;
 };
 
 /** How long a login probe may take before the last known state is used. */
@@ -429,6 +462,11 @@ export class MessagingGatewayService {
   /** Everything seen and sent, oldest first, reloaded from the last run. */
   private readonly messageLog: ChatLogEntry[] =
     readStoredMessageLog() as ChatLogEntry[];
+  /** Messages still owed to a chat; see OUTBOX_RETRY_MS. */
+  private readonly outbox: OutboxEntry[] = (
+    readStoredOutbox() as OutboxEntry[]
+  ).filter((entry) => typeof entry?.chatId === "string");
+  private outboxTimer: ReturnType<typeof setTimeout> | null = null;
 
   /** Armed by appendLog; one write covers a burst of messages. */
   private logSaveTimer: NodeJS.Timeout | null = null;
@@ -454,6 +492,8 @@ export class MessagingGatewayService {
 
   constructor(private readonly options: GatewayOptions) {
     this.failureThrottle = new FailureReplyThrottle(options.now);
+    // Owed from the last run: tried once the connectors have had a moment.
+    if (this.outbox.length > 0) this.scheduleOutbox(OUTBOX_STARTUP_DELAY_MS);
   }
 
   /**
@@ -501,6 +541,8 @@ export class MessagingGatewayService {
   }
 
   async dispose(): Promise<void> {
+    if (this.outboxTimer != null) clearTimeout(this.outboxTimer);
+    this.outboxTimer = null;
     for (const timer of this.releasedLogins.values()) clearTimeout(timer);
     this.releasedLogins.clear();
     if (this.logSaveTimer != null) {
@@ -716,8 +758,13 @@ export class MessagingGatewayService {
     // A released login that landed is kept.
     if (state === "connected" || state === "syncing")
       this.clearReleasedLogin(platformId);
-    // A connector that made it back up has earned a fresh restart ladder.
-    if (state === "connected") this.restartBackoff.delete(platformId);
+    // A connector that made it back up has earned a fresh restart ladder,
+    // and what it still owes a chat goes now.
+    if (state === "connected") {
+      this.restartBackoff.delete(platformId);
+      if (this.outbox.some((entry) => entry.platform === platformId))
+        this.scheduleOutbox(0);
+    }
     // Every transition to the main log, so an export says what the card showed.
     console.log(
       `[messaging] ${platformId}: ${previous?.state ?? "(new)"} -> ${state}` +
@@ -1069,6 +1116,8 @@ export class MessagingGatewayService {
             ? handle.intro
             : null,
         failureReply: null,
+        delivered: false,
+        failureSaid: false,
       };
 
       if (existing != null) this.routesBySession.delete(existing.sessionId);
@@ -1166,6 +1215,8 @@ export class MessagingGatewayService {
       senderLabel: "",
       pendingIntro: null,
       failureReply: null,
+      delivered: false,
+      failureSaid: false,
     };
 
     if (existing != null) {
@@ -1202,6 +1253,8 @@ export class MessagingGatewayService {
     route.taggedReply = null;
     // A fresh turn may fill the queue again, and deserves to say so again.
     route.queueFullNotified = false;
+    route.delivered = false;
+    route.failureSaid = false;
     // Set at dispatch time, not arrival: the context must describe the message
     // this turn is answering, not one that queued behind it.
     route.replyContext = replyContext;
@@ -1338,20 +1391,11 @@ export class MessagingGatewayService {
         `[messaging] ${route.platform}:${route.chatId} turn failed: ${raw}`
       );
       this.flushReply(route);
-      const failure: TurnFailure = {
+      this.startFailureReply(route, {
         code: event.error?.code,
+        cause: event.error?.cause,
         actions: event.error?.actions ?? event.error?.segmentData?.actions,
-      };
-      route.failureReply = this.replyToFailure(route, failure)
-        .catch((error: unknown) => {
-          console.error(
-            `[messaging] ${route.platform}:${route.chatId} failure reply failed:`,
-            error
-          );
-        })
-        .finally(() => {
-          route.failureReply = null;
-        });
+      });
       return;
     }
 
@@ -1394,7 +1438,10 @@ export class MessagingGatewayService {
     route.taggedReply = null;
 
     // The agent's way of sending nothing; the sentinel must never reach a chat.
-    if (reply === "NO_REPLY") return;
+    if (reply === "NO_REPLY") {
+      route.delivered = true;
+      return;
+    }
 
     // Words addressed to the user, about to be said to their friend. The
     // preamble forbids it, but an instruction the model can forget is not a
@@ -1428,6 +1475,7 @@ export class MessagingGatewayService {
    * text is withheld (see relayingSession) precisely so this stands alone.
    */
   private deliver(route: Route, text: string): void {
+    route.delivered = true;
     const words = forChat(text, route.platform);
     void this.safeSend(route.platform, route.chatId, words, route.replyContext);
     if (!route.viaBot) return;
@@ -1463,18 +1511,20 @@ export class MessagingGatewayService {
       own != null &&
       own.platform === route.platform &&
       own.chatId === route.userId;
+    const words = await channelWords(
+      channelLocale(
+        readUserLanguage()?.name ?? null,
+        this.options.appLanguage?.() ?? null
+      )
+    );
+    // Someone else's chat is never left on silence: a neutral line, nothing
+    // about why. A turn that merely said nothing may have meant to, so that
+    // one is the user's call, told to them below.
+    if (!isOwn && failureKind(failure) !== "empty")
+      this.deliver(route, words.t("outcome.channel.contactNeutral"));
     if (!isOwn && own == null) {
       console.log(
         `[messaging] ${route.platform}:${route.chatId} failed turn not reported: the platform has no own chat`
-      );
-      return;
-    }
-    if (
-      !isOwn &&
-      !this.failureThrottle.mayNotice(`${route.platform}:${route.chatId}`)
-    ) {
-      console.log(
-        `[messaging] ${route.platform}:${route.chatId} failed turn already reported to the user inside the window`
       );
       return;
     }
@@ -1493,12 +1543,6 @@ export class MessagingGatewayService {
         ? withinMs(fetchBillingPlan(false), UPGRADE_URL_WAIT_MS)
         : null,
     ]);
-    const words = await channelWords(
-      channelLocale(
-        readUserLanguage()?.name ?? null,
-        this.options.appLanguage?.() ?? null
-      )
-    );
     // The offer is throttled per chat it lands in, always the user's own.
     const ownChatKey = isOwn
       ? `${route.platform}:${route.chatId}`
@@ -1514,7 +1558,9 @@ export class MessagingGatewayService {
         topUpUrl: billing?.topUpUrl ?? upgradeUrl ?? fallback,
         billing,
       },
-      this.failureThrottle.repeat(ownChatKey, failureKind(failure))
+      // A contact went unanswered: the user hears the whole line every time,
+      // what stopped it and the way on, never the shortened reminder.
+      isOwn && this.failureThrottle.repeat(ownChatKey, failureKind(failure))
     );
     if (line == null) return;
     if (isOwn) this.deliver(route, line);
@@ -1522,7 +1568,7 @@ export class MessagingGatewayService {
     else
       this.deliverToSelf(
         own,
-        contactFailureNotice(words, route.userName, line)
+        contactFailureNotice(words, route.userName, line, failureKind(failure))
       );
   }
 
@@ -1559,6 +1605,49 @@ export class MessagingGatewayService {
     void this.safeSend(own.platform, own.chatId, forChat(text, own.platform));
   }
 
+  /** Word and send the turn's failure line; the turn ends once it has gone. */
+  private startFailureReply(route: Route, failure: TurnFailure): void {
+    if (route.failureSaid) return;
+    route.failureSaid = true;
+    route.failureReply = this.replyToFailure(route, failure)
+      .catch((error: unknown) => {
+        console.error(
+          `[messaging] ${route.platform}:${route.chatId} failure reply failed:`,
+          error
+        );
+      })
+      .finally(() => {
+        route.failureReply = null;
+      });
+  }
+
+  /**
+   * A turn main ended itself: the inactivity watchdog, the agent process
+   * going away, or a Stop in the app. The agent's idle never reaches the
+   * route then, which used to hold the chat busy, and silent, for fifteen
+   * minutes. The chat hears why (not for a Stop, which the user chose), and
+   * the route is freed for what queued behind it.
+   */
+  noteTurnClosed(record: { sessionId: string; kind: string }): void {
+    const route = this.routesBySession.get(record.sessionId);
+    if (route == null || !route.busy) return;
+    if (record.kind === "stopped") {
+      // What a stopped turn had not said yet stays unsaid.
+      route.buffer = "";
+      route.taggedReply = null;
+      route.delivered = true;
+      this.finishTurn(route);
+      return;
+    }
+    if (record.kind !== "timed_out" && record.kind !== "agent_exited") return;
+    console.log(
+      `[messaging] ${route.platform}:${route.chatId} turn ended by the app: ${record.kind}`
+    );
+    this.flushReply(route);
+    this.startFailureReply(route, { code: record.kind });
+    this.finishTurn(route);
+  }
+
   /** Flush the buffered reply, free the route, start the next queued turn. */
   private finishTurn(route: Route): void {
     if (!route.busy) return;
@@ -1570,6 +1659,16 @@ export class MessagingGatewayService {
     }
 
     this.flushReply(route);
+    // Nothing reached the chat and nothing said why: the turn still ends on
+    // a line, never on silence.
+    if (!route.delivered && !route.failureSaid) {
+      console.log(
+        `[messaging] ${route.platform}:${route.chatId} turn ended with no reply`
+      );
+      this.startFailureReply(route, { code: EMPTY_REPLY_CODE });
+      void route.failureReply?.then(() => this.finishTurn(route));
+      return;
+    }
     route.busy = false;
     this.chatTurnEndedAt.set(
       route.sessionId,
@@ -1684,8 +1783,17 @@ export class MessagingGatewayService {
       }
     }
     console.error(
-      `[messaging] ${platformId} send to ${chatId} failed after ${delays.length} attempts, giving up`
+      `[messaging] ${platformId} send to ${chatId} failed after ${delays.length} attempts, kept to retry`
     );
+    this.park({
+      platform: platformId,
+      chatId,
+      text,
+      ...(replyContext != null ? { replyContext } : {}),
+      userName: this.routes.get(`${platformId}:${chatId}`)?.userName ?? null,
+      firstFailedAt: this.options.now?.() ?? Date.now(),
+      tries: 0,
+    });
     this.appendLog({
       platform: platformId,
       chatId,
@@ -1697,6 +1805,120 @@ export class MessagingGatewayService {
       direction: "out",
       at: new Date().toISOString(),
     });
+  }
+
+  /** The agent answered a chat with its own send: that turn has reached it. */
+  private noteAgentSent(platformId: MessagingPlatformId, chatId: string): void {
+    const route = this.routes.get(`${platformId}:${chatId}`);
+    if (route?.busy === true) route.delivered = true;
+  }
+
+  /** Keep a message that could not go, and try it again later. */
+  private park(entry: OutboxEntry): void {
+    this.outbox.push(entry);
+    this.saveOutbox();
+    this.scheduleOutbox(OUTBOX_RETRY_MS[0] ?? 0);
+  }
+
+  private scheduleOutbox(delayMs: number): void {
+    if (this.outboxTimer != null) clearTimeout(this.outboxTimer);
+    this.outboxTimer = setTimeout(() => {
+      this.outboxTimer = null;
+      void this.flushOutbox();
+    }, delayMs);
+    this.outboxTimer.unref?.();
+  }
+
+  /** One more attempt at everything owed; what still fails waits longer. */
+  private async flushOutbox(): Promise<void> {
+    const now = (): number => this.options.now?.() ?? Date.now();
+    // A copy: entries that go, or are given up on, leave the outbox as it runs.
+    for (const entry of this.outbox.slice()) {
+      const connector = this.connectors.get(entry.platform);
+      let sent = false;
+      if (connector != null) {
+        try {
+          await connector.sendText(
+            entry.chatId,
+            entry.text,
+            entry.replyContext
+          );
+          sent = true;
+        } catch (error) {
+          console.error(
+            `[messaging] ${entry.platform} retry of an undelivered message failed:`,
+            error
+          );
+        }
+      }
+      if (sent) {
+        this.dropFromOutbox(entry);
+        this.appendLog({
+          platform: entry.platform,
+          chatId: entry.chatId,
+          userId: "me",
+          userName: null,
+          text: entry.text,
+          direction: "out",
+          at: new Date(now()).toISOString(),
+        });
+        continue;
+      }
+      entry.tries += 1;
+      if (
+        entry.tries >= OUTBOX_RETRY_MS.length ||
+        now() - entry.firstFailedAt > OUTBOX_MAX_AGE_MS
+      ) {
+        this.dropFromOutbox(entry);
+        await this.tellUndelivered(entry);
+      }
+    }
+    this.saveOutbox();
+    const next = Math.min(
+      ...this.outbox.map(
+        (entry) =>
+          OUTBOX_RETRY_MS[Math.min(entry.tries, OUTBOX_RETRY_MS.length - 1)] ??
+          0
+      )
+    );
+    if (this.outbox.length > 0) this.scheduleOutbox(next);
+  }
+
+  private dropFromOutbox(entry: OutboxEntry): void {
+    const at = this.outbox.indexOf(entry);
+    if (at >= 0) this.outbox.splice(at, 1);
+  }
+
+  /** The user's own chat hears which message never went, unless it was theirs. */
+  private async tellUndelivered(entry: OutboxEntry): Promise<void> {
+    console.error(
+      `[messaging] ${entry.platform} message to ${entry.chatId} given up on`
+    );
+    const own = this.selfChatOf(entry.platform);
+    if (
+      own == null ||
+      (own.platform === entry.platform && own.chatId === entry.chatId)
+    )
+      return;
+    const words = await channelWords(
+      channelLocale(
+        readUserLanguage()?.name ?? null,
+        this.options.appLanguage?.() ?? null
+      )
+    );
+    const name =
+      entry.userName != null && entry.userName.trim().length > 0
+        ? entry.userName.trim()
+        : words.t("outcome.channel.someone");
+    this.deliverToSelf(own, words.t("outcome.channel.undelivered", { name }));
+  }
+
+  private saveOutbox(): void {
+    try {
+      writeStoredOutbox(this.outbox);
+    } catch (error) {
+      console.error("[messaging] could not persist the outbox:", error);
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -2302,6 +2524,7 @@ export class MessagingGatewayService {
       text = `[${from.name}] ${text}`;
     text = forChat(text, platformId);
     await connector.sendText(target, text);
+    this.noteAgentSent(platformId, target);
     this.appendLog({
       platform: platformId,
       chatId: target,
@@ -2335,6 +2558,7 @@ export class MessagingGatewayService {
     await this.awaitReady(platformId);
     const target = this.resolveTarget(platformId, chatId);
     await connector.sendFile(target, filePath, caption);
+    this.noteAgentSent(platformId, target);
     this.appendLog({
       platform: platformId,
       chatId: target,

@@ -21,6 +21,35 @@ import type { StoredTranscript } from "../session/transcript-service";
 /** The entry type of an AG-UI message part in the upload log. */
 export const AGUI_ENTRY_TYPE = "ui-message-part";
 
+/** The entry type of a turn's ending in the upload log. */
+export const TURN_OUTCOME_ENTRY_TYPE = "turn-outcome";
+
+interface TurnRecordLike {
+  turnId: string;
+  kind: string;
+  cause?: string;
+  startedAt: number;
+  endedAt: number;
+}
+
+/**
+ * One entry per closed turn. Neither the v1 segments nor the AG-UI message
+ * parts carry how a turn ended (an error card, a timeout, a turn that said
+ * nothing), so without these the upload cannot tell a failed turn from one
+ * that answered.
+ */
+export const outcomeSyncEntries = (
+  records: readonly TurnRecordLike[]
+): Array<Record<string, unknown>> =>
+  records.map((record) => ({
+    id: `${TURN_OUTCOME_ENTRY_TYPE}:${record.turnId}`,
+    type: TURN_OUTCOME_ENTRY_TYPE,
+    kind: record.kind,
+    ...(record.cause != null ? { cause: record.cause } : {}),
+    startedAt: record.startedAt,
+    at: record.endedAt,
+  }));
+
 interface MessageLike {
   id?: unknown;
   role?: unknown;
@@ -92,6 +121,7 @@ export const syncLogFor = (
   sources: {
     readV1(sessionId: string): StoredTranscript | null;
     readThread(sessionId: string): ThreadLike | null;
+    readOutcomes?(sessionId: string): readonly TurnRecordLike[];
   }
 ): StoredTranscript | null => {
   const v1 = sources.readV1(sessionId);
@@ -104,11 +134,12 @@ export const syncLogFor = (
   const agui =
     thread?.source.kind === "agui" ? aguiSyncEntries(thread.messages) : [];
   if (v1 == null && agui.length === 0) return null;
-  if (agui.length === 0) return v1;
+  const outcomes = outcomeSyncEntries(sources.readOutcomes?.(sessionId) ?? []);
+  if (agui.length === 0 && outcomes.length === 0) return v1;
   return {
     version: 1,
     sessionId,
     updatedAt: thread?.updatedAt ?? v1?.updatedAt ?? "",
-    segments: [...(v1?.segments ?? []), ...agui],
+    segments: [...(v1?.segments ?? []), ...agui, ...outcomes],
   };
 };

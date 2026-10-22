@@ -53,6 +53,9 @@ export type FailureKind =
   | "free-pool-out"
   | "model-unavailable"
   | "connection"
+  | "timed-out"
+  | "agent-exited"
+  | "empty"
   | "generic";
 
 /** Where the chat's upgrade and top-up lines point, and what they offer. */
@@ -73,6 +76,9 @@ const ABACUS_BILLING_URL = "https://apps.abacus.ai/chatllm/admin/profile";
 
 const NETWORK_UNREACHABLE_CODE = "network_unreachable";
 
+/** A turn that ended with nothing for the chat and no error saying why. */
+export const EMPTY_REPLY_CODE = "empty_reply";
+
 /** Whose own key failed: the own-key offer, or the key to fix. */
 const ownKeyAction = (error: TurnFailure) =>
   error.actions?.find((action) => action.type === "own-key-unavailable") ??
@@ -92,6 +98,10 @@ export const failureKind = (error: TurnFailure): FailureKind => {
   if (types.has("free-pool-out")) return "free-pool-out";
   if (error.code === "model_unavailable") return "model-unavailable";
   if (error.code === NETWORK_UNREACHABLE_CODE) return "connection";
+  // Endings main decides: the inactivity watchdog, the agent going away.
+  if (error.code === "timed_out") return "timed-out";
+  if (error.code === "agent_exited") return "agent-exited";
+  if (error.code === EMPTY_REPLY_CODE) return "empty";
   return "generic";
 };
 
@@ -139,7 +149,7 @@ const ownKeyLead = (words: ChannelWords, error: TurnFailure): string => {
 
 /**
  * The single place a failed turn becomes chat words. Someone else's chat gets
- * nothing: no error, no offer, only what the agent itself had produced. With
+ * none of these: no error, no offer, only the gateway's neutral line. With
  * `repeat`, the offer already went to this chat inside the throttle window, so
  * the line shrinks to a reminder.
  */
@@ -239,6 +249,12 @@ export const chatReplyForFailure = (
       return t("outcome.channel.notSignedIn");
     case "connection":
       return t("outcome.channel.connection");
+    case "timed-out":
+      return t("outcome.channel.timedOut");
+    case "agent-exited":
+      return t("outcome.channel.agentExited");
+    case "empty":
+      return t("outcome.channel.empty");
     case "generic":
       return t("outcome.channel.generic");
   }
@@ -283,12 +299,16 @@ export const chatLineForCreditThreshold = (
 export const contactFailureNotice = (
   words: ChannelWords,
   contactName: string | null,
-  ownLine: string
+  ownLine: string,
+  kind?: FailureKind
 ): string => {
   const name =
     contactName != null && contactName.trim().length > 0
       ? contactName.trim()
       : words.t("outcome.channel.someone");
+  // Nothing went out to them, not even the neutral line: the user decides.
+  if (kind === "empty")
+    return words.t("outcome.channel.contactEmpty", { name });
   return ownLine === words.t("outcome.channel.generic")
     ? words.t("outcome.channel.contactFailedGeneric", { name })
     : `${words.t("outcome.channel.contactFailed", { name })} ${ownLine}`;
@@ -303,7 +323,6 @@ export const FAILURE_REPLY_WINDOW_MS = 6 * 60 * 60_000;
  */
 export class FailureReplyThrottle {
   private readonly offered = new Map<string, number>();
-  private readonly noticed = new Map<string, number>();
 
   constructor(private readonly now: () => number = Date.now) {}
 
@@ -317,15 +336,13 @@ export class FailureReplyThrottle {
       kind === "model-unavailable" ||
       kind === "generic" ||
       kind === "connection" ||
-      kind === "key-rejected"
+      kind === "key-rejected" ||
+      kind === "timed-out" ||
+      kind === "agent-exited" ||
+      kind === "empty"
     )
       return false;
     return !this.claim(this.offered, `${chatKey}:${kind}`);
-  }
-
-  /** Whether a contact-failure notice for this contact may go now. */
-  mayNotice(contactKey: string): boolean {
-    return this.claim(this.noticed, contactKey);
   }
 
   private claim(seen: Map<string, number>, key: string): boolean {

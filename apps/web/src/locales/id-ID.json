@@ -4519,7 +4519,13 @@
       "contactFailedGeneric": "Aku tidak bisa membalas {{name}} barusan: ada yang salah di sisiku.",
       "someone": "seseorang",
       "payment": "Saya berhenti sejenak karena kami tidak dapat mengonfirmasi pembayaran terakhir Anda. Jika langganan Anda aktif, hubungi support@abacus.ai dan jangan membeli lagi. Penagihan: {{link}}",
-      "paymentLapsed": "Saya berhenti sejenak karena langganan Abacus.AI Anda telah berakhir. Perpanjang di sini: {{link}}"
+      "paymentLapsed": "Saya berhenti sejenak karena langganan Abacus.AI Anda telah berakhir. Perpanjang di sini: {{link}}",
+      "timedOut": "Itu terlalu lama dan dihentikan sebelum saya sempat membalas. Kirim lagi untuk melanjutkan.",
+      "agentExited": "Aplikasi berhenti sebelum saya sempat membalas. Kirim lagi untuk melanjutkan.",
+      "empty": "Saya tidak bisa menyusun balasan untuk itu. Silakan kirim lagi.",
+      "contactNeutral": "Maaf, saya belum bisa membalas sekarang. Saya akan segera menghubungi Anda.",
+      "contactEmpty": "Saya tidak membalas {{name}}: tidak ada jawaban yang kembali. Buka aplikasi untuk membalasnya, atau beri tahu saya apa yang harus dikatakan.",
+      "undelivered": "Pesan untuk {{name}} tidak dapat dikirim."
     },
     "unavailable": {
       "title": {

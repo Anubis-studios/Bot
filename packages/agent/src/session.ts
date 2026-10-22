@@ -119,6 +119,7 @@ import {
 } from "./openllm-router.js";
 import { OPENLLM_ID, failureStatus, isOpenLlmReference } from "./openllm.js";
 import { refreshOpenRouterLive } from "./openrouter-live.js";
+import { OwnedTurn } from "./owned-turn.js";
 import { PendingSteers } from "./pending-steers.js";
 import {
   gateToolCall,
@@ -138,6 +139,7 @@ import {
   type PermissionRequest,
   type SkillMetadata,
   type ToolRequest,
+  type TurnOutcome,
 } from "./protocol.js";
 import {
   createModelRuntime,
@@ -788,6 +790,8 @@ export class AbacusBotSession {
   private continuingPastMalformedToolCall = false;
   /** Whether a user turn is in flight: a refresh landing now is mid-turn. */
   private turnRunning = false;
+  /** The turn the running `send` owns; its end waits for the send's report. */
+  private ownedTurn: OwnedTurn | null = null;
   /**
    * A model call that has gone silent. Nothing in the stack ends a stalled
    * stream before the desktop's ten-minute watchdog: a response the server
@@ -827,8 +831,6 @@ export class AbacusBotSession {
    */
   private pendingLanguageRepair: ReplyLanguageMismatch | null = null;
   private languageRepairsThisTurn = 0;
-  /** The run that ended the turn answered with no text and no tool call. */
-  private turnEndedEmpty = false;
   /** The turn's recoveries from an empty reply (empty-reply.ts). */
   private readonly emptyReplies = new EmptyReplies();
   /** The same model is to be asked again, out of sight, for its answer. */
@@ -1346,6 +1348,20 @@ export class AbacusBotSession {
   // ---------------------------------------------------------------- commands
 
   async send(text: string, turn?: TurnHandle): Promise<void> {
+    const slot: { owned?: OwnedTurn } = {};
+    try {
+      await this.sendTurn(text, turn, slot);
+    } finally {
+      // Whatever path the send left by, its turn closes, and only once.
+      if (slot.owned != null) this.closeOwnedTurn(slot.owned);
+    }
+  }
+
+  private async sendTurn(
+    text: string,
+    turn: TurnHandle | undefined,
+    slot: { owned?: OwnedTurn }
+  ): Promise<void> {
     const session = this.requireSession();
 
     // The last turn died on credits or credentials. Whatever the user did
@@ -1388,7 +1404,6 @@ export class AbacusBotSession {
     this.networkFailureReported = false;
     this.languageRepairsThisTurn = 0;
     this.pendingLanguageRepair = null;
-    this.turnEndedEmpty = false;
     this.emptyReplies.begin();
     this.pendingEmptyAsk = false;
     this.mcpTools.atTurnStart();
@@ -1398,6 +1413,9 @@ export class AbacusBotSession {
     this.pendingStall = null;
     this.stallFailureReported = false;
     this.turnRunning = true;
+    const owned = new OwnedTurn();
+    this.ownedTurn = owned;
+    slot.owned = owned;
     // A rotation left over from a stopped turn must not fire here.
     this.pendingOpenLlmRotation = null;
     // A new message is a new answer; last turn's decline does not carry over.
@@ -1406,6 +1424,7 @@ export class AbacusBotSession {
     // At the credit wall the turn waits for the user's choice: it never
     // starts on a weaker model they have not chosen.
     if (await this.stopAtCreditWall()) {
+      this.closeOwnedTurn(owned);
       turn?.settled?.();
       return;
     }
@@ -1428,6 +1447,7 @@ export class AbacusBotSession {
       await session.prompt(text);
       await this.continuePastRecoverableFailures();
       this.reportTurnFailure();
+      this.closeOwnedTurn(owned);
       turn?.settled?.();
     } catch (error) {
       // A thrown provider error gets the same words as a reported turn
@@ -1435,8 +1455,18 @@ export class AbacusBotSession {
       const raw = describe(error);
       this.router.chain.failed(raw, this.session?.model?.provider);
       this.reportFailure();
+      // A throw before pi's agent_end left the turn running: end it, or the
+      // session stays busy with nothing left to say so.
+      if (this.turnRunning) this.finishTurn();
+      this.closeOwnedTurn(owned);
       turn?.settled?.();
     }
+  }
+
+  /** Emit the owned turn's held end with its outcome; see OwnedTurn. */
+  private closeOwnedTurn(owned: OwnedTurn): void {
+    if (this.ownedTurn === owned) this.ownedTurn = null;
+    owned.close(this.interrupted);
   }
 
   /**
@@ -1481,7 +1511,7 @@ export class AbacusBotSession {
       this.router.chain.failed(message, this.session?.model?.provider);
     // Still nothing after the recoveries: the turn ends on the empty-reply
     // card, never in silence.
-    else if (this.turnEndedEmpty)
+    else if (this.ownedTurn?.endedEmpty === true)
       this.router.chain.failed(
         EMPTY_REPLY_FAILURE,
         this.session?.model?.provider
@@ -2282,15 +2312,30 @@ export class AbacusBotSession {
               : {}),
           }
         : this.lastTurnUsage;
-    this.emitAgentEvent({
-      type: "turn_complete",
-      ...(usage != null ? { usage } : {}),
-    });
     this.lastTurnUsage = null;
-    this.emitAgentEvent({
-      type: "status_changed",
-      status: AgentStatus.Idle,
-    });
+    const end = (outcome?: TurnOutcome): void => {
+      this.emitAgentEvent({
+        type: "turn_complete",
+        ...(outcome != null ? { outcome } : {}),
+        ...(usage != null ? { usage } : {}),
+      });
+      this.emitAgentEvent({
+        type: "status_changed",
+        status: AgentStatus.Idle,
+      });
+    };
+    // A send's turn ends after the send has said why (OwnedTurn); a run pi
+    // started on its own has no send to wait for.
+    const owned = this.ownedTurn;
+    if (!this.interrupted && owned?.hold(end) === true) return;
+    // A stopped turn ends now: nothing is left to report, and a Stop or a
+    // reset must not see the old turn's end arrive after it.
+    if (this.interrupted && owned != null) {
+      owned.hold(end);
+      this.closeOwnedTurn(owned);
+      return;
+    }
+    end();
   }
 
   /**
@@ -2938,7 +2983,9 @@ export class AbacusBotSession {
 
         // A call that answered ends any outage this turn was riding out.
         if (runMadeProgress(event.messages)) this.networkWait.reset();
-        this.turnEndedEmpty = !this.interrupted && endedEmpty(event.messages);
+        // The run that ends the turn is the last to set it.
+        if (this.ownedTurn != null)
+          this.ownedTurn.endedEmpty = endedEmpty(event.messages);
         // The network's failure is checked (and waited out) before anything
         // reads it as the model's: no cooldown, no rotation, no compaction.
         this.pendingNetworkFailure =
@@ -3003,7 +3050,8 @@ export class AbacusBotSession {
         // than ending on silence (EmptyReplies).
         const emptyStep =
           !event.willRetry &&
-          this.turnEndedEmpty &&
+          !this.interrupted &&
+          this.ownedTurn?.endedEmpty === true &&
           !this.continuingPastMalformedToolCall &&
           this.pendingContextCompaction == null &&
           this.pendingOpenLlmRotation == null &&
@@ -3768,6 +3816,8 @@ export class AbacusBotSession {
 
   private emitAgentEvent(event: AgentEvent, meta?: EventMeta): void {
     if (meta != null) tagEvent(event, meta);
+    if (event.type === "error" && meta?.origin !== "startup")
+      this.ownedTurn?.noteError(event.error);
     this.options.emit({ type: "event", event });
   }
 

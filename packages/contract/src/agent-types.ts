@@ -150,6 +150,14 @@ export interface ToolDisplayData {
   lineCount?: number;
 }
 
+/** How a turn ended, as the agent that ran it saw it. */
+export interface TurnOutcome {
+  /** `empty`: the last call answered with no text and no tool call. */
+  kind: "reply" | "failed" | "empty" | "stopped";
+  /** For `failed`: the reported error's cause (turn-outcome.ts) or code. */
+  cause?: string;
+}
+
 export type AgentEvent =
   | { type: "status_changed"; status: AgentStatus }
   // A change of `messageId` is a hard boundary: the renderer must start a new
@@ -190,6 +198,12 @@ export type AgentEvent =
   // once at startup; `reason` says why not.
   | {
       type: "turn_complete";
+      /**
+       * How the user-visible turn ended. Only on the turn_complete that closes
+       * a turn a send started, which comes after any error that turn reported
+       * and right before its idle; absent from older agents.
+       */
+      outcome?: TurnOutcome;
       /** The turn's last request; cache reads falling to zero mean the prefix changed. */
       usage?: {
         input: number;

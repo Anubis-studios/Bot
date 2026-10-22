@@ -4519,7 +4519,13 @@
       "contactFailedGeneric": "Não consegui responder a {{name}} agora há pouco: algo deu errado do meu lado.",
       "someone": "alguém",
       "payment": "Pausei porque não conseguimos confirmar seu último pagamento. Se sua assinatura estiver ativa, fale com support@abacus.ai e não compre de novo. Cobrança: {{link}}",
-      "paymentLapsed": "Pausei porque sua assinatura da Abacus.AI terminou. Renove aqui: {{link}}"
+      "paymentLapsed": "Pausei porque sua assinatura da Abacus.AI terminou. Renove aqui: {{link}}",
+      "timedOut": "Demorou demais e foi interrompido antes que eu pudesse responder. Envie de novo para retomar.",
+      "agentExited": "O app fechou antes que eu pudesse responder. Envie de novo para retomar.",
+      "empty": "Não consegui montar uma resposta para isso. Envie de novo, por favor.",
+      "contactNeutral": "Desculpe, não consigo responder agora. Falo com você em breve.",
+      "contactEmpty": "Não respondi a {{name}}: nenhuma resposta voltou. Abra o app para responder ou me diga o que dizer.",
+      "undelivered": "Não foi possível entregar uma mensagem para {{name}}."
     },
     "unavailable": {
       "title": {

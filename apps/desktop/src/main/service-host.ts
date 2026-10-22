@@ -384,6 +384,7 @@ import {
   tailStderr,
   type AgentSessionDiagnostics,
 } from "./services/diagnostics/log-dump";
+import { logStore } from "./services/diagnostics/log-store";
 import { BuiltinMcpLifecycle } from "./services/mcp/builtin-mcp-lifecycle";
 import {
   BuiltinToolPermissions,
@@ -484,6 +485,7 @@ import { type StepEvent, StepEvents } from "./services/session/step-events";
 import { ThreadStore } from "./services/session/thread-store";
 import { TranscriptService } from "./services/session/transcript-service";
 import { TurnAbandoner } from "./services/session/turn-abandoner";
+import { TurnLedger } from "./services/session/turn-ledger";
 import { VaultClient } from "./services/vault/vault-client";
 import { Vault } from "./services/vault/vault-tools";
 import { WhisperModelService } from "./services/voice/whisper-model-service";
@@ -577,6 +579,26 @@ export class ServiceHost {
                 emittedAt: new Date().toISOString(),
               }),
           });
+    // A turn main ended itself never sends its idle: the chat app and the
+    // routine record hear about it from the ledger, and the upload gets it.
+    this.turnLedger.onClose((record) => {
+      this.messagingGatewayService.noteTurnClosed(record);
+      if (
+        (record.kind === "timed_out" || record.kind === "agent_exited") &&
+        this.agentSessionManagerService.isRoutineSession(record.sessionId)
+      )
+        this.settleRoutineRun(record.sessionId, {
+          type: "event",
+          event: {
+            type: "error",
+            error: {
+              message: `The run ended: ${record.kind}`,
+              code: record.kind,
+            },
+          },
+        });
+      this.debugSyncService.enqueue(record.sessionId);
+    });
     // A turn in any session (a chat, a bot, a routine with nobody watching)
     // that ends at the credit wall stamps it, so the card is there on the
     // next launch and every agent stops at it.
@@ -713,12 +735,19 @@ export class ServiceHost {
   private readonly transcriptService = new TranscriptService({
     threads: this.threadStore,
   });
+  /** How every turn ended, once each (TurnLedger); fed by the turn state below. */
+  private readonly turnLedger = new TurnLedger({
+    log: (line) => logStore().append("agent", line),
+    dir: () => path.join(abacusBotHome(), "turn-outcomes"),
+  });
   private readonly debugSyncService = new DebugSyncService({
-    // v1 segments plus an AG-UI thread's message parts (spec 03 §24.12 a).
+    // v1 segments plus an AG-UI thread's message parts (spec 03 §24.12 a),
+    // and how each turn ended, which neither of them records.
     readTranscript: (sessionId) =>
       syncLogFor(sessionId, {
         readV1: (id) => this.transcriptService.read(id),
         readThread: (id) => this.threadStore.readAguiFile(id),
+        readOutcomes: (id) => this.turnLedger.records(id),
       }),
     clientVersion: app.getVersion(),
   });
@@ -2557,7 +2586,8 @@ export class ServiceHost {
       // Actually stop it, or the slow tool's events would still be forwarded
       // when it finally lands and the session would go busy again.
       this.stopAgentTurn({ workspaceId, sessionId });
-    }
+    },
+    this.turnLedger
   );
 
   private readonly turnAbandoner = new TurnAbandoner({
