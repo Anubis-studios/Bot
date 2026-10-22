@@ -9,8 +9,8 @@ import {
   FALLBACK_LANGUAGE,
   matchSupportedLanguage,
   resolveAppLanguage,
-} from "@abacus-ai/contract/contract/languages";
-import type { SupportedLanguage } from "@abacus-ai/contract/contract/rows";
+  type SupportedLanguage,
+} from "@abacus-ai/contract/contract";
 
 export { FALLBACK_LANGUAGE, matchSupportedLanguage, type SupportedLanguage };
 
