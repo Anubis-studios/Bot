@@ -6,6 +6,7 @@
  */
 import { Type } from "typebox";
 
+import { mcpCallBudgetSeconds } from "../extensions/tool-timeouts.js";
 import {
   ATTACHMENT_TRUSTED_SERVER,
   AttachmentError,
@@ -13,7 +14,7 @@ import {
   rewriteAttachmentParams,
   saveAttachmentBlocks,
 } from "./attachments.js";
-import { McpHttpError } from "./client.js";
+import { McpHttpError, McpTimeoutError } from "./client.js";
 import type { ConnectedMcp } from "./index.js";
 
 interface PiToolDefinitionLike {
@@ -94,6 +95,21 @@ export function buildMcpToolDefinitions(
           at: { client: { name: string }; toolName: string },
           error: unknown
         ) {
+          if (error instanceof McpTimeoutError) {
+            // Stopped at its budget: the turn goes on without it.
+            return {
+              content: [
+                {
+                  type: "text" as const,
+                  text:
+                    `${tool.name} did not answer within ${mcpCallBudgetSeconds(tool.name)}s, so the call was stopped. ` +
+                    "Carry on without it: try a narrower request or another way, or tell the user what could not be done.",
+                },
+              ],
+              details: { server: at.client.name, tool: at.toolName },
+              isError: true,
+            };
+          }
           if (error instanceof AttachmentError) {
             // The model can fix these (wrong path, too big).
             return {
@@ -137,7 +153,8 @@ export function buildMcpToolDefinitions(
 
           const result = await route.client.callTool(
             route.toolName,
-            callParams
+            callParams,
+            mcpCallBudgetSeconds(tool.name) * 1_000
           );
 
           // Blob resources land in the workspace; the model gets the path.

@@ -7,7 +7,11 @@ import { fakePi } from "@abacus-ai/test-support/fake-pi";
  */
 import { describe, expect, it, vi } from "vitest";
 
-import { budgetSecondsFor, default as toolTimeouts } from "./tool-timeouts.js";
+import {
+  budgetSecondsFor,
+  mcpCallBudgetSeconds,
+  default as toolTimeouts,
+} from "./tool-timeouts.js";
 
 function withTimeouts() {
   const pi = fakePi();
@@ -33,7 +37,9 @@ describe("stamping a deadline", () => {
   // The reported case: `npx create-next-app` was killed at exactly 120s with
   // most of the work done. Two minutes is right for a command that hung; it
   // is wrong for one whose job is to download a dependency tree.
-  it("gives an install or a scaffold the full ceiling", async () => {
+  it("gives an install or a scaffold the install budget", async () => {
+    // A Windows installer or a dependency tree on a slow network runs for many
+    // minutes and still succeeds; at 600s it was killed mid-install.
     const pi = withTimeouts();
     for (const command of [
       "cd /tmp && npx --yes create-next-app@latest chess-game --ts",
@@ -41,11 +47,21 @@ describe("stamping a deadline", () => {
       "pnpm add -D vitest",
       "pip install -r requirements.txt",
       "git clone https://example.com/repo.git",
+      "winget install --id MiKTeX.MiKTeX --accept-source-agreements",
+      "composer create-project laravel/laravel app",
     ]) {
       const event = bashCall({ command });
       await pi.fire("tool_call", event);
-      expect(event.input.timeout).toBe(600);
+      expect(event.input.timeout).toBe(1800);
     }
+  });
+
+  it("lets an explicit budget on an install reach the install ceiling, and no further", async () => {
+    const pi = withTimeouts();
+    const event = bashCall({ command: "pip install torch", timeout: 9_999 });
+    await pi.fire("tool_call", event);
+
+    expect(event.input.timeout).toBe(1800);
   });
 
   it("still gives an ordinary command the short budget", async () => {
@@ -148,6 +164,11 @@ describe("declared budgets", () => {
     // Budgets live with the tool rather than in user config precisely so an
     // unrecognised name gets the default instead of silently getting none.
     expect(budgetSecondsFor("some_mcp_tool")).toBe(180);
+  });
+
+  it("gives an MCP tool call its budget: a connector's default, or the tool's own", () => {
+    expect(mcpCallBudgetSeconds("abacus-connectors_Gmail_Tool")).toBe(90);
+    expect(mcpCallBudgetSeconds("pdf")).toBe(300);
   });
 });
 

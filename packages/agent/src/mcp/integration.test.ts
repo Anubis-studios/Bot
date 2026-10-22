@@ -26,6 +26,8 @@ import { BATCH_EDIT_GUIDELINES } from "../extensions/edit-tool.js";
 import { IDENTITY_PROMPT } from "../persona.js";
 import type { DesktopEvent } from "../protocol.js";
 import { AbacusBotSession } from "../session.js";
+import { McpClient, type McpTransport } from "./client.js";
+import { buildMcpToolDefinitions } from "./tools.js";
 
 let provider: FakeProvider;
 let home: string;
@@ -265,6 +267,45 @@ describe("connecting", () => {
     await harness.session.send("look something up");
 
     expect(server.calls).toEqual([{ name: "lookup", args: { q: "widgets" } }]);
+  });
+
+  it("stops a call that outlives its budget and lets the turn go on", async () => {
+    // A connector that never answers used to hold the turn for the
+    // transport's 15 minutes; the model now hears it failed, at the budget.
+    const asked: Array<number | undefined> = [];
+    const transport: McpTransport = {
+      request: async (method, _params, timeoutMs) => {
+        if (method === "initialize") return {};
+        if (method === "tools/list")
+          return { tools: [{ name: "Gmail_Tool", inputSchema: {} }] };
+        asked.push(timeoutMs);
+        throw new DOMException("The operation timed out.", "TimeoutError");
+      },
+      notify: async () => {},
+      close: () => {},
+    } as McpTransport;
+    const client = await McpClient.connect("abacus-connectors", transport);
+    const [tool] = buildMcpToolDefinitions(() => ({
+      clients: [client],
+      statuses: [],
+      routes: new Map([
+        ["abacus-connectors_Gmail_Tool", { client, toolName: "Gmail_Tool" }],
+      ]),
+      tools: [
+        { name: "abacus-connectors_Gmail_Tool", description: "", schema: {} },
+      ],
+    }));
+
+    const result = await tool!.execute("call-1", {});
+
+    expect(asked).toEqual([90_000]);
+    expect(result.isError).toBe(true);
+    expect(result.content[0]).toMatchObject({
+      type: "text",
+      text: expect.stringContaining(
+        "did not answer within 90s, so the call was stopped"
+      ),
+    });
   });
 
   it("reports an unreachable server without taking the session down", async () => {

@@ -100,6 +100,24 @@ describe("the budgets the two packages have to agree on", () => {
     expect(MAX_VOUCHED_RUNTIME_MS).toBeGreaterThan(longest);
   });
 
+  it("vouches for an install until its own budget kills it", () => {
+    // Installs and scaffolds get their own, longer budget outside the table;
+    // the agent must report their timeout before the watchdog ends the turn.
+    const source = readFileSync(
+      resolve(
+        import.meta.dirname,
+        "../../../../../../packages/agent/src/extensions/tool-timeouts.ts"
+      ),
+      "utf8"
+    );
+    const install = Number(
+      /const INSTALL_SECONDS = ([\d_]+);/.exec(source)?.[1]?.replace(/_/g, "")
+    );
+
+    expect(install).toBeGreaterThan(0);
+    expect(MAX_VOUCHED_RUNTIME_MS).toBeGreaterThan(install * 1_000);
+  });
+
   it("gives up on a call long before the watchdog would be unreachable", () => {
     // The vouching limit plus the watchdog is the worst case for noticing a
     // tool that hung and cannot be killed. Keep it to something a person would

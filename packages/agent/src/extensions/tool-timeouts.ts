@@ -1,9 +1,11 @@
 /**
  * Tool-call budgets, enforced in one place so a command waiting on stdin
  * cannot park an unattended turn forever. Tools with a native timeout (bash)
- * get the budget stamped on the call and pi kills the process; everything else
- * gets a watchdog that can only report, since the extension API has no
- * per-call abort. Unknown tool names fall to DEFAULT_BUDGET_SECONDS.
+ * get the budget stamped on the call and pi kills the process; an MCP tool's
+ * call is given up on at its budget (mcpCallBudgetSeconds) and comes back to
+ * the model as a failed call, so the turn goes on. Everything else gets a
+ * watchdog that can only report, since the extension API has no per-call
+ * abort. Unknown tool names fall to DEFAULT_BUDGET_SECONDS.
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
@@ -34,12 +36,28 @@ const BUDGETS: Record<string, Budget> = {
   edit: { seconds: 30 },
   batch_edit: { seconds: 45 },
   batch_file_read: { seconds: 30 },
+  // Each provider request is cut at this (web/search.ts); web_fetch has its own 30s.
+  web_search: { seconds: 45 },
 };
 
 const DEFAULT_BUDGET_SECONDS = 180;
 
-/** pi rejects a bash timeout above its own ceiling; stay well inside it. */
+/**
+ * An MCP tool named nowhere above: a connector read or an app action, which
+ * answers in seconds when it answers at all. Past this the call is stopped
+ * and the model told, instead of the turn waiting the transport's 15 minutes.
+ */
+const MCP_DEFAULT_BUDGET_SECONDS = 90;
+
+/** The longest an explicit bash timeout may ask for. */
 const MAX_STAMPED_SECONDS = 600;
+
+/**
+ * What an install or a scaffold gets: a package manager on a slow network,
+ * or a Windows installer, runs for many minutes and still succeeds. Past it
+ * the command is killed and the turn goes on with what it printed.
+ */
+const INSTALL_SECONDS = 1_800;
 
 /**
  * Commands that fetch a dependency tree and reliably want minutes: for an
@@ -47,23 +65,36 @@ const MAX_STAMPED_SECONDS = 600;
  * Not backgrounded, because the next step needs their files.
  */
 const SLOW_COMMAND_PATTERN =
-  /\b(?:npm|pnpm|yarn|bun)\s+(?:i|add|install|ci|dlx|create)\b|\bnpx\b|\bcreate-(?:next|react|vite|expo|remix|t3)-app\b|\bpip3?\s+install\b|\buv\s+(?:pip\s+)?(?:install|sync)\b|\bpoetry\s+(?:install|add)\b|\bcargo\s+(?:build|install|fetch)\b|\bgo\s+(?:get|mod\s+download)\b|\bbundle\s+install\b|\bbrew\s+install\b|\bgit\s+clone\b|\bdocker\s+(?:build|pull)\b/;
+  /\b(?:npm|pnpm|yarn|bun)\s+(?:i|add|install|ci|dlx|create)\b|\bnpx\b|\bcreate-(?:next|react|vite|expo|remix|t3)-app\b|\bpip3?\s+install\b|\buv\s+(?:pip\s+)?(?:install|sync)\b|\bpoetry\s+(?:install|add)\b|\bcargo\s+(?:build|install|fetch)\b|\bgo\s+(?:get|mod\s+download)\b|\bbundle\s+install\b|\bbrew\s+install\b|\bgit\s+clone\b|\bdocker\s+(?:build|pull)\b|\bwinget\s+(?:install|upgrade)\b|\bchoco\s+(?:install|upgrade)\b|\bscoop\s+install\b|\bcomposer\s+(?:install|require|create-project|update)\b|\b(?:apt|apt-get|dnf|yum)\s+install\b/;
 
 /** What a killed command should tell the model to do about it. */
 const TIMEOUT_REMEDY =
-  "Re-run it with a larger `timeout` (up to 600 seconds). Use `background: true` " +
-  "only for something you do not need the result of right now; never for an " +
-  "install or a scaffold, because the next step needs its files.";
+  "Re-run it with a larger `timeout` (up to 600 seconds; an install or a scaffold " +
+  "gets up to 1800). Use `background: true` only for something you do not need " +
+  "the result of right now; never for an install or a scaffold, because the next " +
+  "step needs its files.";
 
 /** The budget a bash call gets when the model named none. */
 export function bashBudgetSecondsFor(command: string): number {
   return SLOW_COMMAND_PATTERN.test(command)
-    ? MAX_STAMPED_SECONDS
+    ? INSTALL_SECONDS
     : BUDGETS.bash!.seconds;
+}
+
+/** The most an explicit bash timeout may ask for, given the command. */
+function bashCeilingSecondsFor(command: string): number {
+  return SLOW_COMMAND_PATTERN.test(command)
+    ? INSTALL_SECONDS
+    : MAX_STAMPED_SECONDS;
 }
 
 export function budgetSecondsFor(toolName: string): number {
   return BUDGETS[toolName]?.seconds ?? DEFAULT_BUDGET_SECONDS;
+}
+
+/** How long an MCP tool's call may run before it is stopped and reported. */
+export function mcpCallBudgetSeconds(toolName: string): number {
+  return BUDGETS[toolName]?.seconds ?? MCP_DEFAULT_BUDGET_SECONDS;
 }
 
 export default function (pi: ExtensionAPI) {
@@ -85,6 +116,11 @@ export default function (pi: ExtensionAPI) {
     if (input.background === true) return;
 
     const existing = input[budget.nativeParam];
+    const command = String(input.command ?? "");
+    const ceiling =
+      event.toolName === "bash"
+        ? bashCeilingSecondsFor(command)
+        : MAX_STAMPED_SECONDS;
 
     // An explicit budget wins, but capped: it cannot park the session forever.
     if (
@@ -92,17 +128,16 @@ export default function (pi: ExtensionAPI) {
       Number.isFinite(existing) &&
       existing > 0
     ) {
-      if (existing > MAX_STAMPED_SECONDS)
-        input[budget.nativeParam] = MAX_STAMPED_SECONDS;
+      if (existing > ceiling) input[budget.nativeParam] = ceiling;
       return;
     }
 
     const seconds =
       event.toolName === "bash"
-        ? bashBudgetSecondsFor(String(input.command ?? ""))
+        ? bashBudgetSecondsFor(command)
         : budget.seconds;
 
-    input[budget.nativeParam] = Math.min(seconds, MAX_STAMPED_SECONDS);
+    input[budget.nativeParam] = Math.min(seconds, ceiling);
   });
 
   pi.on("tool_execution_start", async (event, ctx) => {

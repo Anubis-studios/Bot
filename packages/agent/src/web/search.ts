@@ -333,6 +333,18 @@ const noResults =
   "or the search did not run; either way there are no sources to cite. " +
   "Try a different query; do not cite URLs from memory.";
 
+/**
+ * How long one provider request may take. A search answers in seconds; one
+ * that hangs is stopped here and reported as a failed search, so the turn
+ * goes on instead of waiting on the tool.
+ */
+const SEARCH_REQUEST_TIMEOUT_MS = 45_000;
+
+const withDeadline = (signal?: AbortSignal): AbortSignal => {
+  const deadline = AbortSignal.timeout(SEARCH_REQUEST_TIMEOUT_MS);
+  return signal != null ? AbortSignal.any([signal, deadline]) : deadline;
+};
+
 const providerFailed = (error: unknown): WebSearchError =>
   new WebSearchError(
     "PROVIDER_ERROR",
@@ -351,7 +363,7 @@ async function postJson(
       method: "POST",
       headers: { "content-type": "application/json", ...headers },
       body: JSON.stringify(body),
-      ...(signal != null ? { signal } : {}),
+      signal: withDeadline(signal),
     });
   } catch (error) {
     throw providerFailed(error);
@@ -381,7 +393,7 @@ async function getJson(
   try {
     response = await fetch(url, {
       headers: { accept: "application/json", ...headers },
-      ...(signal != null ? { signal } : {}),
+      signal: withDeadline(signal),
     });
   } catch (error) {
     throw providerFailed(error);

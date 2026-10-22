@@ -27,7 +27,12 @@ interface JsonRpcResponse {
 }
 
 export interface McpTransport {
-  request(method: string, params?: unknown): Promise<unknown>;
+  /** `timeoutMs` overrides the method's own deadline (a tool call's budget). */
+  request(
+    method: string,
+    params?: unknown,
+    timeoutMs?: number
+  ): Promise<unknown>;
   notify(method: string, params?: unknown): Promise<void>;
   close(): void;
 }
@@ -55,6 +60,14 @@ const LONG_CALL_DISPATCHER = new Agent({
   headersTimeout: TOOL_CALL_TIMEOUT_MS,
   bodyTimeout: TOOL_CALL_TIMEOUT_MS,
 });
+
+/** A request that outlived its deadline; a tool call's means its budget ran out. */
+export class McpTimeoutError extends Error {
+  constructor(method: string) {
+    super(`${method} timed out`);
+    this.name = "McpTimeoutError";
+  }
+}
 
 /** How much of a stdio server's stderr to keep for its exit message. */
 const STDERR_TAIL_CHARS = 4000;
@@ -167,7 +180,11 @@ class HttpTransport implements McpTransport {
     );
   }
 
-  async request(method: string, params?: unknown): Promise<unknown> {
+  async request(
+    method: string,
+    params?: unknown,
+    timeoutMs?: number
+  ): Promise<unknown> {
     const id = ++this.nextId;
     const init = {
       method: "POST",
@@ -179,7 +196,7 @@ class HttpTransport implements McpTransport {
         ...(params != null ? { params } : {}),
       }),
       redirect: this.redirectMode,
-      signal: AbortSignal.timeout(timeoutFor(method)),
+      signal: AbortSignal.timeout(timeoutMs ?? timeoutFor(method)),
       dispatcher: LONG_CALL_DISPATCHER,
     };
     // Cast at the boundary: `dispatcher` is an undici extension the DOM
@@ -324,15 +341,22 @@ class StdioTransport implements McpTransport {
     }
   }
 
-  async request(method: string, params?: unknown): Promise<unknown> {
+  async request(
+    method: string,
+    params?: unknown,
+    timeoutMs?: number
+  ): Promise<unknown> {
     if (this.exited != null) throw this.exited;
 
     const id = ++this.nextId;
 
     const promise = new Promise<unknown>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        if (this.pending.delete(id)) reject(new Error(`${method} timed out`));
-      }, timeoutFor(method));
+      const timer = setTimeout(
+        () => {
+          if (this.pending.delete(id)) reject(new McpTimeoutError(method));
+        },
+        timeoutMs ?? timeoutFor(method)
+      );
 
       this.pending.set(id, {
         resolve: (value) => {
@@ -475,16 +499,28 @@ export class McpClient {
    */
   async callTool(
     toolName: string,
-    args: Record<string, unknown>
+    args: Record<string, unknown>,
+    /** The call's budget; past it the call fails with McpTimeoutError. */
+    timeoutMs?: number
   ): Promise<{
     text: string;
     isError: boolean;
     blocks: Array<Record<string, unknown>>;
   }> {
-    const result = (await this.transport.request("tools/call", {
-      name: toolName,
-      arguments: args,
-    })) as
+    let raw: unknown;
+    try {
+      raw = await this.transport.request(
+        "tools/call",
+        { name: toolName, arguments: args },
+        timeoutMs
+      );
+    } catch (error) {
+      // fetch's own deadline surfaces as a DOMException named TimeoutError.
+      if (error instanceof Error && error.name === "TimeoutError")
+        throw new McpTimeoutError("tools/call");
+      throw error;
+    }
+    const result = raw as
       | { content?: Array<Record<string, unknown>>; isError?: boolean }
       | undefined;
 
