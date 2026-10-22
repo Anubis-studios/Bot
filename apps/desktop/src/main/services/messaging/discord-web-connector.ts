@@ -14,6 +14,10 @@ import {
   normalizeScrapedText,
   type ConnectorCallbacks,
   type MessagingConnector,
+  type PageScript,
+  pageScript,
+  PollScheduler,
+  runPageScript,
   setFileInput,
 } from "./connector";
 
@@ -114,8 +118,16 @@ export class DiscordWebConnector implements MessagingConnector {
   private signedOutTicks = 0;
   /** Consecutive polls stuck between login form and app. See checkLogin. */
   private bootStuckTicks = 0;
-  private loginTimer: NodeJS.Timeout | null = null;
-  private inboundTimer: NodeJS.Timeout | null = null;
+  private readonly loginPoll = new PollScheduler(
+    () => this.checkLogin(),
+    LOGIN_POLL_MS,
+    (error) => this.logFailure("login check", error)
+  );
+  private readonly inboundPoll = new PollScheduler(
+    () => this.pollInbound(),
+    INBOUND_POLL_MS,
+    (error) => this.logFailure("inbound sweep", error)
+  );
   /** DMs, off the home page's private-channels rail. */
   private contacts: Array<{ chatId: string; name: string }> = [];
   /** Rail reads since login. The rail renders after `connected`: one empty
@@ -207,10 +219,8 @@ export class DiscordWebConnector implements MessagingConnector {
     this.loggedIn = false;
     this.railReads = 0;
     this.contactsRead = false;
-    if (this.loginTimer != null) clearInterval(this.loginTimer);
-    if (this.inboundTimer != null) clearInterval(this.inboundTimer);
-    this.loginTimer = null;
-    this.inboundTimer = null;
+    this.loginPoll.stop();
+    this.inboundPoll.stop();
     const win = this.window;
     this.window = null;
     if (win != null && !win.isDestroyed()) win.destroy();
@@ -725,8 +735,13 @@ export class DiscordWebConnector implements MessagingConnector {
   // ── Login ──────────────────────────────────────────────────────────────
 
   private pollLogin(): void {
-    if (this.loginTimer != null) clearInterval(this.loginTimer);
-    this.loginTimer = setInterval(() => void this.checkLogin(), LOGIN_POLL_MS);
+    this.loginPoll.start();
+  }
+
+  private logFailure(what: string, error: unknown): void {
+    this.callbacks.onLog(
+      `discord-web: ${what} failed: ${String((error as Error)?.message ?? error)}`
+    );
   }
 
   /** See MessagingConnector.probeLive: one login check, now, then the answer. */
@@ -837,13 +852,14 @@ export class DiscordWebConnector implements MessagingConnector {
   // ── Inbound + contacts ─────────────────────────────────────────────────
 
   private startInboundPolling(): void {
-    if (this.inboundTimer != null) clearInterval(this.inboundTimer);
     this.firstInboundSweep = true;
-    this.inboundTimer = setInterval(() => {
-      // Sweeps queued behind a send/read/crawl would all run back to back.
-      if (this.driving > 0) return;
-      void this.serialize(() => this.sweepInbound());
-    }, INBOUND_POLL_MS);
+    this.inboundPoll.start();
+  }
+
+  private async pollInbound(): Promise<void> {
+    // Sweeps queued behind a send/read/crawl would all run back to back.
+    if (this.driving > 0) return;
+    await this.serialize(() => this.sweepInbound());
   }
 
   private async sweepInbound(): Promise<void> {
@@ -1170,16 +1186,13 @@ export class DiscordWebConnector implements MessagingConnector {
    * scripts use top-level `await`; a throw resolves to null (not-ready).
    */
   private async run<T>(
-    script: string,
+    script: PageScript,
     args: Record<string, unknown>
   ): Promise<T | null> {
     const win = this.ensureWindow();
     if (win == null || win.isDestroyed()) return null;
     try {
-      const value = (await win.webContents.executeJavaScript(
-        `(async function(args){ ${script} })(${JSON.stringify(args)})`,
-        true
-      )) as T;
+      const value = (await runPageScript(win.webContents, script, args)) as T;
       return value ?? null;
     } catch (error) {
       this.callbacks.onLog(
@@ -1195,7 +1208,7 @@ export class DiscordWebConnector implements MessagingConnector {
  * /channels/@me while logged out sits there before redirecting, and "no login
  * form" would read that boot flash as logged in.
  */
-const LOGIN_STATE_SCRIPT = `
+const LOGIN_STATE_SCRIPT = pageScript`
   const path = location.pathname;
   const onAuthPage = path.indexOf('/login') === 0 || path.indexOf('/register') === 0;
   const loginForm = !!document.querySelector('input[name="email"], input[type="email"], input[name="password"]');
@@ -1209,7 +1222,7 @@ const LOGIN_STATE_SCRIPT = `
 `;
 
 /** The open DMs as contacts. Null off the home page: the rail is a server's. */
-const CONTACTS_SCRIPT = `
+const CONTACTS_SCRIPT = pageScript`
   if (location.pathname.indexOf('/channels/@me') !== 0) return null;
   const rows = [];
   const seen = new Set();
@@ -1237,7 +1250,7 @@ const CONTACTS_SCRIPT = `
  * The joined servers, off the guild rail's `guildsnav___<id>` hook; numeric
  * ids only, which skips the home button, folders and pips.
  */
-const GUILDS_SCRIPT = `
+const GUILDS_SCRIPT = pageScript`
   const rows = [];
   const seen = new Set();
   const clean = (raw) => String(raw || '').replace(/,[^,]*(mention|unread)[^,]*$/i, '').trim();
@@ -1292,7 +1305,7 @@ const GUILDS_SCRIPT = `
 `;
 
 /** Rail diagnostics, so the log tells "no servers" from renamed hooks. */
-const RAIL_SHAPE_SCRIPT = `
+const RAIL_SHAPE_SCRIPT = pageScript`
   const sample = [...document.querySelectorAll('[data-list-item-id]')]
     .slice(0, 8)
     .map((el) => el.getAttribute('data-list-item-id'));
@@ -1307,7 +1320,7 @@ const RAIL_SHAPE_SCRIPT = `
 `;
 
 /** The open server's channels, off `/channels/<gid>/<cid>` anchors. */
-const GUILD_CHANNELS_SCRIPT = `
+const GUILD_CHANNELS_SCRIPT = pageScript`
   const gid = String(args.guildId || '');
   if (!/^\\d+$/.test(gid)) return [];
   const rows = [];
@@ -1329,7 +1342,7 @@ const GUILD_CHANNELS_SCRIPT = `
 `;
 
 /** Press the anchor whose href starts with args.href, if the page has one. */
-const OPEN_ANCHOR_SCRIPT = `
+const OPEN_ANCHOR_SCRIPT = pageScript`
   const press = (el) => {
     const r = el.getBoundingClientRect();
     const o = { bubbles: true, cancelable: true, view: window, clientX: r.x + Math.min(20, r.width / 2), clientY: r.y + Math.min(20, r.height / 2) };
@@ -1347,7 +1360,7 @@ const OPEN_ANCHOR_SCRIPT = `
 `;
 
 /** Press a server's icon on the guild rail: an SPA hop into that server. */
-const OPEN_GUILD_SCRIPT = `
+const OPEN_GUILD_SCRIPT = pageScript`
   const press = (el) => {
     const r = el.getBoundingClientRect();
     const o = { bubbles: true, cancelable: true, view: window, clientX: r.x + Math.min(20, r.width / 2), clientY: r.y + Math.min(20, r.height / 2) };
@@ -1363,7 +1376,7 @@ const OPEN_GUILD_SCRIPT = `
 `;
 
 /** Open a chat by name through the quickswitcher, for a non-id target. */
-const QUICKSWITCH_SCRIPT = `
+const QUICKSWITCH_SCRIPT = pageScript`
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const waitFor = async (sel, ms) => {
     const end = Date.now() + ms;
@@ -1395,7 +1408,7 @@ const QUICKSWITCH_SCRIPT = `
 `;
 
 /** Has the opened chat rendered: messages on screen, or at least a composer. */
-const CHAT_READY_SCRIPT = `
+const CHAT_READY_SCRIPT = pageScript`
   const ready =
     !!document.querySelector('li[id^="chat-messages-"]') ||
     !!document.querySelector('div[role="textbox"][data-slate-editor="true"]');
@@ -1403,7 +1416,7 @@ const CHAT_READY_SCRIPT = `
 `;
 
 /** The composer's centre for a trusted click; Slate ignores synthetic input. */
-const FOCUS_COMPOSER_SCRIPT = `
+const FOCUS_COMPOSER_SCRIPT = pageScript`
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const waitFor = async (sel, ms) => {
     const end = Date.now() + ms;
@@ -1421,14 +1434,14 @@ const FOCUS_COMPOSER_SCRIPT = `
 `;
 
 /** Whether the composer currently holds the text we just typed. */
-const COMPOSER_HAS_TEXT_SCRIPT = `
+const COMPOSER_HAS_TEXT_SCRIPT = pageScript`
   const box = document.querySelector('div[role="textbox"][data-slate-editor="true"], div[role="textbox"]');
   if (!box) return { has: false };
   return { has: box.textContent.indexOf(String(args.probe || '')) !== -1 };
 `;
 
 /** Whether the tail of the open chat's message list shows the sent text. */
-const LAST_MESSAGES_HAVE_SCRIPT = `
+const LAST_MESSAGES_HAVE_SCRIPT = pageScript`
   const probe = String(args.probe || '');
   if (probe.length === 0) return { has: false };
   const items = [...document.querySelectorAll('li[id^="chat-messages-"]')].slice(-5);
@@ -1436,7 +1449,7 @@ const LAST_MESSAGES_HAVE_SCRIPT = `
 `;
 
 /** Page state when a send vanished, so slow mode and wrong page log apart. */
-const SEND_FAILURE_SHAPE_SCRIPT = `
+const SEND_FAILURE_SHAPE_SCRIPT = pageScript`
   const tail = [...document.querySelectorAll('li[id^="chat-messages-"]')]
     .slice(-3)
     .map((li) => li.textContent.trim().slice(0, 80));
@@ -1455,7 +1468,7 @@ const SEND_FAILURE_SHAPE_SCRIPT = `
 `;
 
 /** Whether the composer is empty: the confirmation that a send went out. */
-const COMPOSER_EMPTY_SCRIPT = `
+const COMPOSER_EMPTY_SCRIPT = pageScript`
   const box = document.querySelector('div[role="textbox"][data-slate-editor="true"], div[role="textbox"]');
   if (!box) return { empty: true };
   // Slate keeps a zero-width placeholder in an "empty" editor; treat it as empty.
@@ -1470,7 +1483,7 @@ const COMPOSER_EMPTY_SCRIPT = `
  * The open chat's recent messages. Direction is "out" when the author matches
  * the account panel's username; absent that, everything reads as "in".
  */
-const READ_CURRENT_SCRIPT = `
+const READ_CURRENT_SCRIPT = pageScript`
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const limit = Number(args.limit) || 30;
   // Discord opens a channel at the last-read position, which in a quiet
@@ -1538,7 +1551,7 @@ const READ_CURRENT_SCRIPT = `
 `;
 
 /** DM rail entries with an unread pill, as inbound signal. Home page only. */
-const INBOUND_SCRIPT = `
+const INBOUND_SCRIPT = pageScript`
   if (location.pathname.indexOf('/channels/@me') !== 0) return null;
   const rows = [];
   for (const a of document.querySelectorAll('a[href^="/channels/@me/"]')) {
@@ -1555,7 +1568,7 @@ const INBOUND_SCRIPT = `
 `;
 
 /** A forum's post cards; no message list, so they are the readable content. */
-const FORUM_POSTS_SCRIPT = `
+const FORUM_POSTS_SCRIPT = pageScript`
   const limit = Number(args.limit) || 30;
   const rows = [];
   const seen = new Set();
@@ -1595,7 +1608,7 @@ const FORUM_POSTS_SCRIPT = `
 `;
 
 /** Page diagnostics, so "channel is empty" and stale selectors log apart. */
-const PAGE_SHAPE_SCRIPT = `
+const PAGE_SHAPE_SCRIPT = pageScript`
   const main = document.querySelector('main') || document.body;
   const sample = [...main.querySelectorAll(':scope > * , :scope > * > *')]
     .slice(0, 10)
@@ -1614,12 +1627,12 @@ const PAGE_SHAPE_SCRIPT = `
 `;
 
 /** Whether an un-sent upload chip is still sitting above the composer. */
-const UPLOAD_PENDING_SCRIPT = `
+const UPLOAD_PENDING_SCRIPT = pageScript`
   return { uploading: !!document.querySelector('[class*="attachedFile"], [class*="uploadInput"] + div [class*="file"], form [class*="attachment"]') };
 `;
 
 /** Forum card diagnostics, logged when no card yields a thread id. */
-const FORUM_SHAPE_SCRIPT = `
+const FORUM_SHAPE_SCRIPT = pageScript`
   const cards = [...document.querySelectorAll('[class*="card"], li[class*="post"], [data-item-id]')].slice(0, 3);
   return {
     path: location.pathname,
@@ -1634,7 +1647,7 @@ const FORUM_SHAPE_SCRIPT = `
 `;
 
 /** The search bar's centre for a trusted click; it ignores synthetic focus. */
-const SEARCH_BAR_POS_SCRIPT = `
+const SEARCH_BAR_POS_SCRIPT = pageScript`
   const bar =
     document.querySelector('[class*="searchBar"] [role="combobox"]') ||
     document.querySelector('[class*="searchBar"] [contenteditable="true"]') ||
@@ -1646,7 +1659,7 @@ const SEARCH_BAR_POS_SCRIPT = `
 `;
 
 /** The results pane in document order; channel headers scope the hits after. */
-const SEARCH_RESULTS_SCRIPT = `
+const SEARCH_RESULTS_SCRIPT = pageScript`
   const pane = document.querySelector('[class*="searchResultsWrap"]');
   if (!pane) return null;
   const hits = [];
@@ -1672,7 +1685,7 @@ const SEARCH_RESULTS_SCRIPT = `
 `;
 
 /** Expand collapsed sidebar sections, whose contents stay out of the DOM. */
-const EXPAND_CATEGORIES_SCRIPT = `
+const EXPAND_CATEGORIES_SCRIPT = pageScript`
   const press = (el) => {
     const r = el.getBoundingClientRect();
     const o = { bubbles: true, cancelable: true, view: window, clientX: r.x + Math.min(20, r.width / 2), clientY: r.y + Math.min(20, r.height / 2) };

@@ -15,14 +15,20 @@
  * re-armed the self lookup, whose navigation caused the next slow boot: a
  * connected↔needs_login flap that read as "chats never sync".
  */
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("electron", () => ({
-  BrowserWindow: class {},
-  session: { fromPartition: () => ({}) },
-  shell: { openExternal: async () => undefined },
-}));
+vi.mock("electron", async () => {
+  const { EventEmitter } = await import("node:events");
+  return {
+    BrowserWindow: class {},
+    session: { fromPartition: () => ({}) },
+    shell: { openExternal: async () => undefined },
+    powerMonitor: new EventEmitter(),
+    net: { isOnline: () => true },
+  };
+});
 
+const { powerMonitor } = await import("electron");
 const { WhatsAppWebConnector } = await import("./whatsapp-web-connector");
 
 /** The connector with the page's login answers scripted; no Electron. */
@@ -117,5 +123,168 @@ describe("a login that goes away after connect", () => {
     await poll(); // another lone signed-out, still debounced
 
     expect(states).toEqual(["connected"]);
+  });
+});
+
+/**
+ * Sleep and wake. The report: after the PC slept, the bridge never came
+ * back; the 5s sweep kept queueing behind 30s attach waits on one page lock,
+ * and a chat read waited behind dozens of them until the agent's client gave
+ * up at fifteen minutes. Pinned: one relink at a time on a backoff, no sweep
+ * while it runs, and a read that answers inside its deadline either way.
+ */
+describe("a computer that sleeps and wakes", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    powerMonitor.removeAllListeners();
+  });
+
+  type Wired = {
+    running: boolean;
+    loggedIn: boolean;
+    bridgeReady: boolean;
+    bridgeExpected: boolean;
+    selfLookupDone: boolean;
+    chatListRead: boolean;
+    bridgeChats: unknown[];
+    bridge: unknown;
+    window: unknown;
+    userDeadlineMs: number;
+    run: (script: string, args: unknown) => Promise<unknown>;
+    reloadPage: () => Promise<void>;
+    watchPower: () => void;
+    startInboundPolling: () => void;
+    readChat: (chatId: string, limit: number) => Promise<unknown[]>;
+    lock: { busy: boolean };
+  };
+
+  /** A linked connector whose bridge fails to re-attach `failures` times. */
+  const wired = (failures: number) => {
+    const states: string[] = [];
+    const connector = new WhatsAppWebConnector({
+      onMessage: () => {},
+      onState: (state: string) => states.push(state),
+      onLog: () => {},
+    } as never);
+    const c = connector as unknown as Wired;
+    const counts = { sweeps: 0, attaches: 0, reloads: 0, overlap: 0 };
+    let holding = 0;
+    let live = true;
+    const hold = async <T>(answer: T): Promise<T> => {
+      holding += 1;
+      counts.overlap = Math.max(counts.overlap, holding);
+      await new Promise((resolve) => setTimeout(resolve, 2_000));
+      holding -= 1;
+      return answer;
+    };
+    c.running = true;
+    c.loggedIn = true;
+    c.bridgeReady = true;
+    c.bridgeExpected = true;
+    c.selfLookupDone = true;
+    c.chatListRead = true;
+    const ma = { jid: "919111111111@c.us", name: "Ma", isGroup: false };
+    c.bridgeChats = [ma];
+    // The page itself shows the chat list; the bridge is what went away.
+    c.run = async () => ({ loggedIn: true });
+    c.reloadPage = async () => {
+      counts.reloads += 1;
+    };
+    c.bridge = {
+      isLive: async () => live,
+      ensure: async () => {
+        counts.attaches += 1;
+        live = counts.attaches > failures;
+        return hold(live);
+      },
+      listChats: async () => [ma],
+      drain: async () => {
+        counts.sweeps += 1;
+        return hold({ messages: [], loggedOut: false });
+      },
+      readChat: async () => ({
+        ok: true,
+        rows: [{ id: "1", jid: ma.jid, fromMe: false, text: "hi", t: 1 }],
+      }),
+    };
+    c.watchPower();
+    c.startInboundPolling();
+    return { c, states, counts, detach: () => (live = false) };
+  };
+
+  it("relinks once on a backoff, sweeps nothing meanwhile, and reads fail fast until it is back", async () => {
+    vi.useFakeTimers();
+    const { c, states, counts, detach } = wired(2);
+
+    // Awake: a 2s sweep every 5s, one at a time.
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(counts.sweeps).toBeGreaterThanOrEqual(4);
+    expect(counts.overlap).toBe(1);
+
+    powerMonitor.emit("suspend");
+    detach();
+    const sweepsBeforeSleep = counts.sweeps;
+    await vi.advanceTimersByTimeAsync(60_000);
+    powerMonitor.emit("resume");
+    // A second wake signal (unlock) joins the relink already under way.
+    powerMonitor.emit("unlock-screen");
+
+    // Mid-relink: the read waits on the attempt, then answers with the state.
+    const started = Date.now();
+    const during = c.readChat("Ma", 10).catch((e: Error) => e.message);
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(await during).toMatch(
+      /reconnecting after the computer woke up\. Try again in a moment/
+    );
+    expect(Date.now() - started).toBeLessThanOrEqual(c.userDeadlineMs);
+    expect(states).toEqual(["connecting"]);
+    expect(counts.sweeps).toBe(sweepsBeforeSleep);
+
+    // Two more tries on the backoff; the third attach lands.
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(counts.attaches).toBe(3);
+    expect(counts.reloads).toBe(2);
+    expect(states).toEqual(["connecting", "connecting", "connected"]);
+    // Never two page tasks at once.
+    expect(counts.overlap).toBe(1);
+
+    // Back: the read goes ahead of any sweep and answers.
+    const after = c.readChat("Ma", 10);
+    await vi.advanceTimersByTimeAsync(2_000);
+    await expect(after).resolves.toEqual([
+      expect.objectContaining({ text: "hi", direction: "in" }),
+    ]);
+  });
+
+  it("cuts a read short at its deadline and gives the page back", async () => {
+    vi.useFakeTimers();
+    const { c } = wired(0);
+    (c as unknown as { inboundPoll: { stop: () => void } }).inboundPoll.stop();
+    c.userDeadlineMs = 5_000;
+    // A renderer that never answers the read; everything else answers.
+    let answered = 0;
+    c.window = {
+      isDestroyed: () => false,
+      webContents: {
+        executeJavaScript: (code: string) =>
+          code.includes("HANG")
+            ? new Promise(() => {})
+            : Promise.resolve((answered += 1)),
+      },
+    };
+    const realRun = Object.getPrototypeOf(c).run as Wired["run"];
+    c.run = realRun.bind(c);
+    (c.bridge as { readChat: unknown }).readChat = async () => ({
+      ok: true,
+      rows: (await c.run("HANG", {})) ?? [],
+    });
+
+    const stuck = c.readChat("Ma", 10).catch((e: Error) => e.message);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(await stuck).toMatch(/did not answer within 5s/);
+    // The lock is free again: the next page call is not stuck behind it.
+    await vi.advanceTimersByTimeAsync(0);
+    expect(c.lock.busy).toBe(false);
+    await expect(c.run("ANSWER", {})).resolves.toBe(answered);
   });
 });

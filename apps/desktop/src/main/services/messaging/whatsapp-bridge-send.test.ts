@@ -22,6 +22,7 @@ type Internals = {
   loggedIn: boolean;
   bridge: {
     ensure: () => Promise<boolean>;
+    isLive?: () => Promise<boolean>;
     listChats: () => Promise<unknown[]>;
     sendText: (
       jid: string,
@@ -53,7 +54,9 @@ const connectorWith = (
   } as never);
   const internals = connector as unknown as Internals;
   internals.loggedIn = true;
-  internals.bridge = bridge;
+  // Attached by the lifecycle; each call only checks it is still live.
+  internals.bridge = bridge && { ...bridge, isLive: bridge.ensure };
+  internals.bridgeReady = true;
   internals.bridgeChats = [
     { jid: "919876543210@c.us", name: "Meghna", isGroup: false, isMe: false },
   ];
@@ -94,6 +97,7 @@ describe("sending through the bridge", () => {
       },
       ackOf: async () => -1,
     });
+    internals.bridgeReady = false;
 
     await internals.sendTextNow("Meghna", "hello there");
 

@@ -6,12 +6,18 @@
  * a badge left by an earlier real message keeps the row in the sweep, and
  * the preview then shows whatever was said LAST, direction unknown.
  */
-import { describe, expect, it } from "vitest";
+import vm from "node:vm";
+
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   isEphemeralPreview,
   normalizeScrapedText,
+  PageLock,
+  pageScript,
+  PollScheduler,
   previewMatchesSent,
+  runPageScript,
 } from "./connector";
 
 describe("isEphemeralPreview", () => {
@@ -143,5 +149,135 @@ describe("normalizeScrapedText", () => {
     );
     expect(normalizeScrapedText("  spaced \t out  ")).toBe("spaced out");
     expect(normalizeScrapedText("plain")).toBe("plain");
+  });
+});
+
+describe("PollScheduler", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("never queues a run behind a slow one, and holds while paused", async () => {
+    vi.useFakeTimers();
+    let runs = 0;
+    let running = 0;
+    let overlapped = false;
+    const poll = new PollScheduler(
+      async () => {
+        runs += 1;
+        running += 1;
+        if (running > 1) overlapped = true;
+        // Slower than the interval: a page answering slowly after a sleep.
+        await new Promise((resolve) => setTimeout(resolve, 30_000));
+        running -= 1;
+      },
+      5_000,
+      () => {}
+    );
+    poll.start();
+    await vi.advanceTimersByTimeAsync(5_000 + 3 * 35_000);
+    expect(runs).toBe(4);
+    expect(overlapped).toBe(false);
+
+    poll.pause();
+    await vi.advanceTimersByTimeAsync(30_000); // the one in flight finishes
+    const paused = runs;
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(runs).toBe(paused);
+
+    poll.resume();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(runs).toBe(paused + 1);
+    poll.stop();
+  });
+});
+
+describe("PageLock", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("lets a user call go ahead of queued background work", async () => {
+    const lock = new PageLock();
+    const order: string[] = [];
+    let release: () => void = () => {};
+    const first = lock.run(
+      () => new Promise<void>((resolve) => (release = resolve))
+    );
+    const sweep = lock.run(async () => void order.push("sweep"));
+    const read = lock.run(async () => void order.push("read"), { user: true });
+    release();
+    await Promise.all([first, sweep, read]);
+    expect(order).toEqual(["read", "sweep"]);
+  });
+
+  it("drops a call whose deadline passes in the queue, and cuts one short that may be", async () => {
+    vi.useFakeTimers();
+    const lock = new PageLock();
+    let ranLate = false;
+    let aborted = false;
+    const holder = lock.run(
+      (signal) =>
+        new Promise<void>((resolve) => {
+          signal.addEventListener("abort", () => {
+            aborted = true;
+            resolve();
+          });
+        }),
+      { user: true, deadlineMs: 10_000, interruptible: true }
+    );
+    const queued = lock.run(
+      async () => {
+        ranLate = true;
+      },
+      { user: true, deadlineMs: 5_000, timeoutError: () => new Error("late") }
+    );
+    const holderResult = holder.catch((e: Error) => e.message);
+    const queuedResult = queued.catch((e: Error) => e.message);
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(await queuedResult).toBe("late");
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(await holderResult).toBe("The page did not answer.");
+    expect(aborted).toBe(true);
+    expect(ranLate).toBe(false);
+    expect(lock.busy).toBe(false);
+  });
+});
+
+describe("runPageScript", () => {
+  // Arguments are data from chats and the agent; none may become code.
+  const hostile = {
+    quote: `he said "hi" and 'bye'`,
+    tag: "</script><script>globalThis.pwned = 1</script>",
+    separators: "line\u2028para\u2029end",
+    backtick: "`${globalThis.pwned = 1}`",
+    breakout: '"})();globalThis.pwned = 1;(async function(){ //',
+    nested: { list: ["<!--", "-->", "&amp;", "\\", "\n"] },
+  };
+
+  it("hands arguments over unchanged, and none of them runs", async () => {
+    let code = "";
+    const context = vm.createContext({});
+    const contents = {
+      executeJavaScript: async (source: string) => {
+        code = source;
+        return vm.runInContext(source, context);
+      },
+    };
+
+    const echoed = await runPageScript(
+      contents,
+      pageScript`return args;`,
+      hostile
+    );
+
+    expect(echoed).toEqual(hostile);
+    expect(vm.runInContext("globalThis.pwned", context)).toBeUndefined();
+    // Safe to sit in an HTML script block or a single line, too.
+    expect(code).not.toMatch(/[<>&\u2028\u2029]/);
+  });
+
+  it("splices only page scripts into page scripts", () => {
+    const helper = pageScript`const twice = (n) => n * 2;`;
+    expect(pageScript`${helper} return twice(args.n);`).toBe(
+      "const twice = (n) => n * 2; return twice(args.n);"
+    );
   });
 });

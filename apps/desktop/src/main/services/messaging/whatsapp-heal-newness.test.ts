@@ -22,7 +22,9 @@ const SOURCE = fs.readFileSync(
 );
 
 const script = (name: string): string => {
-  const match = SOURCE.match(new RegExp(`const ${name} = \`([\\s\\S]*?)\`;`));
+  const match = SOURCE.match(
+    new RegExp(`const ${name} = pageScript\`([\\s\\S]*?)\`;`)
+  );
   if (match == null) throw new Error(`${name} not found`);
   return match[1];
 };
