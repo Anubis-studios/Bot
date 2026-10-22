@@ -8,6 +8,8 @@
  * server that was not there a moment ago.
  */
 import * as fs from "node:fs";
+import * as http from "node:http";
+import type { AddressInfo } from "node:net";
 import * as os from "node:os";
 import * as path from "node:path";
 
@@ -19,13 +21,23 @@ import {
   FakeProvider,
   fakeProviderConfig,
 } from "@abacus-ai/test-support/fake-provider";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 import { BATCH_READ_GUIDELINES } from "../extensions/batch-read-tool.js";
 import { BATCH_EDIT_GUIDELINES } from "../extensions/edit-tool.js";
 import { IDENTITY_PROMPT } from "../persona.js";
 import type { DesktopEvent } from "../protocol.js";
 import { AbacusBotSession } from "../session.js";
+import { McpClient, type McpTransport } from "./client.js";
+import { buildMcpToolDefinitions } from "./tools.js";
 
 let provider: FakeProvider;
 let home: string;
@@ -625,5 +637,174 @@ describe("the browser sub-agent", () => {
     expect(tools.map((tool) => (tool as { name: string }).name)).toContain(
       "browser_click"
     );
+  });
+});
+
+describe("a tool call that is given up on", () => {
+  /** A JSON-RPC message as a server receives it. */
+  type Received = { id?: number; method: string; params?: unknown };
+
+  /**
+   * Answers the handshake and never a tool call: the connector that used to
+   * hold a turn for fifteen minutes.
+   */
+  const answer = (message: Received): unknown =>
+    message.method === "initialize"
+      ? { protocolVersion: "2024-11-05", capabilities: {} }
+      : message.method === "tools/list"
+        ? { tools: [{ name: "hang", inputSchema: { type: "object" } }] }
+        : undefined;
+
+  it("is cancelled on an HTTP server, not just dropped", async () => {
+    const received: Received[] = [];
+    const server = http.createServer((request, response) => {
+      let body = "";
+      request.on("data", (chunk) => (body += chunk));
+      request.on("end", () => {
+        const message = JSON.parse(body) as Received;
+        received.push(message);
+        if (message.id == null) {
+          response.writeHead(202).end();
+          return;
+        }
+        const result = answer(message);
+        if (result === undefined) return; // never answered
+        response
+          .writeHead(200, { "content-type": "application/json" })
+          .end(JSON.stringify({ jsonrpc: "2.0", id: message.id, result }));
+      });
+    });
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", resolve)
+    );
+    try {
+      const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/mcp`;
+      const client = await McpClient.connect(
+        "silent",
+        McpClient.httpTransport(url)
+      );
+      const stop = new AbortController();
+      const call = client.callTool("hang", {}, stop.signal);
+      await vi.waitFor(() =>
+        expect(received.map((m) => m.method)).toContain("tools/call")
+      );
+
+      stop.abort(new Error("Stopped"));
+
+      await expect(call).rejects.toThrow();
+      const asked = received.find((m) => m.method === "tools/call")!;
+      await vi.waitFor(() =>
+        expect(received).toContainEqual(
+          expect.objectContaining({
+            method: "notifications/cancelled",
+            params: { requestId: asked.id, reason: "Stopped" },
+          })
+        )
+      );
+    } finally {
+      server.closeAllConnections();
+      server.close();
+    }
+  });
+
+  it("is cancelled on a stdio server, which is told the request id", async () => {
+    // The server logs every message it reads to a file, so the test sees
+    // exactly what crossed the pipe.
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "abacusai-bot-mcp-"));
+    const log = path.join(dir, "received.jsonl");
+    const script = path.join(dir, "server.mjs");
+    fs.writeFileSync(
+      script,
+      `import * as fs from "node:fs";
+import * as readline from "node:readline";
+readline.createInterface({ input: process.stdin }).on("line", (line) => {
+  const message = JSON.parse(line);
+  fs.appendFileSync(${JSON.stringify(log)}, line + "\\n");
+  if (message.id == null) return;
+  const result =
+    message.method === "initialize"
+      ? { protocolVersion: "2024-11-05", capabilities: {} }
+      : message.method === "tools/list"
+        ? { tools: [{ name: "hang", inputSchema: { type: "object" } }] }
+        : undefined;
+  if (result !== undefined)
+    process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: message.id, result }) + "\\n");
+});
+`,
+      "utf8"
+    );
+    const read = (): Received[] =>
+      fs.existsSync(log)
+        ? fs
+            .readFileSync(log, "utf8")
+            .trim()
+            .split("\n")
+            .map((line) => JSON.parse(line) as Received)
+        : [];
+    const client = await McpClient.connect(
+      "silent",
+      McpClient.stdioTransport(process.execPath, [script], {})
+    );
+    try {
+      const stop = new AbortController();
+      const call = client.callTool("hang", {}, stop.signal);
+      await vi.waitFor(() =>
+        expect(read().map((m) => m.method)).toContain("tools/call")
+      );
+
+      stop.abort(new Error("Stopped"));
+
+      await expect(call).rejects.toThrow("Stopped");
+      const asked = read().find((m) => m.method === "tools/call")!;
+      await vi.waitFor(() =>
+        expect(read()).toContainEqual(
+          expect.objectContaining({
+            method: "notifications/cancelled",
+            params: { requestId: asked.id, reason: "Stopped" },
+          })
+        )
+      );
+    } finally {
+      client.close();
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("comes back to the model at the tool's budget, with the call's signal aborted", async () => {
+    vi.useFakeTimers();
+    try {
+      let seen: AbortSignal | undefined;
+      const transport: McpTransport = {
+        request: async (method, params, signal) => {
+          if (method !== "tools/call") return answer({ method, params });
+          seen = signal;
+          return new Promise(() => {});
+        },
+        notify: async () => {},
+        close: () => {},
+      };
+      const client = await McpClient.connect("abacus-connectors", transport);
+      const [tool] = buildMcpToolDefinitions(() => ({
+        clients: [client],
+        statuses: [],
+        routes: new Map([
+          ["abacus-connectors_hang", { client, toolName: "hang" }],
+        ]),
+        tools: [
+          { name: "abacus-connectors_hang", description: "", schema: {} },
+        ],
+      }));
+
+      const call = tool!.execute("call-1", {});
+      const settled = expect(call).rejects.toThrow(
+        "abacus-connectors_hang did not answer within 90s, so the call was stopped"
+      );
+      await vi.advanceTimersByTimeAsync(90_000);
+
+      await settled;
+      expect(seen?.aborted).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

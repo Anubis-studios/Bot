@@ -27,7 +27,15 @@ interface JsonRpcResponse {
 }
 
 export interface McpTransport {
-  request(method: string, params?: unknown): Promise<unknown>;
+  /**
+   * `signal` is the caller's: Stop, or a tool call's budget. When it fires
+   * the request is given up on and the server told (notifications/cancelled).
+   */
+  request(
+    method: string,
+    params?: unknown,
+    signal?: AbortSignal
+  ): Promise<unknown>;
   notify(method: string, params?: unknown): Promise<void>;
   close(): void;
 }
@@ -36,8 +44,9 @@ const PROTOCOL_VERSION = "2024-11-05";
 const CLIENT_INFO = { name: "abacusai-bot", version: "1.0.0" };
 /**
  * A server that cannot answer `initialize` or `tools/list` in a minute is
- * broken. A `tools/call` is arbitrary work (the pdf and deck tools run several
- * generation passes behind one call), so it gets its own, far longer ceiling.
+ * broken. A `tools/call` is arbitrary work, so its ceiling here is far longer:
+ * the model's calls are held to their own budgets by the caller's signal
+ * (withCallBudget), and this only bounds a call nothing else does.
  */
 const REQUEST_TIMEOUT_MS = 60_000;
 const TOOL_CALL_TIMEOUT_MS = 15 * 60_000;
@@ -55,6 +64,24 @@ const LONG_CALL_DISPATCHER = new Agent({
   headersTimeout: TOOL_CALL_TIMEOUT_MS,
   bodyTimeout: TOOL_CALL_TIMEOUT_MS,
 });
+
+/**
+ * Tell a server to stop work on a request this side gave up on (Stop, a
+ * budget, a deadline), per MCP's cancellation. Best effort: a server that
+ * ignores it has already lost the reply.
+ */
+function cancelRequest(
+  transport: Pick<McpTransport, "notify">,
+  requestId: number,
+  reason: unknown
+): Promise<void> {
+  return transport
+    .notify("notifications/cancelled", {
+      requestId,
+      reason: reason instanceof Error ? reason.message : String(reason),
+    })
+    .catch(() => undefined);
+}
 
 /** How much of a stdio server's stderr to keep for its exit message. */
 const STDERR_TAIL_CHARS = 4000;
@@ -167,8 +194,13 @@ class HttpTransport implements McpTransport {
     );
   }
 
-  async request(method: string, params?: unknown): Promise<unknown> {
+  async request(
+    method: string,
+    params?: unknown,
+    signal?: AbortSignal
+  ): Promise<unknown> {
     const id = ++this.nextId;
+    const deadline = AbortSignal.timeout(timeoutFor(method));
     const init = {
       method: "POST",
       headers: this.requestHeaders(),
@@ -179,9 +211,24 @@ class HttpTransport implements McpTransport {
         ...(params != null ? { params } : {}),
       }),
       redirect: this.redirectMode,
-      signal: AbortSignal.timeout(timeoutFor(method)),
+      signal: signal != null ? AbortSignal.any([signal, deadline]) : deadline,
       dispatcher: LONG_CALL_DISPATCHER,
     };
+    try {
+      return await this.exchange(method, id, init);
+    } catch (error) {
+      // Dropping the connection does not stop the server's work; MCP's
+      // cancellation does.
+      if (init.signal.aborted) void cancelRequest(this, id, init.signal.reason);
+      throw error;
+    }
+  }
+
+  private async exchange(
+    method: string,
+    id: number,
+    init: Record<string, unknown>
+  ): Promise<unknown> {
     // Cast at the boundary: `dispatcher` is an undici extension the DOM
     // RequestInit type does not carry, and Node's fetch is undici.
     const response = await fetch(this.url, init as unknown as RequestInit);
@@ -324,23 +371,42 @@ class StdioTransport implements McpTransport {
     }
   }
 
-  async request(method: string, params?: unknown): Promise<unknown> {
+  async request(
+    method: string,
+    params?: unknown,
+    signal?: AbortSignal
+  ): Promise<unknown> {
     if (this.exited != null) throw this.exited;
+    signal?.throwIfAborted();
 
     const id = ++this.nextId;
 
     const promise = new Promise<unknown>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        if (this.pending.delete(id)) reject(new Error(`${method} timed out`));
-      }, timeoutFor(method));
+      const timer = setTimeout(
+        () => giveUp(new Error(`${method} timed out`)),
+        timeoutFor(method)
+      );
+      const onAbort = (): void => giveUp(signal?.reason);
+      signal?.addEventListener("abort", onAbort, { once: true });
+      const settle = (): void => {
+        clearTimeout(timer);
+        signal?.removeEventListener("abort", onAbort);
+      };
+      // The reply will never be read: tell the server to stop working on it.
+      const giveUp = (reason: unknown): void => {
+        if (!this.pending.delete(id)) return;
+        settle();
+        void cancelRequest(this, id, reason);
+        reject(reason instanceof Error ? reason : new Error(String(reason)));
+      };
 
       this.pending.set(id, {
         resolve: (value) => {
-          clearTimeout(timer);
+          settle();
           resolve(value);
         },
         reject: (error) => {
-          clearTimeout(timer);
+          settle();
           reject(error);
         },
       });
@@ -475,16 +541,19 @@ export class McpClient {
    */
   async callTool(
     toolName: string,
-    args: Record<string, unknown>
+    args: Record<string, unknown>,
+    /** Stop, or the call's budget (withCallBudget). */
+    signal?: AbortSignal
   ): Promise<{
     text: string;
     isError: boolean;
     blocks: Array<Record<string, unknown>>;
   }> {
-    const result = (await this.transport.request("tools/call", {
-      name: toolName,
-      arguments: args,
-    })) as
+    const result = (await this.transport.request(
+      "tools/call",
+      { name: toolName, arguments: args },
+      signal
+    )) as
       | { content?: Array<Record<string, unknown>>; isError?: boolean }
       | undefined;
 

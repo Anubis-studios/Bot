@@ -44,9 +44,9 @@ interface OperationsLike {
 const TIMEOUT_GUIDANCE = [
   "",
   "A call with no timeout gets 120 seconds, and is killed at it. Set timeout (in seconds, up to",
-  "600) for anything that legitimately takes longer. Commands that fetch a dependency tree",
-  "(npm/pnpm/yarn install, npx, create-next-app, pip install, cargo build, git clone, docker",
-  "build) are given the full 600 automatically; you do not need to ask for it, and you should",
+  "600) for anything that legitimately takes longer. Installs and scaffolds (npm/pnpm/yarn",
+  "install, npx, create-next-app, pip install, cargo build, git clone, docker build, winget,",
+  "composer, apt) are given 1800 automatically; you do not need to ask for it, and you should",
   "not background them: the next step needs the files they write.",
 ].join("\n");
 
@@ -82,8 +82,8 @@ export function withBackgroundOption<T extends BashLikeDefinition>(
       timeout: Type.Optional(
         Type.Number({
           description:
-            "Seconds to allow, up to 600. Unset means 120, or 600 for an install or a " +
-            "scaffold, which are recognised by their command.",
+            "Seconds to allow, up to 600 (1800 for an install or a scaffold). Unset means " +
+            "120, or 1800 for an install or a scaffold, which are recognised by their command.",
         })
       ),
       background: Type.Optional(

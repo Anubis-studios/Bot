@@ -18,9 +18,10 @@ export const HEARTBEAT_INTERVAL_MS = 30_000;
  * `ppt`, `design`, `delegate_task`, `browser_task`) cannot be killed, and
  * vouching for them forever would make a turn that can never end. Past this
  * the agent goes quiet and lets the watchdog act. Clear of the longest tool
- * budget (900s); asserted in turn-watchdog-budget.test.ts.
+ * budget (an install's 1800s), so the install is killed and reported before
+ * the watchdog gives up on the turn; asserted in turn-watchdog-budget.test.ts.
  */
-export const MAX_VOUCHED_RUNTIME_MS = 20 * 60_000;
+export const MAX_VOUCHED_RUNTIME_MS = 35 * 60_000;
 
 export class ToolHeartbeat {
   /** Outstanding tool calls, by the time each started. */
