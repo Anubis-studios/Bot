@@ -25,6 +25,7 @@ import {
   onboardingExitTarget,
 } from "#renderer/features/onboarding/machine";
 import { PairingQueueBanner } from "#renderer/features/onboarding/pairing-banner";
+import { UpgradeRoutinesCard } from "#renderer/features/routines/always-on";
 import { SessionsGlobals } from "#renderer/features/sessions/globals";
 import { dispatchPreview } from "#renderer/features/shell/preview-consumers";
 import {
@@ -96,6 +97,7 @@ const ShellRoute = () => {
       <SessionsGlobals preview={dispatchPreview} />
       <UpgradeDialogHost />
       {!provisional && tour == null && <CreditThresholdHost />}
+      {!provisional && tour == null && <UpgradeRoutinesCard />}
       {!provisional && <PaymentRequiredDialog />}
     </>
   );

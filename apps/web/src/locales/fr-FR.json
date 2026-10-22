@@ -1551,13 +1551,22 @@
       "local": "Routines run on this computer while it's on and AbacusAI Bot is open.",
       "title": "Run around the clock",
       "free": "Want routines to keep going with your laptop closed? Abacus AI Agent on the web runs them 24/7 on the Basic plan.",
-      "paid": "Your plan includes 24/7 routines in Abacus AI Agent on the web.",
-      "openAgent": "Open Abacus AI Agent",
+      "paid": "Configurez vos routines dans Abacus AI Agent sur le web. Elles y tournent 24h/24, même ordinateur éteint, tout comme vos réponses automatiques WhatsApp, Telegram et Discord.",
+      "openAgent": "Configurer les routines 24h/24",
       "dismiss": "Dismiss",
       "missed_one": "Missed {{count}} run while your computer was off",
       "missed_other": "Missed {{count}} runs while your computer was off",
       "missedNoticeFree": "{{names}}. On the Basic plan, Abacus AI Agent on the web runs routines 24/7, even with your computer off.",
-      "missedNoticePaid": "{{names}}. Your plan runs routines 24/7 in Abacus AI Agent on the web, even with your computer off."
+      "missedNoticePaid": "{{names}}. Configurez vos routines dans Abacus AI Agent sur le web, où elles tournent 24h/24, même ordinateur éteint."
+    },
+    "upgraded": {
+      "title": "Vous êtes sur {{plan}}",
+      "titleNoPlan": "Vous avez un forfait payant",
+      "body": "Étape suivante : configurez vos routines dans Abacus AI Agent sur le web. Elles y tournent 24h/24, même ordinateur éteint.",
+      "autoReplies": "Réponses automatiques WhatsApp, Telegram et Discord",
+      "allRoutines": "Toutes vos routines, à l'heure",
+      "setUp": "Configurer les routines 24h/24",
+      "back": "Retour à AbacusAI Bot"
     },
     "reach": {
       "gmailSearch": "Search Gmail",

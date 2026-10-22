@@ -195,7 +195,11 @@ it("opens a referral dialog, copies the real link, selects it on clipboard failu
 it("swaps the paid link and web card for the free promo from the shared account cache", async () => {
   let current = account;
   const open = vi.fn();
+  // The after-upgrade routines card is its own test (routines); seen here.
+  const seed = defaultSeed();
+  seed.prefs!.dismissals.upgradeRoutinesSeenAt = 1;
   const app = await renderApp("/sessions/new", {
+    seed,
     procedures: {
       account: { abacus: os.account.abacus.handler(() => current) },
       system: {

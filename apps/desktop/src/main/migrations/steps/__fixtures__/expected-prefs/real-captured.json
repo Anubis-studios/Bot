@@ -19,6 +19,7 @@
       "creditsExhaustedAt": "default",
       "defaultMode": "legacy",
       "dismissals.creditThresholdCards": "default",
+      "dismissals.freePlanSeenAt": "default",
       "dismissals.newLookSeenAt": "default",
       "dismissals.referralCardUntil": "default",
       "dismissals.routeLlmNudgeAt": "default",
@@ -27,6 +28,7 @@
       "dismissals.routinesAlwaysOnCardAt": "default",
       "dismissals.routinesAlwaysOnToldAt": "default",
       "dismissals.routinesMissedSeenAt": "default",
+      "dismissals.upgradeRoutinesSeenAt": "default",
       "dismissals.upsell": "default",
       "dismissals.whatsappIntroAt": "default",
       "freeLaneChosenAt": "default",
@@ -85,6 +87,7 @@
       "defaultMode": "AUTO",
       "dismissals": {
         "creditThresholdCards": {},
+        "freePlanSeenAt": null,
         "newLookSeenAt": null,
         "referralCardUntil": null,
         "routeLlmNudgeAt": null,
@@ -93,6 +96,7 @@
         "routinesAlwaysOnCardAt": null,
         "routinesAlwaysOnToldAt": null,
         "routinesMissedSeenAt": null,
+        "upgradeRoutinesSeenAt": null,
         "upsell": false,
         "whatsappIntroAt": null
       },

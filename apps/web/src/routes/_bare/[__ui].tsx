@@ -30,9 +30,11 @@ import {
   OnboardingGallery,
 } from "#renderer/features/onboarding/gallery";
 import {
+  AlwaysOnGallery,
   Phase5GalleryNav,
   phase5FixtureIds,
   RoutineSidebarGallery,
+  UpgradeRoutinesGallery,
 } from "#renderer/features/routines/gallery";
 import {
   sessionsGallerySections,
@@ -196,6 +198,9 @@ function Phase5View({ fixture }: { fixture: string }) {
     "artifacts-grid": <ArtifactsPage fixtureRows={artifactGalleryRows} />,
     "artifacts-stress": <ArtifactsStressGallery />,
     "sound-synthesis": <SoundSynthesisProbe />,
+    "upgrade-routines": <UpgradeRoutinesGallery />,
+    "routines-always-on-paid": <AlwaysOnGallery plan="paid" />,
+    "routines-always-on-free": <AlwaysOnGallery plan="free" />,
     "library-connectors": <ConnectorsPage />,
     "settings-general": <GeneralPage />,
     "settings-models": <ModelsPage />,

@@ -1551,13 +1551,22 @@
       "local": "Routines run on this computer while it's on and AbacusAI Bot is open.",
       "title": "Run around the clock",
       "free": "Want routines to keep going with your laptop closed? Abacus AI Agent on the web runs them 24/7 on the Basic plan.",
-      "paid": "Your plan includes 24/7 routines in Abacus AI Agent on the web.",
-      "openAgent": "Open Abacus AI Agent",
+      "paid": "ウェブ版の Abacus AI Agent でルーティンを設定しましょう。パソコンの電源が切れていても、ルーティンも WhatsApp・Telegram・Discord の自動返信も 24 時間動き続けます。",
+      "openAgent": "24 時間ルーティンを設定",
       "dismiss": "Dismiss",
       "missed_one": "Missed {{count}} run while your computer was off",
       "missed_other": "Missed {{count}} runs while your computer was off",
       "missedNoticeFree": "{{names}}. On the Basic plan, Abacus AI Agent on the web runs routines 24/7, even with your computer off.",
-      "missedNoticePaid": "{{names}}. Your plan runs routines 24/7 in Abacus AI Agent on the web, even with your computer off."
+      "missedNoticePaid": "{{names}}。ウェブ版の Abacus AI Agent でルーティンを設定すると、パソコンの電源が切れていても 24 時間動き続けます。"
+    },
+    "upgraded": {
+      "title": "{{plan}} プランになりました",
+      "titleNoPlan": "有料プランになりました",
+      "body": "次は、ウェブ版の Abacus AI Agent でルーティンを設定しましょう。パソコンの電源が切れていても 24 時間動き続けます。",
+      "autoReplies": "WhatsApp・Telegram・Discord の自動返信",
+      "allRoutines": "すべてのルーティンを予定どおりに",
+      "setUp": "24 時間ルーティンを設定",
+      "back": "AbacusAI Bot に戻る"
     },
     "reach": {
       "gmailSearch": "Search Gmail",

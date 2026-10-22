@@ -1551,13 +1551,22 @@
       "local": "Routines run on this computer while it's on and AbacusAI Bot is open.",
       "title": "Run around the clock",
       "free": "Want routines to keep going with your laptop closed? Abacus AI Agent on the web runs them 24/7 on the Basic plan.",
-      "paid": "Your plan includes 24/7 routines in Abacus AI Agent on the web.",
-      "openAgent": "Open Abacus AI Agent",
+      "paid": "Atur rutinitasmu di Abacus AI Agent di web. Di sana rutinitas berjalan 24/7, bahkan saat komputermu mati, begitu juga balasan otomatis WhatsApp, Telegram, dan Discord.",
+      "openAgent": "Atur rutinitas 24/7",
       "dismiss": "Dismiss",
       "missed_one": "Missed {{count}} run while your computer was off",
       "missed_other": "Missed {{count}} runs while your computer was off",
       "missedNoticeFree": "{{names}}. On the Basic plan, Abacus AI Agent on the web runs routines 24/7, even with your computer off.",
-      "missedNoticePaid": "{{names}}. Your plan runs routines 24/7 in Abacus AI Agent on the web, even with your computer off."
+      "missedNoticePaid": "{{names}}. Atur rutinitasmu di Abacus AI Agent di web, tempat rutinitas berjalan 24/7, bahkan saat komputermu mati."
+    },
+    "upgraded": {
+      "title": "Kamu sekarang di {{plan}}",
+      "titleNoPlan": "Kamu sekarang di paket berbayar",
+      "body": "Selanjutnya, atur rutinitasmu di Abacus AI Agent di web. Di sana rutinitas berjalan 24/7, bahkan saat komputermu mati.",
+      "autoReplies": "Balasan otomatis WhatsApp, Telegram, dan Discord",
+      "allRoutines": "Semua rutinitasmu, tepat waktu",
+      "setUp": "Atur rutinitas 24/7",
+      "back": "Kembali ke AbacusAI Bot"
     },
     "reach": {
       "gmailSearch": "Search Gmail",

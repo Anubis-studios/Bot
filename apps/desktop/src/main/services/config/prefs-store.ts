@@ -79,6 +79,8 @@ const DEFAULTS: PrefsValues = {
     routinesAlwaysOnCardAt: null,
     routinesMissedSeenAt: null,
     creditThresholdCards: {},
+    freePlanSeenAt: null,
+    upgradeRoutinesSeenAt: null,
   },
   panes: {},
   motion: { reduce: "system" },

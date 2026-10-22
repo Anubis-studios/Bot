@@ -44,6 +44,8 @@ export const DEFAULT_PREFS: Required<PrefsRow> & {
     routinesAlwaysOnCardAt: null,
     routinesMissedSeenAt: null,
     creditThresholdCards: {},
+    freePlanSeenAt: null,
+    upgradeRoutinesSeenAt: null,
   },
   panes: {},
   motion: { reduce: "system" },

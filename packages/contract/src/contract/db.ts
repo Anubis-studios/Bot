@@ -214,6 +214,10 @@ export const PREFS_GROUP_ENTRIES = {
         answered: v.nullable(CreditThresholdSchema),
       })
     ),
+    /** The account first read on the free plan here, so a paid read after it is an upgrade. */
+    freePlanSeenAt: NullableTimestamp,
+    /** The after-upgrade card sending routines to Abacus AI Agent on the web, seen. */
+    upgradeRoutinesSeenAt: NullableTimestamp,
   },
   motion: { reduce: v.picklist(["system", "on", "off"]) },
   sounds: {

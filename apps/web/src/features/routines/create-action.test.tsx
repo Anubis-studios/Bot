@@ -1,11 +1,17 @@
 import { contract } from "@abacus-ai/contract/contract";
 import type { AbacusAccountInfo } from "@abacus-ai/contract/contracts";
 import { implement } from "@orpc/server";
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
-import { expect, it } from "vitest";
+import {
+  act,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
+import { expect, it, vi } from "vitest";
 
 import { IS_BROWSER } from "#renderer/lib/platform";
-import { renderApp } from "#renderer/test-support/app-harness";
+import { defaultSeed, renderApp } from "#renderer/test-support/app-harness";
 const os = implement(contract);
 const account = (tier: string): AbacusAccountInfo => ({
   user_id: "test",
@@ -100,6 +106,114 @@ it.runIf(IS_BROWSER)(
         await screen.findByRole("dialog", { name: "Unlock routines" })
       ).toBeTruthy();
       expect(screen.queryByRole("textbox", { name: "Instruction" })).toBeNull();
+    } finally {
+      app.view.unmount();
+      await app.cleanup();
+    }
+  }
+);
+it.runIf(!IS_BROWSER)(
+  "once the plan turns paid, sends routines to Abacus AI Agent on the web, once",
+  async () => {
+    let tier = "free";
+    const open = vi.fn();
+    const app = await renderApp("/routines", {
+      procedures: {
+        account: { abacus: os.account.abacus.handler(() => account(tier)) },
+        system: {
+          openExternal: os.system.openExternal.handler(({ input }) =>
+            open(input)
+          ),
+        },
+      },
+    });
+    const dismissals = () => app.collections.prefs.get("app")?.dismissals;
+    try {
+      // Read as free first: that read is what makes a later paid one an upgrade.
+      await waitFor(() => expect(dismissals()?.freePlanSeenAt).not.toBeNull());
+      expect(screen.queryByRole("dialog")).toBeNull();
+      tier = "basic";
+      await act(async () => {
+        await app.router.options.context.queryClient.invalidateQueries({
+          queryKey: app.transport.orpc.account.abacus.queryKey(),
+        });
+      });
+      const dialog = await screen.findByRole("dialog", {
+        name: "You're on basic",
+      });
+      fireEvent.click(
+        within(dialog).getByRole("button", { name: "Set up 24/7 routines" })
+      );
+      await waitFor(() =>
+        expect(open).toHaveBeenCalledWith({
+          url: "https://apps.abacus.ai/chatllm",
+        })
+      );
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+      expect(dismissals()?.upgradeRoutinesSeenAt).not.toBeNull();
+    } finally {
+      app.view.unmount();
+      await app.cleanup();
+    }
+  },
+  15000
+);
+it.runIf(!IS_BROWSER)(
+  "never tells an account first read as paid that it just upgraded",
+  async () => {
+    const app = await renderApp("/routines", options("basic"));
+    try {
+      await screen.findByRole("navigation", { name: "Routines" });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(
+        app.collections.prefs.get("app")?.dismissals.freePlanSeenAt
+      ).toBeNull();
+    } finally {
+      app.view.unmount();
+      await app.cleanup();
+    }
+  }
+);
+it.runIf(!IS_BROWSER)(
+  "the free Run around the clock card has no close button and shows despite an earlier dismissal",
+  async () => {
+    const seed = defaultSeed();
+    seed.prefs!.dismissals.routinesAlwaysOnCardAt = 1;
+    const app = await renderApp("/routines", { seed, ...options("free") });
+    try {
+      const card = await screen.findByRole("region", {
+        name: "Run around the clock",
+      });
+      expect(
+        within(card).getByRole("button", { name: "Upgrade" })
+      ).toBeTruthy();
+      expect(
+        within(card).queryByRole("button", { name: "Dismiss" })
+      ).toBeNull();
+    } finally {
+      app.view.unmount();
+      await app.cleanup();
+    }
+  }
+);
+it.runIf(!IS_BROWSER)(
+  "the paid Run around the clock card can still be dismissed, and stays dismissed",
+  async () => {
+    const app = await renderApp("/routines", options("pro"));
+    try {
+      const card = await screen.findByRole("region", {
+        name: "Run around the clock",
+      });
+      fireEvent.click(within(card).getByRole("button", { name: "Dismiss" }));
+      await waitFor(() =>
+        expect(
+          screen.queryByRole("region", { name: "Run around the clock" })
+        ).toBeNull()
+      );
+      expect(
+        app.collections.prefs.get("app")?.dismissals.routinesAlwaysOnCardAt
+      ).not.toBeNull();
     } finally {
       app.view.unmount();
       await app.cleanup();
