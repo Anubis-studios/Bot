@@ -88,18 +88,24 @@ export const creditsRenewMonthly = (billing: BillingPlan | null): boolean =>
 
 /** How many of the plan's leading models a pitch names. */
 const TOP_MODEL_COUNT = 4;
-const TOP_MODELS_FEATURE = /^top models including (.+)$/i;
+const TOP_MODELS_FEATURE = "top models including ";
 
-/** The plan's leading models, read from its feature line; null without one. */
+/**
+ * The plan's leading models, read from its feature line; null without one.
+ * Plain string splits: the line is the server's, and a backtracking pattern
+ * over it could be made slow.
+ */
 const planTopModels = (
   features: readonly string[],
   locale: string
 ): string | null => {
   for (const feature of features) {
-    const match = TOP_MODELS_FEATURE.exec(feature.trim());
-    if (match == null) continue;
-    const names = match[1]!
-      .split(/,\s*|\s+and\s+/)
+    const line = feature.trim();
+    if (!line.toLowerCase().startsWith(TOP_MODELS_FEATURE)) continue;
+    const names = line
+      .slice(TOP_MODELS_FEATURE.length)
+      .split(",")
+      .flatMap((part) => part.split(" and "))
       .map((name) => name.trim())
       .filter((name) => name.length > 0)
       .slice(0, TOP_MODEL_COUNT);
