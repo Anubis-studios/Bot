@@ -150,7 +150,6 @@ import {
   DEFAULT_MAX_OUTPUT_TOKENS,
 } from "./providers.js";
 import {
-  REPLY_LANGUAGE_PROMPT,
   replyLanguageMismatch,
   replyLanguageRepairPrompt,
   type ReplyLanguageMismatch,
@@ -199,7 +198,10 @@ import {
   type TurnFailure,
 } from "./turn-outcome.js";
 import { turnUsage, type TurnUsage } from "./turn-usage.js";
-import { learnUserLanguage, userLanguagePrompt } from "./user-language.js";
+import {
+  accountReplyLanguagePrompt,
+  learnUserLanguage,
+} from "./user-language.js";
 import { webHostPrompt } from "./web-host-prompt.js";
 import { desktopXSearchAvailable, searchAvailable } from "./web/search.js";
 import webTools from "./web/tools.js";
@@ -860,8 +862,8 @@ export class AbacusBotSession {
   private resourceLoader: DefaultResourceLoader | undefined;
   /** The instructions the current prompt was built with; compared per turn. */
   private promptInstructions = "";
-  /** The user-language line the prompt was built with. */
-  private promptUserLanguage: string | null = null;
+  /** The reply-language block the prompt was built with. */
+  private promptUserLanguage = "";
   private promptPersona = "";
   /** The MCP roster the prompt was last built against. */
   private promptMcpRoster = "";
@@ -966,8 +968,6 @@ export class AbacusBotSession {
         // Timezone before anything that shows a time: connectors return UTC.
         timezonePrompt(),
         webHostPrompt(),
-        // The check at agent_end catches language drift; this prevents it.
-        REPLY_LANGUAGE_PROMPT,
         // Both prompts name tools, so both read the same roster.
         displayPrompt(),
         // Null everywhere the tool is a real bash.
@@ -987,7 +987,8 @@ export class AbacusBotSession {
         const persona = personaPrompt();
         const instructions = unattended ? null : customInstructionsPrompt();
         const remember = unattended ? null : rememberPrompt();
-        const language = userLanguagePrompt();
+        // The check at agent_end catches language drift; this prevents it.
+        const language = accountReplyLanguagePrompt();
         this.promptUserLanguage = language;
 
         // Live statuses, so a connector added mid-chat updates the line.
@@ -1001,7 +1002,7 @@ export class AbacusBotSession {
           ...(remember == null ? [] : [remember]),
           ...(instructions == null ? [] : [instructions]),
           // Last of all, so it outweighs a template or routine written in English.
-          ...(language == null ? [] : [language]),
+          language,
         ];
       },
       // The permission gate runs before the guardrails: a call the user will
@@ -3780,7 +3781,7 @@ export class AbacusBotSession {
     // The bot persona and the MCP roster ride the same rebuild.
     const persona = readPersona();
     const roster = mcpRosterFingerprint(this.mcp.statuses);
-    const language = userLanguagePrompt();
+    const language = accountReplyLanguagePrompt();
 
     if (
       current === this.promptInstructions &&

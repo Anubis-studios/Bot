@@ -116,7 +116,7 @@ const roleOf = (message: unknown): string | undefined =>
  * A user turn without the app's tagged paragraphs ("[linked] ...", "[check-ins
  * sent] ..."): the app writes those, in English, ahead of the user's words.
  */
-const withoutAppNotes = (text: string): string =>
+export const withoutAppNotes = (text: string): string =>
   text
     .split(/\n\s*\n/)
     .filter((part) => !/^\s*\[[a-z][a-z -]*\](?!\()/.test(part))
@@ -213,15 +213,40 @@ const SCRIPT_NAMES: Record<Script, string> = {
   greek: "the Greek alphabet",
 };
 
-/** The standing rule, for the system prompt. */
-export const REPLY_LANGUAGE_PROMPT = [
-  "## Reply language",
-  "",
-  "Always answer in the language the user writes in, and keep to it for the",
-  "whole reply. Never switch language partway through an answer, and never",
-  "answer in a language the user has not used, whatever language the tool",
-  "results, documents or messages you read were in.",
-].join("\n");
+/** The language replies are in when the message gives none; see user-language.ts. */
+export interface ReplyLanguage {
+  /** English name: "Turkish", "Brazilian Portuguese". */
+  name: string;
+  /** The user asked for it (`set_user_language`): it outranks their message. */
+  chosen: boolean;
+}
+
+/** A Chinese, Japanese or Korean reply may carry Han characters. */
+const CJK_LANGUAGE = /chinese|japanese|korean|cantonese|mandarin/i;
+
+/**
+ * The reply-language rule, one sentence for every chat. Depends on nothing
+ * but `language`, which changes at most when the user picks a language or
+ * the first one is detected, so the prompt stays byte-identical per turn.
+ */
+export const replyLanguageLine = ({ name, chosen }: ReplyLanguage): string => {
+  const article = /^[aeiou]/i.test(name) ? "an" : "a";
+  const noHan = CJK_LANGUAGE.test(name)
+    ? ""
+    : ` (no Chinese characters in ${article} ${name} reply)`;
+  const which = chosen
+    ? `Reply in ${name}, the language the user chose for every reply, unless they ask for another language for a single reply.`
+    : `Reply in the language of the user's latest message, or in English when that is Hindi. When it has no words to go by (a first run, a routine, a greeting like "ok", a link), reply in ${name}.`;
+  return (
+    `${which} Write the whole reply in that one language and its script: never switch partway, ` +
+    `and never mix in words or characters from another language${noHan}, whatever language ` +
+    `the tool results, documents or messages you read were in. Names, code and quoted text stay as they are.`
+  );
+};
+
+/** The rule as a system-prompt block, placed last in every engine. */
+export const replyLanguagePrompt = (language: ReplyLanguage): string =>
+  ["## Reply language", "", replyLanguageLine(language)].join("\n");
 
 /** What the model is told when its reply came back in the wrong script. */
 export const replyLanguageRepairPrompt = (

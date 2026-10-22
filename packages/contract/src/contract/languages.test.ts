@@ -28,6 +28,9 @@ describe("supported languages", () => {
     expect(v.is(PrefsPatchSchema, { language: "de-DE" })).toBe(true);
     expect(v.is(PrefsPatchSchema, { language: "de" })).toBe(false);
     expect(v.is(PrefsPatchSchema, { language: "tlh-KL" })).toBe(false);
+    // Hindi is not a UI language: a saved pick reads back as "system".
+    expect(v.is(PrefsPatchSchema, { language: "hi-IN" })).toBe(false);
+    expect(SUPPORTED_LANGUAGES).not.toContain("hi-IN");
     // Unknown keys are refused, as the spec's prefs patch requires.
     expect(v.is(PrefsPatchSchema, { colour: "red" })).toBe(false);
   });

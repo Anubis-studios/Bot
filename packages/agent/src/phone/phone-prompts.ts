@@ -5,8 +5,10 @@
  */
 import { timezonePrompt } from "../bot/bot-time-tool.js";
 import { isOpenLlmReference } from "../openllm.js";
+import { replyLanguageLine } from "../reply-language.js";
 import { serviceRoutingPrompt } from "../service-routing-prompt.js";
 import { PHONE_CONNECTABLE_SERVICES } from "../tool-policy.js";
+import { resolveReplyLanguage } from "../user-language.js";
 import { PHONE_BUBBLE_MARKER } from "./phone-bubbles.js";
 
 /** How the model names itself when asked. */
@@ -18,22 +20,9 @@ export function describeModel(reference: string | null): string {
   return reference;
 }
 
-/** A language code's English name ("pt-BR" is "Brazilian Portuguese"), or the code itself. */
-function languageName(code: string): string {
-  try {
-    return new Intl.DisplayNames(["en"], { type: "language" }).of(code) ?? code;
-  } catch {
-    return code;
-  }
-}
-
-/** The language replies start in, with English when the server knows none. */
-function replyLanguagePrompt(language: string | null): string {
-  const start =
-    language == null
-      ? "The user's language is not known yet: reply in English"
-      : `The user's language is ${languageName(language)}: reply in it`;
-  return `${start}, and if they write in another language, switch to theirs.`;
+/** The reply-language rule, falling back to the server's language for the user, else English. */
+function phoneReplyLanguageLine(language: string | null): string {
+  return replyLanguageLine(resolveReplyLanguage(null, language));
 }
 
 /** `zone` and `language` are the user's, as the server knew them when the session started. */
@@ -48,7 +37,7 @@ export function phoneOperatingPrompt(
     "",
     "Texting style:",
     "- Write like a person texting: short, plain, no preamble.",
-    `- ${replyLanguagePrompt(language)}`,
+    `- ${phoneReplyLanguageLine(language)}`,
     "- WhatsApp formatting only: *bold*, _italic_, simple lists. No headings,",
     "  no tables, no markdown links.",
     `- When a reply reads better as two or three texts, put a line with only`,

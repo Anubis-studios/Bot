@@ -91,6 +91,7 @@ import {
 import { isOpenLlmReference, OPENLLM_ID } from "../openllm.js";
 import { refreshOpenRouterLive } from "../openrouter-live.js";
 import { OwnedTurn } from "../owned-turn.js";
+import { isOwnerAudience } from "../owner-tools.js";
 import { PendingSteers, type PendingSteer } from "../pending-steers.js";
 import {
   gateToolCall,
@@ -120,7 +121,6 @@ import {
   DEFAULT_MAX_OUTPUT_TOKENS,
 } from "../providers.js";
 import {
-  REPLY_LANGUAGE_PROMPT,
   replyLanguageMismatch,
   replyLanguageRepairPrompt,
   type ReplyLanguageMismatch,
@@ -157,6 +157,10 @@ import {
   type TurnFailure,
 } from "../turn-outcome.js";
 import { turnUsage, type TurnUsage } from "../turn-usage.js";
+import {
+  accountReplyLanguagePrompt,
+  learnUserLanguage,
+} from "../user-language.js";
 import webTools from "../web/tools.js";
 import type { ForeverProfile, HiddenTurnPrompt } from "./profile.js";
 import { TurnReply } from "./turn-reply.js";
@@ -355,6 +359,8 @@ export class ForeverEngine {
   private promptPersona = "";
   /** The MCP roster the prompt was last built against. */
   private promptMcpRoster = "";
+  /** The reply-language block the prompt was built with. */
+  private promptReplyLanguage: string | null = null;
 
   constructor(
     private readonly options: ForeverEngineOptions,
@@ -424,8 +430,6 @@ export class ForeverEngine {
       systemPromptOverride: () => basePrompt("builtin"),
       appendSystemPrompt: [
         ...this.profile.systemPrompt(),
-        // Same guard as the desktop chat, on a worse surface.
-        REPLY_LANGUAGE_PROMPT,
         githubPrompt(),
         windowsShellPrompt(),
         scriptRuntimesPrompt(),
@@ -436,6 +440,9 @@ export class ForeverEngine {
         // Live on every rebuild: a connector added mid-conversation must show.
         const mcp = mcpPrompt(this.mcp.statuses);
         this.promptMcpRoster = mcpRosterFingerprint(this.mcp.statuses);
+        // Same block as the desktop chat; the check at agent_end catches drift.
+        const language = this.replyLanguagePrompt();
+        this.promptReplyLanguage = language;
 
         return [
           ...(persona == null ? [] : [persona]),
@@ -443,6 +450,8 @@ export class ForeverEngine {
           ...(mcp == null ? [] : [mcp]),
           ...(memory == null ? [] : [memory]),
           ...(sessionStartMemory == null ? [] : [sessionStartMemory]),
+          // Last of all, so it outweighs a kickstart or routine written in English.
+          ...(language == null ? [] : [language]),
         ];
       },
       extensionFactories: [
@@ -767,6 +776,9 @@ export class ForeverEngine {
 
     try {
       this.profile.noteUserWords?.(text);
+      // Only the user's own words name their language: not a sender's, not a routine's.
+      if (isOwnerAudience() && this.profile.statesReplyLanguage !== true)
+        void learnUserLanguage(text, (process.env.ABACUS_API_KEY ?? "").trim());
       const context = await this.profile.beforeTurn(text);
       // Rides along with the user's message, not as a turn of its own.
       if (context.length > 0)
@@ -902,6 +914,13 @@ export class ForeverEngine {
     return ok;
   }
 
+  /** The account's reply-language block, or null when the profile's own prompt states the rule. */
+  private replyLanguagePrompt(): string | null {
+    return this.profile.statesReplyLanguage === true
+      ? null
+      : accountReplyLanguagePrompt();
+  }
+
   /**
    * Rebuild the standing prompt when the persona or memory files changed, so
    * the prompt cache is spent only when something real changed.
@@ -910,11 +929,13 @@ export class ForeverEngine {
     const persona = readPersona();
     const fingerprint = this.profile.memory.fingerprint();
     const roster = mcpRosterFingerprint(this.mcp.statuses);
+    const language = this.replyLanguagePrompt();
 
     if (
       persona === this.promptPersona &&
       fingerprint === this.promptMemoryFingerprint &&
-      roster === this.promptMcpRoster
+      roster === this.promptMcpRoster &&
+      language === this.promptReplyLanguage
     )
       return;
 

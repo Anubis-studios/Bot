@@ -1,16 +1,30 @@
 /**
- * The language the user wants replies in, one per account. Detected once from
- * their first messages by a small model call, changed when they ask with
- * `set_user_language`, and closing every system prompt, so bots, routines and
- * setup runs that have no message of the user's to copy still answer in it.
- * Re-read per turn (refreshCustomInstructions in session.ts), like the
- * standing instructions.
+ * The language replies are in, one precedence for every engine:
+ *
+ * 1. the language the user chose (`set_user_language`);
+ * 2. the language of their current message, which the prompt line leaves to
+ *    the model, so nothing per turn reaches the prompt;
+ * 3. the language detected once from their first messages;
+ * 4. the app's language (the UI pick, else the OS's), ABACUSAI_BOT_LOCALE;
+ * 5. English.
+ *
+ * In a bot's chat with a remote sender the sender is someone else, so their
+ * message wins and the user's choice is only the fallback. Hindi is never a
+ * reply language: from any source it reads as English. The resolved language
+ * closes every system prompt, so bots, routines and setup runs that have no
+ * message to copy still answer in it; engines rebuild the prompt only when it
+ * changes, which is at most once per account at a reload.
  */
 import fs from "fs";
 import path from "path";
 
 import { abacusV1BaseUrl } from "./abacus-endpoint.js";
 import { abacusBotDir } from "./config.js";
+import {
+  type ReplyLanguage,
+  replyLanguagePrompt,
+  withoutAppNotes,
+} from "./reply-language.js";
 
 /** The cheap model the free plan already runs on. */
 export const USER_LANGUAGE_DETECT_MODEL = "deepseek-ai/DeepSeek-V4.1-Flash";
@@ -19,6 +33,7 @@ export const USER_LANGUAGE_DETECT_ATTEMPTS = 3;
 const DETECT_TIMEOUT_MS = 15_000;
 const DETECT_MAX_CHARS = 1_000;
 const NAME_MAX_CHARS = 40;
+const ENGLISH = "English";
 
 export interface UserLanguage {
   /** English name of the language, as the prompt states it: "Turkish". */
@@ -63,6 +78,8 @@ const cleanName = (raw: unknown): string | null => {
   if (name.length === 0 || name.length > NAME_MAX_CHARS) return null;
   // A name, not an instruction smuggled in as one.
   if (!/^\p{L}[\p{L}\p{M} ()'-]*$/u.test(name)) return null;
+  // Hindi is never a reply language; Hinglish reads as English too.
+  if (/^(hindi|hinglish)\b/i.test(name)) return ENGLISH;
   return name.charAt(0).toUpperCase() + name.slice(1);
 };
 
@@ -84,14 +101,52 @@ export function writeUserLanguage(
   return true;
 }
 
-/** The line that closes every system prompt, or null when nothing is set. */
-export function userLanguagePrompt(): string | null {
-  const language = readUserLanguage();
-  if (language == null) return null;
-  return (
-    `User language: ${language.name}. Always reply in ${language.name}, including scheduled ` +
-    `runs, setup runs and messages sent to other apps, unless the user asks for another ` +
-    `language for a single reply.`
+/**
+ * A BCP 47 tag's language in English, as the prompt states it: "pt-BR" is
+ * "Brazilian Portuguese", "tr-TR" is "Turkish" (a region only when the
+ * language has a name for it). Null for a tag that names no language.
+ */
+function localeLanguageName(tag: string): string | null {
+  try {
+    const names = new Intl.DisplayNames(["en"], { type: "language" });
+    const full = names.of(tag.trim().replace(/_/g, "-"));
+    const base = names.of(
+      new Intl.Locale(tag.trim().replace(/_/g, "-")).language
+    );
+    const name = full != null && !full.includes("(") ? full : base;
+    if (name == null || name.toLowerCase() === tag.trim().toLowerCase())
+      return null;
+    return cleanName(name);
+  } catch {
+    return null;
+  }
+}
+
+/** Whether this is a bot's chat with a remote sender, as the desktop that spawned it says. */
+const isSenderChat = (): boolean =>
+  (process.env.ABACUSAI_BOT_SENDER_CHAT ?? "").trim() === "1";
+
+/** The precedence above, from its inputs; see the module comment. */
+export function resolveReplyLanguage(
+  saved: UserLanguage | null,
+  appLocale: string | null | undefined,
+  senderChat = false
+): ReplyLanguage {
+  const savedName = saved == null ? null : cleanName(saved.name);
+  if (savedName != null)
+    return { name: savedName, chosen: saved?.source === "user" && !senderChat };
+  const app = appLocale == null ? null : localeLanguageName(appLocale);
+  return { name: app ?? ENGLISH, chosen: false };
+}
+
+/** The reply-language block this session's prompt closes with. */
+export function accountReplyLanguagePrompt(): string {
+  return replyLanguagePrompt(
+    resolveReplyLanguage(
+      readUserLanguage(),
+      process.env.ABACUSAI_BOT_LOCALE,
+      isSenderChat()
+    )
   );
 }
 
@@ -150,10 +205,12 @@ let detecting = false;
  * is saved and attempts remain. Runs in the background; never throws.
  */
 export async function learnUserLanguage(
-  text: string,
+  message: string,
   apiKey: string,
   fetchImpl: typeof fetch = fetch
 ): Promise<void> {
+  // The app's own tagged notes ("[first run] ...") are English and not theirs.
+  const text = withoutAppNotes(message);
   if (detecting || text.trim().length === 0 || apiKey.length === 0) return;
   const stored = readStored();
   if (cleanName(stored.language?.name) != null) return;

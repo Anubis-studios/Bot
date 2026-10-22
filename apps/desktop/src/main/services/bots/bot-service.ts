@@ -7,6 +7,10 @@
 import fs from "fs";
 import path from "path";
 
+import {
+  readUserLanguage,
+  resolveReplyLanguage,
+} from "@abacus-ai/agent/user-language";
 import { connectorById } from "@abacus-ai/connectors/registry";
 import type { UserTextTags } from "@abacus-ai/contract/agent-types";
 import {
@@ -288,16 +292,6 @@ const changeNotice = (notice: BotChangeNotice): string => {
   );
 };
 
-/** "Brazilian Portuguese", "Turkish": the language a tag names, in English. */
-const languageName = (tag: string): string => {
-  try {
-    const name = new Intl.DisplayNames(["en"], { type: "language" }).of(tag);
-    return (name ?? tag).replace(/\s*\(.*\)$/, "");
-  } catch {
-    return tag;
-  }
-};
-
 /** Visible first message of a fresh bot chat, so the bot speaks first. */
 const kickstartMessage = (bot: Bot, language: string | null): string => {
   const names = neededConnectorNames(bot);
@@ -315,11 +309,12 @@ const kickstartMessage = (bot: Bot, language: string | null): string => {
     goal == null
       ? "get started on your mission"
       : `take the first step toward what the user asked for: "${goal}"`;
+  // The same resolver as the reply-language prompt line: never Hindi.
   const write =
     language == null
       ? ""
-      : ` Write in ${languageName(language)}, the user's app language, ` +
-        "unless they write to you in another.";
+      : ` Write in ${resolveReplyLanguage(readUserLanguage(), language).name}, ` +
+        "the user's language, unless they write to you in another.";
   return (
     `[first run] ${connect}Introduce yourself once, then ${start}. ` +
     "Everything after a tool result is the same reply continuing. " +

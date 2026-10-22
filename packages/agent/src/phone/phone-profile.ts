@@ -116,6 +116,8 @@ export function createPhoneProfile(
 
   return {
     // Read at session start; `current_time` reads the zone on every call.
+    // The server's language for the user is the reply fallback, not the app's.
+    statesReplyLanguage: true,
     systemPrompt: () => [
       phoneOperatingPrompt(
         options.model,

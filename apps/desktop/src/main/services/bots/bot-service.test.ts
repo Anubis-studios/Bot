@@ -256,9 +256,29 @@ describe("opening the forever chat", () => {
 
     const [, , kickstart] = vi.mocked(callbacks.sendMessage).mock.calls[0]!;
     expect(kickstart).toContain(
-      "Write in Brazilian Portuguese, the user's app language, unless they write to you in another."
+      "Write in Brazilian Portuguese, the user's language, unless they write to you in another."
     );
     expect(kickstart).toContain("get started on your mission");
+  });
+
+  it("writes the first run in the reply language's resolver: the saved language first, never Hindi", async () => {
+    const callbacks = makeCallbacks({ appLanguage: () => "hi-IN" });
+    const service = new BotService(callbacks);
+    const bot = service.create({ name: "Scout", description: "Watch." });
+
+    await service.openChat(bot.id);
+    const [, , hindiOs] = vi.mocked(callbacks.sendMessage).mock.calls[0]!;
+    expect(hindiOs).toContain("Write in English, the user's language,");
+    expect(hindiOs).not.toMatch(/Hindi/);
+
+    fs.writeFileSync(
+      path.join(home, "user-language.json"),
+      JSON.stringify({ language: { name: "Spanish", source: "detected" } })
+    );
+    const other = service.create({ name: "Scout 2", description: "Watch." });
+    await service.openChat(other.id);
+    const [, , saved] = vi.mocked(callbacks.sendMessage).mock.calls[1]!;
+    expect(saved).toContain("Write in Spanish, the user's language,");
   });
 
   it("starts a bot made from the user's words on those words, asking for nothing", async () => {

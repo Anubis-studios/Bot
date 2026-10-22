@@ -1245,6 +1245,12 @@ describe("the chat app's own language", () => {
     expect(channelLocale(null, null)).toBe("en-US");
   });
 
+  it("is never Hindi: a Hindi language or app falls back to English", () => {
+    expect(channelLocale("Hindi", "hi-IN")).toBe("en-US");
+    expect(channelLocale(null, "hi-IN")).toBe("en-US");
+    expect(channelLocale("Hindi", "tr-TR")).toBe("tr-TR");
+  });
+
   it("a Portuguese user hears the wall in Portuguese, with the bot's link and the plan's price", async () => {
     mocks.language = "Portuguese";
     mocks.fetchUpgradeUrl = async () => null;

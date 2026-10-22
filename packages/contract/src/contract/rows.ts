@@ -128,7 +128,6 @@ export const SUPPORTED_LANGUAGES = [
   "es-ES",
   "es-419",
   "fr-FR",
-  "hi-IN",
   "id-ID",
   "it-IT",
   "ja-JP",

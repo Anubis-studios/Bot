@@ -330,6 +330,7 @@ import {
 import type { ElectronBrowserRuntime } from "./services/browser/electron-browser-runtime";
 import {
   buildAgentAuthEnv,
+  appLocaleTag,
   buildAgentConfigEnv,
 } from "./services/config/agent-env";
 import type { PrefsStore } from "./services/config/prefs-store";
@@ -5706,6 +5707,13 @@ export class ServiceHost {
       ...(sessionId != null && this.isOwnerSession(sessionId)
         ? { ABACUSAI_BOT_AUDIENCE: "owner" }
         : {}),
+      // A remote sender's chat answers in the sender's language, not the user's pick.
+      ...(sessionId != null &&
+      this.agentSessionManagerService.get(sessionId)?.owner?.role === "sender"
+        ? { ABACUSAI_BOT_SENDER_CHAT: "1" }
+        : {}),
+      // The reply fallback; read at spawn, so a UI change reaches the next session.
+      ABACUSAI_BOT_LOCALE: this.appLanguage(),
       // Read once by the agent runtime and removed from its environment.
       ABACUSAI_BOT_CHECKOUT_TOKEN: this.checkoutToken,
       // Kept current afterwards by the `connectivity` command.
@@ -5745,10 +5753,11 @@ export class ServiceHost {
 
   /** The app's language, the OS's while the user has not picked one. */
   private appLanguage(): string {
-    const picked = this.prefs?.().get().language;
-    return picked != null && picked !== "system"
-      ? picked
-      : Intl.DateTimeFormat().resolvedOptions().locale;
+    return appLocaleTag(
+      this.prefs?.().get().language,
+      app.getPreferredSystemLanguages(),
+      app.getLocale()
+    );
   }
 
   /**

@@ -19,7 +19,6 @@ const LOADERS: Record<
   "es-ES": () => import("#locales/es-ES.json"),
   "es-419": () => import("#locales/es-419.json"),
   "fr-FR": () => import("#locales/fr-FR.json"),
-  "hi-IN": () => import("#locales/hi-IN.json"),
   "id-ID": () => import("#locales/id-ID.json"),
   "it-IT": () => import("#locales/it-IT.json"),
   "ja-JP": () => import("#locales/ja-JP.json"),
