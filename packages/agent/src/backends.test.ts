@@ -32,10 +32,13 @@ import { posixShell } from "./posix-shell.js";
 import { sandboxBackendFor } from "./sandbox-support.js";
 import { runnerPath } from "./sandbox/mxc.js";
 import {
+  hasRecycleBin,
+  mayDeleteForGood,
   parseRm,
   rewriteCmdDeletes,
   rewritePowershell,
   touchesTrash,
+  TRASH_UNAVAILABLE,
 } from "./trash-shim.js";
 import {
   emptiesTrash,
@@ -582,7 +585,11 @@ describe("deletes in the agent's shell", () => {
       }
     );
 
-    it(
+    // The test folder is under the home folder, so on Windows its drive has a Recycle Bin.
+    const windowsWithBin =
+      process.platform === "win32" && hasRecycleBin(os.homedir());
+
+    it.skipIf(windowsWithBin)(
       "deletes anyway when the trash refuses, and says so",
       { timeout: 60_000 },
       async () => {
@@ -596,6 +603,27 @@ describe("deletes in the agent's shell", () => {
         expect(there("tree")).toBe(false);
         expect(result.output).toContain("this drive has no Recycle Bin");
         expect(result.output).toContain("deleted it permanently instead");
+      }
+    );
+
+    it.runIf(windowsWithBin)(
+      "leaves in place what Windows will not recycle, as it may be in use",
+      { timeout: 60_000 },
+      async () => {
+        put("a.txt", "tree/b.txt", "folder/c.txt");
+        // What Windows answers for a folder a process runs in, or a file held open.
+        failWith = "Operation was aborted";
+
+        const rm = await run("rm -rf a.txt tree");
+        const rd = await run("cmd /c rd /s /q folder");
+
+        expect(rm.code).not.toBe(0);
+        expect(rd.code).not.toBe(0);
+        for (const kept of ["a.txt", "tree/b.txt", "folder/c.txt"])
+          expect(there(kept)).toBe(true);
+        expect(rm.output).toContain("left it in place");
+        expect(rm.output).not.toContain("permanently");
+        expect(rd.output).toContain("left it in place");
       }
     );
 
@@ -837,6 +865,35 @@ describe("what counts as emptying the trash", () => {
       "Get-ChildItem C:\\Users",
     ])
       expect(emptiesTrash(command, os.tmpdir()), command).toBe(false);
+  });
+});
+
+describe("when a delete the trash refused still goes ahead", () => {
+  const withBin = (): boolean => true;
+  const withoutBin = (): boolean => false;
+
+  it("always off Windows", () => {
+    expect(mayDeleteForGood("/a", "Operation was aborted", "linux")).toBe(true);
+    expect(mayDeleteForGood("/a", "nope", "darwin", withBin)).toBe(true);
+  });
+
+  it("on Windows only where the drive has no Recycle Bin", () => {
+    expect(
+      mayDeleteForGood("C:\\a", "Operation was aborted", "win32", withBin)
+    ).toBe(false);
+    expect(
+      mayDeleteForGood("E:\\a", "Operation was aborted", "win32", withoutBin)
+    ).toBe(true);
+  });
+
+  it("on Windows when no trash was there to ask", () => {
+    for (const reason of Object.values(TRASH_UNAVAILABLE))
+      expect(mayDeleteForGood("C:\\a", reason, "win32", withBin)).toBe(true);
+  });
+
+  it("finds no Recycle Bin on a network share", () => {
+    expect(hasRecycleBin("\\\\server\\share\\a.txt")).toBe(false);
+    expect(hasRecycleBin("//server/share/a.txt")).toBe(false);
   });
 });
 

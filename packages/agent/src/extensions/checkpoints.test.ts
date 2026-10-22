@@ -18,6 +18,7 @@ import {
   lineCounts,
   pathKey,
 } from "../checkpoint-store.js";
+import { hasRecycleBin } from "../trash-shim.js";
 import { setTrashMover } from "../trash.js";
 import {
   bashTargets,
@@ -389,20 +390,45 @@ describe("restoring", () => {
     }
   });
 
-  it("deletes it anyway when the trash refuses, and says so", async () => {
-    setTrashMover(async () => {
-      throw new Error("no Trash on this drive");
-    });
-    try {
-      const text = await restoreCreated();
+  // The test folder is under the temp dir, so on Windows its drive has a Recycle Bin.
+  const windowsWithBin =
+    process.platform === "win32" && hasRecycleBin(os.tmpdir());
 
-      expect(fs.existsSync(at("made.txt"))).toBe(false);
-      expect(text).toContain("no Trash on this drive");
-      expect(text).toContain("deleted it permanently instead");
-    } finally {
-      setTrashMover(null);
+  it.skipIf(windowsWithBin)(
+    "deletes it anyway when the trash refuses, and says so",
+    async () => {
+      setTrashMover(async () => {
+        throw new Error("no Trash on this drive");
+      });
+      try {
+        const text = await restoreCreated();
+
+        expect(fs.existsSync(at("made.txt"))).toBe(false);
+        expect(text).toContain("no Trash on this drive");
+        expect(text).toContain("deleted it permanently instead");
+      } finally {
+        setTrashMover(null);
+      }
     }
-  });
+  );
+
+  it.runIf(windowsWithBin)(
+    "leaves it in place when Windows will not recycle it, and says so",
+    async () => {
+      setTrashMover(async () => {
+        throw new Error("Operation was aborted");
+      });
+      try {
+        const text = await restoreCreated();
+
+        expect(fs.existsSync(at("made.txt"))).toBe(true);
+        expect(text).toContain("Operation was aborted");
+        expect(text).toContain("left it in place");
+      } finally {
+        setTrashMover(null);
+      }
+    }
+  );
 });
 
 describe("caps and retention", () => {

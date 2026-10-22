@@ -29,9 +29,11 @@ import { modelPath } from "./model-path.js";
 import { posixShell } from "./posix-shell-install.js";
 import {
   emptyTrashMessage,
+  mayDeleteForGood,
   TRASH_APPLETS,
   TRASH_ENV,
   TRASH_SHIMMED,
+  TRASH_UNAVAILABLE,
   trashName,
 } from "./trash-shim.js";
 
@@ -52,7 +54,7 @@ export const TRASH_TIMEOUT_MS = 10 * 60_000;
 
 /** Moves `file` to the trash: null when it went, otherwise why not. */
 export async function moveToTrash(file: string): Promise<string | null> {
-  if (mover == null) return "no trash is available in this session";
+  if (mover == null) return TRASH_UNAVAILABLE.session;
   try {
     await mover(file);
     return null;
@@ -62,13 +64,16 @@ export async function moveToTrash(file: string): Promise<string | null> {
 }
 
 /**
- * A file tool's delete: to the trash, or (never refusing) deleted for good
- * when the trash will not take it. Null when it went to the trash, otherwise
- * the note the tool's result carries.
+ * A file tool's delete: to the trash, or deleted for good when the trash will
+ * not take it and that may go for good (mayDeleteForGood); otherwise left in
+ * place. Null when it went to the trash, otherwise the note the tool's result
+ * carries.
  */
 export async function removeToTrash(file: string): Promise<string | null> {
   const reason = await moveToTrash(file);
   if (reason == null) return null;
+  if (!mayDeleteForGood(file, reason))
+    return `Could not move ${modelPath(file)} to the ${trashName()} (${reason}); left it in place, as it may be open in another program.`;
   await fsp.rm(file, { recursive: true, force: true });
 
   return `Could not move ${modelPath(file)} to the ${trashName()} (${reason}); deleted it permanently instead.`;

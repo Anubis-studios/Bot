@@ -144,7 +144,8 @@ export interface RestoreOptions {
   insideTurn?: boolean;
   /**
    * Deletes a file the turn created; a plain delete by default. Answers a
-   * note when it could only delete for good (the agent's goes to the trash).
+   * note when it could only delete for good, or left the file in place (the
+   * agent's goes to the trash).
    */
   remove?: (file: string) => Promise<string | null>;
 }

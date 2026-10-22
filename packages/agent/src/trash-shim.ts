@@ -5,8 +5,9 @@
  * each runs this file with the command it stands in for. `rm`, `rmdir`,
  * `unlink`, `find -delete`, `git clean`, cmd's `del`/`rd` and PowerShell's
  * `Remove-Item` hand what they would delete to the agent, which moves it to
- * the platform's trash. A delete is never refused: when the move fails, the
- * real tool deletes it and a note says so. Deleting the trash itself, or
+ * the platform's trash. When the move fails, the real tool deletes it and a
+ * note says so, except on a Windows drive that has a Recycle Bin, where the
+ * item is left in place (see mayDeleteForGood). Deleting the trash itself, or
  * anything inside it, is the one thing never run.
  *
  * Node builtins only, and no imports of the agent: it starts once per command.
@@ -62,6 +63,44 @@ export function emptyTrashMessage(
     `Tell the user, in their language: "Emptying the ${bin} can't be undone, so I won't do it. ` +
     `Please open the ${bin} yourself, check nothing in it is needed, then empty it."`
   );
+}
+
+/** Why a move was never tried: no trash service was reached. The delete goes ahead then. */
+export const TRASH_UNAVAILABLE = {
+  service: "the app's trash service is not available here",
+  session: "no trash is available in this session",
+  unreachable: "the app's trash service could not be reached",
+  unreadable: "an unreadable answer from the app",
+  unanswered: "no answer",
+} as const;
+
+/** Whether the drive `abs` is on has a Recycle Bin: a local drive whose root holds one. */
+export function hasRecycleBin(abs: string): boolean {
+  const root = path.win32.parse(path.win32.resolve(abs)).root;
+  // A network share has none.
+  if (/^[\\/]{2}/.test(root)) return false;
+
+  return fs.existsSync(path.win32.join(root, "$Recycle.Bin"));
+}
+
+/**
+ * Whether a delete the trash refused may still go ahead, for good. Not on a
+ * Windows drive that has a Recycle Bin: Windows refuses an item that is in
+ * use (a folder a process runs in, a file held open) with the same error it
+ * gives for a drive without one, so deleting anyway would destroy what is
+ * open. The item is left in place and the command fails instead.
+ */
+export function mayDeleteForGood(
+  abs: string,
+  reason: string,
+  platform: NodeJS.Platform = process.platform,
+  recycleBin: (abs: string) => boolean = hasRecycleBin
+): boolean {
+  if (platform !== "win32") return true;
+  if ((Object.values(TRASH_UNAVAILABLE) as string[]).includes(reason))
+    return true;
+
+  return !recycleBin(abs);
 }
 
 const foldCase = (platform: NodeJS.Platform): boolean =>
@@ -190,7 +229,7 @@ export async function sendToTrash(
   const token = env[TRASH_ENV.token];
   if (paths.length === 0) return [];
   if (socket == null || socket === "" || token == null || token === "")
-    return paths.map(() => "the app's trash service is not available here");
+    return paths.map(() => TRASH_UNAVAILABLE.service);
 
   return await new Promise((resolve) => {
     let buffer = "";
@@ -216,15 +255,17 @@ export async function sendToTrash(
         const results = reply.results ?? [];
         finish(
           paths.map((_, index) =>
-            results[index] === undefined ? "no answer" : results[index]!
+            results[index] === undefined
+              ? TRASH_UNAVAILABLE.unanswered
+              : results[index]!
           )
         );
       } catch {
-        finish(paths.map(() => "an unreadable answer from the app"));
+        finish(paths.map(() => TRASH_UNAVAILABLE.unreadable));
       }
     });
     const unreachable = (): void =>
-      finish(paths.map(() => "the app's trash service could not be reached"));
+      finish(paths.map(() => TRASH_UNAVAILABLE.unreachable));
     client.on("error", unreachable);
     client.on("close", unreachable);
   });
@@ -344,7 +385,8 @@ const removeTree: PlainDelete = (targets) => {
 
 /**
  * Trash what can go, plain-delete temp files and whatever the trash refused
- * (saying so), and refuse only what is in the trash. The exit status.
+ * (saying so) where that may go for good, and refuse what is in the trash.
+ * The exit status.
  */
 async function dispose(
   tool: string,
@@ -367,6 +409,13 @@ async function dispose(
     const reason = reasons[index];
     if (reason == null) {
       onTrashed(target);
+      return;
+    }
+    if (!mayDeleteForGood(target.abs, reason)) {
+      process.stderr.write(
+        `${tool}: could not move '${target.shown}' to the ${trashName()} (${reason}); left it in place, as it may be open in another program.\n`
+      );
+      status = 1;
       return;
     }
     process.stderr.write(
