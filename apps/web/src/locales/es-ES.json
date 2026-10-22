@@ -4243,22 +4243,14 @@
     "connectorsTitle": "Los conectores están disponibles con créditos de AbacusAI",
     "creditsBody": "Tu mensaje está guardado. Mejora tu plan y se enviará al momento.",
     "creditsBodyNoMessage": "Mejora tu plan para seguir con los mejores modelos, conectores y rutinas.",
-    "creditsEyebrow": "Has usado tus 2000 créditos gratis",
     "creditsTitle": "Sigue con AbacusAI Bot",
-    "featureApps": "Crea y publica apps en la web: 3 proyectos al mes",
-    "featureConnectorsLead": "Más de 100 conectores",
-    "featureConnectorsRest": ": Gmail, Google Calendar, Slack, Drive, Notion y más",
-    "featureCreditsLead": "20 000 créditos al mes",
-    "featureCreditsRest": " para chats, creaciones y rutinas",
-    "featureMedia": "Generación de imágenes y vídeos",
-    "featureModels": "Los mejores modelos: GPT-6.1 Sol, Claude Sonnet 5.5, Claude Opus 5.5, Gemini 3.1 Pro",
-    "featureRoutines": "Hasta 5 rutinas a la vez, incluso cada hora",
     "keepChatting": "Seguir chateando sin conectores",
     "notNow": "Ahora no",
     "ownKeyBody": "No separate API bill. Upgrade and your message sends right away.",
     "ownKeyBodyNoMessage": "No separate API bill. Upgrade to keep going on the top models.",
     "ownKeyTitle": "Use any model on AbacusAI",
     "plan": "Plan Basic · cancela cuando quieras",
+    "planLine": "Plan {{plan}} · cancela cuando quieras",
     "price": "7 $",
     "pricePeriod": "durante tu primer mes",
     "startAt": "Desde",
@@ -4465,7 +4457,6 @@
       "title": "Se te acabaron los créditos gratis",
       "expiredTitle": "Tus créditos gratis han caducado",
       "paidTitle": "Has usado los créditos de este mes",
-      "renews": "Los créditos gratis se renuevan cada mes.",
       "balance": "Te quedan {{remaining}} de {{granted}} créditos",
       "warning": "Para seguir ahora, el bot cambiaría a modelos gratuitos de otro proveedor ({{providers}}). Son de mucha menor calidad: más errores, pueden romper código que funciona y a menudo llegan a sus límites de uso.",
       "offer": "Mejora a {{plan}} — {{price}}",
@@ -4475,6 +4466,15 @@
     "plan": {
       "introPrice": "{{first}} el primer mes, después {{monthly}}/mes",
       "monthlyPrice": "{{monthly}}/mes"
+    },
+    "pitch": {
+      "credits": "{{credits}} créditos cada mes, {{times}} veces el plan gratis",
+      "creditsOnly": "{{credits}} créditos cada mes",
+      "models": "Los mejores modelos: {{models}}",
+      "media": "Generación de imágenes y vídeos",
+      "agents": "Agentes personales en Abacus AI Agent en la web que funcionan 24/7: respuestas automáticas en WhatsApp, Discord y Telegram, todas tus rutinas y todo lo que hace tu bot",
+      "connectors": "Más de 100 conectores: Gmail, Google Calendar, Slack, Drive, Notion y más",
+      "apps": "Crea y publica aplicaciones web"
     },
     "freeChip": "Modelo gratuito · {{provider}}",
     "freeChipAny": "otro proveedor",
@@ -4503,7 +4503,6 @@
     "channel": {
       "wall": "Me he detenido porque se te acabaron los créditos gratis.",
       "expired": "Me he detenido porque tus créditos gratis han caducado.",
-      "renews": "Los créditos gratis se renuevan cada mes.",
       "offer": "{{plan}} cuesta {{price}} y te da:",
       "link": "Mejora aquí: {{link}}",
       "repeat": "Sigo en pausa: {{link}}",
@@ -4516,15 +4515,17 @@
       "ownKeyRateLimit": "Tu clave de {{provider}} alcanzó su límite de uso.",
       "ownKeyDown": "{{provider}} no responde ahora mismo.",
       "ownKeyRejected": "Se rechazó tu clave de {{provider}}: no es válida o ha caducado. Corrígela en la app, en Ajustes → Modelos.",
-      "ownKeyOffer": "Usa cualquier modelo en AbacusAI: {{link}}",
       "ownKeyWeb": "Úsala en AbacusAI Agent en la web: {{link}}",
+      "ownKeySwitch": "Cambia a Abacus.AI en el selector de modelos de la app para seguir con tus créditos gratuitos de Abacus.",
       "busy": "Los modelos gratuitos están ocupados ahora mismo.",
       "connection": "Se cortó la conexión y no pude terminar. Inténtalo de nuevo en un momento.",
       "notSignedIn": "La app de escritorio no tiene la sesión iniciada en Abacus.AI ahora mismo. Abre la app, inicia sesión y vuelve a escribirme.",
       "generic": "Algo falló por mi parte y no pude terminar. Inténtalo de nuevo en un momento.",
       "contactFailed": "No pude responder a {{name}} hace un momento.",
       "contactFailedGeneric": "No pude responder a {{name}} hace un momento: algo falló por mi parte.",
-      "someone": "alguien"
+      "someone": "alguien",
+      "payment": "Me he detenido porque no hemos podido confirmar tu último pago. Si tu suscripción está activa, escribe a support@abacus.ai y no vuelvas a comprar. Facturación: {{link}}",
+      "paymentLapsed": "Me he detenido porque tu suscripción de Abacus.AI ha terminado. Renuévala aquí: {{link}}"
     },
     "unavailable": {
       "title": {
@@ -4547,6 +4548,11 @@
       "seePlans": "Ver planes",
       "planBody": "Sigue ahora con un modelo gratis o mejora a {{plan}} para usarlo.",
       "planBodyAny": "Sigue ahora con un modelo gratis o mejora tu plan para usarlo."
+    },
+    "payment": {
+      "title": "No hemos podido confirmar tu último pago",
+      "body": "Si tu suscripción está activa, escribe a support@abacus.ai. No vuelvas a comprar.",
+      "billing": "Abrir facturación"
     }
   },
   "creditThreshold": {
@@ -4573,13 +4579,6 @@
     "meterLabel": "{{used}} de {{total}} créditos gratis usados",
     "used": "{{used}} usados",
     "left": "{{left}} restantes",
-    "benefit": {
-      "credits": "{{credits}} créditos cada mes, {{times}} veces el plan gratis",
-      "creditsOnly": "{{credits}} créditos cada mes",
-      "models": "Los mejores modelos: {{models}}",
-      "media": "Generación de imágenes y vídeos",
-      "agents": "Agentes personales en Abacus AI Agent en la web que funcionan 24/7: respuestas automáticas en WhatsApp, Discord y Telegram, todas tus rutinas y todo lo que hace tu bot"
-    },
     "upgradeIntro": "Mejorar · {{price}} el primer mes",
     "upgradeMonthly": "Mejorar · {{price}}/mes",
     "upgrade": "Mejorar",

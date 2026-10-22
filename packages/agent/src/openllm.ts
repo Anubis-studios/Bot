@@ -112,6 +112,60 @@ export function isPlanRejection(raw: string): boolean {
 export const isOutOfCredits = (raw: string): boolean => creditWall(raw) != null;
 
 /**
+ * Why Abacus refused a call for its account rather than for the request:
+ * the credits (`exhausted`, `expired`) or the billing (`payment`, a payment
+ * not confirmed or a subscription that lapsed).
+ */
+export type AbacusRefusal = CreditWall | "payment";
+
+/** The code the server puts on each such refusal, in the body and a header. */
+const ABACUS_REFUSAL_CODE =
+  /\babacus_(credits_exhausted|free_tier_expired|payment_required)\b/;
+
+const REFUSAL_BY_CODE: Record<string, AbacusRefusal> = {
+  credits_exhausted: "exhausted",
+  free_tier_expired: "expired",
+  payment_required: "payment",
+};
+
+/** The billing gate's 402 sentences, for a server that sends no code. */
+const PAYMENT_REFUSAL =
+  /could not confirm the last payment|subscription has ended|payment method is required|PaymentMethodRequired/i;
+/** The same gate's 402 for a free tier past its end, without a code. */
+const TRIAL_ENDED = /free trial has ended/i;
+
+/**
+ * Calls the Abacus endpoint answered: Abacus itself, and a call whose
+ * provider is not known (as before the provider was recorded).
+ */
+const abacusServed = (provider: string | undefined): boolean =>
+  provider == null || provider === "abacus" || provider === "openllm";
+
+/**
+ * Why Abacus refused this call for credits or billing, or null. Only a call
+ * Abacus served can say so: another provider's balance or quota sentence is
+ * the user's own key, which no Abacus plan refills. The code decides; an
+ * answer without one (an older server, an edge error) is read by its words.
+ */
+export function abacusRefusal(
+  raw: string,
+  provider: string | undefined
+): AbacusRefusal | null {
+  if (!abacusServed(provider)) return null;
+  const code = raw.match(ABACUS_REFUSAL_CODE)?.[1];
+  if (code != null) return REFUSAL_BY_CODE[code] ?? null;
+  if (PAYMENT_REFUSAL.test(raw)) return "payment";
+  if (TRIAL_ENDED.test(raw)) return "expired";
+  return creditWall(raw);
+}
+
+/** A billing refusal's reason: a lapsed subscription, else an unconfirmed payment. */
+export const paymentRefusalReason = (raw: string): "lapsed" | "unconfirmed" =>
+  /subscription has ended|"reason"\s*:\s*"lapsed"/i.test(raw)
+    ? "lapsed"
+    : "unconfirmed";
+
+/**
  * Balance and billing sentences that never mean a rate limit, whoever relays
  * them: Anthropic's 400 "credit balance is too low", OpenAI's 429
  * `insufficient_quota`, DeepSeek's 402 "Insufficient Balance", xAI's "used all
@@ -179,7 +233,9 @@ export function accountWideFailure(
   // as the billed ones. Closing only the paid tier left those to fail one by
   // one on per-model cooldowns, which then read as "busy" rather than "shut".
   if (provider === "abacus") {
-    return isOutOfCredits(failure) ? { provider: "abacus" } : null;
+    return abacusRefusal(failure, provider) != null
+      ? { provider: "abacus" }
+      : null;
   }
 
   // A Studio key's free quota is the key's, not one model's: Google says so

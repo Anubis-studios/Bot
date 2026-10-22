@@ -1,6 +1,7 @@
 import {
   type BillingPlan,
   formatUsd,
+  planPitch,
   wallOffer,
 } from "@abacus-ai/contract/billing-plan";
 import { AlertTriangle, Check, Lock } from "lucide-react";
@@ -101,7 +102,7 @@ export const ModelUnavailableCard = ({
                     {t("outcome.unavailable.offer", { plan: offer.planName })}
                   </p>
                   <ul className="flex flex-col gap-1">
-                    {offer.features.map((feature) => (
+                    {planPitch(t, billing, i18n.language).map((feature) => (
                       <li key={feature} className="flex gap-1.5">
                         <Check
                           aria-hidden

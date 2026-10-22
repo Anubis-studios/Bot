@@ -68,7 +68,8 @@ const GALLERY_GROUPS: Array<{
     id: "chat-errors",
     match: (s) =>
       s.id === "session-failed-ratelimit" ||
-      s.id === "session-golden-turn-failed",
+      s.id === "session-golden-turn-failed" ||
+      s.id.startsWith("session-outcome-"),
   },
 ];
 

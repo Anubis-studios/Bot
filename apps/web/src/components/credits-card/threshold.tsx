@@ -1,6 +1,7 @@
 import {
   type BillingPlan,
   formatUsd,
+  planPitch,
   wallOffer,
 } from "@abacus-ai/contract/billing-plan";
 import {
@@ -38,32 +39,6 @@ import {
  * turns; it stays until a button is picked, and Esc is Continue free.
  */
 
-/** How many of the plan's leading models the card names. */
-const TOP_MODEL_COUNT = 4;
-const TOP_MODELS_FEATURE = /^top models including (.+)$/i;
-
-/** The plan's leading models, read from its feature line; null without one. */
-export const planTopModels = (
-  features: readonly string[],
-  locale: string
-): string | null => {
-  for (const feature of features) {
-    const match = TOP_MODELS_FEATURE.exec(feature.trim());
-    if (match == null) continue;
-    const names = match[1]!
-      .split(/,\s*|\s+and\s+/)
-      .map((name) => name.trim())
-      .filter((name) => name.length > 0)
-      .slice(0, TOP_MODEL_COUNT);
-    return names.length > 0
-      ? new Intl.ListFormat(locale, { style: "short", type: "unit" }).format(
-          names
-        )
-      : null;
-  }
-  return null;
-};
-
 export interface CreditThresholdCardProps {
   threshold: CreditThreshold;
   used: number;
@@ -96,12 +71,6 @@ export const CreditThresholdCard = ({
     estimate
   );
   const offer = wallOffer(billing);
-  const monthly = billing?.plans.find(
-    (plan) => plan.plan === offer?.plan
-  )?.creditsPerMonth;
-  const times =
-    monthly != null && total > 0 ? Math.round(monthly / total) : null;
-  const models = offer != null ? planTopModels(offer.features, locale) : null;
   const first = offer?.firstMonthPriceCents;
   const price = offer?.priceCents;
   const Icon = threshold === 80 ? AlertTriangle : Gauge;
@@ -169,32 +138,16 @@ export const CreditThresholdCard = ({
           className="flex flex-col gap-2"
           data-slot="credit-threshold-benefits"
         >
-          {[
-            monthly != null
-              ? t(
-                  times != null && times >= 2
-                    ? "creditThreshold.benefit.credits"
-                    : "creditThreshold.benefit.creditsOnly",
-                  { credits: number(monthly), times }
-                )
-              : null,
-            models != null
-              ? t("creditThreshold.benefit.models", { models })
-              : null,
-            t("creditThreshold.benefit.media"),
-            t("creditThreshold.benefit.agents"),
-          ]
-            .filter((line): line is string => line != null)
-            .map((line) => (
-              <li key={line} className="flex gap-2 text-sm/5">
-                <Check
-                  aria-hidden
-                  className="text-primary mt-0.5 size-4 shrink-0"
-                  strokeWidth={2.4}
-                />
-                <span>{line}</span>
-              </li>
-            ))}
+          {planPitch(t, billing, locale).map((line) => (
+            <li key={line} className="flex gap-2 text-sm/5">
+              <Check
+                aria-hidden
+                className="text-primary mt-0.5 size-4 shrink-0"
+                strokeWidth={2.4}
+              />
+              <span>{line}</span>
+            </li>
+          ))}
         </ul>
         <div className="flex flex-col gap-1.5">
           <Button

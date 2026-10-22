@@ -78,8 +78,110 @@ export const wallOffer = (
 
 /**
  * Whether the account's current plan renews its credits every month, as
- * the server says; nothing is claimed when the plan list does not say.
+ * the server says. The free plan never does: its credits are a one-time
+ * grant, whatever its plan row lists.
  */
 export const creditsRenewMonthly = (billing: BillingPlan | null): boolean =>
-  billing?.plans.some((plan) => plan.current && plan.creditsPerMonth > 0) ===
-  true;
+  billing?.plans.some(
+    (plan) => plan.current && plan.plan !== "free" && plan.creditsPerMonth > 0
+  ) === true;
+
+/** How many of the plan's leading models a pitch names. */
+const TOP_MODEL_COUNT = 4;
+const TOP_MODELS_FEATURE = "top models including ";
+
+/**
+ * The plan's leading models, read from its feature line; null without one.
+ * Plain string splits: the line is the server's, and a backtracking pattern
+ * over it could be made slow.
+ */
+const planTopModels = (
+  features: readonly string[],
+  locale: string
+): string | null => {
+  for (const feature of features) {
+    const line = feature.trim();
+    if (!line.toLowerCase().startsWith(TOP_MODELS_FEATURE)) continue;
+    const names = line
+      .slice(TOP_MODELS_FEATURE.length)
+      .split(",")
+      .flatMap((part) => part.split(" and "))
+      .map((name) => name.trim())
+      .filter((name) => name.length > 0)
+      .slice(0, TOP_MODEL_COUNT);
+    return names.length > 0
+      ? new Intl.ListFormat(locale, { style: "short", type: "unit" }).format(
+          names
+        )
+      : null;
+  }
+  return null;
+};
+
+/** The lines of a plan's pitch (locale keys `outcome.pitch.<line>`). */
+export type PitchLine =
+  | "credits"
+  | "models"
+  | "media"
+  | "agents"
+  | "connectors"
+  | "apps";
+
+export const PITCH_LINES: readonly PitchLine[] = [
+  "credits",
+  "models",
+  "media",
+  "agents",
+  "connectors",
+  "apps",
+];
+
+/**
+ * Every line of the offered plan's pitch, in the reader's language and in
+ * `order`: its monthly credits against the current plan's, the leading models
+ * its feature line names, and what it gives. Credits and models come from
+ * billing_plan, so the app names no figure or model of its own; a line it
+ * cannot read is left out rather than guessed.
+ */
+export function planPitch(
+  t: PlanT,
+  billing: BillingPlan | null,
+  locale: string,
+  order: readonly PitchLine[] = PITCH_LINES
+): string[] {
+  const offer = wallOffer(billing);
+  const number = (value: number) =>
+    new Intl.NumberFormat(locale).format(Math.round(value));
+  const monthly = billing?.plans.find(
+    (plan) => plan.plan === offer?.plan
+  )?.creditsPerMonth;
+  const free =
+    billing?.plans.find((plan) => plan.current)?.creditsPerMonth ??
+    billing?.current.creditsGranted ??
+    null;
+  const times =
+    monthly != null && free != null && free > 0
+      ? Math.round(monthly / free)
+      : null;
+  const models = offer != null ? planTopModels(offer.features, locale) : null;
+  const line = (name: PitchLine): string | null => {
+    switch (name) {
+      case "credits":
+        return monthly == null
+          ? null
+          : t(
+              times != null && times >= 2
+                ? "outcome.pitch.credits"
+                : "outcome.pitch.creditsOnly",
+              { credits: number(monthly), times: times ?? 0 }
+            );
+      case "models":
+        return models != null ? t("outcome.pitch.models", { models }) : null;
+      default:
+        return t(`outcome.pitch.${name}`);
+    }
+  };
+  return order
+    .map(line)
+    .filter((text): text is string => text != null && text.length > 0);
+}

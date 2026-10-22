@@ -13,6 +13,10 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createMemoryTransport } from "#renderer/data/transport/memory";
+import {
+  closeUpgradeDialog,
+  upgradeDialogStore,
+} from "#renderer/lib/upgrade-dialog";
 
 import * as b from "../fixtures/builders";
 import { FakeRelay } from "../fixtures/relay";
@@ -476,7 +480,7 @@ describe("the turn's outcome card", () => {
     ],
   };
 
-  it("a free account at the wall on auto sees the plan and an explicit free-model choice, never a silent swap", async () => {
+  it("a free account at the wall gets one line: Upgrade reopens the dialog, the free models an explicit choice", async () => {
     const chooseFreeLane = vi.fn(async () => {});
     const relay = failed(WALL);
     current = await renderRelay(
@@ -487,26 +491,20 @@ describe("the turn's outcome card", () => {
       host("free", { chooseFreeLane })
     );
 
-    const card = await screen.findByText("Your free credits are used up");
-    const wall = card.closest('[data-slot="credits-card"]') as HTMLElement;
-    await within(wall).findByText("Free credits renew every month.");
-    expect(within(wall).getByText("0 of 2,000 credits left")).toBeTruthy();
-    expect(within(wall).getByRole("note").textContent).toContain(
-      "(OpenRouter, Google Gemini)"
-    );
-    expect(
-      within(wall).getByText(
-        "Upgrade to Basic — $7 your first month, then $10/month"
-      )
-    ).toBeTruthy();
-    expect(within(wall).getByText("Image and video generation")).toBeTruthy();
-    expect(
-      within(wall).getByRole("button", { name: "Upgrade to Basic" })
-    ).toBeTruthy();
-    // No model on this computer at the wall.
-    expect(within(wall).queryByRole("button", { name: /local/i })).toBeNull();
+    const line = await screen.findByText("Your free credits are used up");
+    const wall = line.closest('[data-slot="error-card"]') as HTMLElement;
+    expect(wall.getAttribute("data-variant")).toBe("upgrade-status");
+    // The pitch is the upgrade dialog's, never the inline row's.
+    expect(within(wall).queryByText(/\$\d/)).toBeNull();
+    expect(within(wall).queryByText(/renew/i)).toBeNull();
     // Nothing ran on a free model before the choice.
     expect(relay.stats.send).toHaveLength(0);
+
+    fireEvent.click(within(wall).getByRole("button", { name: "Upgrade" }));
+    expect(upgradeDialogStore.state.request).toMatchObject({
+      kind: "credits",
+    });
+    closeUpgradeDialog();
 
     fireEvent.click(
       within(wall).getByRole("button", {
@@ -520,6 +518,27 @@ describe("the turn's outcome card", () => {
     });
   });
 
+  it("an expired free tier says so, and its Upgrade asks for the expired dialog", async () => {
+    current = await renderRelay(
+      failed({
+        message: "Your free credits have expired.",
+        cause: "credits_expired",
+        actions: [{ type: "upgrade-abacus", cause: "expired" }],
+      }),
+      "session",
+      {},
+      {},
+      host("free")
+    );
+    await screen.findByText("Your free credits have expired");
+    fireEvent.click(screen.getByRole("button", { name: "Upgrade" }));
+    expect(upgradeDialogStore.state.request).toMatchObject({
+      kind: "credits",
+      expired: true,
+    });
+    closeUpgradeDialog();
+  });
+
   it("a paid account at the wall is offered a top-up, not the plan", async () => {
     current = await renderRelay(
       failed(WALL),
@@ -531,6 +550,40 @@ describe("the turn's outcome card", () => {
     await screen.findByText("You've used this month's credits");
     expect(await screen.findByRole("button", { name: "Top up" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Upgrade to/ })).toBeNull();
+  });
+
+  it("Abacus's billing gate is a payment card: support, the billing page, no purchase", async () => {
+    const openExternal = vi.fn(async () => {});
+    const openUpgrade = vi.fn(async () => {});
+    current = await renderRelay(
+      failed({
+        message: "We couldn't confirm your last payment.",
+        cause: "payment_required",
+        actions: [
+          { type: "payment-required", cause: "unconfirmed" },
+          { type: "switch-model" },
+        ],
+      }),
+      "session",
+      {},
+      {},
+      host("free", { openExternal, openUpgrade })
+    );
+    await screen.findByText("We couldn't confirm your last payment");
+    expect(
+      screen.getByText(
+        "If your subscription is active, contact support@abacus.ai. Please don't purchase again."
+      )
+    ).toBeTruthy();
+    screen.getByRole("button", { name: "Open billing" }).click();
+    expect(openExternal).toHaveBeenCalledWith(
+      "https://apps.abacus.ai/chatllm/admin/profile"
+    );
+    expect(openUpgrade).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: /Upgrade/ })).toBeNull();
+    expect(
+      screen.queryByText(/used your free credits|out of credits/i)
+    ).toBeNull();
   });
 
   it("a dropped connection is the connection card, with its details and a retry", async () => {
@@ -735,9 +788,7 @@ describe("the turn's outcome card", () => {
       host("free")
     );
     await screen.findByText("Your free credits are used up");
-    expect(
-      await screen.findByRole("button", { name: "Upgrade to Basic" })
-    ).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Upgrade" })).toBeTruthy();
     expect(screen.getByText("Check the key")).toBeTruthy();
     expect(screen.queryByText(/Switch to Abacus/)).toBeNull();
   });

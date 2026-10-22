@@ -4243,22 +4243,14 @@
     "connectorsTitle": "Os conectores estão disponíveis com créditos da AbacusAI",
     "creditsBody": "Sua mensagem foi salva. Faça o upgrade e ela será enviada na hora.",
     "creditsBodyNoMessage": "Faça o upgrade para continuar com os melhores modelos, conectores e rotinas.",
-    "creditsEyebrow": "Você usou seus 2.000 créditos gratuitos",
     "creditsTitle": "Continue com o AbacusAI Bot",
-    "featureApps": "Crie e publique apps na web: 3 projetos por mês",
-    "featureConnectorsLead": "Mais de 100 conectores",
-    "featureConnectorsRest": ": Gmail, Google Agenda, Slack, Drive, Notion e mais",
-    "featureCreditsLead": "20.000 créditos por mês",
-    "featureCreditsRest": " para chats, criações e rotinas",
-    "featureMedia": "Geração de imagens e vídeos",
-    "featureModels": "Melhores modelos: GPT-6.1 Sol, Claude Sonnet 5.5, Claude Opus 5.5, Gemini 3.1 Pro",
-    "featureRoutines": "Até 5 rotinas ao mesmo tempo, com frequência de até uma por hora",
     "keepChatting": "Continuar conversando sem conectores",
     "notNow": "Agora não",
     "ownKeyBody": "No separate API bill. Upgrade and your message sends right away.",
     "ownKeyBodyNoMessage": "No separate API bill. Upgrade to keep going on the top models.",
     "ownKeyTitle": "Use any model on AbacusAI",
     "plan": "Plano Basic · cancele quando quiser",
+    "planLine": "Plano {{plan}} · cancele quando quiser",
     "price": "US$ 7",
     "pricePeriod": "no primeiro mês",
     "startAt": "A partir de",
@@ -4465,7 +4457,6 @@
       "title": "Seus créditos grátis acabaram",
       "expiredTitle": "Seus créditos grátis expiraram",
       "paidTitle": "Você usou os créditos deste mês",
-      "renews": "Os créditos grátis renovam todo mês.",
       "balance": "Restam {{remaining}} de {{granted}} créditos",
       "warning": "Para continuar agora, o bot mudaria para modelos gratuitos de outro provedor ({{providers}}). Eles têm qualidade bem menor: mais erros, podem quebrar código que funciona e muitas vezes atingem limites de uso.",
       "offer": "Faça upgrade para o {{plan}} — {{price}}",
@@ -4475,6 +4466,15 @@
     "plan": {
       "introPrice": "{{first}} no primeiro mês, depois {{monthly}}/mês",
       "monthlyPrice": "{{monthly}}/mês"
+    },
+    "pitch": {
+      "credits": "{{credits}} créditos todo mês, {{times}}x o plano grátis",
+      "creditsOnly": "{{credits}} créditos todo mês",
+      "models": "Melhores modelos: {{models}}",
+      "media": "Geração de imagens e vídeos",
+      "agents": "Agentes pessoais no Abacus AI Agent na web que funcionam 24/7: respostas automáticas no WhatsApp, Discord e Telegram, todas as suas rotinas e tudo o que o seu bot faz",
+      "connectors": "Mais de 100 conectores: Gmail, Google Agenda, Slack, Drive, Notion e mais",
+      "apps": "Crie e publique apps web"
     },
     "freeChip": "Modelo gratuito · {{provider}}",
     "freeChipAny": "outro provedor",
@@ -4503,7 +4503,6 @@
     "channel": {
       "wall": "Pausei porque seus créditos grátis acabaram.",
       "expired": "Pausei porque seus créditos grátis expiraram.",
-      "renews": "Os créditos grátis renovam todo mês.",
       "offer": "O {{plan}} custa {{price}} e oferece:",
       "link": "Faça upgrade aqui: {{link}}",
       "repeat": "Ainda pausado: {{link}}",
@@ -4516,15 +4515,17 @@
       "ownKeyRateLimit": "Sua chave do {{provider}} atingiu o limite de uso.",
       "ownKeyDown": "O {{provider}} não está respondendo agora.",
       "ownKeyRejected": "Sua chave do {{provider}} foi recusada: ela é inválida ou expirou. Corrija no app, em Configurações → Modelos.",
-      "ownKeyOffer": "Use qualquer modelo no AbacusAI: {{link}}",
       "ownKeyWeb": "Use no AbacusAI Agent na web: {{link}}",
+      "ownKeySwitch": "Mude para a Abacus.AI no seletor de modelos do app para continuar com seus créditos gratuitos da Abacus.",
       "busy": "Os modelos gratuitos estão ocupados agora.",
       "connection": "A conexão caiu, então não consegui terminar. Tente de novo daqui a pouco.",
       "notSignedIn": "O app para computador não está conectado ao Abacus.AI agora. Abra o app, entre na sua conta e me mande mensagem de novo.",
       "generic": "Algo deu errado do meu lado, então não consegui terminar. Tente de novo daqui a pouco.",
       "contactFailed": "Não consegui responder a {{name}} agora há pouco.",
       "contactFailedGeneric": "Não consegui responder a {{name}} agora há pouco: algo deu errado do meu lado.",
-      "someone": "alguém"
+      "someone": "alguém",
+      "payment": "Pausei porque não conseguimos confirmar seu último pagamento. Se sua assinatura estiver ativa, fale com support@abacus.ai e não compre de novo. Cobrança: {{link}}",
+      "paymentLapsed": "Pausei porque sua assinatura da Abacus.AI terminou. Renove aqui: {{link}}"
     },
     "unavailable": {
       "title": {
@@ -4547,6 +4548,11 @@
       "seePlans": "Ver planos",
       "planBody": "Continue agora com um modelo gratuito, ou faça upgrade para o {{plan}} para usá-lo.",
       "planBodyAny": "Continue agora com um modelo gratuito, ou faça upgrade do seu plano para usá-lo."
+    },
+    "payment": {
+      "title": "Não conseguimos confirmar seu último pagamento",
+      "body": "Se sua assinatura estiver ativa, fale com support@abacus.ai. Não compre de novo.",
+      "billing": "Abrir cobrança"
     }
   },
   "creditThreshold": {
@@ -4573,13 +4579,6 @@
     "meterLabel": "{{used}} de {{total}} créditos grátis usados",
     "used": "{{used}} usados",
     "left": "{{left}} restantes",
-    "benefit": {
-      "credits": "{{credits}} créditos todo mês, {{times}}x o plano grátis",
-      "creditsOnly": "{{credits}} créditos todo mês",
-      "models": "Melhores modelos: {{models}}",
-      "media": "Geração de imagens e vídeos",
-      "agents": "Agentes pessoais no Abacus AI Agent na web que funcionam 24/7: respostas automáticas no WhatsApp, Discord e Telegram, todas as suas rotinas e tudo o que o seu bot faz"
-    },
     "upgradeIntro": "Fazer upgrade · {{price}} no primeiro mês",
     "upgradeMonthly": "Fazer upgrade · {{price}}/mês",
     "upgrade": "Fazer upgrade",

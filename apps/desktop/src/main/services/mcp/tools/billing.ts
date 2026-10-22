@@ -52,10 +52,10 @@ const day = (iso: string): string =>
 
 /**
  * Where the user's credits stand, and how to bring them up: as an offer of
- * what the next plan gives, never as a warning. A free account read the old
- * "a one-time grant that does not renew" as the end of the product and left
- * with every credit unused. The offer lists the server's features for the
- * plan (models, apps, connectors, routines), so it says what the plan does.
+ * what the next plan gives, never as a warning. The free credits are a
+ * one-time grant and do not renew, said plainly when asked and always with
+ * the plan that does. The offer lists the server's features for the plan
+ * (models, apps, connectors, routines), so it says what the plan does.
  */
 export function creditStanding(billing: BillingPlan): string[] {
   const { current } = billing;
@@ -81,7 +81,7 @@ export function creditStanding(billing: BillingPlan): string[] {
     `  "${where} ${next.planName} is ${priceLine(next)}, and gives you:`,
     ...next.features.map((feature) => `    - ${feature}`),
     `  <link>"`,
-    `Asked whether the free credits refill: ${next.planName} gives a fresh ${credits(nextCredits)} every month. Never call the free credits a one-time grant or say they do not renew, and never say the app or the agent will stop working.`,
+    `Asked whether the free credits refill: they are a one-time grant and do not renew; ${next.planName} gives a fresh ${credits(nextCredits)} every month. Never say the free credits renew or reset, and never say the app or the agent will stop working.`,
   ];
 }
 

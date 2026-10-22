@@ -1588,11 +1588,23 @@
     "sources": ["../../../packages/contract/src/billing-plan.ts"]
   },
   {
+    "prefix": "outcome.pitch.",
+    "values": [
+      "credits",
+      "creditsOnly",
+      "models",
+      "media",
+      "agents",
+      "connectors",
+      "apps"
+    ],
+    "sources": ["../../../packages/contract/src/billing-plan.ts"]
+  },
+  {
     "prefix": "outcome.channel.",
     "values": [
       "wall",
       "expired",
-      "renews",
       "offer",
       "link",
       "repeat",
@@ -1605,15 +1617,17 @@
       "ownKeyRateLimit",
       "ownKeyDown",
       "ownKeyRejected",
-      "ownKeyOffer",
       "ownKeyWeb",
+      "ownKeySwitch",
       "busy",
       "connection",
       "notSignedIn",
       "generic",
       "contactFailed",
       "contactFailedGeneric",
-      "someone"
+      "someone",
+      "payment",
+      "paymentLapsed"
     ],
     "sources": [
       "../../desktop/src/main/services/messaging/chat-failure-reply.ts"

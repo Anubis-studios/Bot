@@ -14,7 +14,10 @@ import { CreditsCard } from "#renderer/components/credits-card";
 import { ModelUnavailableCard } from "#renderer/components/credits-card/model-unavailable";
 import { GroupCard } from "#renderer/components/form-kit/page";
 import { usePrefs } from "#renderer/data/db/prefs";
-import { ABACUS_AGENT_URL } from "#renderer/lib/abacus-links";
+import {
+  ABACUS_AGENT_URL,
+  ABACUS_BILLING_URL,
+} from "#renderer/lib/abacus-links";
 import { latestPresented } from "#renderer/lib/bot-turns/deliverables";
 import { cn } from "#renderer/lib/cn";
 import { CREDITS_EXHAUSTED_TTL_MS } from "#renderer/lib/credits";
@@ -46,7 +49,7 @@ import type {
 import { formatElapsed, useSeconds } from "../clock";
 import { useChatView } from "../context";
 import { toolTitle } from "../tools/tool-line";
-import { useUpgradeResume } from "../upgrade-triggers";
+import { creditsExpired, useUpgradeResume } from "../upgrade-triggers";
 
 export const providerMessage = (raw = ""): string => {
   const start = raw.indexOf("{");
@@ -322,12 +325,6 @@ const wantsUpgradeCard = (actions?: ErrorAction[], paying = false): boolean =>
       (action.type === "free-pool-out" && !(paying && action.cause === "busy"))
   ) === true;
 
-/** A free tier past its window, rather than an empty balance. */
-const creditsExpired = (actions?: ErrorAction[]): boolean =>
-  actions?.some(
-    (action) => action.type === "upgrade-abacus" && action.cause === "expired"
-  ) === true;
-
 /** The picked model that cannot serve the turn, when that is why it ended. */
 const modelUnavailable = (actions?: ErrorAction[]): ErrorAction | undefined =>
   actions?.find((action) => action.type === "model-unavailable");
@@ -412,6 +409,66 @@ const OwnKeyCard = ({
   );
 };
 
+/**
+ * Abacus's billing gate refused the turn: a payment it could not confirm
+ * (support, never a second purchase) or a subscription that ended (renew).
+ * Not the credits card: buying more would not let this account through.
+ */
+const PaymentCard = ({ lapsed }: { lapsed: boolean }) => {
+  const { t } = useTranslation();
+  const { runtime, composer } = useChatView();
+  return (
+    <div
+      role="group"
+      aria-label={t("chat.error.label")}
+      className="mx-auto w-full max-w-[calc(var(--composer-max-w)-var(--spacing)*8)]"
+      data-slot="error-card"
+      data-variant="payment-required"
+      data-cause={lapsed ? "lapsed" : "unconfirmed"}
+    >
+      <GroupCard
+        title={t(
+          lapsed ? "paymentRequired.lapsedTitle" : "outcome.payment.title"
+        )}
+      >
+        <p className="text-muted-foreground p-3 text-sm">
+          {t(lapsed ? "paymentRequired.lapsedBody" : "outcome.payment.body")}
+        </p>
+        <div className="flex flex-wrap gap-2 p-3">
+          <Button
+            size="sm"
+            data-action={lapsed ? "renew" : "open-billing"}
+            onClick={() =>
+              void (lapsed
+                ? runtime.host.openUpgrade()
+                : runtime.host.openExternal(ABACUS_BILLING_URL))
+            }
+          >
+            {t(lapsed ? "paymentRequired.renew" : "outcome.payment.billing")}
+          </Button>
+          {composer.model != null && composer.readOnly == null && (
+            <Button
+              size="sm"
+              variant="secondary"
+              data-action="switch-model"
+              onClick={(event) =>
+                event.currentTarget
+                  .closest('[data-slot="chat-view"]')
+                  ?.querySelector<HTMLButtonElement>(
+                    '[data-slot="chat-model-picker"]'
+                  )
+                  ?.click()
+              }
+            >
+              {t("chat.error.switchModel")}
+            </Button>
+          )}
+        </div>
+      </GroupCard>
+    </div>
+  );
+};
+
 /** What the turn a wall cut off handed over, up to the outcome's anchor. */
 const readyBefore = (
   messages: readonly UIMessage[],
@@ -480,6 +537,9 @@ export const ErrorCard = ({
         t("workspace.retryMessage")
       )
       .catch(() => {});
+  const payment = actions.find((action) => action.type === "payment-required");
+  if (payment != null)
+    return <PaymentCard lapsed={payment.cause === "lapsed"} />;
   // A provider that seems silent while the computer is offline is the
   // connection's fault, not the key's: the plain error says so.
   const ownKey = ownKeyFailure(actions);
@@ -572,6 +632,96 @@ export const ErrorCard = ({
     const continueFree = actions.find(
       (action) => action.type === "continue-free"
     );
+    // The upgrade dialog, asked for by the person: its pitch is the plan's whole list.
+    const askUpgrade = () =>
+      requestUpgradeDialog(
+        {
+          kind: "credits",
+          key: `credit-wall:${outcome.runId}:${Date.now()}`,
+          threadId: session.threadId,
+          pendingText: lastUserText(session.hostStore.state.messages),
+          ...(creditsExpired(actions) ? { expired: true } : {}),
+          resume,
+        },
+        true
+      );
+    // The free ways on beside the plan: a $0 model by name, the key to fix.
+    const alternatives = (size?: "sm") =>
+      canReply ? (
+        <>
+          {composer.model &&
+            actions
+              .filter(
+                (action) => action.type === "switch-model" && action.model
+              )
+              .map((action) => (
+                <Button
+                  key={action.model}
+                  {...(size != null ? { size } : {})}
+                  variant="secondary"
+                  onClick={() => composer.model?.onChange(action.model!)}
+                >
+                  {t("workspace.premiumUpgrade.continueOn", {
+                    model: action.label ?? action.model,
+                  })}
+                </Button>
+              ))}
+          {actions.some((action) => action.type === "fix-key") && (
+            <Button
+              nativeButton={false}
+              {...(size != null ? { size } : {})}
+              variant="secondary"
+              data-action="fix-key"
+              render={<AppLink to="/settings/models" />}
+            >
+              {t("outcome.action.fixKey")}
+            </Button>
+          )}
+        </>
+      ) : undefined;
+    // A free account at the Abacus wall: the pitch is the upgrade dialog's
+    // (UpgradeTriggers opens it once per stopped run); here, one line and the
+    // way back to it, beside the free ways on.
+    if (atWall && tier === "free")
+      return (
+        <div
+          role="group"
+          aria-label={t("chat.error.label")}
+          className="mx-auto flex w-full max-w-[calc(var(--composer-max-w)-var(--spacing)*8)] flex-col gap-3"
+          data-slot="error-card"
+          data-variant="upgrade-status"
+        >
+          <div className="bg-card flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2.5 text-sm">
+            <span className="me-auto font-medium">
+              {t(
+                creditsExpired(actions)
+                  ? "outcome.wall.expiredTitle"
+                  : "outcome.wall.title"
+              )}
+            </span>
+            {canReply && (
+              <Button size="sm" data-action="upgrade" onClick={askUpgrade}>
+                {t("creditsCard.cta")}
+              </Button>
+            )}
+            {continueFree?.providers != null &&
+              continueFree.providers.length > 0 &&
+              latest &&
+              canReply && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  data-action="continue-free"
+                  onClick={() => void resumeOnFreePool().catch(() => {})}
+                >
+                  {t("outcome.wall.continueFree")}
+                </Button>
+              )}
+            {alternatives("sm")}
+          </div>
+          {ready.length > 0 && slots.renderDeliverables?.(ready)}
+        </div>
+      );
     return (
       <div
         role="group"
@@ -597,55 +747,10 @@ export const ErrorCard = ({
               ...(continueFree != null &&
                 latest &&
                 canReply && { onContinueFree: resumeOnFreePool }),
-              ...(canReply && {
-                onUpgrade: () =>
-                  requestUpgradeDialog(
-                    {
-                      kind: "credits",
-                      key: `credit-wall:${outcome.runId}:${Date.now()}`,
-                      threadId: session.threadId,
-                      pendingText: lastUserText(
-                        session.hostStore.state.messages
-                      ),
-                      resume,
-                    },
-                    true
-                  ),
-              }),
+              ...(canReply && { onUpgrade: askUpgrade }),
             },
           })}
-          alternatives={
-            canReply ? (
-              <>
-                {composer.model &&
-                  actions
-                    .filter(
-                      (action) => action.type === "switch-model" && action.model
-                    )
-                    .map((action) => (
-                      <Button
-                        key={action.model}
-                        variant="secondary"
-                        onClick={() => composer.model?.onChange(action.model!)}
-                      >
-                        {t("workspace.premiumUpgrade.continueOn", {
-                          model: action.label ?? action.model,
-                        })}
-                      </Button>
-                    ))}
-                {actions.some((action) => action.type === "fix-key") && (
-                  <Button
-                    nativeButton={false}
-                    variant="secondary"
-                    data-action="fix-key"
-                    render={<AppLink to="/settings/models" />}
-                  >
-                    {t("outcome.action.fixKey")}
-                  </Button>
-                )}
-              </>
-            ) : undefined
-          }
+          alternatives={alternatives()}
           // Connecting a free source from the card is choosing the free lane.
           onResume={latest && canReply ? resumeOnFreePool : undefined}
         />

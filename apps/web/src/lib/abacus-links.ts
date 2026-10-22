@@ -14,6 +14,10 @@ export const ABACUS_BUY_CREDITS_URL =
 export const DESKTOP_DOWNLOAD_URL = "https://bot.abacus.ai";
 
 export const ABACUS_AGENT_URL = "https://apps.abacus.ai/chatllm";
+
+/** The account's billing page, where a payment is checked or a plan renewed. */
+export const ABACUS_BILLING_URL =
+  "https://apps.abacus.ai/chatllm/admin/profile";
 export const ABACUS_TERMS_URL = "https://abacus.ai/terms";
 
 export const ABACUS_HELP_URL =

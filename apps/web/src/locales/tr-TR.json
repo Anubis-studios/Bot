@@ -4243,22 +4243,14 @@
     "connectorsTitle": "Bağlayıcılar AbacusAI kredileriyle kullanılabilir",
     "creditsBody": "Mesajın kaydedildi. Yükselt, hemen gönderilsin.",
     "creditsBodyNoMessage": "En iyi modeller, bağlayıcılar ve rutinlerle devam etmek için yükselt.",
-    "creditsEyebrow": "2.000 ücretsiz kredinin hepsini kullandın",
     "creditsTitle": "AbacusAI Bot ile devam et",
-    "featureApps": "Web’de uygulama oluştur ve yayınla: ayda 3 proje",
-    "featureConnectorsLead": "100+ bağlayıcı",
-    "featureConnectorsRest": ": Gmail, Google Calendar, Slack, Drive, Notion ve daha fazlası",
-    "featureCreditsLead": "Aylık 20.000 kredi",
-    "featureCreditsRest": " sohbetler, derlemeler ve rutinler için",
-    "featureMedia": "Görsel ve video oluşturma",
-    "featureModels": "En iyi modeller: GPT-6.1 Sol, Claude Sonnet 5.5, Claude Opus 5.5, Gemini 3.1 Pro",
-    "featureRoutines": "Aynı anda en fazla 5 rutin, saatte bire kadar sıklıkla",
     "keepChatting": "Bağlayıcılar olmadan sohbete devam et",
     "notNow": "Şimdi değil",
     "ownKeyBody": "Ayrı bir API faturası yok. Yükselt, mesajın hemen gönderilsin.",
     "ownKeyBodyNoMessage": "Ayrı bir API faturası yok. En iyi modellerle devam etmek için yükselt.",
     "ownKeyTitle": "AbacusAI’da istediğin modeli kullan",
     "plan": "Basic plan · istediğin zaman iptal et",
+    "planLine": "{{plan}} plan · istediğin zaman iptal et",
     "price": "$7",
     "pricePeriod": "ilk ayın için",
     "startAt": "Başlangıç fiyatı",
@@ -4465,7 +4457,6 @@
       "title": "Ücretsiz kredilerin bitti",
       "expiredTitle": "Ücretsiz kredilerinin süresi doldu",
       "paidTitle": "Bu ayın kredilerini kullandın",
-      "renews": "Ücretsiz krediler her ay yenilenir.",
       "balance": "{{granted}} krediden {{remaining}} kaldı",
       "warning": "Şimdi devam etmek için bot, başka bir sağlayıcının ({{providers}}) ücretsiz modellerine geçer. Bunlar çok daha düşük kalitededir: daha çok hata yapar, çalışan kodu bozabilir ve sık sık kullanım sınırına takılır.",
       "offer": "{{plan}} planına geç — {{price}}",
@@ -4475,6 +4466,15 @@
     "plan": {
       "introPrice": "İlk ay {{first}}, sonra aylık {{monthly}}",
       "monthlyPrice": "Aylık {{monthly}}"
+    },
+    "pitch": {
+      "credits": "Her ay {{credits}} kredi, ücretsiz planın {{times}} katı",
+      "creditsOnly": "Her ay {{credits}} kredi",
+      "models": "En iyi modeller: {{models}}",
+      "media": "Görsel ve video oluşturma",
+      "agents": "Web'deki Abacus AI Agent'ta 7/24 çalışan kişisel ajanlar: WhatsApp, Discord ve Telegram otomatik yanıtları, tüm rutinlerin ve botunun yaptığı her şey",
+      "connectors": "100+ bağlayıcı: Gmail, Google Calendar, Slack, Drive, Notion ve daha fazlası",
+      "apps": "Web uygulamaları oluşturun ve yayınlayın"
     },
     "freeChip": "Ücretsiz model · {{provider}}",
     "freeChipAny": "başka bir sağlayıcı",
@@ -4503,7 +4503,6 @@
     "channel": {
       "wall": "Ücretsiz kredilerin bittiği için durakladım.",
       "expired": "Ücretsiz kredilerinin süresi dolduğu için durakladım.",
-      "renews": "Ücretsiz krediler her ay yenilenir.",
       "offer": "{{plan}} planı {{price}} ve sana şunları sunar:",
       "link": "Buradan yükselt: {{link}}",
       "repeat": "Hâlâ duraklatıldı: {{link}}",
@@ -4516,15 +4515,17 @@
       "ownKeyRateLimit": "{{provider}} anahtarın kullanım sınırına ulaştı.",
       "ownKeyDown": "{{provider}} şu anda yanıt vermiyor.",
       "ownKeyRejected": "{{provider}} anahtarın reddedildi: geçersiz ya da süresi dolmuş. Uygulamada Ayarlar → Modeller bölümünden düzelt.",
-      "ownKeyOffer": "Bunun yerine AbacusAI'daki herhangi bir modeli kullan: {{link}}",
       "ownKeyWeb": "Web'deki AbacusAI Agent'ta kullan: {{link}}",
+      "ownKeySwitch": "Ücretsiz Abacus kredilerinle devam etmek için uygulamanın model seçicisinden Abacus.AI'ye geç.",
       "busy": "Ücretsiz modeller şu anda yoğun.",
       "connection": "Bağlantı koptuğu için bunu bitiremedim. Lütfen birazdan tekrar dene.",
       "notSignedIn": "Masaüstü uygulaması şu anda Abacus.AI'da oturum açmış değil. Uygulamayı açıp oturum aç, sonra bana tekrar yaz.",
       "generic": "Benim tarafımda bir sorun oldu, bu yüzden bunu bitiremedim. Lütfen birazdan tekrar dene.",
       "contactFailed": "Az önce {{name}} kişisine yanıt veremedim.",
       "contactFailedGeneric": "Az önce {{name}} kişisine yanıt veremedim: benim tarafımda bir sorun oldu.",
-      "someone": "birisi"
+      "someone": "birisi",
+      "payment": "Son ödemenizi doğrulayamadığımız için durakladım. Aboneliğiniz etkinse support@abacus.ai ile iletişime geçin ve lütfen tekrar satın almayın. Faturalandırma: {{link}}",
+      "paymentLapsed": "Abacus.AI aboneliğiniz sona erdiği için durakladım. Buradan yenileyin: {{link}}"
     },
     "unavailable": {
       "title": {
@@ -4547,6 +4548,11 @@
       "seePlans": "Planları gör",
       "planBody": "Şimdi ücretsiz bir modelle devam et ya da kullanmak için {{plan}} planına yükselt.",
       "planBodyAny": "Şimdi ücretsiz bir modelle devam et ya da kullanmak için planını yükselt."
+    },
+    "payment": {
+      "title": "Son ödemenizi doğrulayamadık",
+      "body": "Aboneliğiniz etkinse support@abacus.ai ile iletişime geçin. Lütfen tekrar satın almayın.",
+      "billing": "Faturalandırmayı aç"
     }
   },
   "creditThreshold": {
@@ -4573,13 +4579,6 @@
     "meterLabel": "{{total}} ücretsiz krediden {{used}} kullanıldı",
     "used": "{{used}} kullanıldı",
     "left": "{{left}} kaldı",
-    "benefit": {
-      "credits": "Her ay {{credits}} kredi, ücretsiz planın {{times}} katı",
-      "creditsOnly": "Her ay {{credits}} kredi",
-      "models": "En iyi modeller: {{models}}",
-      "media": "Görsel ve video oluşturma",
-      "agents": "Web'deki Abacus AI Agent'ta 7/24 çalışan kişisel ajanlar: WhatsApp, Discord ve Telegram otomatik yanıtları, tüm rutinlerin ve botunun yaptığı her şey"
-    },
     "upgradeIntro": "Yükselt · ilk ay {{price}}",
     "upgradeMonthly": "Yükselt · aylık {{price}}",
     "upgrade": "Yükselt",

@@ -4243,22 +4243,14 @@
     "connectorsTitle": "コネクタは AbacusAI クレジットで利用できます",
     "creditsBody": "メッセージは保存されています。アップグレードするとすぐに送信されます。",
     "creditsBodyNoMessage": "アップグレードして、トップモデル、コネクタ、ルーティンを使い続けましょう。",
-    "creditsEyebrow": "無料の 2,000 クレジットを使い切りました",
     "creditsTitle": "AbacusAI Bot を使い続ける",
-    "featureApps": "Web でアプリを構築・公開：月 3 プロジェクト",
-    "featureConnectorsLead": "100 以上のコネクタ",
-    "featureConnectorsRest": "：Gmail、Google カレンダー、Slack、Drive、Notion など",
-    "featureCreditsLead": "月 20,000 クレジット",
-    "featureCreditsRest": "（チャット、構築、ルーティン用）",
-    "featureMedia": "画像と動画の生成",
-    "featureModels": "トップモデル：GPT-6.1 Sol, Claude Sonnet 5.5, Claude Opus 5.5, Gemini 3.1 Pro",
-    "featureRoutines": "最大 5 つのルーティンを同時実行、最短 1 時間ごと",
     "keepChatting": "コネクタなしでチャットを続ける",
     "notNow": "今はしない",
     "ownKeyBody": "No separate API bill. Upgrade and your message sends right away.",
     "ownKeyBodyNoMessage": "No separate API bill. Upgrade to keep going on the top models.",
     "ownKeyTitle": "Use any model on AbacusAI",
     "plan": "Basic プラン · いつでも解約可能",
+    "planLine": "{{plan}} プラン · いつでも解約可能",
     "price": "$7",
     "pricePeriod": "初月",
     "startAt": "開始価格",
@@ -4465,7 +4457,6 @@
       "title": "無料クレジットを使い切りました",
       "expiredTitle": "無料クレジットの有効期限が切れました",
       "paidTitle": "今月のクレジットを使い切りました",
-      "renews": "無料クレジットは毎月更新されます。",
       "balance": "残り {{remaining}} / {{granted}} クレジット",
       "warning": "このまま続けると、ボットは別のプロバイダー（{{providers}}）の無料モデルに切り替わります。品質はかなり低く、ミスが増え、動いているコードを壊すことがあり、利用制限にもよく達します。",
       "offer": "{{plan}} にアップグレード — {{price}}",
@@ -4475,6 +4466,15 @@
     "plan": {
       "introPrice": "初月 {{first}}、以降 {{monthly}}/月",
       "monthlyPrice": "{{monthly}}/月"
+    },
+    "pitch": {
+      "credits": "毎月 {{credits}} クレジット（無料プランの {{times}} 倍）",
+      "creditsOnly": "毎月 {{credits}} クレジット",
+      "models": "トップモデル: {{models}}",
+      "media": "画像と動画の生成",
+      "agents": "Web 版 Abacus AI Agent で 24 時間 365 日動くパーソナルエージェント: WhatsApp・Discord・Telegram の自動返信、すべてのルーティン、そしてボットがすること全部",
+      "connectors": "100 以上のコネクタ：Gmail、Google カレンダー、Slack、Drive、Notion など",
+      "apps": "Web アプリを作成して公開"
     },
     "freeChip": "無料モデル · {{provider}}",
     "freeChipAny": "別のプロバイダー",
@@ -4503,7 +4503,6 @@
     "channel": {
       "wall": "無料クレジットを使い切ったため、一時停止しました。",
       "expired": "無料クレジットの有効期限が切れたため、一時停止しました。",
-      "renews": "無料クレジットは毎月更新されます。",
       "offer": "{{plan}} は {{price}} で、次のものが使えます:",
       "link": "アップグレードはこちら: {{link}}",
       "repeat": "一時停止中です: {{link}}",
@@ -4516,15 +4515,17 @@
       "ownKeyRateLimit": "{{provider}} のキーが利用制限に達しました。",
       "ownKeyDown": "{{provider}} は現在応答していません。",
       "ownKeyRejected": "{{provider}} のキーが拒否されました。無効か期限切れです。アプリの 設定 → モデル で修正してください。",
-      "ownKeyOffer": "代わりに AbacusAI のモデルを使えます: {{link}}",
       "ownKeyWeb": "Web 版 AbacusAI Agent で使えます: {{link}}",
+      "ownKeySwitch": "アプリのモデル選択で Abacus.AI に切り替えると、無料の Abacus クレジットで続けられます。",
       "busy": "無料モデルは現在混み合っています。",
       "connection": "接続が切れたため、完了できませんでした。少し待ってからもう一度お試しください。",
       "notSignedIn": "デスクトップアプリが現在 Abacus.AI にサインインしていません。アプリを開いてサインインし、もう一度メッセージを送ってください。",
       "generic": "こちらで問題が起きたため、完了できませんでした。少し待ってからもう一度お試しください。",
       "contactFailed": "先ほど {{name}} さんに返信できませんでした。",
       "contactFailedGeneric": "先ほど {{name}} さんに返信できませんでした: こちらで問題が起きました。",
-      "someone": "相手"
+      "someone": "相手",
+      "payment": "前回のお支払いを確認できなかったため、一時停止しています。サブスクリプションが有効な場合は support@abacus.ai までご連絡ください。再度購入はしないでください。請求: {{link}}",
+      "paymentLapsed": "Abacus.AI のサブスクリプションが終了したため、一時停止しています。こちらから更新してください: {{link}}"
     },
     "unavailable": {
       "title": {
@@ -4547,6 +4548,11 @@
       "seePlans": "プランを見る",
       "planBody": "今は無料モデルで続けるか、{{plan}} にアップグレードしてご利用ください。",
       "planBodyAny": "今は無料モデルで続けるか、プランをアップグレードしてご利用ください。"
+    },
+    "payment": {
+      "title": "前回のお支払いを確認できませんでした",
+      "body": "サブスクリプションが有効な場合は support@abacus.ai までご連絡ください。再度購入しないでください。",
+      "billing": "請求ページを開く"
     }
   },
   "creditThreshold": {
@@ -4573,13 +4579,6 @@
     "meterLabel": "無料クレジット {{total}} のうち {{used}} を使用",
     "used": "{{used}} 使用",
     "left": "残り {{left}}",
-    "benefit": {
-      "credits": "毎月 {{credits}} クレジット（無料プランの {{times}} 倍）",
-      "creditsOnly": "毎月 {{credits}} クレジット",
-      "models": "トップモデル: {{models}}",
-      "media": "画像と動画の生成",
-      "agents": "Web 版 Abacus AI Agent で 24 時間 365 日動くパーソナルエージェント: WhatsApp・Discord・Telegram の自動返信、すべてのルーティン、そしてボットがすること全部"
-    },
     "upgradeIntro": "アップグレード · 初月 {{price}}",
     "upgradeMonthly": "アップグレード · {{price}}/月",
     "upgrade": "アップグレード",

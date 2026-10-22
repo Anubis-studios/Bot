@@ -1609,7 +1609,8 @@ export class MessagingGatewayService {
     const line = chatLineForCreditThreshold(
       words,
       mark,
-      billing?.upgrades[0]?.url ?? upgradeUrl ?? botUpgradePage("channel")
+      billing?.upgrades[0]?.url ?? upgradeUrl ?? botUpgradePage("channel"),
+      billing
     );
     if (isOwn) this.deliver(route, line);
     else this.deliverToSelf(own, line);

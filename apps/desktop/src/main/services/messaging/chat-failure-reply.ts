@@ -1,6 +1,6 @@
 import {
   type BillingPlan,
-  creditsRenewMonthly,
+  planPitch,
   planPrice,
   wallOffer,
 } from "@abacus-ai/contract/billing-plan";
@@ -49,6 +49,7 @@ export type FailureKind =
   | "upgrade-abacus"
   | "own-key"
   | "key-rejected"
+  | "payment"
   | "free-pool-out"
   | "model-unavailable"
   | "connection"
@@ -67,6 +68,9 @@ export interface ChannelOffer {
 /** AbacusAI Agent on the web. */
 const ABACUS_AGENT_URL = "https://apps.abacus.ai/chatllm";
 
+/** The account's billing page, where a payment is checked or a plan renewed. */
+const ABACUS_BILLING_URL = "https://apps.abacus.ai/chatllm/admin/profile";
+
 const NETWORK_UNREACHABLE_CODE = "network_unreachable";
 
 /** Whose own key failed: the own-key offer, or the key to fix. */
@@ -79,6 +83,8 @@ export const failureKind = (error: TurnFailure): FailureKind => {
   // The picked model cannot serve the turn: its own line, credits or not.
   if (types.has("model-unavailable")) return "model-gone";
   if (types.has("upgrade-abacus")) return "upgrade-abacus";
+  // Abacus's billing gate: never the out-of-credits line, nor a purchase.
+  if (types.has("payment-required")) return "payment";
   if (error.cause === "key_invalid" && types.has("fix-key"))
     return "key-rejected";
   if (ownKeyAction(error)?.provider != null) return "own-key";
@@ -95,30 +101,26 @@ export const wantsUpgradeUrl = (
   account: AccountKind
 ): boolean => {
   const kind = failureKind(error);
-  if (kind === "upgrade-abacus" || kind === "own-key" || kind === "model-gone")
+  if (kind === "upgrade-abacus" || kind === "model-gone")
     return account === "free";
   return kind === "free-pool-out" && account !== "paid";
 };
 
-/** The plan on offer, its price and what it gives, then the link: from billing_plan. */
-const offerLines = (
-  words: ChannelWords,
-  offer: ChannelOffer,
-  withRenewal: boolean
-): string[] => {
+/**
+ * The plan on offer, its price and its whole pitch, then the link: all from
+ * billing_plan (planPitch), the same lines the app's dialog lists.
+ */
+const offerLines = (words: ChannelWords, offer: ChannelOffer): string[] => {
   const { t, locale } = words;
   const plan = wallOffer(offer.billing);
   return [
-    ...(withRenewal && creditsRenewMonthly(offer.billing)
-      ? [t("outcome.channel.renews")]
-      : []),
     ...(plan != null
       ? [
           t("outcome.channel.offer", {
             plan: plan.planName,
             price: planPrice(t, plan, locale),
           }),
-          ...plan.features.map((feature) => `- ${feature}`),
+          ...planPitch(t, offer.billing, locale).map((line) => `- ${line}`),
         ]
       : []),
     t("outcome.channel.link", { link: plan?.url ?? offer.upgradeUrl }),
@@ -170,7 +172,7 @@ export const chatReplyForFailure = (
           : account === "free"
             ? [
                 t("outcome.channel.unavailableOut", { model }),
-                ...offerLines(words, offer, false),
+                ...offerLines(words, offer),
               ].join("\n")
             : `${t("outcome.channel.unavailableOut", { model })} ${t("outcome.channel.paidOut", { link: offer.topUpUrl })}`;
       if (gone?.cause !== "plan")
@@ -185,7 +187,7 @@ export const chatReplyForFailure = (
       return account === "free"
         ? [
             t("outcome.channel.unavailablePlan", { model }),
-            ...offerLines(words, offer, false),
+            ...offerLines(words, offer),
           ].join("\n")
         : `${t("outcome.channel.unavailablePlan", { model })} ${t("outcome.channel.link", { link: offer.upgradeUrl })}`;
     }
@@ -202,17 +204,27 @@ export const chatReplyForFailure = (
       if (repeat) return reminder;
       return [
         t(expired ? "outcome.channel.expired" : "outcome.channel.wall"),
-        ...offerLines(words, offer, !expired),
+        ...offerLines(words, offer),
       ].join("\n");
     }
     case "own-key":
+      // Free: the Abacus credits still run (a spent account is the wall's
+      // line), so the way on is switching to them, not half a pitch.
       if (account === "free")
         return repeat
-          ? reminder
-          : `${ownKeyLead(words, error)} ${t("outcome.channel.ownKeyOffer", { link: offer.upgradeUrl })}`;
+          ? ownKeyLead(words, error)
+          : `${ownKeyLead(words, error)} ${t("outcome.channel.ownKeySwitch")}`;
       return repeat
         ? ownKeyLead(words, error)
         : `${ownKeyLead(words, error)} ${t("outcome.channel.ownKeyWeb", { link: ABACUS_AGENT_URL })}`;
+    case "payment":
+      return t(
+        error.actions?.find((action) => action.type === "payment-required")
+          ?.cause === "lapsed"
+          ? "outcome.channel.paymentLapsed"
+          : "outcome.channel.payment",
+        { link: ABACUS_BILLING_URL }
+      );
     case "key-rejected":
       return t("outcome.channel.ownKeyRejected", {
         provider: providerDisplayName(ownKeyAction(error)?.provider ?? ""),
@@ -220,10 +232,9 @@ export const chatReplyForFailure = (
     case "free-pool-out":
       if (account === "paid") return t("outcome.channel.generic");
       if (repeat) return reminder;
-      return [
-        t("outcome.channel.busy"),
-        ...offerLines(words, offer, false),
-      ].join("\n");
+      return [t("outcome.channel.busy"), ...offerLines(words, offer)].join(
+        "\n"
+      );
     case "model-unavailable":
       return t("outcome.channel.notSignedIn");
     case "connection":
@@ -241,7 +252,8 @@ export const chatReplyForFailure = (
 export const chatLineForCreditThreshold = (
   words: ChannelWords,
   mark: CreditThresholdMark,
-  link: string
+  link: string,
+  billing: BillingPlan | null = null
 ): string => {
   const left = Math.max(0, mark.granted - mark.used);
   const count = tasksLeft(left, mark.perTask);
@@ -252,9 +264,16 @@ export const chatLineForCreditThreshold = (
     { left, total: mark.granted },
     count != null ? { count, kind: mark.kind } : null
   );
-  return [title, ...lines, words.t("outcome.channel.link", { link })].join(
-    "\n"
-  );
+  // The plan's whole pitch, as every upgrade line carries it; the link last.
+  return [
+    title,
+    ...lines,
+    ...offerLines(words, { upgradeUrl: link, topUpUrl: link, billing }).slice(
+      0,
+      -1
+    ),
+    words.t("outcome.channel.link", { link }),
+  ].join("\n");
 };
 
 /**

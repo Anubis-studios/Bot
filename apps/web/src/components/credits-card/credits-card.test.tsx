@@ -16,9 +16,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DbProvider } from "#renderer/data/db";
 import { fixturePrefs } from "#renderer/data/fixture-db/rows";
+import {
+  closeUpgradeDialog,
+  requestUpgradeDialog,
+  type UpgradeDialogRequest,
+} from "#renderer/lib/upgrade-dialog";
 import { createHarness, defaultSeed } from "#renderer/test-support/app-harness";
 
 import { renderWithDb } from "../../features/chat/testing";
+import { UpgradeDialogHost } from "../../features/upgrade-dialog";
 import { DeliverablesCard } from "../file-preview";
 import { CreditsCard, missingFreeSources } from "./index";
 import { CreditThresholdCard, CreditThresholdHost } from "./threshold";
@@ -269,10 +275,12 @@ describe("the free grant's milestone card", () => {
         ),
       ].map((item) => item.textContent)
     ).toEqual([
-      "20,000 credits every month, 10x the free plan",
+      "20,000 credits a month (10x the free plan)",
       "Top models: Model A, Model B, Model C, Model D",
       "Image and video generation",
       "Personal agents in Abacus AI Agent on the web that run 24/7: WhatsApp, Discord and Telegram auto-replies, all your routines, and everything your bot does",
+      "100+ connectors: Gmail, Google Calendar, Slack, Drive, Notion and more",
+      "Build and publish web apps",
     ]);
     expect(
       screen.getByRole("button", { name: "Upgrade · $7 first month" })
@@ -449,6 +457,81 @@ describe("the free grant's milestone card", () => {
     await waitFor(() => expect(h.steps()).toContain("credit_card_50_upgrade"));
     await waitFor(() =>
       expect(h.cards()).toEqual({ "o1:u1": { shown: 50, answered: 50 } })
+    );
+  });
+
+  const dialog = async (request: UpgradeDialogRequest) => {
+    const os = implement(contract);
+    const harness = await createHarness("/", {
+      seed: { ...defaultSeed(), sessions: [] },
+      procedures: {
+        account: {
+          abacus: os.account.abacus.handler(() => ({
+            ...ACCOUNT,
+            credits_used: 2000,
+          })),
+          billingPlan: os.account.billingPlan.handler(() => BILLING),
+        },
+      },
+    });
+    let rendered!: ReturnType<typeof render>;
+    await act(async () => {
+      rendered = render(
+        <QueryClientProvider
+          client={harness.router.options.context.queryClient}
+        >
+          <RouterContextProvider router={harness.router}>
+            <DbProvider value={harness.appDb}>
+              <UpgradeDialogHost />
+            </DbProvider>
+          </RouterContextProvider>
+        </QueryClientProvider>
+      );
+    });
+    cleanup = async () => {
+      closeUpgradeDialog();
+      rendered.unmount();
+      await harness.cleanup();
+    };
+    act(() => requestUpgradeDialog(request, true));
+    return screen.findByRole("dialog");
+  };
+
+  it("the out-of-credits dialog carries the plan's whole pitch and its price, never a renewal", async () => {
+    const open = await dialog({ kind: "credits", key: "k1", threadId: "t1" });
+    await waitFor(() =>
+      expect(
+        [...document.querySelectorAll('[data-slot="upgrade-pitch"] li')]
+          .map((item) => item.textContent)
+          .toSorted()
+      ).toEqual(
+        [
+          "20,000 credits a month (10x the free plan)",
+          "Top models: Model A, Model B, Model C, Model D",
+          "Image and video generation",
+          "Personal agents in Abacus AI Agent on the web that run 24/7: WhatsApp, Discord and Telegram auto-replies, all your routines, and everything your bot does",
+          "100+ connectors: Gmail, Google Calendar, Slack, Drive, Notion and more",
+          "Build and publish web apps",
+        ].toSorted()
+      )
+    );
+    expect(open.textContent).toContain("Your free credits are used up");
+    expect(open.textContent).toContain("$7 your first month, then $10/month");
+    expect(open.textContent).not.toMatch(/renew/i);
+    expect(
+      screen.getByRole("button", { name: "Upgrade to Basic" })
+    ).toBeTruthy();
+  });
+
+  it("an expired free tier's dialog says it expired", async () => {
+    const open = await dialog({
+      kind: "credits",
+      key: "k2",
+      threadId: "t1",
+      expired: true,
+    });
+    await waitFor(() =>
+      expect(open.textContent).toContain("Your free credits have expired")
     );
   });
 });

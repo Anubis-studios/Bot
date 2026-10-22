@@ -33,6 +33,7 @@ import {
   OPENLLM_POOL_BUSY_MESSAGE,
   TurnChain,
   classifyAttempt,
+  classifyProviderFailure,
   isBusyCause,
   presentFailure,
 } from "./turn-outcome.js";
@@ -688,5 +689,172 @@ describe("one cause per turn, read from the whole chain of calls", () => {
       { type: "fix-key", provider: "mistral" },
       { type: "switch-model" },
     ]);
+  });
+});
+
+/**
+ * Who refused decides. Real answers from turns that showed the Abacus
+ * out-of-credits card while the provider refusing was the user's own key,
+ * and Abacus's own refusals with and without the code the server now adds.
+ */
+describe("who refused: Abacus's wall, its billing gate, or the user's own key", () => {
+  const pinned = (abacus: "credits" | "out" | null) => ({
+    routed: false,
+    freeLaneProviders: [],
+    onFreeLane: false,
+    abacusFreeModels: [],
+    abacus,
+  });
+  const GEMINI_QUOTA =
+    '{"error":{"message":"{\\n  \\"error\\": {\\n    \\"code\\": 429,\\n    \\"message\\": \\"You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://…';
+  const OPENAI_NO_CREDITS =
+    "You have no credits remaining. Add credits to continue using the API at https://platform.openai.com/settings/organization/billing/.";
+  const DEEPSEEK_BALANCE =
+    "402: Insufficient Balance (request_id: 00000000-0000-0000-0000-000000000000)";
+  const HUGGINGFACE_CREDITS =
+    '402 "You have no remaining credits. Purchase pre-paid credits to continue using Inference Providers. Alternatively, subscribe to PRO to get monthly included credits."';
+  const PAYMENT_UNCONFIRMED =
+    '402 "We could not confirm the last payment on this subscription. If your subscription is active, please contact support@abacus.ai - do not purchase again."';
+  const ABACUS_WALL = "429: You have no remaining credits to use the LLM apis.";
+  const ABACUS_WALL_CODED =
+    '429: {"message":"You have no remaining credits to use the LLM apis.","type":"insufficient_quota","param":null,"code":"insufficient_quota","abacus_error_code":"abacus_credits_exhausted"}';
+
+  it.each([
+    ["gemini", GEMINI_QUOTA, "own_key_quota"],
+    ["openai", OPENAI_NO_CREDITS, "own_key_quota"],
+    ["deepseek", DEEPSEEK_BALANCE, "own_key_quota"],
+    ["huggingface", HUGGINGFACE_CREDITS, "own_key_quota"],
+    [
+      "openrouter",
+      "402: Insufficient credits. Add more using https://openrouter.ai/settings/credits",
+      "own_key_quota",
+    ],
+    [
+      "minimax",
+      '402 {"type":"error","error":{"type":"insufficient_balance_error","message":"insufficient balance (1008)"}}',
+      "own_key_quota",
+    ],
+    ["cerebras", "402 status code (no body)", "own_key_quota"],
+    [
+      "opencode",
+      "402: Upstream request failed: Insufficient account funds",
+      "own_key_quota",
+    ],
+    // A server's own "no remaining credits" is not Abacus's wall either.
+    ["local", ABACUS_WALL, "rate_limited"],
+    // Abacus without the code (today's server): read by its words.
+    ["abacus", ABACUS_WALL, "credits_exhausted"],
+    ["abacus", PAYMENT_UNCONFIRMED, "payment_required"],
+    [
+      "abacus",
+      '402 "Your subscription has ended. Please renew it to continue."',
+      "payment_required",
+    ],
+    [
+      "abacus",
+      '402 "Your free trial has ended. Please subscribe to continue."',
+      "credits_expired",
+    ],
+    // Abacus with the code: the code decides.
+    ["abacus", ABACUS_WALL_CODED, "credits_exhausted"],
+    [
+      "abacus",
+      '429 {"type":"error","error":{"type":"rate_limit_error","message":"Your free AbacusAI credits have expired. You have no remaining credits to use the API.","abacus_error_code":"abacus_free_tier_expired"}}',
+      "credits_expired",
+    ],
+    [
+      "abacus",
+      '402 {"success":false,"error":"We could not confirm the last payment on this subscription.","errorType":"PaymentMethodRequired","reason":"unconfirmed","abacusErrorCode":"abacus_payment_required"}',
+      "payment_required",
+    ],
+  ] as const)("%s: %s → %s", (provider, raw, cause) => {
+    expect(classifyAttempt(raw, provider)).toBe(cause);
+  });
+
+  it("an own key's quota names that key, never the Abacus credits", () => {
+    for (const [provider, raw] of [
+      ["gemini", GEMINI_QUOTA],
+      ["openai", OPENAI_NO_CREDITS],
+      ["deepseek", DEEPSEEK_BALANCE],
+      ["huggingface", HUGGINGFACE_CREDITS],
+    ] as const) {
+      const chain = new TurnChain();
+      chain.failed(raw, provider);
+      const shown = presentFailure(chain.failure()!, pinned("credits"));
+      expect(shown.cause).toBe("own_key_quota");
+      expect(shown.message).toMatch(/^Your .+ key hit its quota\./);
+      expect(shown.message).not.toMatch(/out of credits|Abacus/i);
+      expect(shown.actions).toEqual([
+        { type: "fix-key", provider },
+        { type: "switch-to-abacus" },
+      ]);
+    }
+  });
+
+  it("an own key's quota while the Abacus credits are out too offers the plan", () => {
+    const shown = presentFailure(
+      { cause: "own_key_quota", provider: "deepseek", raw: DEEPSEEK_BALANCE },
+      pinned("out")
+    );
+    expect(shown.actions).toEqual([
+      { type: "fix-key", provider: "deepseek" },
+      { type: "upgrade-abacus", cause: "exhausted" },
+    ]);
+  });
+
+  it("Abacus's billing gate is a payment card, never the credits card", () => {
+    const chain = new TurnChain();
+    chain.failed(PAYMENT_UNCONFIRMED, "abacus");
+    const shown = presentFailure(chain.failure()!, pinned("credits"));
+    expect(shown).toMatchObject({
+      cause: "payment_required",
+      message:
+        "We couldn't confirm your last payment. If your subscription is active, contact support@abacus.ai. Please don't purchase again.",
+      actions: [
+        { type: "payment-required", cause: "unconfirmed" },
+        { type: "switch-model" },
+      ],
+    });
+    expect(JSON.stringify(shown.actions)).not.toContain("upgrade-abacus");
+    const lapsed = presentFailure(
+      {
+        cause: "payment_required",
+        provider: "abacus",
+        raw: '402 "Your subscription has ended. Please renew it to continue."',
+      },
+      pinned("credits")
+    );
+    expect(lapsed.actions?.[0]).toEqual({
+      type: "payment-required",
+      cause: "lapsed",
+    });
+  });
+
+  it("Abacus's wall, coded or not, is still the credits card", () => {
+    for (const raw of [ABACUS_WALL, ABACUS_WALL_CODED]) {
+      const shown = presentFailure(
+        { cause: classifyAttempt(raw, "abacus"), provider: "abacus", raw },
+        pinned("out")
+      );
+      expect(shown.cause).toBe("credits_exhausted");
+      expect(shown.actions?.[0]).toEqual({
+        type: "upgrade-abacus",
+        cause: "exhausted",
+      });
+      expect(shown.message).toMatch(/^You're out of credits \(429\)\./);
+    }
+  });
+
+  it("the summary is the provider's quota for an own key, the wall for Abacus", () => {
+    expect(classifyProviderFailure(DEEPSEEK_BALANCE, "deepseek").summary).toBe(
+      "The model provider is out of quota"
+    );
+    expect(classifyProviderFailure(ABACUS_WALL, "abacus").summary).toBe(
+      "You're out of credits"
+    );
+    // No provider known: read as before.
+    expect(classifyProviderFailure(ABACUS_WALL).summary).toBe(
+      "You're out of credits"
+    );
   });
 });

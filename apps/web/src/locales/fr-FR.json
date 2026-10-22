@@ -4243,22 +4243,14 @@
     "connectorsTitle": "Les connecteurs sont disponibles avec des crédits AbacusAI",
     "creditsBody": "Votre message est enregistré. Passez à un forfait supérieur et il part tout de suite.",
     "creditsBodyNoMessage": "Passez à un forfait supérieur pour continuer avec les meilleurs modèles, les connecteurs et les routines.",
-    "creditsEyebrow": "Vous avez utilisé vos 2 000 crédits gratuits",
     "creditsTitle": "Continuez avec AbacusAI Bot",
-    "featureApps": "Créez et déployez des apps sur le web : 3 projets par mois",
-    "featureConnectorsLead": "100+ connecteurs",
-    "featureConnectorsRest": " : Gmail, Google Agenda, Slack, Drive, Notion et plus",
-    "featureCreditsLead": "20 000 crédits par mois",
-    "featureCreditsRest": " pour les discussions, les créations et les routines",
-    "featureMedia": "Génération d'images et de vidéos",
-    "featureModels": "Meilleurs modèles : GPT-6.1 Sol, Claude Sonnet 5.5, Claude Opus 5.5, Gemini 3.1 Pro",
-    "featureRoutines": "Jusqu'à 5 routines en parallèle, jusqu'à toutes les heures",
     "keepChatting": "Continuer à discuter sans connecteurs",
     "notNow": "Pas maintenant",
     "ownKeyBody": "No separate API bill. Upgrade and your message sends right away.",
     "ownKeyBodyNoMessage": "No separate API bill. Upgrade to keep going on the top models.",
     "ownKeyTitle": "Use any model on AbacusAI",
     "plan": "Forfait Basic · résiliable à tout moment",
+    "planLine": "Forfait {{plan}} · résiliable à tout moment",
     "price": "7 $",
     "pricePeriod": "pour votre premier mois",
     "startAt": "À partir de",
@@ -4465,7 +4457,6 @@
       "title": "Vos crédits gratuits sont épuisés",
       "expiredTitle": "Vos crédits gratuits ont expiré",
       "paidTitle": "Vous avez utilisé les crédits de ce mois-ci",
-      "renews": "Les crédits gratuits se renouvellent chaque mois.",
       "balance": "Il vous reste {{remaining}} crédits sur {{granted}}",
       "warning": "Pour continuer maintenant, le bot passerait à des modèles gratuits d'un autre fournisseur ({{providers}}). Ils sont de bien moindre qualité : plus d'erreurs, ils peuvent casser du code qui fonctionne et atteignent souvent leurs limites d'utilisation.",
       "offer": "Passez à {{plan}} — {{price}}",
@@ -4475,6 +4466,15 @@
     "plan": {
       "introPrice": "{{first}} le premier mois, puis {{monthly}}/mois",
       "monthlyPrice": "{{monthly}}/mois"
+    },
+    "pitch": {
+      "credits": "{{credits}} crédits chaque mois, {{times}} fois le forfait gratuit",
+      "creditsOnly": "{{credits}} crédits chaque mois",
+      "models": "Meilleurs modèles : {{models}}",
+      "media": "Génération d'images et de vidéos",
+      "agents": "Des agents personnels dans Abacus AI Agent sur le web qui tournent 24 h/24, 7 j/7 : réponses automatiques sur WhatsApp, Discord et Telegram, toutes vos routines et tout ce que fait votre bot",
+      "connectors": "100+ connecteurs : Gmail, Google Agenda, Slack, Drive, Notion et plus",
+      "apps": "Créez et publiez des applications web"
     },
     "freeChip": "Modèle gratuit · {{provider}}",
     "freeChipAny": "un autre fournisseur",
@@ -4503,7 +4503,6 @@
     "channel": {
       "wall": "Je me suis mis en pause car vos crédits gratuits sont épuisés.",
       "expired": "Je me suis mis en pause car vos crédits gratuits ont expiré.",
-      "renews": "Les crédits gratuits se renouvellent chaque mois.",
       "offer": "{{plan}} coûte {{price}} et vous offre :",
       "link": "Passez à l'offre supérieure ici : {{link}}",
       "repeat": "Toujours en pause : {{link}}",
@@ -4516,15 +4515,17 @@
       "ownKeyRateLimit": "Votre clé {{provider}} a atteint sa limite d'utilisation.",
       "ownKeyDown": "{{provider}} ne répond pas en ce moment.",
       "ownKeyRejected": "Votre clé {{provider}} a été refusée : elle est invalide ou a expiré. Corrigez-la dans l'application, dans Paramètres → Modèles.",
-      "ownKeyOffer": "Utilisez plutôt n'importe quel modèle sur AbacusAI : {{link}}",
       "ownKeyWeb": "Utilisez-la dans AbacusAI Agent sur le web : {{link}}",
+      "ownKeySwitch": "Passez à Abacus.AI dans le sélecteur de modèles de l'app pour continuer avec vos crédits Abacus gratuits.",
       "busy": "Les modèles gratuits sont occupés en ce moment.",
       "connection": "La connexion a été coupée, je n'ai donc pas pu terminer. Réessayez dans un instant.",
       "notSignedIn": "L'application de bureau n'est pas connectée à Abacus.AI pour le moment. Ouvrez l'application, connectez-vous, puis écrivez-moi à nouveau.",
       "generic": "Un problème est survenu de mon côté, je n'ai donc pas pu terminer. Réessayez dans un instant.",
       "contactFailed": "Je n'ai pas pu répondre à {{name}} tout à l'heure.",
       "contactFailedGeneric": "Je n'ai pas pu répondre à {{name}} tout à l'heure : un problème est survenu de mon côté.",
-      "someone": "quelqu'un"
+      "someone": "quelqu'un",
+      "payment": "Je suis en pause car nous n'avons pas pu confirmer votre dernier paiement. Si votre abonnement est actif, contactez support@abacus.ai et n'achetez pas à nouveau. Facturation : {{link}}",
+      "paymentLapsed": "Je suis en pause car votre abonnement Abacus.AI a pris fin. Renouvelez-le ici : {{link}}"
     },
     "unavailable": {
       "title": {
@@ -4547,6 +4548,11 @@
       "seePlans": "Voir les offres",
       "planBody": "Continuez maintenant avec un modèle gratuit, ou passez à {{plan}} pour l'utiliser.",
       "planBodyAny": "Continuez maintenant avec un modèle gratuit, ou passez à une offre supérieure pour l'utiliser."
+    },
+    "payment": {
+      "title": "Nous n'avons pas pu confirmer votre dernier paiement",
+      "body": "Si votre abonnement est actif, contactez support@abacus.ai. N'achetez pas à nouveau.",
+      "billing": "Ouvrir la facturation"
     }
   },
   "creditThreshold": {
@@ -4573,13 +4579,6 @@
     "meterLabel": "{{used}} crédits gratuits utilisés sur {{total}}",
     "used": "{{used}} utilisés",
     "left": "{{left}} restants",
-    "benefit": {
-      "credits": "{{credits}} crédits chaque mois, {{times}} fois le forfait gratuit",
-      "creditsOnly": "{{credits}} crédits chaque mois",
-      "models": "Meilleurs modèles : {{models}}",
-      "media": "Génération d'images et de vidéos",
-      "agents": "Des agents personnels dans Abacus AI Agent sur le web qui tournent 24 h/24, 7 j/7 : réponses automatiques sur WhatsApp, Discord et Telegram, toutes vos routines et tout ce que fait votre bot"
-    },
     "upgradeIntro": "Passer au forfait · {{price}} le premier mois",
     "upgradeMonthly": "Passer au forfait · {{price}}/mois",
     "upgrade": "Passer au forfait",

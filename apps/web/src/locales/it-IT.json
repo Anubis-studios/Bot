@@ -4243,22 +4243,14 @@
     "connectorsTitle": "I connettori sono disponibili con i crediti AbacusAI",
     "creditsBody": "Il tuo messaggio è salvato. Fai l'upgrade e partirà subito.",
     "creditsBodyNoMessage": "Fai l'upgrade per continuare con i migliori modelli, connettori e routine.",
-    "creditsEyebrow": "Hai usato i tuoi 2.000 crediti gratuiti",
     "creditsTitle": "Continua con AbacusAI Bot",
-    "featureApps": "Crea e pubblica app sul web: 3 progetti al mese",
-    "featureConnectorsLead": "Oltre 100 connettori",
-    "featureConnectorsRest": ": Gmail, Google Calendar, Slack, Drive, Notion e altro",
-    "featureCreditsLead": "20.000 crediti al mese",
-    "featureCreditsRest": " per chat, creazioni e routine",
-    "featureMedia": "Generazione di immagini e video",
-    "featureModels": "I migliori modelli: GPT-6.1 Sol, Claude Sonnet 5.5, Claude Opus 5.5, Gemini 3.1 Pro",
-    "featureRoutines": "Fino a 5 routine contemporaneamente, anche ogni ora",
     "keepChatting": "Continua a chattare senza connettori",
     "notNow": "Non ora",
     "ownKeyBody": "No separate API bill. Upgrade and your message sends right away.",
     "ownKeyBodyNoMessage": "No separate API bill. Upgrade to keep going on the top models.",
     "ownKeyTitle": "Use any model on AbacusAI",
     "plan": "Piano Basic · disdici quando vuoi",
+    "planLine": "Piano {{plan}} · disdici quando vuoi",
     "price": "7 $",
     "pricePeriod": "per il primo mese",
     "startAt": "A partire da",
@@ -4465,7 +4457,6 @@
       "title": "Hai esaurito i crediti gratuiti",
       "expiredTitle": "I tuoi crediti gratuiti sono scaduti",
       "paidTitle": "Hai usato i crediti di questo mese",
-      "renews": "I crediti gratuiti si rinnovano ogni mese.",
       "balance": "Ti restano {{remaining}} crediti su {{granted}}",
       "warning": "Per continuare ora, il bot passerebbe a modelli gratuiti di un altro fornitore ({{providers}}). Sono di qualità molto inferiore: più errori, possono rompere codice funzionante e spesso raggiungono i limiti di utilizzo.",
       "offer": "Passa a {{plan}} — {{price}}",
@@ -4475,6 +4466,15 @@
     "plan": {
       "introPrice": "{{first}} il primo mese, poi {{monthly}}/mese",
       "monthlyPrice": "{{monthly}}/mese"
+    },
+    "pitch": {
+      "credits": "{{credits}} crediti ogni mese, {{times}} volte il piano gratuito",
+      "creditsOnly": "{{credits}} crediti ogni mese",
+      "models": "Modelli migliori: {{models}}",
+      "media": "Generazione di immagini e video",
+      "agents": "Agenti personali in Abacus AI Agent sul web attivi 24/7: risposte automatiche su WhatsApp, Discord e Telegram, tutte le tue routine e tutto ciò che fa il tuo bot",
+      "connectors": "Oltre 100 connettori: Gmail, Google Calendar, Slack, Drive, Notion e altro",
+      "apps": "Crea e pubblica app web"
     },
     "freeChip": "Modello gratuito · {{provider}}",
     "freeChipAny": "un altro fornitore",
@@ -4503,7 +4503,6 @@
     "channel": {
       "wall": "Mi sono fermato perché hai esaurito i crediti gratuiti.",
       "expired": "Mi sono fermato perché i tuoi crediti gratuiti sono scaduti.",
-      "renews": "I crediti gratuiti si rinnovano ogni mese.",
       "offer": "{{plan}} costa {{price}} e ti offre:",
       "link": "Passa al piano qui: {{link}}",
       "repeat": "Ancora in pausa: {{link}}",
@@ -4516,15 +4515,17 @@
       "ownKeyRateLimit": "La tua chiave {{provider}} ha raggiunto il limite di utilizzo.",
       "ownKeyDown": "{{provider}} non risponde in questo momento.",
       "ownKeyRejected": "La tua chiave {{provider}} è stata rifiutata: non è valida o è scaduta. Correggila nell'app, in Impostazioni → Modelli.",
-      "ownKeyOffer": "Usa invece qualsiasi modello su AbacusAI: {{link}}",
       "ownKeyWeb": "Usala in AbacusAI Agent sul web: {{link}}",
+      "ownKeySwitch": "Passa ad Abacus.AI nel selettore dei modelli dell'app per continuare con i tuoi crediti Abacus gratuiti.",
       "busy": "I modelli gratuiti sono occupati in questo momento.",
       "connection": "La connessione si è interrotta, quindi non ho potuto finire. Riprova tra un momento.",
       "notSignedIn": "L'app desktop non ha effettuato l'accesso ad Abacus.AI in questo momento. Apri l'app, accedi e poi scrivimi di nuovo.",
       "generic": "Qualcosa è andato storto da parte mia, quindi non ho potuto finire. Riprova tra un momento.",
       "contactFailed": "Non sono riuscito a rispondere a {{name}} poco fa.",
       "contactFailedGeneric": "Non sono riuscito a rispondere a {{name}} poco fa: qualcosa è andato storto da parte mia.",
-      "someone": "qualcuno"
+      "someone": "qualcuno",
+      "payment": "Mi sono fermato perché non siamo riusciti a confermare il tuo ultimo pagamento. Se il tuo abbonamento è attivo, contatta support@abacus.ai e non acquistare di nuovo. Fatturazione: {{link}}",
+      "paymentLapsed": "Mi sono fermato perché il tuo abbonamento Abacus.AI è terminato. Rinnovalo qui: {{link}}"
     },
     "unavailable": {
       "title": {
@@ -4547,6 +4548,11 @@
       "seePlans": "Vedi i piani",
       "planBody": "Continua ora con un modello gratuito, oppure passa a {{plan}} per usarlo.",
       "planBodyAny": "Continua ora con un modello gratuito, oppure passa a un piano superiore per usarlo."
+    },
+    "payment": {
+      "title": "Non siamo riusciti a confermare il tuo ultimo pagamento",
+      "body": "Se il tuo abbonamento è attivo, contatta support@abacus.ai. Non acquistare di nuovo.",
+      "billing": "Apri fatturazione"
     }
   },
   "creditThreshold": {
@@ -4573,13 +4579,6 @@
     "meterLabel": "{{used}} crediti gratuiti usati su {{total}}",
     "used": "{{used}} usati",
     "left": "{{left}} rimasti",
-    "benefit": {
-      "credits": "{{credits}} crediti ogni mese, {{times}} volte il piano gratuito",
-      "creditsOnly": "{{credits}} crediti ogni mese",
-      "models": "Modelli migliori: {{models}}",
-      "media": "Generazione di immagini e video",
-      "agents": "Agenti personali in Abacus AI Agent sul web attivi 24/7: risposte automatiche su WhatsApp, Discord e Telegram, tutte le tue routine e tutto ciò che fa il tuo bot"
-    },
     "upgradeIntro": "Upgrade · {{price}} il primo mese",
     "upgradeMonthly": "Upgrade · {{price}}/mese",
     "upgrade": "Upgrade",

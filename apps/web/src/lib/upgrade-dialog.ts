@@ -24,6 +24,8 @@ export interface UpgradeDialogRequest {
   pendingText?: string;
   /** `own-key`: whose key failed, and how. */
   ownKey?: OwnKeyFailure;
+  /** `credits`: the free tier ended, rather than its credits running out. */
+  expired?: boolean;
   /** Sends that message again once the plan is active, on `model` if given. */
   resume?: (model?: string) => Promise<unknown>;
 }
