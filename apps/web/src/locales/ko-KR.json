@@ -1551,13 +1551,22 @@
       "local": "Routines run on this computer while it's on and AbacusAI Bot is open.",
       "title": "Run around the clock",
       "free": "Want routines to keep going with your laptop closed? Abacus AI Agent on the web runs them 24/7 on the Basic plan.",
-      "paid": "Your plan includes 24/7 routines in Abacus AI Agent on the web.",
-      "openAgent": "Open Abacus AI Agent",
+      "paid": "웹의 Abacus AI Agent에서 루틴을 설정하세요. 컴퓨터가 꺼져 있어도 루틴과 WhatsApp, Telegram, Discord 자동 답장이 24시간 내내 실행돼요.",
+      "openAgent": "24시간 루틴 설정",
       "dismiss": "Dismiss",
       "missed_one": "Missed {{count}} run while your computer was off",
       "missed_other": "Missed {{count}} runs while your computer was off",
       "missedNoticeFree": "{{names}}. On the Basic plan, Abacus AI Agent on the web runs routines 24/7, even with your computer off.",
-      "missedNoticePaid": "{{names}}. Your plan runs routines 24/7 in Abacus AI Agent on the web, even with your computer off."
+      "missedNoticePaid": "{{names}}. 웹의 Abacus AI Agent에서 루틴을 설정하면 컴퓨터가 꺼져 있어도 24시간 내내 실행돼요."
+    },
+    "upgraded": {
+      "title": "이제 {{plan}} 플랜이에요",
+      "titleNoPlan": "이제 유료 플랜이에요",
+      "body": "다음으로 웹의 Abacus AI Agent에서 루틴을 설정하세요. 컴퓨터가 꺼져 있어도 24시간 내내 실행돼요.",
+      "autoReplies": "WhatsApp, Telegram, Discord 자동 답장",
+      "allRoutines": "모든 루틴을 제시간에",
+      "setUp": "24시간 루틴 설정",
+      "back": "AbacusAI Bot으로 돌아가기"
     },
     "reach": {
       "gmailSearch": "Search Gmail",

@@ -172,8 +172,9 @@ const paymentNote = (facts: StepFacts): string =>
 
 const upgradedNote = (facts: StepFacts): string =>
   `[upgraded] The user's account just moved to ${text(facts.plan) ?? "a paid plan"}. Confirm it in one short line, in their ` +
-  "language and your own words. If a task stopped on the old plan's limit, carry on with it now. Mention once that the " +
-  `full AbacusAI Agent is at ${text(facts.link) ?? "their Abacus.AI account"}.`;
+  "language and your own words. If a task stopped on the old plan's limit, carry on with it now. Then ask them, once, " +
+  `to set up their routines in Abacus AI Agent on the web at ${text(facts.link) ?? "their Abacus.AI account"} (give the ` +
+  "link as written): there they run 24/7, even with the computer off, and so do WhatsApp, Telegram and Discord auto-replies.";
 
 /**
  * The one text a step-done event is told by. `known`: this run asked for

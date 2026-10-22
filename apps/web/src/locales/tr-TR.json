@@ -1551,13 +1551,22 @@
       "local": "Rutinler, bu bilgisayar açıkken ve AbacusAI Bot çalışırken bu bilgisayarda çalışır.",
       "title": "Günün her saati çalıştır",
       "free": "Dizüstü bilgisayarın kapalıyken de rutinlerin çalışsın mı istiyorsun? Web'deki Abacus AI Agent, Basic planda onları 7/24 çalıştırır.",
-      "paid": "Planın, web'deki Abacus AI Agent'ta 7/24 rutinleri içerir.",
-      "openAgent": "Abacus AI Agent'ı aç",
+      "paid": "Rutinlerini web'deki Abacus AI Agent'ta kur. Orada bilgisayarın kapalıyken bile 7/24 çalışırlar; WhatsApp, Telegram ve Discord otomatik yanıtların da öyle.",
+      "openAgent": "7/24 rutinleri kur",
       "dismiss": "Kapat",
       "missed_one": "Bilgisayarın kapalıyken {{count}} çalışma kaçırıldı",
       "missed_other": "Bilgisayarın kapalıyken {{count}} çalışma kaçırıldı",
       "missedNoticeFree": "{{names}}. Basic planda, web'deki Abacus AI Agent rutinleri bilgisayarın kapalıyken bile 7/24 çalıştırır.",
-      "missedNoticePaid": "{{names}}. Planın, web'deki Abacus AI Agent'ta rutinleri bilgisayarın kapalıyken bile 7/24 çalıştırır."
+      "missedNoticePaid": "{{names}}. Rutinlerini web'deki Abacus AI Agent'ta kur; orada bilgisayarın kapalıyken bile 7/24 çalışırlar."
+    },
+    "upgraded": {
+      "title": "Artık {{plan}} planındasın",
+      "titleNoPlan": "Artık ücretli bir plandasın",
+      "body": "Sırada rutinlerini web'deki Abacus AI Agent'ta kurmak var. Orada bilgisayarın kapalıyken bile 7/24 çalışırlar.",
+      "autoReplies": "WhatsApp, Telegram ve Discord otomatik yanıtları",
+      "allRoutines": "Tüm rutinlerin, zamanında",
+      "setUp": "7/24 rutinleri kur",
+      "back": "AbacusAI Bot'a dön"
     },
     "reach": {
       "gmailSearch": "Gmail'de ara",

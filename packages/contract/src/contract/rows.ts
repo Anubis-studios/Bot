@@ -186,6 +186,8 @@ export interface PrefsRow {
     routinesMissedSeenAt: number | null;
     /** Per account: the credit milestone card shown and answered. */
     creditThresholdCards?: Record<string, CreditThresholdCard>;
+    freePlanSeenAt: number | null;
+    upgradeRoutinesSeenAt: number | null;
   };
   /** Panel widths. */
   panes: Record<string, number>;

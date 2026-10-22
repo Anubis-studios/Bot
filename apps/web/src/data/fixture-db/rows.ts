@@ -257,6 +257,8 @@ export const fixturePrefs = (overrides: Partial<PrefsRow> = {}): PrefsRow => ({
     routinesAlwaysOnCardAt: null,
     routinesMissedSeenAt: null,
     creditThresholdCards: {},
+    freePlanSeenAt: null,
+    upgradeRoutinesSeenAt: null,
   },
   panes: {},
   motion: { reduce: "system" },
