@@ -9,7 +9,6 @@ import {
   CATALOG_SUPPLEMENTS,
   listBuiltinModels,
   missingCatalogSupplements,
-  vendorWireTraits,
 } from "./model-catalog.js";
 
 describe("catalog supplements", () => {
@@ -48,21 +47,5 @@ describe("catalog supplements", () => {
         expect(bundled.has(model.id)).toBe(true);
       }
     }
-  });
-});
-
-describe("vendor wire traits", () => {
-  it("reads a model's thinking levels and quirks from pi's row", () => {
-    expect(vendorWireTraits("anthropic", "claude-sonnet-5")?.compat).toEqual(
-      expect.objectContaining({ forceAdaptiveThinking: true })
-    );
-    expect(vendorWireTraits("openai", "gpt-5.4")?.thinkingLevelMap).toEqual(
-      expect.objectContaining({ off: "none" })
-    );
-  });
-
-  it("is null for a model pi does not carry", () => {
-    expect(vendorWireTraits("anthropic", "claude-sonnet-9")).toBeNull();
-    expect(vendorWireTraits("nope", "gpt-5.4")).toBeNull();
   });
 });

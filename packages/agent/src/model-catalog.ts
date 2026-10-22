@@ -42,8 +42,6 @@ interface CatalogEntry {
   name?: string;
   contextWindow?: number;
   cost?: { input?: number; output?: number };
-  thinkingLevelMap?: Record<string, string | null>;
-  compat?: Record<string, unknown>;
 }
 
 /**
@@ -200,30 +198,6 @@ export const missingCatalogSupplements = (): Record<
     if (absent.length > 0) missing[provider] = absent;
   }
   return missing;
-};
-
-/** What a vendor model needs on its own wire beyond the id: thinking levels and quirks. */
-export interface VendorWireTraits {
-  thinkingLevelMap?: Record<string, string | null>;
-  compat?: Record<string, unknown>;
-}
-
-/** pi's row for `provider`'s model `id` (supplements included), or null when pi has none. */
-export const vendorWireTraits = (
-  provider: string,
-  id: string
-): VendorWireTraits | null => {
-  const namespace = CATALOGS[provider];
-  const row: CatalogEntry | undefined =
-    (namespace == null
-      ? undefined
-      : entriesOf(namespace).find((model) => model.id === id)) ??
-    CATALOG_SUPPLEMENTS[provider]?.find((model) => model.id === id);
-  if (row == null) return null;
-  return {
-    ...(row.thinkingLevelMap ? { thinkingLevelMap: row.thinkingLevelMap } : {}),
-    ...(row.compat ? { compat: row.compat } : {}),
-  };
 };
 
 /** Every provider this module can expand. */
