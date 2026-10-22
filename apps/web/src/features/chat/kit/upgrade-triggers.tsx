@@ -33,11 +33,13 @@ const errorActions = (outcome: RunOutcomeRecord) =>
 const outOfAbacusCredits = (outcome: RunOutcomeRecord): boolean =>
   errorActions(outcome).some((action) => action.type === "upgrade-abacus");
 
-/** The free tier ended, rather than its credits running out. */
-export const abacusCreditsExpired = (outcome: RunOutcomeRecord): boolean =>
-  errorActions(outcome).some(
+/** The Abacus wall is a free tier that ended, rather than its credits running out. */
+export const creditsExpired = (
+  actions: ReadonlyArray<{ type?: string; cause?: string }> | undefined
+): boolean =>
+  actions?.some(
     (action) => action.type === "upgrade-abacus" && action.cause === "expired"
-  );
+  ) === true;
 
 /**
  * Sends the waiting message again once the plan is active. With a model the
@@ -100,7 +102,7 @@ export const UpgradeTriggers = ({
         ...(ownKey != null ? { ownKey } : {}),
         ...(kind === "credits" &&
         outcome != null &&
-        abacusCreditsExpired(outcome)
+        creditsExpired(errorActions(outcome))
           ? { expired: true }
           : {}),
         resume,

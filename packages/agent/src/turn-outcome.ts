@@ -289,8 +289,10 @@ const routedMessage = (failure: TurnFailure): string => {
       return "You're out of Abacus.AI credits.";
     case "credits_expired":
       return "Your free credits have expired.";
-    case "payment_required":
-      return paymentMessage(failure.raw);
+    case "payment_required": {
+      const { summary, remedy } = paymentWords(failure.raw);
+      return `${summary}. ${remedy}`;
+    }
     case "connection":
       return NETWORK_UNREACHABLE_MESSAGE;
     case "context_too_long":
@@ -313,11 +315,23 @@ const routedMessage = (failure: TurnFailure): string => {
   }
 };
 
-/** The billing gate's line, in the app's words; the card shows its own. */
-const paymentMessage = (raw: string): string =>
+/**
+ * Abacus's billing refusal in the app's words: what happened and the way on,
+ * support for a payment it could not confirm (never a second purchase), a
+ * renewal for a subscription that ended. The card shows its own translation.
+ */
+const paymentWords = (raw: string): { summary: string; remedy: string } =>
   paymentRefusalReason(raw) === "lapsed"
-    ? "Your Abacus.AI subscription has ended. Renew it to keep going."
-    : "We couldn't confirm your last payment. If your subscription is active, contact support@abacus.ai. Please don't purchase again.";
+    ? {
+        summary: "Your Abacus.AI subscription has ended",
+        remedy:
+          "Renew it to keep going, or switch to a model with its own key.",
+      }
+    : {
+        summary: "We couldn't confirm your last payment",
+        remedy:
+          "If your subscription is active, contact support@abacus.ai. Please don't purchase again.",
+      };
 
 /** The English line for the model-unavailable card; the app shows its own. */
 const unavailableMessage = (action: NotificationAction): string => {
@@ -713,19 +727,7 @@ export function classifyProviderFailure(
   // Before the rate-limit branch: an out-of-credits account answers 429 too,
   // and "try again in a moment" is exactly the wrong advice for it.
   const wall = abacusRefusal(raw, provider);
-  if (wall === "payment") {
-    return paymentRefusalReason(raw) === "lapsed"
-      ? {
-          summary: "Your Abacus.AI subscription has ended",
-          remedy:
-            "Renew it to keep going, or switch to a model with its own key.",
-        }
-      : {
-          summary: "We couldn't confirm your last payment",
-          remedy:
-            "If your subscription is active, contact support@abacus.ai. Please don't purchase again.",
-        };
-  }
+  if (wall === "payment") return paymentWords(raw);
   if (wall === "expired") {
     return {
       summary: "Your free credits have expired",

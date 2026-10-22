@@ -49,7 +49,7 @@ import type {
 import { formatElapsed, useSeconds } from "../clock";
 import { useChatView } from "../context";
 import { toolTitle } from "../tools/tool-line";
-import { useUpgradeResume } from "../upgrade-triggers";
+import { creditsExpired, useUpgradeResume } from "../upgrade-triggers";
 
 export const providerMessage = (raw = ""): string => {
   const start = raw.indexOf("{");
@@ -323,12 +323,6 @@ const wantsUpgradeCard = (actions?: ErrorAction[], paying = false): boolean =>
     (action) =>
       action.type === "upgrade-abacus" ||
       (action.type === "free-pool-out" && !(paying && action.cause === "busy"))
-  ) === true;
-
-/** A free tier past its window, rather than an empty balance. */
-const creditsExpired = (actions?: ErrorAction[]): boolean =>
-  actions?.some(
-    (action) => action.type === "upgrade-abacus" && action.cause === "expired"
   ) === true;
 
 /** The picked model that cannot serve the turn, when that is why it ended. */
@@ -638,6 +632,53 @@ export const ErrorCard = ({
     const continueFree = actions.find(
       (action) => action.type === "continue-free"
     );
+    // The upgrade dialog, asked for by the person: its pitch is the plan's whole list.
+    const askUpgrade = () =>
+      requestUpgradeDialog(
+        {
+          kind: "credits",
+          key: `credit-wall:${outcome.runId}:${Date.now()}`,
+          threadId: session.threadId,
+          pendingText: lastUserText(session.hostStore.state.messages),
+          ...(creditsExpired(actions) ? { expired: true } : {}),
+          resume,
+        },
+        true
+      );
+    // The free ways on beside the plan: a $0 model by name, the key to fix.
+    const alternatives = (size?: "sm") =>
+      canReply ? (
+        <>
+          {composer.model &&
+            actions
+              .filter(
+                (action) => action.type === "switch-model" && action.model
+              )
+              .map((action) => (
+                <Button
+                  key={action.model}
+                  {...(size != null ? { size } : {})}
+                  variant="secondary"
+                  onClick={() => composer.model?.onChange(action.model!)}
+                >
+                  {t("workspace.premiumUpgrade.continueOn", {
+                    model: action.label ?? action.model,
+                  })}
+                </Button>
+              ))}
+          {actions.some((action) => action.type === "fix-key") && (
+            <Button
+              nativeButton={false}
+              {...(size != null ? { size } : {})}
+              variant="secondary"
+              data-action="fix-key"
+              render={<AppLink to="/settings/models" />}
+            >
+              {t("outcome.action.fixKey")}
+            </Button>
+          )}
+        </>
+      ) : undefined;
     // A free account at the Abacus wall: the pitch is the upgrade dialog's
     // (UpgradeTriggers opens it once per stopped run); here, one line and the
     // way back to it, beside the free ways on.
@@ -659,30 +700,11 @@ export const ErrorCard = ({
               )}
             </span>
             {canReply && (
-              <Button
-                size="sm"
-                data-action="upgrade"
-                onClick={() =>
-                  requestUpgradeDialog(
-                    {
-                      kind: "credits",
-                      key: `credit-wall:${outcome.runId}:${Date.now()}`,
-                      threadId: session.threadId,
-                      pendingText: lastUserText(
-                        session.hostStore.state.messages
-                      ),
-                      ...(creditsExpired(actions) ? { expired: true } : {}),
-                      resume,
-                    },
-                    true
-                  )
-                }
-              >
+              <Button size="sm" data-action="upgrade" onClick={askUpgrade}>
                 {t("creditsCard.cta")}
               </Button>
             )}
-            {continueFree != null &&
-              continueFree.providers != null &&
+            {continueFree?.providers != null &&
               continueFree.providers.length > 0 &&
               latest &&
               canReply && (
@@ -695,36 +717,7 @@ export const ErrorCard = ({
                   {t("outcome.wall.continueFree")}
                 </Button>
               )}
-            {canReply &&
-              composer.model &&
-              actions
-                .filter(
-                  (action) => action.type === "switch-model" && action.model
-                )
-                .map((action) => (
-                  <Button
-                    key={action.model}
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => composer.model?.onChange(action.model!)}
-                  >
-                    {t("workspace.premiumUpgrade.continueOn", {
-                      model: action.label ?? action.model,
-                    })}
-                  </Button>
-                ))}
-            {canReply &&
-              actions.some((action) => action.type === "fix-key") && (
-                <Button
-                  nativeButton={false}
-                  size="sm"
-                  variant="secondary"
-                  data-action="fix-key"
-                  render={<AppLink to="/settings/models" />}
-                >
-                  {t("outcome.action.fixKey")}
-                </Button>
-              )}
+            {alternatives("sm")}
           </div>
           {ready.length > 0 && slots.renderDeliverables?.(ready)}
         </div>
@@ -754,55 +747,10 @@ export const ErrorCard = ({
               ...(continueFree != null &&
                 latest &&
                 canReply && { onContinueFree: resumeOnFreePool }),
-              ...(canReply && {
-                onUpgrade: () =>
-                  requestUpgradeDialog(
-                    {
-                      kind: "credits",
-                      key: `credit-wall:${outcome.runId}:${Date.now()}`,
-                      threadId: session.threadId,
-                      pendingText: lastUserText(
-                        session.hostStore.state.messages
-                      ),
-                      resume,
-                    },
-                    true
-                  ),
-              }),
+              ...(canReply && { onUpgrade: askUpgrade }),
             },
           })}
-          alternatives={
-            canReply ? (
-              <>
-                {composer.model &&
-                  actions
-                    .filter(
-                      (action) => action.type === "switch-model" && action.model
-                    )
-                    .map((action) => (
-                      <Button
-                        key={action.model}
-                        variant="secondary"
-                        onClick={() => composer.model?.onChange(action.model!)}
-                      >
-                        {t("workspace.premiumUpgrade.continueOn", {
-                          model: action.label ?? action.model,
-                        })}
-                      </Button>
-                    ))}
-                {actions.some((action) => action.type === "fix-key") && (
-                  <Button
-                    nativeButton={false}
-                    variant="secondary"
-                    data-action="fix-key"
-                    render={<AppLink to="/settings/models" />}
-                  >
-                    {t("outcome.action.fixKey")}
-                  </Button>
-                )}
-              </>
-            ) : undefined
-          }
+          alternatives={alternatives()}
           // Connecting a free source from the card is choosing the free lane.
           onResume={latest && canReply ? resumeOnFreePool : undefined}
         />

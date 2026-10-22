@@ -131,12 +131,14 @@ const REFUSAL_BY_CODE: Record<string, AbacusRefusal> = {
 /** The billing gate's 402 sentences, for a server that sends no code. */
 const PAYMENT_REFUSAL =
   /could not confirm the last payment|subscription has ended|payment method is required|PaymentMethodRequired/i;
+/** The same gate's 402 for a free tier past its end, without a code. */
+const TRIAL_ENDED = /free trial has ended/i;
 
 /**
  * Calls the Abacus endpoint answered: Abacus itself, and a call whose
  * provider is not known (as before the provider was recorded).
  */
-export const abacusServed = (provider: string | undefined): boolean =>
+const abacusServed = (provider: string | undefined): boolean =>
   provider == null || provider === "abacus" || provider === "openllm";
 
 /**
@@ -153,7 +155,7 @@ export function abacusRefusal(
   const code = raw.match(ABACUS_REFUSAL_CODE)?.[1];
   if (code != null) return REFUSAL_BY_CODE[code] ?? null;
   if (PAYMENT_REFUSAL.test(raw)) return "payment";
-  if (/free trial has ended/i.test(raw)) return "expired";
+  if (TRIAL_ENDED.test(raw)) return "expired";
   return creditWall(raw);
 }
 

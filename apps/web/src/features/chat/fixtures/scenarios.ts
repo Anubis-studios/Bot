@@ -373,7 +373,8 @@ const OUTCOME_ERRORS: Record<
     ],
   },
   "payment-lapsed": {
-    message: "Your Abacus.AI subscription has ended. Renew it to keep going.",
+    message:
+      "Your Abacus.AI subscription has ended. Renew it to keep going, or switch to a model with its own key.",
     cause: "payment_required",
     detail: '402 "Your subscription has ended. Please renew it to continue."',
     actions: [
