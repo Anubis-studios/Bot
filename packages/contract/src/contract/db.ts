@@ -7,6 +7,7 @@ import { eventIterator, type } from "@orpc/contract";
 import * as v from "valibot";
 
 import { HOME_CHANNELS } from "../bots";
+import { CREDIT_TASK_KINDS, CREDIT_THRESHOLDS } from "../credit-thresholds";
 import { THEME_COLOR_KEYS } from "../look";
 import { base, mutation, query, subscription } from "./base";
 import { AvatarAccessorySchema, BotWallpaperSchema } from "./bots";
@@ -122,6 +123,17 @@ export const RoutineUpdateInputSchema = v.object({
 
 const NullableTimestamp = v.nullable(v.number());
 
+const CreditThresholdSchema = v.picklist(CREDIT_THRESHOLDS);
+const CreditThresholdMarkSchema = v.strictObject({
+  reached: CreditThresholdSchema,
+  at: v.number(),
+  used: v.number(),
+  granted: v.number(),
+  perTask: v.nullable(v.number()),
+  kind: v.nullable(v.picklist(CREDIT_TASK_KINDS)),
+  told: v.nullable(CreditThresholdSchema),
+});
+
 export const BOT_SOUND_LEVELS = ["all", "needs-me", "nothing"] as const;
 export const PREFS_TEXT_SIZES = [13, 14, 15] as const;
 /** `@abacus-ai/connectors`' `MessagingPlatform` (checked in contract.types.test). */
@@ -195,6 +207,13 @@ export const PREFS_GROUP_ENTRIES = {
     routinesAlwaysOnCardAt: NullableTimestamp,
     /** The newest missed-runs notice shown (its `missed.at`). */
     routinesMissedSeenAt: NullableTimestamp,
+    creditThresholdCards: v.record(
+      v.string(),
+      v.strictObject({
+        shown: v.nullable(CreditThresholdSchema),
+        answered: v.nullable(CreditThresholdSchema),
+      })
+    ),
   },
   motion: { reduce: v.picklist(["system", "on", "off"]) },
   sounds: {
@@ -262,6 +281,7 @@ export const PREFS_SCALAR_ENTRIES = {
   recentFolders: v.pipe(v.array(v.string()), v.maxLength(5)),
   creditsExhaustedAt: NullableTimestamp,
   freeLaneChosenAt: NullableTimestamp,
+  creditThresholds: v.record(v.string(), CreditThresholdMarkSchema),
   browserHomepage: v.nullable(v.string()),
   showLinkPreviews: v.boolean(),
   /** Off: no `gh` call, no PR chip, tab or review anywhere. */
@@ -302,6 +322,7 @@ export const PrefsPatchSchema = v.strictObject({
   recentFolders: v.optional(S.recentFolders),
   creditsExhaustedAt: v.optional(S.creditsExhaustedAt),
   freeLaneChosenAt: v.optional(S.freeLaneChosenAt),
+  creditThresholds: v.optional(S.creditThresholds),
   browserHomepage: v.optional(S.browserHomepage),
   showLinkPreviews: v.optional(S.showLinkPreviews),
   githubIntegration: v.optional(S.githubIntegration),

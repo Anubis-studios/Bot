@@ -4,6 +4,11 @@ import {
   planPrice,
   wallOffer,
 } from "@abacus-ai/contract/billing-plan";
+import {
+  creditThresholdWords,
+  type CreditThresholdMark,
+  tasksLeft,
+} from "@abacus-ai/contract/credit-thresholds";
 import { providerDisplayName } from "@abacus-ai/contract/settings";
 
 import type { ChannelWords } from "./channel-words";
@@ -226,6 +231,30 @@ export const chatReplyForFailure = (
     case "generic":
       return t("outcome.channel.generic");
   }
+};
+
+/**
+ * A free account crossed a credit milestone in a chat-app turn: the card's
+ * words, as of the read that crossed it, then the upgrade link. No keyword to
+ * reply with; the link is the way on.
+ */
+export const chatLineForCreditThreshold = (
+  words: ChannelWords,
+  mark: CreditThresholdMark,
+  link: string
+): string => {
+  const left = Math.max(0, mark.granted - mark.used);
+  const count = tasksLeft(left, mark.perTask);
+  const { title, lines } = creditThresholdWords(
+    words.t,
+    words.locale,
+    mark.reached,
+    { left, total: mark.granted },
+    count != null ? { count, kind: mark.kind } : null
+  );
+  return [title, ...lines, words.t("outcome.channel.link", { link })].join(
+    "\n"
+  );
 };
 
 /**

@@ -123,9 +123,19 @@ export async function channelWords(
     }
   }
   const tree = loaded.get(locale) ?? enUS;
+  const plural = new Intl.PluralRules(locale);
+  const find = (key: string): string | undefined =>
+    lookup(tree, key) ?? lookup(enUS, key);
   return {
     locale,
-    t: (key, values) =>
-      interpolate(lookup(tree, key) ?? lookup(enUS, key) ?? key, values),
+    // A numeric `count` picks the key's plural form, as i18next does.
+    t: (key, values) => {
+      const count = values?.count;
+      const text =
+        typeof count === "number"
+          ? (find(`${key}_${plural.select(count)}`) ?? find(`${key}_other`))
+          : undefined;
+      return interpolate(text ?? find(key) ?? key, values);
+    },
   };
 }

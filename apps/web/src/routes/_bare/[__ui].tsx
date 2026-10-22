@@ -1,5 +1,6 @@
 import { createFileRoute, notFound, Link } from "@tanstack/react-router";
 
+import { CreditThresholdGallery } from "#renderer/components/credits-card/threshold-gallery";
 import { SoundSynthesisProbe } from "#renderer/components/sound-preview/probe";
 import {
   ArtifactsPage,
@@ -107,6 +108,8 @@ const extension = {
         ),
         "tour",
         "new-look",
+        "credit-card-50",
+        "credit-card-80",
         ...[
           "idle",
           "working",
@@ -147,6 +150,11 @@ const extension = {
       <OnboardingGallery step={props.fixture.slice(11) as OnboardingStepId} />
     ) : props.fixture.startsWith("notch-") ? (
       <NotchGallery state={props.fixture.slice(6)} />
+    ) : props.fixture === "credit-card-50" ||
+      props.fixture === "credit-card-80" ? (
+      <CreditThresholdGallery
+        threshold={props.fixture === "credit-card-80" ? 80 : 50}
+      />
     ) : props.fixture === "new-look" ? (
       <div className="relative h-40 transform-gpu">
         <NewLookCard onTour={() => undefined} onDismiss={() => undefined} />

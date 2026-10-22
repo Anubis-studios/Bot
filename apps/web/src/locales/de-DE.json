@@ -4539,5 +4539,41 @@
       "planBody": "Mach jetzt mit einem kostenlosen Modell weiter oder wechsle zu {{plan}}, um es zu nutzen.",
       "planBodyAny": "Mach jetzt mit einem kostenlosen Modell weiter oder führe ein Upgrade durch, um es zu nutzen."
     }
+  },
+  "creditThreshold": {
+    "half": {
+      "title": "Du hast die Hälfte deiner kostenlosen Credits verbraucht",
+      "body": "Du hast noch {{left}} von {{total}}.",
+      "estimateBuilds_one": "Das reicht für etwa {{count}} weiteren Build wie heute.",
+      "estimateBuilds_other": "Das reicht für etwa {{count}} weitere Builds wie heute.",
+      "estimateMessages_one": "Das reicht für etwa {{count}} weitere Bot-Nachricht wie heute.",
+      "estimateMessages_other": "Das reicht für etwa {{count}} weitere Bot-Nachrichten wie heute.",
+      "estimateTasks_one": "Das reicht für etwa {{count}} weitere Aufgabe wie heute.",
+      "estimateTasks_other": "Das reicht für etwa {{count}} weitere Aufgaben wie heute."
+    },
+    "low": {
+      "title": "Nur noch {{left}} kostenlose Credits",
+      "urge": "Upgrade jetzt, damit deine Arbeit nicht mittendrin stoppt.",
+      "estimateBuilds_one": "Genug für etwa {{count}} weiteren Build.",
+      "estimateBuilds_other": "Genug für etwa {{count}} weitere Builds.",
+      "estimateMessages_one": "Genug für etwa {{count}} weitere Bot-Nachricht.",
+      "estimateMessages_other": "Genug für etwa {{count}} weitere Bot-Nachrichten.",
+      "estimateTasks_one": "Genug für etwa {{count}} weitere Aufgabe.",
+      "estimateTasks_other": "Genug für etwa {{count}} weitere Aufgaben."
+    },
+    "meterLabel": "{{used}} von {{total}} kostenlosen Credits verbraucht",
+    "used": "{{used}} verbraucht",
+    "left": "{{left}} übrig",
+    "benefit": {
+      "credits": "{{credits}} Credits jeden Monat, {{times}}-mal so viel wie im kostenlosen Plan",
+      "creditsOnly": "{{credits}} Credits jeden Monat",
+      "models": "Top-Modelle: {{models}}",
+      "media": "Bild- und Videogenerierung",
+      "agents": "Persönliche Agents in Abacus AI Agent im Web, die rund um die Uhr laufen: automatische Antworten in WhatsApp, Discord und Telegram, alle deine Routinen und alles, was dein Bot tut"
+    },
+    "upgradeIntro": "Upgrade · {{price}} im ersten Monat",
+    "upgradeMonthly": "Upgrade · {{price}}/Monat",
+    "upgrade": "Upgrade",
+    "continueFree": "Kostenlos weitermachen"
   }
 }

@@ -4539,5 +4539,41 @@
       "planBody": "Sigue ahora con un modelo gratis o mejora a {{plan}} para usarlo.",
       "planBodyAny": "Sigue ahora con un modelo gratis o mejora tu plan para usarlo."
     }
+  },
+  "creditThreshold": {
+    "half": {
+      "title": "Has usado la mitad de tus créditos gratis",
+      "body": "Te quedan {{left}} de {{total}}.",
+      "estimateBuilds_one": "Te da para unas {{count}} compilación más como las de hoy.",
+      "estimateBuilds_other": "Te da para unas {{count}} compilaciones más como las de hoy.",
+      "estimateMessages_one": "Te da para unos {{count}} mensaje más del bot como los de hoy.",
+      "estimateMessages_other": "Te da para unos {{count}} mensajes más del bot como los de hoy.",
+      "estimateTasks_one": "Te da para unas {{count}} tarea más como las de hoy.",
+      "estimateTasks_other": "Te da para unas {{count}} tareas más como las de hoy."
+    },
+    "low": {
+      "title": "Solo te quedan {{left}} créditos gratis",
+      "urge": "Mejora ahora para que tu trabajo no se quede a medias.",
+      "estimateBuilds_one": "Suficiente para unas {{count}} compilación más.",
+      "estimateBuilds_other": "Suficiente para unas {{count}} compilaciones más.",
+      "estimateMessages_one": "Suficiente para unos {{count}} mensaje más del bot.",
+      "estimateMessages_other": "Suficiente para unos {{count}} mensajes más del bot.",
+      "estimateTasks_one": "Suficiente para unas {{count}} tarea más.",
+      "estimateTasks_other": "Suficiente para unas {{count}} tareas más."
+    },
+    "meterLabel": "{{used}} de {{total}} créditos gratis usados",
+    "used": "{{used}} usados",
+    "left": "{{left}} restantes",
+    "benefit": {
+      "credits": "{{credits}} créditos cada mes, {{times}} veces el plan gratis",
+      "creditsOnly": "{{credits}} créditos cada mes",
+      "models": "Los mejores modelos: {{models}}",
+      "media": "Generación de imágenes y vídeos",
+      "agents": "Agentes personales en Abacus AI Agent en la web que funcionan 24/7: respuestas automáticas en WhatsApp, Discord y Telegram, todas tus rutinas y todo lo que hace tu bot"
+    },
+    "upgradeIntro": "Mejorar · {{price}} el primer mes",
+    "upgradeMonthly": "Mejorar · {{price}}/mes",
+    "upgrade": "Mejorar",
+    "continueFree": "Seguir gratis"
   }
 }

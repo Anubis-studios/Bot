@@ -1628,5 +1628,21 @@
     "prefix": "outcome.unavailable.why.",
     "values": ["retired", "down"],
     "sources": ["components/credits-card/model-unavailable.tsx"]
+  },
+  {
+    "prefix": "creditThreshold.",
+    "values": [
+      "half.title",
+      "half.body",
+      "half.estimateBuilds",
+      "half.estimateMessages",
+      "half.estimateTasks",
+      "low.title",
+      "low.urge",
+      "low.estimateBuilds",
+      "low.estimateMessages",
+      "low.estimateTasks"
+    ],
+    "sources": ["../../../packages/contract/src/credit-thresholds.ts"]
   }
 ]

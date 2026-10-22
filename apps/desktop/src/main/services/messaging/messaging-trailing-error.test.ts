@@ -1,5 +1,6 @@
 import { AgentStatus } from "@abacus-ai/contract/agent-types";
 import type { BillingPlan } from "@abacus-ai/contract/billing-plan";
+import type { CreditThresholdMark } from "@abacus-ai/contract/credit-thresholds";
 import type { MessagingPlatformId } from "@abacus-ai/contract/messaging";
 /**
  * What a chat is told when the agent reports an error.
@@ -261,6 +262,9 @@ const harness = ({
 
   const main = chat("C1", "U1", "Ana");
   return {
+    gateway,
+    clock,
+    sessionOf: (chatId: string) => sessions.get(chatId)!,
     log,
     /** The text of everything sent, in order. */
     sent: () => log.map((line) => line.slice(line.indexOf(": ") + 2)),
@@ -694,6 +698,99 @@ const reply = (
   account: "free" | "paid" | "unknown",
   repeat = false
 ) => chatReplyForFailure(error, "own", account, ENGLISH, OFFER, repeat);
+
+describe("a credit milestone crossed in a chat-app turn", () => {
+  const mark = (patch: Partial<CreditThresholdMark> = {}) =>
+    ({
+      reached: 50,
+      at: 0,
+      used: 1000,
+      granted: 2000,
+      perTask: 80,
+      kind: "messages",
+      told: null,
+      ...patch,
+    }) as CreditThresholdMark;
+
+  it("the user's own chat hears the card's words and the upgrade link, no keyword to reply", async () => {
+    const h = harness({ self: true });
+    await h.inbound("plan my week");
+    h.say("Done.");
+    h.idle();
+    expect(await h.gateway.tellCreditThreshold(h.sessionOf("C1"), mark())).toBe(
+      true
+    );
+    expect(h.sent()).toEqual([
+      "Done.",
+      [
+        "You've used half your free credits",
+        "You have 1,000 of 2,000 left.",
+        "That's about 12 more bot messages like today's.",
+        `Upgrade here: ${UPGRADE_URL}`,
+      ].join("\n"),
+    ]);
+  });
+
+  it("at four fifths urges the upgrade, without an estimate it cannot make", async () => {
+    const h = harness({ self: true });
+    await h.inbound("plan my week");
+    h.idle();
+    await h.gateway.tellCreditThreshold(
+      h.sessionOf("C1"),
+      mark({ reached: 80, used: 1640, perTask: null, kind: null })
+    );
+    expect(h.sent().at(-1)).toBe(
+      [
+        "Only 360 free credits left",
+        "Upgrade now so your work doesn't stop halfway.",
+        `Upgrade here: ${UPGRADE_URL}`,
+      ].join("\n")
+    );
+  });
+
+  it("a contact's chat never hears it; the user's own chat does", async () => {
+    const h = harness();
+    await h.inbound("hi");
+    h.idle();
+    await h.gateway.tellCreditThreshold(h.sessionOf("C1"), mark());
+    expect(h.log).toEqual([
+      expect.stringMatching(/^ME: You've used half your free credits\n/),
+    ]);
+  });
+
+  it("a turn that was not a chat app's says nothing there", async () => {
+    const h = harness({ self: true });
+    expect(await h.gateway.tellCreditThreshold("session-x", mark())).toBe(
+      false
+    );
+    await h.inbound("plan my week");
+    h.idle();
+    h.clock.now += 10 * 60_000;
+    expect(await h.gateway.tellCreditThreshold(h.sessionOf("C1"), mark())).toBe(
+      false
+    );
+    expect(h.sent()).toEqual([]);
+  });
+
+  it("is worded in the user's language, plural and all", async () => {
+    mocks.language = "portuguese";
+    const h = harness({ self: true });
+    await h.inbound("oi");
+    h.idle();
+    await h.gateway.tellCreditThreshold(
+      h.sessionOf("C1"),
+      mark({ perTask: 1000, kind: "builds" })
+    );
+    expect(h.sent().at(-1)).toBe(
+      [
+        "Você usou metade dos seus créditos grátis",
+        "Restam 1.000 de 2.000.",
+        "Dá para cerca de 1 build a mais como os de hoje.",
+        `Faça upgrade aqui: ${UPGRADE_URL}`,
+      ].join("\n")
+    );
+  });
+});
 
 describe("chatReplyForFailure", () => {
   it("gives someone else's chat nothing, whatever the failure", () => {
