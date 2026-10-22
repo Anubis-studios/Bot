@@ -1,6 +1,13 @@
+import {
+  PITCH_LINES,
+  type PitchLine,
+  planPitch,
+  planPrice,
+  wallOffer,
+} from "@abacus-ai/contract/billing-plan";
 import type { AbacusAccountInfo } from "@abacus-ai/contract/contracts";
 import { providerDisplayName } from "@abacus-ai/contract/settings";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Bot,
   Calendar,
@@ -57,33 +64,24 @@ const askedAccount = (
     ? creditsTier(account) === "free"
     : spentFreeAccount(account);
 
-type PlanFeature = "credits" | "models" | "routines" | "apps" | "media";
-
-const FEATURE_KEYS = {
-  models: "upgradeDialog.featureModels",
-  routines: "upgradeDialog.featureRoutines",
-  apps: "upgradeDialog.featureApps",
-  media: "upgradeDialog.featureMedia",
-} as const;
-
 /**
- * The plan's features, led by what the person's side gains (upgradePitch);
- * an own key's offer leads with the models, the reason to switch.
+ * The plan's whole pitch, led by what the person's side gains (upgradePitch);
+ * an own key's offer leads with the models, the reason to switch, and the
+ * connectors' with the connectors.
  */
-const featureOrder = (
+const pitchOrder = (
   pitch: UpgradePitch | null,
-  ownKey: boolean
-): PlanFeature[] => {
-  if (ownKey)
-    return [
-      "models",
-      ...featureOrder(pitch, false).filter((feature) => feature !== "models"),
-    ];
-  if (pitch === "sessions")
-    return ["models", "apps", "media", "credits", "routines"];
-  if (pitch === "bots")
-    return ["credits", "routines", "models", "apps", "media"];
-  return ["credits", "models", "routines", "apps", "media"];
+  lead: PitchLine | null
+): readonly PitchLine[] => {
+  const order: readonly PitchLine[] =
+    pitch === "sessions"
+      ? ["models", "apps", "media", "credits", "agents", "connectors"]
+      : pitch === "bots"
+        ? ["credits", "agents", "connectors", "models", "apps", "media"]
+        : PITCH_LINES;
+  return lead == null
+    ? order
+    : [lead, ...order.filter((line) => line !== lead)];
 };
 
 const Feature = ({ lead, rest }: { lead?: string; rest: string }) => (
@@ -114,12 +112,30 @@ const DialogBody = ({
   /** `dismissed` when the person said no; not when they paid or are paying. */
   onDone: (dismissed: boolean) => void;
 }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { transport } = useAppContext();
   const { data: account } = useAccount();
+  const { data: billing } = useQuery({
+    ...transport.orpc.account.billingPlan.queryOptions({ input: {} }),
+    staleTime: 60_000,
+  });
   const [waiting, setWaiting] = useState(false);
   const connectors = request.kind === "connectors";
   const ownKey = request.kind === "own-key";
+  const offer = wallOffer(billing ?? null);
+  // Never half a pitch: the list waits for the plan it is read from.
+  const pitch =
+    billing != null
+      ? planPitch(
+          t,
+          billing,
+          i18n.language,
+          pitchOrder(
+            upgradePitch(account),
+            ownKey ? "models" : connectors ? "connectors" : null
+          )
+        )
+      : [];
 
   // Checkout runs in the browser: once the plan is active (lib/upgrade.ts
   // watches for it), send the waiting message and close.
@@ -215,7 +231,9 @@ const DialogBody = ({
             : t(
                 connectors
                   ? "upgradeDialog.connectorsEyebrow"
-                  : "upgradeDialog.creditsEyebrow"
+                  : request.expired === true
+                    ? "outcome.wall.expiredTitle"
+                    : "outcome.wall.title"
               )}
         </p>
         <DialogTitle className="text-[22px]/7 font-semibold tracking-[-0.01em] text-balance">
@@ -252,43 +270,30 @@ const DialogBody = ({
           </span>
         </div>
       )}
-      <div className="flex flex-col gap-1">
-        <p className="flex items-baseline gap-2">
-          {connectors && (
-            <span className="text-muted-foreground text-sm">
-              {t("upgradeDialog.startAt")}
+      {offer != null && (
+        <div className="flex flex-col gap-1" data-slot="upgrade-price">
+          <p className="flex items-baseline gap-2">
+            {connectors && (
+              <span className="text-muted-foreground text-sm">
+                {t("upgradeDialog.startAt")}
+              </span>
+            )}
+            <span className="text-lg font-bold tracking-[-0.01em]">
+              {planPrice(t, offer, i18n.language)}
             </span>
-          )}
-          <span className="text-[28px] font-bold tracking-[-0.02em]">
-            {t("upgradeDialog.price")}
-          </span>
-          <span className="text-muted-foreground text-sm">
-            {t("upgradeDialog.pricePeriod")}
-          </span>
-        </p>
-        <p className="text-muted-foreground text-[13px]">
-          {t("upgradeDialog.plan")}
-        </p>
-      </div>
-      <ul className="flex flex-col gap-2.5">
-        {connectors && (
-          <Feature
-            lead={t("upgradeDialog.featureConnectorsLead")}
-            rest={t("upgradeDialog.featureConnectorsRest")}
-          />
-        )}
-        {featureOrder(upgradePitch(account), ownKey).map((feature) =>
-          feature === "credits" ? (
-            <Feature
-              key={feature}
-              lead={t("upgradeDialog.featureCreditsLead")}
-              rest={t("upgradeDialog.featureCreditsRest")}
-            />
-          ) : (
-            <Feature key={feature} rest={t(FEATURE_KEYS[feature])} />
-          )
-        )}
-      </ul>
+          </p>
+          <p className="text-muted-foreground text-[13px]">
+            {t("upgradeDialog.planLine", { plan: offer.planName })}
+          </p>
+        </div>
+      )}
+      {pitch.length > 0 && (
+        <ul className="flex flex-col gap-2.5" data-slot="upgrade-pitch">
+          {pitch.map((line) => (
+            <Feature key={line} rest={line} />
+          ))}
+        </ul>
+      )}
       <div className="flex flex-col gap-1.5 pt-1">
         <Button
           className="h-11 text-sm font-semibold"
@@ -298,7 +303,9 @@ const DialogBody = ({
             setWaiting(true);
           }}
         >
-          {t("upgradeDialog.upgradeCta")}
+          {offer != null
+            ? t("outcome.wall.upgradeCta", { plan: offer.planName })
+            : t("creditsCard.cta")}
         </Button>
         <Button
           variant="ghost"

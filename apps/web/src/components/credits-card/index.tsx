@@ -1,6 +1,6 @@
 import {
   type BillingPlan,
-  creditsRenewMonthly,
+  planPitch,
   planPrice,
   wallOffer,
 } from "@abacus-ai/contract/billing-plan";
@@ -202,9 +202,6 @@ export const CreditsCard = ({
                     })}
                   </p>
                 )}
-              {!paying && creditsRenewMonthly(billing) && (
-                <p data-slot="wall-renews">{t("outcome.wall.renews")}</p>
-              )}
               {wall.onContinueFree != null && wall.providers.length > 0 && (
                 <div
                   role="note"
@@ -233,7 +230,7 @@ export const CreditsCard = ({
                     })}
                   </p>
                   <ul className="flex flex-col gap-1">
-                    {offer.features.map((feature) => (
+                    {planPitch(t, billing, i18n.language).map((feature) => (
                       <li key={feature} className="flex gap-1.5">
                         <Check
                           aria-hidden

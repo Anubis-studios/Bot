@@ -638,6 +638,97 @@ export const ErrorCard = ({
     const continueFree = actions.find(
       (action) => action.type === "continue-free"
     );
+    // A free account at the Abacus wall: the pitch is the upgrade dialog's
+    // (UpgradeTriggers opens it once per stopped run); here, one line and the
+    // way back to it, beside the free ways on.
+    if (atWall && tier === "free")
+      return (
+        <div
+          role="group"
+          aria-label={t("chat.error.label")}
+          className="mx-auto flex w-full max-w-[calc(var(--composer-max-w)-var(--spacing)*8)] flex-col gap-3"
+          data-slot="error-card"
+          data-variant="upgrade-status"
+        >
+          <div className="bg-card flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2.5 text-sm">
+            <span className="me-auto font-medium">
+              {t(
+                creditsExpired(actions)
+                  ? "outcome.wall.expiredTitle"
+                  : "outcome.wall.title"
+              )}
+            </span>
+            {canReply && (
+              <Button
+                size="sm"
+                data-action="upgrade"
+                onClick={() =>
+                  requestUpgradeDialog(
+                    {
+                      kind: "credits",
+                      key: `credit-wall:${outcome.runId}:${Date.now()}`,
+                      threadId: session.threadId,
+                      pendingText: lastUserText(
+                        session.hostStore.state.messages
+                      ),
+                      ...(creditsExpired(actions) ? { expired: true } : {}),
+                      resume,
+                    },
+                    true
+                  )
+                }
+              >
+                {t("creditsCard.cta")}
+              </Button>
+            )}
+            {continueFree != null &&
+              continueFree.providers != null &&
+              continueFree.providers.length > 0 &&
+              latest &&
+              canReply && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  data-action="continue-free"
+                  onClick={() => void resumeOnFreePool().catch(() => {})}
+                >
+                  {t("outcome.wall.continueFree")}
+                </Button>
+              )}
+            {canReply &&
+              composer.model &&
+              actions
+                .filter(
+                  (action) => action.type === "switch-model" && action.model
+                )
+                .map((action) => (
+                  <Button
+                    key={action.model}
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => composer.model?.onChange(action.model!)}
+                  >
+                    {t("workspace.premiumUpgrade.continueOn", {
+                      model: action.label ?? action.model,
+                    })}
+                  </Button>
+                ))}
+            {canReply &&
+              actions.some((action) => action.type === "fix-key") && (
+                <Button
+                  nativeButton={false}
+                  size="sm"
+                  variant="secondary"
+                  data-action="fix-key"
+                  render={<AppLink to="/settings/models" />}
+                >
+                  {t("outcome.action.fixKey")}
+                </Button>
+              )}
+          </div>
+          {ready.length > 0 && slots.renderDeliverables?.(ready)}
+        </div>
+      );
     return (
       <div
         role="group"

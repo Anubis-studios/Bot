@@ -101,7 +101,10 @@ const BILLING: BillingPlan = {
       priceText: "$10/mo",
       firstMonthPriceCents: 700,
       priceCents: 1000,
-      features: ["20,000 credits a month", "Top models"],
+      features: [
+        "Unlimited chatting with the bot (20,000 credits a month)",
+        "Top models including Model A, Model B, Model C, Model D and Model E",
+      ],
       creditsPerMonth: 20000,
       current: false,
     },
@@ -113,7 +116,10 @@ const BILLING: BillingPlan = {
       priceText: "$10/mo",
       firstMonthPriceCents: 700,
       priceCents: 1000,
-      features: ["20,000 credits a month", "Top models"],
+      features: [
+        "Unlimited chatting with the bot (20,000 credits a month)",
+        "Top models including Model A, Model B, Model C, Model D and Model E",
+      ],
       url: null,
     },
   ],
@@ -122,19 +128,25 @@ const BILLING: BillingPlan = {
 };
 
 /** The Basic offer, as the chat app hears it, in English. */
+/** The plan's whole pitch, as every upgrade line carries it. */
+const PITCH = [
+  "- 20,000 credits a month (10x the free plan)",
+  "- Top models: Model A, Model B, Model C, Model D",
+  "- Image and video generation",
+  "- Personal agents in Abacus AI Agent on the web that run 24/7: WhatsApp, Discord and Telegram auto-replies, all your routines, and everything your bot does",
+  "- 100+ connectors: Gmail, Google Calendar, Slack, Drive, Notion and more",
+  "- Build and publish web apps",
+];
 const offerLines = (link: string) =>
   [
     "Basic is $7 your first month, then $10/month and gives you:",
-    "- 20,000 credits a month",
-    "- Top models",
+    ...PITCH,
     `Upgrade here: ${link}`,
   ].join("\n");
 const wallLine = (link: string) =>
-  [
-    "I've paused because your free credits are used up.",
-    "Free credits renew every month.",
-    offerLines(link),
-  ].join("\n");
+  ["I've paused because your free credits are used up.", offerLines(link)].join(
+    "\n"
+  );
 
 const FREE = { subscription_tier: "free" };
 const PAID = { subscription_tier: "basic" };
@@ -330,7 +342,7 @@ describe("the user's own chat, on the free plan", () => {
     ["down", "DeepSeek isn't responding right now."],
     ["network", "DeepSeek isn't responding right now."],
   ])(
-    "own key failed (%s): says so and offers AbacusAI",
+    "own key failed (%s): says so and points at the Abacus credits, no half pitch",
     async (cause, lead) => {
       const h = harness({ self: true });
       await h.inbound("hi");
@@ -338,7 +350,7 @@ describe("the user's own chat, on the free plan", () => {
       await settle();
 
       expect(h.sent()).toEqual([
-        `${lead} Use any model on AbacusAI instead: ${UPGRADE_URL}`,
+        `${lead} Switch to Abacus.AI in the app's model picker to keep going on your free Abacus credits.`,
       ]);
     }
   );
@@ -554,7 +566,7 @@ describe("the notice in the user's own chat", () => {
     await settle();
 
     expect(h.log).toEqual([
-      `shared me: I couldn't reply to Ana just now. DeepSeek isn't responding right now. Use any model on AbacusAI instead: ${UPGRADE_URL}`,
+      "shared me: I couldn't reply to Ana just now. DeepSeek isn't responding right now. Switch to Abacus.AI in the app's model picker to keep going on your free Abacus credits.",
     ]);
   });
 
@@ -763,7 +775,8 @@ describe("a credit milestone crossed in a chat-app turn", () => {
         "You've used half your free credits",
         "You have 1,000 of 2,000 left.",
         "That's about 12 more bot messages like today's.",
-        `Upgrade here: ${UPGRADE_URL}`,
+        // The plan's whole pitch, as every upgrade line carries it.
+        offerLines(UPGRADE_URL),
       ].join("\n"),
     ]);
   });
@@ -780,7 +793,7 @@ describe("a credit milestone crossed in a chat-app turn", () => {
       [
         "Only 360 free credits left",
         "Upgrade now so your work doesn't stop halfway.",
-        `Upgrade here: ${UPGRADE_URL}`,
+        offerLines(UPGRADE_URL),
       ].join("\n")
     );
   });
@@ -818,14 +831,12 @@ describe("a credit milestone crossed in a chat-app turn", () => {
       h.sessionOf("C1"),
       mark({ perTask: 1000, kind: "builds" })
     );
-    expect(h.sent().at(-1)).toBe(
-      [
-        "Você usou metade dos seus créditos grátis",
-        "Restam 1.000 de 2.000.",
-        "Dá para cerca de 1 build a mais como os de hoje.",
-        `Faça upgrade aqui: ${UPGRADE_URL}`,
-      ].join("\n")
+    const line = h.sent().at(-1)!;
+    expect(line).toMatch(
+      /^Você usou metade dos seus créditos grátis\nRestam 1\.000 de 2\.000\.\nDá para cerca de 1 build a mais como os de hoje\.\n/
     );
+    expect(line).toContain("- Geração de imagens e vídeos");
+    expect(line.endsWith(`Faça upgrade aqui: ${UPGRADE_URL}`)).toBe(true);
   });
 });
 
@@ -969,7 +980,8 @@ describe("the chat app's own language", () => {
     });
     const line = h.sent()[0]!;
     expect(line).toContain("Pausei porque seus créditos grátis acabaram.");
-    expect(line).toContain("Os créditos grátis renovam todo mês.");
+    expect(line).not.toMatch(/renov/i);
+    expect(line).toContain("- Geração de imagens e vídeos");
     expect(line).toMatch(
       /O Basic custa US\$\s?7 no primeiro mês, depois US\$\s?10\/mês/
     );

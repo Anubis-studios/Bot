@@ -160,7 +160,7 @@ describe("billing_plan grounds every answer about plans and credits", () => {
 });
 
 describe("billing_plan's answer", () => {
-  it("states the plan, the credits left, the renewal, the next plan's price and features, and the link", async () => {
+  it("states the plan, the credits left, that free credits do not renew, the next plan's price and features, and the link", async () => {
     const { appBillingResult } = await import("./billing");
     const result = appBillingResult(
       {
@@ -211,8 +211,10 @@ describe("billing_plan's answer", () => {
     const text = result.content[0]!.text;
     expect(text).toContain("The user's plan: Free.");
     expect(text).toContain("Credits left: 0 of 2,000 this month.");
+    // The free plan's credits are a one-time grant: never said to renew.
+    expect(text).not.toContain("Their plan's credits renew every month");
     expect(text).toContain(
-      "Their plan's credits renew every month: 2,000 a month. Never call them a one-time grant."
+      "Asked whether the free credits refill: they are a one-time grant and do not renew; Basic gives a fresh 20,000 every month."
     );
     expect(text).toContain(
       "Basic: $7 for the first month (30% off the usual $10/mo), then $10/mo, link: https://example.test/upgrade"
@@ -370,9 +372,7 @@ describe("billing_plan on what Basic gives this app", () => {
     expect(text).toContain(
       "In this app, bots, chats and routines have no task or project cap"
     );
-    expect(text).toContain(
-      "Their plan's credits renew every month: 2,000 a month. Never call them a one-time grant."
-    );
+    expect(text).not.toContain("Their plan's credits renew every month");
     expect(text).not.toMatch(/tasks? per month/i);
   });
 });
@@ -434,8 +434,6 @@ describe("billing_plan on the phone", () => {
     expect(text).toContain(`  - ${line} [in Abacus AI Agent on the web`);
     expect(text).toContain("every feature line as written");
     expect(text).toContain("never answer no or impossible");
-    expect(text).toContain(
-      "Their plan's credits renew every month: 2,000 a month."
-    );
+    expect(text).not.toContain("Their plan's credits renew every month");
   });
 });

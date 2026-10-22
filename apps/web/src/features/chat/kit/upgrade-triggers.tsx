@@ -33,6 +33,12 @@ const errorActions = (outcome: RunOutcomeRecord) =>
 const outOfAbacusCredits = (outcome: RunOutcomeRecord): boolean =>
   errorActions(outcome).some((action) => action.type === "upgrade-abacus");
 
+/** The free tier ended, rather than its credits running out. */
+export const abacusCreditsExpired = (outcome: RunOutcomeRecord): boolean =>
+  errorActions(outcome).some(
+    (action) => action.type === "upgrade-abacus" && action.cause === "expired"
+  );
+
 /**
  * Sends the waiting message again once the plan is active. With a model the
  * chat moves onto it first, since the key that failed stays dry; the retry
@@ -92,6 +98,11 @@ export const UpgradeTriggers = ({
         threadId: session.threadId,
         pendingText: lastUserText(messages),
         ...(ownKey != null ? { ownKey } : {}),
+        ...(kind === "credits" &&
+        outcome != null &&
+        abacusCreditsExpired(outcome)
+          ? { expired: true }
+          : {}),
         resume,
       })
   );
