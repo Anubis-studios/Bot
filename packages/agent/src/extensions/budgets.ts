@@ -2,9 +2,14 @@
  * Ported from codingagent-lite (abacusai/codingagent-lite), MIT.
  *
  * Budgets: bound the three ways cheap models waste money and turns. Turn cap
- * (ABACUSAI_BOT_TURN_CAP, default 250): at 100 turns short of it the model is
- * told to wrap up and present what it has, at 50 short it is told again and
- * harder, past it the run is stopped with a message that says so.
+ * (ABACUSAI_BOT_TURN_CAP, default 250 model calls a run) and time
+ * (ABACUSAI_BOT_RUN_CAP_MS, default 60 minutes from the user's message): at
+ * 100 calls short of the cap the model is told to wrap up and present what it
+ * has, at 50 short it is told again and harder. At either limit the turn
+ * closes out instead of being cut mid-step: the model is
+ * told, unseen, to stop working and write its closing message, every tool call
+ * is refused from then on, and only if it still has not finished a few calls
+ * later is the run stopped with a message that says so.
  * Repetition: the third identical tool call in a run is blocked (the second,
  * for a connector call, which is billed). Connector calls: every fifth one,
  * the model is reminded what they cost and asked whether it already has
@@ -39,6 +44,8 @@ const PRESENT_AGAIN_MS = 20 * 60_000;
 const PRESENT_TOOL = "present_deliverable";
 /** The share of granted credits below which a billed run is told to wrap up. */
 const CREDITS_LOW_SHARE = 0.1;
+/** Model calls a closing run gets to write its closing message. */
+const CLOSE_OUT_TURNS = 2;
 
 /** Why the budget stopped the current run, or null. Cleared as the next run starts. */
 let stoppedBecause: string | null = null;
@@ -68,6 +75,21 @@ function turnCap(): number {
   const raw = Number(process.env.ABACUSAI_BOT_TURN_CAP);
   return Math.floor(Number.isFinite(raw) && raw > 0 ? raw : 250);
 }
+
+/**
+ * How long one run may go before it closes out. A healthy build or install
+ * runs for tens of minutes and is left to finish; past an hour the run hands
+ * over what it has rather than going on unattended.
+ */
+function runCapMs(): number {
+  const raw = Number(process.env.ABACUSAI_BOT_RUN_CAP_MS);
+  return Number.isFinite(raw) && raw > 0 ? raw : 60 * 60_000;
+}
+
+const closeOutPrompt = (why: string): string =>
+  `${why} Stop working now: no more tool calls, they will be refused. Write your closing message to the ` +
+  `user, in their language: what is done and where it is, what is left, and that they can send a ` +
+  `message to carry on from here.`;
 
 const wrapUpPrompt = (turns: number, cap: number): string =>
   `Budget check: this run has made ${turns} of ${cap} model calls and has been going a long time. ` +
@@ -118,6 +140,11 @@ const stoppedMessage = (cap: number): string =>
   `was stopped. Whatever it built is still in the workspace. To get it back on track, send a message ` +
   `that narrows the task: say exactly what you want next, or ask it to present what it has so far.`;
 
+/** What the user reads when a run that hit its time limit did not close out. */
+const timeStoppedMessage = (minutes: number): string =>
+  `This run worked for ${minutes} minutes without finishing and was stopped. Whatever it built is ` +
+  `still in the workspace. Send a message to carry on from here, or ask it to present what it has.`;
+
 function temperatureSetting(): number | undefined {
   const raw = process.env.ABACUSAI_BOT_TEMPERATURE;
   if (raw === "off" || raw === "0off") return undefined;
@@ -141,6 +168,13 @@ export default function (pi: ExtensionAPI) {
   let presentNudges = 0;
   // Once per session: a top-up between runs does not earn a second warning.
   let creditsNudged = false;
+  // A turn past its cap or its time: told to close out, then given a few
+  // calls. Both belong to the user's turn, not to one pi run: a hidden
+  // continuation (a stall's re-ask, an empty reply's ask) starts a run of its
+  // own, and must neither restart the hour nor lift a close-out under way.
+  let turnStartedAt = Date.now();
+  let closingTurns: number | null = null;
+  let closingStop: string | null = null;
   const refreshCredits = (ctx: { model?: unknown } | undefined): void => {
     if (billedAbacus(ctx?.model)) refreshCreditBalanceIfStale();
   };
@@ -150,6 +184,15 @@ export default function (pi: ExtensionAPI) {
     change();
     activeSince = generating || runningTools.size > 0 ? now : null;
   };
+
+  // A prompt sent while idle starts the user's turn; one sent mid-run joins it.
+  pi.on("input", (event) => {
+    if ((event as { streamingBehavior?: unknown }).streamingBehavior != null)
+      return;
+    turnStartedAt = Date.now();
+    closingTurns = null;
+    closingStop = null;
+  });
 
   pi.on("agent_start", async () => {
     turns = 0;
@@ -241,18 +284,52 @@ export default function (pi: ExtensionAPI) {
     if (turns === finalAt) steer(finalPrompt(turns, cap));
     else if (turns === wrapUpAt) steer(wrapUpPrompt(turns, cap));
 
-    if (turns > cap) {
-      stoppedBecause = stoppedMessage(cap);
-      if (ctx.hasUI)
-        ctx.ui.notify(
-          `AbacusAI Bot: turn budget (${cap}) exhausted; stopping this run`,
-          "warning"
-        );
-      ctx.abort();
+    // Closing out: a few calls to say what was done, then the stop.
+    if (closingTurns != null) {
+      closingTurns += 1;
+      if (closingTurns > CLOSE_OUT_TURNS) {
+        stoppedBecause = closingStop;
+        if (ctx.hasUI)
+          ctx.ui.notify(
+            "AbacusAI Bot: the run did not close out; stopping it",
+            "warning"
+          );
+        ctx.abort();
+      }
+      return;
+    }
+
+    const elapsed = Date.now() - turnStartedAt;
+    const overCap = turns > cap;
+    if (overCap || elapsed >= runCapMs()) {
+      const minutes = Math.round(runCapMs() / 60_000);
+      closingTurns = 0;
+      closingStop = overCap ? stoppedMessage(cap) : timeStoppedMessage(minutes);
+      // Hidden: what the user reads is the model's own closing message.
+      pi.sendMessage(
+        {
+          customType: "abacusai-bot-close-out",
+          content: closeOutPrompt(
+            overCap
+              ? `This run has reached its limit of ${cap} model calls.`
+              : `This run has been working for ${minutes} minutes, its limit.`
+          ),
+          display: false,
+        },
+        { deliverAs: "steer" }
+      );
     }
   });
 
   pi.on("tool_call", async (event) => {
+    // A closing run writes its closing message; it does not start more work.
+    if (closingTurns != null)
+      return {
+        block: true,
+        reason:
+          "The run is closing: no more tool calls. Write your closing message to the user now: what " +
+          "is done and where it is, what is left, and that they can send a message to carry on.",
+      };
     let inputKey: string;
     try {
       inputKey = JSON.stringify(event.input);

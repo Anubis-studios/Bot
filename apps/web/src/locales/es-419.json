@@ -4526,7 +4526,8 @@
       "contactNeutral": "Perdón, ahora no puedo responder. Te contesto pronto.",
       "contactEmpty": "No le respondí a {{name}}: no llegó ninguna respuesta. Abre la app para contestarle o dime qué decirle.",
       "undelivered": "No se pudo entregar un mensaje a {{name}}.",
-      "appClosed": "La app se cerró antes de que pudiera responder. Envíalo de nuevo para retomarlo."
+      "appClosed": "La app se cerró antes de que pudiera responder. Envíalo de nuevo para retomarlo.",
+      "stillWorking": "Sigo trabajando en eso ({{minutes}} min hasta ahora). Te respondo aquí cuando esté listo."
     },
     "unavailable": {
       "title": {

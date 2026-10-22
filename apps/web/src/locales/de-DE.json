@@ -4526,7 +4526,8 @@
       "contactNeutral": "Entschuldigung, ich kann gerade nicht antworten. Ich melde mich bald.",
       "contactEmpty": "Ich habe {{name}} nicht geantwortet: Es kam keine Antwort zurück. Öffne die App, um zu antworten, oder sag mir, was ich schreiben soll.",
       "undelivered": "Eine Nachricht an {{name}} konnte nicht zugestellt werden.",
-      "appClosed": "Die App wurde geschlossen, bevor ich antworten konnte. Schick es noch einmal, dann mache ich weiter."
+      "appClosed": "Die App wurde geschlossen, bevor ich antworten konnte. Schick es noch einmal, dann mache ich weiter.",
+      "stillWorking": "Ich arbeite noch daran (bisher {{minutes}} Min.). Ich antworte hier, sobald es fertig ist."
     },
     "unavailable": {
       "title": {
