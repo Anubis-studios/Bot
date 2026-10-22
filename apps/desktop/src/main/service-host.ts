@@ -577,6 +577,9 @@ export class ServiceHost {
     // Every turn's one ending (TurnLedger) is what each sink acts on: the chat
     // app it answers, the routine run it is, a caller waiting on its text.
     this.turnLedger.onClose((record) => {
+      // The app's own thread: a run the app closed under gets its terminal.
+      if (record.kind === "app_closed")
+        this.aguiRelay.closeInterruptedRun(record.sessionId, record);
       this.messagingGatewayService.noteTurnClosed(record);
       this.settleRoutineRun(record);
       this.settleTurnWaiter(record);
@@ -722,6 +725,7 @@ export class ServiceHost {
   private readonly turnLedger = new TurnLedger({
     log: (line) => logStore().append("agent", line),
     dir: () => path.join(abacusBotHome(), "turn-outcomes"),
+    journal: () => path.join(abacusBotHome(), "turns-open.json"),
   });
   private readonly debugSyncService = new DebugSyncService({
     // v1 segments plus an AG-UI thread's message parts (spec 03 §24.12 a),
@@ -2056,6 +2060,8 @@ export class ServiceHost {
       },
     },
     deferSelfLaneDefaults: () => !readAccountState().onboarded,
+    noteChannelTurn: (sessionId, channel) =>
+      this.turnLedger.annotate(sessionId, channel),
     isSessionBusy: (workspaceId, sessionId) =>
       this.sessionTurnStateService.get(workspaceId, sessionId).isBusy,
     updateSessionLabel: (workspaceId, sessionId, label) => {
@@ -2644,6 +2650,11 @@ export class ServiceHost {
     this.workspaceService.initialize();
     const workspaceIds = this.workspaceService.getWorkspaces().map((w) => w.id);
     this.agentSessionManagerService.initialize(workspaceIds);
+    // Turns the last run left open (a quit, an update, a crash) are closed
+    // before any send can open a new one, on the app and the hosted host
+    // alike: each sink hears it as it hears any close (a chat once its
+    // platform is back, a routine run, now that its session is known).
+    this.turnLedger.recover();
     this.adoptLegacyBotSessions();
     this.botService.adoptChannelBots();
     this.reconcileBotChatWorkspaces();
@@ -2715,6 +2726,8 @@ export class ServiceHost {
 
   /** Resolves once every agent child has exited; the quit path awaits it. */
   dispose(): Promise<void> {
+    // The quit, not the turns' ending: what is open closes on the next start.
+    this.turnLedger.appClosing();
     this.stop();
     this.stopCreditForwarding();
     this.connectWatcher.stop();

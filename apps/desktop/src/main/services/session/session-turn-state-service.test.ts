@@ -1,7 +1,3 @@
-import {
-  AgentStatus,
-  type DesktopEvent,
-} from "@abacus-ai/contract/agent-types";
 /**
  * What the user sees when a turn stops coming back.
  *
@@ -11,6 +7,14 @@ import {
  * emits a card to persist. The last thing the session was seen doing is the
  * only diagnosis available, so it has to survive into the message.
  */
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+
+import {
+  AgentStatus,
+  type DesktopEvent,
+} from "@abacus-ai/contract/agent-types";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 
 import {
@@ -550,6 +554,80 @@ describe("every turn closes once, with how it ended", () => {
     vi.advanceTimersByTime(TIMEOUT_MS + 1);
 
     expect(records).toEqual([expect.objectContaining({ kind: "timed_out" })]);
+  });
+
+  it("closes on the next start a turn the app closed under, with the chat it owed", () => {
+    const journal = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), "turn-journal-")),
+      "turns-open.json"
+    );
+    const before = new TurnLedger({ journal: () => journal });
+    before.annotate(SESSION, {
+      platform: "whatsapp",
+      chatId: "c1",
+      owner: false,
+      userName: "Ana",
+    });
+    before.begin(SESSION);
+    // The app goes away here: no idle, no Stop, no close.
+
+    const after = new TurnLedger({ journal: () => journal });
+    const heard: Array<{ kind: string; channel?: unknown }> = [];
+    after.onClose((record) => heard.push(record));
+    after.recover();
+
+    expect(heard).toEqual([
+      expect.objectContaining({
+        kind: "app_closed",
+        channel: expect.objectContaining({ chatId: "c1", userName: "Ana" }),
+      }),
+    ]);
+    // Once: a second start finds nothing left open.
+    const again: string[] = [];
+    const third = new TurnLedger({ journal: () => journal });
+    third.onClose((record) => again.push(record.kind));
+    third.recover();
+    expect(again).toEqual([]);
+  });
+
+  it("keeps a turn journaled until its close's listeners have run", () => {
+    const journal = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), "turn-journal-")),
+      "turns-open.json"
+    );
+    const ledger = new TurnLedger({ journal: () => journal });
+    let journaledWhileHeard: unknown = null;
+    ledger.onClose(() => {
+      journaledWhileHeard = JSON.parse(fs.readFileSync(journal, "utf8"));
+    });
+    ledger.begin(SESSION);
+    ledger.end(SESSION, "stopped");
+
+    // A crash inside a listener replays the close on the next start.
+    expect(journaledWhileHeard).toEqual([
+      expect.objectContaining({ sessionId: SESSION }),
+    ]);
+    expect(JSON.parse(fs.readFileSync(journal, "utf8"))).toEqual([]);
+  });
+
+  it("leaves a turn open through a quit, for the next start to close", () => {
+    const journal = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), "turn-journal-")),
+      "turns-open.json"
+    );
+    const ledger = new TurnLedger({ journal: () => journal });
+    const heard: string[] = [];
+    ledger.onClose((record) => heard.push(record.kind));
+    ledger.begin(SESSION);
+    ledger.appClosing();
+    // The agent stopped by the quit.
+    ledger.end(SESSION, "agent_exited");
+    expect(heard).toEqual([]);
+
+    const next = new TurnLedger({ journal: () => journal });
+    next.onClose((record) => heard.push(record.kind));
+    next.recover();
+    expect(heard).toEqual(["app_closed"]);
   });
 
   it("a session cleared away ends its open turn", () => {

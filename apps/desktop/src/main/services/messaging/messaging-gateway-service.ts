@@ -38,7 +38,7 @@ import {
   fetchUpgradeUrl,
 } from "../providers/abacus-upgrade";
 import { environmentNoticeService } from "../providers/environment-notice-service";
-import type { TurnRecord } from "../session/turn-ledger";
+import type { TurnChannel, TurnRecord } from "../session/turn-ledger";
 import { AbacusChannelsConnector } from "./abacus-channels-connector";
 import { channelLocale, channelWords } from "./channel-words";
 import {
@@ -80,6 +80,7 @@ import {
 import {
   ChatOutbox,
   OUTBOX_RETRY_MS,
+  type OwedLine,
   type OwedMessage,
 } from "./messaging-outbox";
 import type { SenderCandidate } from "./sender-resolution";
@@ -252,6 +253,8 @@ type GatewayOptions = {
    * the app is theirs there: a self-lane message waits for it to end.
    */
   isSessionBusy?: (workspaceId: string, sessionId: string) => boolean;
+  /** A turn is about to be sent for a chat: its ending is owed there, even across a restart. */
+  noteChannelTurn?: (sessionId: string, channel: TurnChannel) => void;
   /** Resolve a bot's forever chat, creating or reviving it as needed. */
   openBotChat?: (
     botId: string
@@ -1255,6 +1258,12 @@ export class MessagingGatewayService {
     // model but never into the transcript: they are the same paragraph every
     // turn, and reading them is not reading the conversation.
     this.options.emitUserMessage(route.workspaceId, route.sessionId, framed);
+    this.options.noteChannelTurn?.(route.sessionId, {
+      platform: route.platform,
+      chatId: route.chatId,
+      owner: route.owner,
+      userName: route.userName,
+    });
     this.options.sendMessage(
       route.workspaceId,
       route.sessionId,
@@ -1560,6 +1569,10 @@ export class MessagingGatewayService {
    * reply, or the failure line, never silence. A Stop ends it quietly.
    */
   noteTurnClosed(record: TurnRecord): void {
+    if (record.kind === "app_closed") {
+      this.oweInterrupted(record);
+      return;
+    }
     const route = this.routesBySession.get(record.sessionId);
     if (route == null) return;
     // Not this gateway's turn (one the user ran in the app): what waited on
@@ -1745,25 +1758,95 @@ export class MessagingGatewayService {
     if (route?.busy === true) route.delivered = true;
   }
 
+  /**
+   * A chat turn the app closed under (a quit, an update, a crash), found on
+   * the next start. The chat is owed its ending like any other, sent once its
+   * platform is up: the user's own chat gets the line, a contact the neutral
+   * one, and the user's own chat who went unanswered. Owed synchronously, by
+   * the turn's id, so it is on disk before the ledger lets the turn go and a
+   * replayed start owes nothing twice.
+   */
+  private oweInterrupted(record: TurnRecord): void {
+    const channel = record.channel;
+    if (channel == null) return;
+    const platform = channel.platform as MessagingPlatformId;
+    const owe = (
+      slot: string,
+      chatId: string,
+      say: OwedLine,
+      toSelf = false
+    ): void => {
+      this.outbox.owe(
+        {
+          id: `${record.turnId}:${slot}`,
+          platform,
+          chatId,
+          text: "",
+          say,
+          userName: channel.userName,
+          firstFailedAt: this.options.now?.() ?? Date.now(),
+          ...(toSelf ? { toSelf: true } : {}),
+        },
+        OUTBOX_STARTUP_DELAY_MS
+      );
+    };
+    if (channel.owner) owe("chat", channel.chatId, "appClosed");
+    else {
+      owe("chat", channel.chatId, "contactNeutral");
+      owe("owner", "", "contactAppClosed", true);
+    }
+  }
+
   /** One later attempt at a message still owed; true once it went. */
   private async sendOwed(message: OwedMessage): Promise<boolean> {
-    const connector = this.connectors.get(message.platform);
+    // The user's own chat on the platform, known only once it is up.
+    const own =
+      message.toSelf === true ? this.selfChatOf(message.platform) : null;
+    if (message.toSelf === true && own == null) return false;
+    const platform = own?.platform ?? message.platform;
+    const chatId = own?.chatId ?? message.chatId;
+    const connector = this.connectors.get(platform);
     if (connector == null) return false;
-    await connector.sendText(
-      message.chatId,
-      message.text,
-      message.replyContext
-    );
+    const text =
+      message.say != null
+        ? forChat(await this.wordOwed(message.say, message.userName), platform)
+        : message.text;
+    await connector.sendText(chatId, text, message.replyContext);
     this.appendLog({
-      platform: message.platform,
-      chatId: message.chatId,
+      platform,
+      chatId,
       userId: "me",
       userName: null,
-      text: message.text,
+      text,
       direction: "out",
       at: new Date(this.options.now?.() ?? Date.now()).toISOString(),
     });
     return true;
+  }
+
+  /** An owed line in the user's language as of now. */
+  private async wordOwed(
+    say: OwedLine,
+    userName: string | null
+  ): Promise<string> {
+    const words = await channelWords(
+      channelLocale(
+        readUserLanguage()?.name ?? null,
+        this.options.appLanguage?.() ?? null
+      )
+    );
+    switch (say) {
+      case "appClosed":
+        return words.t("outcome.channel.appClosed");
+      case "contactNeutral":
+        return words.t("outcome.channel.contactNeutral");
+      case "contactAppClosed":
+        return contactFailureNotice(
+          words,
+          userName,
+          words.t("outcome.channel.appClosed")
+        );
+    }
   }
 
   /** The user's own chat hears which message never went, unless it was theirs. */
@@ -1774,6 +1857,7 @@ export class MessagingGatewayService {
     const own = this.selfChatOf(entry.platform);
     if (
       own == null ||
+      entry.toSelf === true ||
       (own.platform === entry.platform && own.chatId === entry.chatId)
     )
       return;

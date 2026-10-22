@@ -1,7 +1,3 @@
-import { AgentStatus } from "@abacus-ai/contract/agent-types";
-import type { BillingPlan } from "@abacus-ai/contract/billing-plan";
-import type { CreditThresholdMark } from "@abacus-ai/contract/credit-thresholds";
-import type { MessagingPlatformId } from "@abacus-ai/contract/messaging";
 /**
  * What a chat is told when the agent reports an error.
  *
@@ -21,8 +17,17 @@ import type { MessagingPlatformId } from "@abacus-ai/contract/messaging";
  * A turn never ends on silence: one that said nothing, or that the app ended
  * itself (the inactivity watchdog, the agent going away), still ends on a line.
  */
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+
+import { AgentStatus } from "@abacus-ai/contract/agent-types";
+import type { BillingPlan } from "@abacus-ai/contract/billing-plan";
+import type { CreditThresholdMark } from "@abacus-ai/contract/credit-thresholds";
+import type { MessagingPlatformId } from "@abacus-ai/contract/messaging";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { TurnLedger } from "../session/turn-ledger";
 import { channelLocale, channelWords } from "./channel-words";
 import {
   chatFailureOf,
@@ -823,6 +828,88 @@ describe("a turn the app ended itself", () => {
     await settle();
 
     expect(h.sent()).toEqual(["Hello!"]);
+  });
+});
+
+describe("a turn the app closed under, found on the next start", () => {
+  /** The last run journaled an open turn for this chat; this start recovers it. */
+  const recovered = (
+    h: ReturnType<typeof harness>,
+    channel: { chatId: string; owner: boolean }
+  ) => {
+    const journal = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), "turn-journal-")),
+      "turns-open.json"
+    );
+    const before = new TurnLedger({ journal: () => journal });
+    before.annotate("session-old", {
+      platform: "discord",
+      userName: "Ana",
+      ...channel,
+    });
+    before.begin("session-old");
+    const after = new TurnLedger({ journal: () => journal });
+    after.onClose((record) => h.gateway.noteTurnClosed(record));
+    after.recover();
+    return journal;
+  };
+  const flush = (h: ReturnType<typeof harness>) =>
+    (
+      h.gateway as unknown as { outbox: { flush(): Promise<void> } }
+    ).outbox.flush();
+
+  it("the user's own chat hears it once its platform is up", async () => {
+    const h = harness({ self: true });
+    recovered(h, { chatId: "U1", owner: true });
+    await flush(h);
+    await flush(h);
+
+    expect(h.log).toEqual([
+      "U1: The app closed before I could reply. Send it again to pick it back up.",
+    ]);
+  });
+
+  it("a contact hears the neutral line, and the user who went unanswered", async () => {
+    const h = harness();
+    recovered(h, { chatId: "C1", owner: false });
+    await flush(h);
+
+    expect(h.log).toEqual([
+      `C1: ${NEUTRAL}`,
+      "ME: I couldn't reply to Ana just now. The app closed before I could reply. Send it again to pick it back up.",
+    ]);
+  });
+
+  it("a close replayed after a crash owes the chat nothing twice", async () => {
+    const h = harness({ self: true });
+    const journal = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), "turn-journal-")),
+      "turns-open.json"
+    );
+    const before = new TurnLedger({ journal: () => journal });
+    before.annotate("session-old", {
+      platform: "discord",
+      chatId: "U1",
+      owner: true,
+      userName: "Ana",
+    });
+    before.begin("session-old");
+    const leftOpen = fs.readFileSync(journal, "utf8");
+    const start = () => {
+      const ledger = new TurnLedger({ journal: () => journal });
+      ledger.onClose((record) => h.gateway.noteTurnClosed(record));
+      ledger.recover();
+    };
+    start();
+    await flush(h);
+    // A crash before the journal's rewrite: the next start finds it again.
+    fs.writeFileSync(journal, leftOpen);
+    start();
+    await flush(h);
+
+    expect(h.log).toEqual([
+      "U1: The app closed before I could reply. Send it again to pick it back up.",
+    ]);
   });
 });
 

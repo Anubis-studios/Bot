@@ -129,7 +129,8 @@ describe("debug sync, feedback and previews on v2 AG-UI threads", () => {
     // No v1 transcript was ever written.
     expect(transcripts.read(SESSION)).toBeNull();
     expect(store.readCurrentFile(SESSION)?.source.kind).toBe("agui");
-    expect(persisted).toEqual([SESSION]);
+    // Once as the user's message is in, once at the terminal.
+    expect(persisted).toEqual([SESSION, SESSION]);
 
     // The sidebar preview comes from the v2 file.
     const preview = botChatPreview(transcripts, SESSION, store);

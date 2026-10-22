@@ -4525,7 +4525,8 @@
       "empty": "No pude armar una respuesta para eso. Envíalo de nuevo, por favor.",
       "contactNeutral": "Perdón, ahora no puedo responder. Te contesto pronto.",
       "contactEmpty": "No le respondí a {{name}}: no llegó ninguna respuesta. Abre la app para contestarle o dime qué decirle.",
-      "undelivered": "No se pudo entregar un mensaje a {{name}}."
+      "undelivered": "No se pudo entregar un mensaje a {{name}}.",
+      "appClosed": "La app se cerró antes de que pudiera responder. Envíalo de nuevo para retomarlo."
     },
     "unavailable": {
       "title": {

@@ -141,8 +141,14 @@ describe("a thread's relay", () => {
 
     feed(relay, [hello("inc-1"), ...events]);
 
-    expect(persisted).toHaveLength(1);
-    const [saved] = persisted;
+    // The user's message as soon as it is in (a crash must not lose it),
+    // then the whole run at its terminal.
+    expect(persisted).toHaveLength(2);
+    expect(persisted[0]!.messages.map((message) => message.role)).toEqual([
+      "user",
+    ]);
+    expect(persisted[0]!.runs).toEqual([]);
+    const saved = persisted[1];
     expect(saved!.messages.map((message) => message.role)).toEqual([
       "user",
       "assistant",
@@ -399,6 +405,8 @@ describe("a thread's relay", () => {
       seen.push(chunk.event as unknown as RelayEvent)
     );
 
+    // Only the run's user message was written before the clear.
+    const writtenBefore = persisted.length;
     relay.clearByMain();
     // The open run is retired first (cancelled), then every open window
     // hears the clear (the kit bumps `rev`), and the file goes.
@@ -414,7 +422,7 @@ describe("a thread's relay", () => {
       [null, null, null, null]
     );
     expect(seen).toHaveLength(2);
-    expect(persisted).toEqual([]);
+    expect(persisted).toHaveLength(writtenBefore);
     expect(relay.checkpoint().messages).toEqual([]);
 
     // The next run starts a new history, without the old migration marker.
@@ -474,6 +482,7 @@ describe("a thread's relay", () => {
       { role: "assistant", text: "partial" },
     ]);
 
+    const writtenBefore = persisted.length;
     relay.clearByMain();
     // One new generation, from an empty checkpoint with no run to rejoin.
     expect(client.generations).toBe(2);
@@ -491,7 +500,7 @@ describe("a thread's relay", () => {
       first.finished,
     ]);
     expect(client.processor.getMessages()).toEqual([]);
-    expect(persisted).toEqual([]);
+    expect(persisted).toHaveLength(writtenBefore);
 
     const second = run("run-2", "fresh");
     feed(relay, [...second.start, ...second.reply("b", "ok"), second.finished]);
@@ -687,8 +696,18 @@ describe("terminals main applies (review r1)", () => {
       ["u-3", "user"],
       ["run-3:error", "assistant"],
     ];
-    expect(roles(persisted.at(-1)!.messages)).toEqual(expected);
-    expect(persisted.at(-1)!.runs.at(-1)).toMatchObject({
+    // Run 3's terminal write; run 4's user message was written after it.
+    const atRun3 = persisted.findLast(
+      (file) =>
+        file.runs.at(-1)?.runId === "run-3" &&
+        file.messages.length === expected.length
+    )!;
+    expect(roles(atRun3.messages)).toEqual(expected);
+    expect(roles(persisted.at(-1)!.messages)).toEqual([
+      ...expected,
+      ["u-4", "user"],
+    ]);
+    expect(atRun3.runs.at(-1)).toMatchObject({
       runId: "run-3",
       afterMessageId: "run-3:error",
     });

@@ -1,6 +1,9 @@
 import type { MessagingPlatformId } from "@abacus-ai/contract/messaging";
 
-/** One chat message still owed: it failed every immediate attempt. */
+/** The lines a turn the app closed under owes its chat (outcome.channel.*). */
+export type OwedLine = "appClosed" | "contactNeutral" | "contactAppClosed";
+
+/** One chat message still owed: it failed every immediate attempt, or was owed from a start. */
 export interface OwedMessage {
   /** The message's own id: owed once, sent once, whatever the retries. */
   id: string;
@@ -10,6 +13,13 @@ export interface OwedMessage {
   replyContext?: Record<string, string>;
   /** Who it was for, for the notice if it never goes. */
   userName: string | null;
+  /** Meant for the user's own chat on the platform, found when it is sent. */
+  toSelf?: boolean;
+  /**
+   * A line worded when it is sent, in place of `text`: one owed from a start,
+   * before any words are loaded, reads in the language of the moment it goes.
+   */
+  say?: OwedLine;
   firstFailedAt: number;
   /** Later attempts made; the immediate ones are not counted. */
   tries: number;
