@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setMigrationWriteBlocks } from "../../migrations/write-block";
 import { CronScheduler } from "./cron-scheduler";
 import {
+  claimSlot,
   createJob,
   onCronStoreWrite,
   onRoutineRunStarted,
@@ -544,7 +545,8 @@ describe("a fire that comes due without a network", () => {
       async () => state.online,
       () => {
         state.held += 1;
-      }
+      },
+      async () => {}
     );
     return { cron, runs, state };
   };
@@ -628,14 +630,15 @@ describe("a fire that comes due without a network", () => {
     state.online = true;
 
     await cron.tick(new Date(2026, 9, 13, 8, 51));
-    // Asleep from 8:51 to 9:37: four fires missed, one run.
-    await cron.tick(new Date(2026, 9, 13, 9, 37));
+    // Asleep from 8:51 to 9:33: four fires missed, one run.
+    await cron.tick(new Date(2026, 9, 13, 9, 33));
 
     expect(runs).toEqual([job.id]);
     expect(getJob(job.id)?.missed?.count).toBe(4);
+    // Made up: the catch-up's moment accounts for every fire before it.
     expect(
-      missedJobs(new Date(2026, 9, 13, 8, 51), new Date(2026, 9, 13, 9, 37))
-    ).toHaveLength(1);
+      missedJobs(new Date(2026, 9, 13, 8, 51), new Date(2026, 9, 13, 9, 33))
+    ).toEqual([]);
   });
 
   it("never probes the network on a tick with nothing due", async () => {
@@ -661,9 +664,14 @@ describe("fires missed while the app was closed", () => {
   /** A process just started: its first tick has no tick before it. */
   const relaunch = () => {
     const runs: string[] = [];
-    const cron = new CronScheduler(async (id) => {
-      runs.push(id);
-    });
+    const cron = new CronScheduler(
+      async (id) => {
+        runs.push(id);
+      },
+      async () => true,
+      () => {},
+      async () => {}
+    );
     return { cron, runs };
   };
 
@@ -672,14 +680,14 @@ describe("fires missed while the app was closed", () => {
     vi.setSystemTime(new Date(2026, 9, 13, 9, 0, 5));
     recordRun(job.id, "started session s", "schedule", { kind: "started" });
 
-    // Closed after 9:00; opened at 9:37: 9:10, 9:20 and 9:30 were missed.
+    // Closed after 9:00; opened at 9:33: 9:10, 9:20 and 9:30 were missed.
     const { cron, runs } = relaunch();
-    await cron.tick(new Date(2026, 9, 13, 9, 37));
+    await cron.tick(new Date(2026, 9, 13, 9, 33));
 
     expect(runs).toEqual([job.id]);
     expect(getJob(job.id)?.missed).toEqual({
       count: 3,
-      at: new Date(2026, 9, 13, 9, 37).getTime(),
+      at: new Date(2026, 9, 13, 9, 33).getTime(),
     });
   });
 
@@ -729,5 +737,186 @@ describe("fires missed while the app was closed", () => {
     expect(getJob(job.id)?.missed?.count).toBe(3);
     await cron.tick(new Date(2026, 9, 13, 9, 30));
     expect(getJob(job.id)?.missed ?? null).toBeNull();
+  });
+});
+
+describe("each scheduled moment", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(2026, 9, 13, 8, 0) });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** A fresh process; `record` false is one that quit before writing the run down. */
+  const launch = (record = true) => {
+    const fires: Array<{ id: string; trigger: string; slot: number }> = [];
+    const waits: number[] = [];
+    const cron = new CronScheduler(
+      async (id, trigger, fire) => {
+        fires.push({ id, trigger, slot: fire.slot });
+        if (record)
+          recordRun(id, "started session s", trigger, {
+            kind: "started",
+            id: fire.attemptId,
+          });
+      },
+      async () => true,
+      () => {},
+      async (ms) => {
+        waits.push(ms);
+      }
+    );
+    return { cron, fires, waits };
+  };
+
+  it("fires once when the app restarts within its minute", async () => {
+    const job = createJob({ schedule: "0 9 * * *", prompt: "x" });
+    vi.setSystemTime(new Date(2026, 9, 13, 9, 0, 5));
+    const first = launch();
+    await first.cron.tick(new Date(2026, 9, 13, 9, 0, 5));
+    expect(first.fires).toHaveLength(1);
+
+    vi.setSystemTime(new Date(2026, 9, 13, 9, 0, 40));
+    const second = launch();
+    await second.cron.tick(new Date(2026, 9, 13, 9, 0, 40));
+
+    expect(second.fires).toEqual([]);
+    expect(getJob(job.id)?.firedSlot?.at).toBe(
+      new Date(2026, 9, 13, 9, 0).getTime()
+    );
+  });
+
+  it("never fires again after a quit before its run was written down", async () => {
+    const job = createJob({ schedule: "0 9 * * *", prompt: "x" });
+    vi.setSystemTime(new Date(2026, 9, 13, 9, 0, 5));
+    await launch(false).cron.tick(new Date(2026, 9, 13, 9, 0, 5));
+    expect(getJob(job.id)?.runs).toEqual([]);
+
+    vi.setSystemTime(new Date(2026, 9, 13, 9, 3));
+    const relaunched = launch();
+    await relaunched.cron.tick(new Date(2026, 9, 13, 9, 3));
+
+    expect(relaunched.fires).toEqual([]);
+    expect(getJob(job.id)?.missed ?? null).toBeNull();
+  });
+
+  it("records the run under the attempt that claimed it", async () => {
+    const job = createJob({ schedule: "0 9 * * *", prompt: "x" });
+    vi.setSystemTime(new Date(2026, 9, 13, 9, 0, 5));
+    await launch().cron.tick(new Date(2026, 9, 13, 9, 0, 5));
+
+    const stored = getJob(job.id);
+    expect(stored?.runs[0]?.id).toBe(stored?.firedSlot?.attemptId);
+  });
+
+  it("makes up a long sleep with one catch-up, for the latest missed fire only", async () => {
+    vi.setSystemTime(new Date(2026, 9, 13, 9, 5));
+    const job = createJob({ schedule: "0 * * * *", prompt: "x" });
+    const { cron, fires } = launch();
+    await cron.tick(new Date(2026, 9, 13, 9, 5));
+    // Asleep until 14:10: 10:00 to 14:00 were missed.
+    vi.setSystemTime(new Date(2026, 9, 13, 14, 10));
+    await cron.tick(new Date(2026, 9, 13, 14, 10));
+    vi.setSystemTime(new Date(2026, 9, 13, 14, 11));
+    await cron.tick(new Date(2026, 9, 13, 14, 11));
+
+    expect(fires).toEqual([
+      {
+        id: job.id,
+        trigger: "catch-up",
+        slot: new Date(2026, 9, 13, 14, 0).getTime(),
+      },
+    ]);
+    expect(getJob(job.id)?.missed?.count).toBe(5);
+
+    // Nor does a relaunch make it up again.
+    vi.setSystemTime(new Date(2026, 9, 13, 14, 20));
+    const relaunched = launch();
+    await relaunched.cron.tick(new Date(2026, 9, 13, 14, 20));
+    expect(relaunched.fires).toEqual([]);
+  });
+
+  it("skips a missed fire older than a day", async () => {
+    // Mondays at 9, made on a Monday morning; the app opens on Tuesday at 10.
+    vi.setSystemTime(new Date(2026, 9, 12, 8, 0));
+    const job = createJob({ schedule: "0 9 * * 1", prompt: "x" });
+    vi.setSystemTime(new Date(2026, 9, 13, 10, 0));
+    const { cron, fires } = launch();
+    await cron.tick(new Date(2026, 9, 13, 10, 0));
+
+    expect(fires).toEqual([]);
+    expect(getJob(job.id)?.heldSince ?? null).toBeNull();
+    expect(getJob(job.id)?.missed?.count).toBe(1);
+  });
+
+  it("skips a missed fire when the next one is about to come", async () => {
+    createJob({ schedule: "0 * * * *", prompt: "x" });
+    vi.setSystemTime(new Date(2026, 9, 13, 9, 50));
+    const { cron, fires } = launch();
+    await cron.tick(new Date(2026, 9, 13, 9, 50));
+
+    expect(fires).toEqual([]);
+  });
+
+  it("spaces out the catch-ups a launch lets go together", async () => {
+    createJob({ schedule: "0 9 * * *", prompt: "x" });
+    createJob({ schedule: "30 9 * * *", prompt: "y" });
+    vi.setSystemTime(new Date(2026, 9, 13, 12, 0));
+    const { cron, fires, waits } = launch();
+    await cron.tick(new Date(2026, 9, 13, 12, 0));
+
+    expect(fires.map((fire) => fire.trigger)).toEqual(["catch-up", "catch-up"]);
+    expect(waits).toEqual([30_000]);
+  });
+
+  it("fires a one-time routine once, then retires it", async () => {
+    const job = createJob({
+      runAt: new Date(2026, 9, 13, 9, 2).getTime(),
+      prompt: "x",
+    });
+    const { cron, fires } = launch();
+    for (const minute of [1, 2, 3, 4]) {
+      vi.setSystemTime(new Date(2026, 9, 13, 9, minute));
+      await cron.tick(new Date(2026, 9, 13, 9, minute));
+    }
+
+    expect(fires).toHaveLength(1);
+    expect(getJob(job.id)?.enabled).toBe(false);
+    vi.setSystemTime(new Date(2026, 9, 13, 9, 10));
+    await launch().cron.tick(new Date(2026, 9, 13, 9, 10));
+    expect(fires).toHaveLength(1);
+  });
+});
+
+describe("a fired moment from a clock that ran ahead", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(2026, 9, 13, 8, 0) });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("is ignored, so the routine still fires once the clock is right", async () => {
+    const job = createJob({ schedule: "0 9 * * *", prompt: "x" });
+    // Claimed while the clock read a week ahead.
+    claimSlot(job.id, new Date(2026, 9, 20, 9, 0).getTime(), "attempt-ahead");
+    vi.setSystemTime(new Date(2026, 9, 13, 9, 0, 5));
+
+    expect(
+      dueJobs(new Date(2026, 9, 13, 9, 0, 5)).map((due) => due.id)
+    ).toEqual([job.id]);
+  });
+
+  it("is dropped when the schedule or one-time moment changes", () => {
+    const job = createJob({ schedule: "0 9 * * *", prompt: "x" });
+    claimSlot(job.id, new Date(2026, 9, 13, 9, 0).getTime(), "attempt-1");
+
+    expect(updateJob(job.id, { schedule: "0 10 * * *" }).firedSlot).toBeNull();
+    claimSlot(job.id, new Date(2026, 9, 13, 10, 0).getTime(), "attempt-2");
+    expect(
+      updateJob(job.id, { runAt: new Date(2026, 9, 14, 9, 0).getTime() })
+        .firedSlot
+    ).toBeNull();
   });
 });

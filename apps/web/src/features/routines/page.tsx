@@ -133,9 +133,14 @@ const RunsRail = ({
                     <span className="text-muted-foreground truncate">
                       {t(`phase5.outcomes.${a.outcome}`)} ·{" "}
                       {t(
-                        ["manual", "create", "schedule", "webhook"].includes(
-                          a.trigger
-                        )
+                        [
+                          "manual",
+                          "create",
+                          "schedule",
+                          "catch-up",
+                          "webhook",
+                          "agent",
+                        ].includes(a.trigger)
                           ? `routines.triggers.${a.trigger}`
                           : "routines.triggers.schedule"
                       )}

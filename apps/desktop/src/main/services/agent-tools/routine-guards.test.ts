@@ -1,5 +1,6 @@
 import type { PrefsRow } from "@abacus-ai/contract/contract/rows";
 import type { RoutineRunItem } from "@abacus-ai/contract/contracts";
+import type { RoutineRun } from "@abacus-ai/contract/routines";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -9,6 +10,7 @@ import {
   wallMoved,
 } from "../providers/credit-wall";
 import {
+  agentRunWarning,
   consecutiveFailures,
   hasRunInFlight,
   NetworkWaitClock,
@@ -18,6 +20,7 @@ import {
   shouldPauseAfter,
   stuckRuns,
 } from "./routine-guards";
+import { readRoutineTiming } from "./routine-timing";
 
 const run = (
   outcome: RoutineRunItem["outcome"],
@@ -204,5 +207,97 @@ describe("the credit wall a routine meets", () => {
       exhaustedAt: 1,
       freeLaneChosenAt: null,
     });
+  });
+});
+
+describe("when a routine the agent asks for fires", () => {
+  const NOW = new Date(2026, 9, 20, 10, 0).getTime();
+  const read = (args: Record<string, unknown>) => readRoutineTiming(args, NOW);
+
+  it("takes a schedule or a moment as written, with nothing to say", () => {
+    expect(read({ schedule: "0 9 * * *" })).toEqual({
+      schedule: "0 9 * * *",
+      runAt: null,
+      runAtText: null,
+      warnings: [],
+    });
+    const at = read({ run_at: "2026-10-20T18:30" });
+    expect(at.runAt).toBe(new Date(2026, 9, 20, 18, 30).getTime());
+    // The user's words go to the hosted server as written.
+    expect(at.runAtText).toBe("2026-10-20T18:30");
+    expect(at.warnings).toEqual([]);
+    expect(read({ in_minutes: 10 }).runAt).toBe(NOW + 10 * 60_000);
+  });
+
+  it("keeps an every-minute schedule, and warns what it costs", () => {
+    const timing = read({ schedule: "* * * * *" });
+    expect(timing.schedule).toBe("* * * * *");
+    expect(timing.warnings.join(" ")).toContain("fires every minute");
+    expect(timing.warnings.join(" ")).toContain("in_minutes");
+    expect(read({ schedule: " */1 * * * * " }).warnings).toHaveLength(1);
+    for (const slower of ["*/5 * * * *", "* 9 * * *", "0 9 14 2 *"])
+      expect(read({ schedule: slower }).warnings).toEqual([]);
+  });
+
+  it("uses run_at when in_minutes is given too, and says so", () => {
+    const timing = read({ run_at: "2026-10-20T18:30", in_minutes: 5 });
+    expect(timing.runAt).toBe(new Date(2026, 9, 20, 18, 30).getTime());
+    expect(timing.warnings).toEqual([
+      "Both run_at and in_minutes were given: run_at was used.",
+    ]);
+  });
+
+  it("runs a moment that has passed once now, and says so", () => {
+    const timing = read({ run_at: "2026-10-19T08:00" });
+    expect(timing.runAt).toBe(NOW);
+    expect(timing.runAtText).toBe(new Date(NOW).toISOString());
+    expect(timing.warnings.join(" ")).toContain("runs once now");
+  });
+
+  it("reads a date with no time as the morning, and says so", () => {
+    const timing = read({ run_at: "2026-10-21" });
+    expect(timing.runAt).toBe(new Date(2026, 9, 21, 9).getTime());
+    expect(timing.warnings.join(" ")).toContain("has no time");
+  });
+
+  it("lets a one-time moment win over a schedule given with it", () => {
+    const timing = read({ schedule: "0 9 * * *", in_minutes: 30 });
+    expect(timing.schedule).toBeNull();
+    expect(timing.runAt).toBe(NOW + 30 * 60_000);
+    expect(timing.warnings.join(" ")).toContain("the schedule was left out");
+  });
+
+  it("leaves out what cannot be read, and says so", () => {
+    expect(read({ run_at: "soon" }).runAt).toBeNull();
+    expect(read({ run_at: "soon" }).warnings.join(" ")).toContain("left out");
+    expect(read({ in_minutes: -3 }).runAt).toBeNull();
+    expect(read({ in_minutes: -3 }).warnings).toHaveLength(1);
+  });
+});
+
+describe("the agent running a routine again", () => {
+  const NOW = 1_000_000_000_000;
+  const started = (minutesAgo: number, trigger: string) =>
+    ({
+      kind: "started",
+      at: NOW - minutesAgo * 60_000,
+      trigger,
+    }) as RoutineRun;
+
+  it("says nothing about a run long after the last", () => {
+    expect(agentRunWarning([started(120, "schedule")], NOW)).toBeNull();
+    expect(agentRunWarning([], NOW)).toBeNull();
+  });
+
+  it("warns, never refuses, soon after another run or past a few a day", () => {
+    expect(agentRunWarning([started(4, "schedule")], NOW)).toBe(
+      "This routine already ran 4 minutes ago. Running it again repeats what it sends and spends credits: do not run it again unless the user asked."
+    );
+    expect(
+      agentRunWarning(
+        [started(30, "agent"), started(60, "agent"), started(90, "agent")],
+        NOW
+      )
+    ).toMatch(/you have run it 3 times today/i);
   });
 });

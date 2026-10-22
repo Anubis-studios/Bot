@@ -4,7 +4,17 @@
  * what a row shows, resolved in main because the renderer can know none of it.
  */
 
-export type RoutineTrigger = "schedule" | "webhook" | "manual" | "create";
+/**
+ * `catch-up`: a scheduled fire made up after the computer was off or asleep;
+ * `agent`: the agent ran it from a conversation, not the user's Run now.
+ */
+export type RoutineTrigger =
+  | "schedule"
+  | "catch-up"
+  | "webhook"
+  | "manual"
+  | "create"
+  | "agent";
 
 /**
  * One entry of a routine's history (spec 05 §31.5 f). **Attempt kinds** are

@@ -1460,7 +1460,9 @@
       "manual": "手動",
       "create": "On creation",
       "schedule": "スケジュール",
-      "webhook": "Webhook"
+      "catch-up": "補完実行",
+      "webhook": "Webhook",
+      "agent": "エージェントによる"
     },
     "hosted": {
       "badge": "Runs on its own",

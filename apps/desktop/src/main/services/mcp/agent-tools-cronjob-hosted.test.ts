@@ -137,6 +137,7 @@ describe("cronjob, hosted", () => {
   });
 
   it("forwards the user's words for a moment as written, and reads a reminder and a watch", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(2026, 9, 8, 9, 0) });
     const { call, create } = harness({ defaultRunner: "hosted" });
     await call({
       action: "create",
@@ -164,6 +165,43 @@ describe("cronjob, hosted", () => {
       watchUrl: "https://shop.example/f/1",
       notify: "relevant",
     });
+    vi.useRealTimers();
+  });
+
+  it("reads a hosted routine's moment the same way as a local one: never refused, warned", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-10-20T08:00Z") });
+    try {
+      const { call, create } = harness({ defaultRunner: "hosted" });
+      expect(
+        await call({ action: "create", prompt: "x", schedule: "* * * * *" })
+      ).toContain("fires every minute");
+      expect(create.mock.calls[0]![0]).toMatchObject({ schedule: "* * * * *" });
+      expect(
+        await call({
+          action: "create",
+          prompt: "x",
+          run_at: "2026-10-20T17:00",
+          in_minutes: 5,
+        })
+      ).toContain("run_at was used");
+      expect(create.mock.calls[1]![1]).toEqual({
+        byAgent: true,
+        runAtText: "2026-10-20T17:00",
+      });
+      create.mockClear();
+
+      await call({
+        action: "create",
+        reminder_text: "Stretch",
+        in_minutes: 10,
+      });
+      expect(create.mock.calls[0]![1]).toEqual({
+        byAgent: true,
+        runAtText: "2026-10-20T08:10:00.000Z",
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("keeps the webhook on a scheduled routine", async () => {

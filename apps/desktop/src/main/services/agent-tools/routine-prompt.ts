@@ -33,9 +33,12 @@ const LAST_REPLY_CHARS = 1_500;
 
 const TRIGGER_LINE: Record<CronTrigger, string> = {
   schedule: "on its schedule",
+  "catch-up":
+    "late, to make up the latest scheduled run it missed while the computer was off or asleep",
   webhook: "by an incoming webhook",
   manual: "by the user pressing Run now",
   create: "for the first time, right after it was set up",
+  agent: "from a conversation, at the agent's request",
 };
 
 export const buildRoutineFirePrompt = (

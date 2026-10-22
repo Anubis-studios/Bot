@@ -1460,7 +1460,9 @@
       "manual": "Manual",
       "create": "On creation",
       "schedule": "Agendada",
-      "webhook": "Webhook"
+      "catch-up": "Recuperada",
+      "webhook": "Webhook",
+      "agent": "Pelo agente"
     },
     "hosted": {
       "badge": "Runs on its own",

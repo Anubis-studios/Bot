@@ -1,13 +1,15 @@
 /**
  * The rules that keep a routine from running away with itself, as pure
  * functions over its runs so they can be tested without a scheduler: an
- * overlapping fire is skipped, an overlong run is failed, and a routine that
- * keeps failing is paused until someone looks.
+ * overlapping fire is skipped, an overlong run is failed, a routine that
+ * keeps failing is paused, and the agent's own runs and schedules are kept
+ * from multiplying what the user asked for.
  */
 import type {
   RoutineRunItem,
   RoutineRunOutcome,
 } from "@abacus-ai/contract/contracts";
+import type { RoutineRun } from "@abacus-ai/contract/routines";
 
 /** How long a run may go before it is presumed stuck. */
 export const ROUTINE_RUN_TIMEOUT_MS = 30 * 60 * 1000;
@@ -119,3 +121,47 @@ export const ranOutOfAbacusCredits = (error: {
   actions?: Array<{ type: string }>;
 }): boolean =>
   error.actions?.some((action) => action.type === "upgrade-abacus") === true;
+
+/** Between two runs of one routine, below which another agent run is flagged. */
+const AGENT_RUN_MIN_GAP_MS = 10 * 60_000;
+
+/** Agent runs of one routine in a day, past which another is flagged. */
+const AGENT_RUNS_PER_DAY = 3;
+
+const DAY_MS = 24 * 60 * 60_000;
+
+/**
+ * What the agent is told when it runs a routine soon after another run, or
+ * past a few agent runs in a day: the run still starts, and the note says
+ * what running it again costs. Null when the run is unremarkable. `runs`
+ * newest first, as the store keeps them.
+ */
+export const agentRunWarning = (
+  runs: readonly RoutineRun[],
+  now: number
+): string | null => {
+  const started = runs.filter((run) => run.kind === "started");
+  const last = started[0];
+  const minutesAgo =
+    last != null && now - last.at < AGENT_RUN_MIN_GAP_MS
+      ? Math.max(0, Math.round((now - last.at) / 60_000))
+      : null;
+  const today = started.filter(
+    (run) => run.trigger === "agent" && now - run.at < DAY_MS
+  ).length;
+  if (minutesAgo == null && today < AGENT_RUNS_PER_DAY) return null;
+  const parts = [
+    ...(minutesAgo != null
+      ? [
+          minutesAgo === 0
+            ? "this routine already ran under a minute ago"
+            : `this routine already ran ${minutesAgo} minute${minutesAgo === 1 ? "" : "s"} ago`,
+        ]
+      : []),
+    ...(today > 0
+      ? [`you have run it ${today} time${today === 1 ? "" : "s"} today`]
+      : []),
+  ];
+  const said = parts.join(", and ");
+  return `${said.charAt(0).toUpperCase()}${said.slice(1)}. Running it again repeats what it sends and spends credits: do not run it again unless the user asked.`;
+};

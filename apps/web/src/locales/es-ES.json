@@ -1460,7 +1460,9 @@
       "manual": "Manual",
       "create": "On creation",
       "schedule": "Programada",
-      "webhook": "Webhook"
+      "catch-up": "Recuperada",
+      "webhook": "Webhook",
+      "agent": "Por el agente"
     },
     "hosted": {
       "badge": "Runs on its own",

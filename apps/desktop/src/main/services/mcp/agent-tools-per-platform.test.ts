@@ -124,3 +124,74 @@ describe("the model's messaging tools", () => {
     expect(text).not.toMatch(/say which one/);
   });
 });
+
+describe("a routine run's messages to someone", () => {
+  /** Sessions `run-a` and `run-b` answer the same fire; `chat` answers none. */
+  const routineHarness = () => {
+    const sent: Sent[] = [];
+    const server = new McpAgentToolsServer({
+      skillsService: {} as never,
+      enabledToolsets: () => new Set(["messaging"]),
+      workspacePath: () => null,
+      botIdForSession: () => null,
+      routineFireForSession: (sessionId: string) =>
+        sessionId === "chat" ? null : "job-1@1700000000000",
+      messaging: {
+        runningPlatforms: () => ["whatsapp"],
+        livePlatforms: () => ["whatsapp"],
+        listChats: () => [],
+        send: async (platform: string, chatId: string, text: string) => {
+          sent.push({ platform, chatId, text });
+        },
+      },
+    } as never);
+    const send = async (session: string, to: string, message: string) => {
+      const result = await (
+        server as unknown as {
+          executeTool: (
+            n: string,
+            a: Record<string, unknown>,
+            s?: string
+          ) => Promise<{ content: { text?: string }[] }>;
+        }
+      ).executeTool("send_whatsapp_message", { to, message }, session);
+      return result.content.map((part) => part.text ?? "").join("\n");
+    };
+    return { sent, send };
+  };
+
+  it("reach each person once per scheduled moment, whichever run sends", async () => {
+    const { sent, send } = routineHarness();
+
+    expect(await send("run-a", "Sam", "Good morning")).toContain("Sent");
+    const second = await send("run-b", "sam ", "Good morning, again");
+
+    // Skipped and said so, not an error: Sam already has this moment's message.
+    expect(second).toContain("Skipped");
+    expect(second).toContain("already got a message");
+    expect(sent).toHaveLength(1);
+  });
+
+  it("skip the same text twice from one run, but let it go on in parts", async () => {
+    const { sent, send } = routineHarness();
+
+    await send("run-a", "Sam", "Part one");
+    expect(await send("run-a", "Sam", "Part two")).toContain("Sent");
+    expect(await send("run-a", "Sam", "Part one")).toContain("Skipped");
+    expect(await send("run-a", "Alex", "Part one")).toContain("Sent");
+    expect(sent.map((entry) => entry.text)).toEqual([
+      "Part one",
+      "Part two",
+      "Part one",
+    ]);
+  });
+
+  it("leave a conversation's own sends alone", async () => {
+    const { sent, send } = routineHarness();
+
+    await send("chat", "Sam", "Hi");
+    await send("chat", "Sam", "Hi");
+
+    expect(sent).toHaveLength(2);
+  });
+});
