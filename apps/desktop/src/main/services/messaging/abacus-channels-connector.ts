@@ -48,11 +48,13 @@ type InboxEntry = {
   channel: string;
   sender: string | null;
   text: string;
-  /** Where it was said: the owner's own DM with the bot, or a group the bot is in. */
+  /** Where it was said: a DM with the bot, or a group the bot is in. */
   chat?: "dm" | "group";
-  /** The group's id on the platform, for a group message. */
+  /** The chat's id on the platform. */
   chat_id?: string;
-  /** False when someone other than the linked owner said it. */
+  /** The sender's id on the platform, when one could be identified. */
+  sender_id?: string | null;
+  /** True only when the server matched the sender to the account that linked the chat. */
   from_owner?: boolean;
   /** Small files (a Telegram photo) ride inline from the server. */
   attachments?: Array<{
@@ -86,19 +88,20 @@ type PairResponse = {
 const TELEGRAM_GROUP_SENDER = / in group "(.*)"$/;
 
 /**
- * The chat an entry belongs to: the owner's own DM, or a group (or anyone
- * else), which goes through the sender path and its held, approval-gated chat.
+ * The chat an entry belongs to. Only an entry the server marks as the
+ * owner's (`from_owner: true`, in a DM or a group) reaches the owner's own
+ * chat. Anyone else, or an entry that does not say, goes through the sender
+ * path and its held, approval-gated chat.
  */
-export const entryChatId = (entry: {
-  chat?: string;
-  chat_id?: string;
-  from_owner?: boolean;
-  sender: string | null;
-}): string => {
+export const entryChatId = (
+  entry: Pick<
+    InboxEntry,
+    "chat" | "chat_id" | "sender_id" | "from_owner" | "sender"
+  >
+): string => {
+  if (entry.from_owner === true) return SELF_CHAT_ID;
   const titled = TELEGRAM_GROUP_SENDER.exec(entry.sender ?? "")?.[1];
-  if (entry.chat !== "group" && entry.from_owner !== false && titled == null)
-    return SELF_CHAT_ID;
-  return `group:${entry.chat_id ?? titled ?? "unknown"}`;
+  return `group:${entry.chat_id ?? titled ?? entry.sender_id ?? "unknown"}`;
 };
 
 export const isWebUrl = (url: string): boolean => {

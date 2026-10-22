@@ -1,7 +1,8 @@
 /**
- * A shared bot sits in groups too. Only the owner's own DM is the owner's
- * chat; a group, or anyone else, gets its own chat id, so the gateway takes
- * it through the sender path (approval first, then a held chat).
+ * A shared bot sits in groups too. Only what the server marks as the
+ * owner's own message is the owner's chat; anyone else, or an entry that does
+ * not say, gets its own chat id, so the gateway takes it through the sender
+ * path (approval first, then a held chat).
  */
 import { describe, expect, it, vi } from "vitest";
 
@@ -23,10 +24,25 @@ const { AbacusChannelsConnector, entryChatId, SELF_CHAT_ID } =
   await import("./abacus-channels-connector");
 
 describe("which chat a shared-bot message belongs to", () => {
-  it("keeps the owner's own DM as the owner's chat", () => {
-    expect(entryChatId({ sender: "Alex" })).toBe(SELF_CHAT_ID);
+  it("keeps the owner's own messages as the owner's chat", () => {
     expect(entryChatId({ sender: "Alex", chat: "dm", from_owner: true })).toBe(
       SELF_CHAT_ID
+    );
+    expect(
+      entryChatId({
+        sender: 'Alex in group "Weekend plans"',
+        chat: "group",
+        chat_id: "-100123",
+        from_owner: true,
+      })
+    ).toBe(SELF_CHAT_ID);
+  });
+
+  it("never treats an entry that does not name its sender as the owner's", () => {
+    expect(entryChatId({ sender: "Alex" })).toBe("group:unknown");
+    expect(entryChatId({ sender: null, sender_id: "77" })).toBe("group:77");
+    expect(entryChatId({ sender: "Alex", chat: "dm", chat_id: "42" })).toBe(
+      "group:42"
     );
   });
 
