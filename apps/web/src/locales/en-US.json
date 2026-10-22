@@ -4077,6 +4077,24 @@
     "waitingTitle": "Finish checkout in your browser",
     "waitingToSend": "Waiting to send: “{{text}}”"
   },
+  "paymentRequired": {
+    "unconfirmedTitle": "Choose a plan to keep using AbacusAI Bot",
+    "unconfirmedBody": "You're signed in, but your account needs a plan before AbacusAI Bot can work.",
+    "alreadySubscribed": "Already subscribed? {{link}}",
+    "reportIssue": "Report an issue",
+    "trialEndedTitle": "Your free trial has ended",
+    "trialEndedBody": "Upgrade to keep using AbacusAI Bot with this account.",
+    "lapsedTitle": "Your subscription has ended",
+    "lapsedBody": "Renew your plan to keep using AbacusAI Bot with this account.",
+    "upgrade": "Upgrade",
+    "renew": "Renew",
+    "webAgent": "Go to Abacus AI Agent on the web →",
+    "tryAgain": "Try again",
+    "checking": "Checking…",
+    "stillBlocked": "We can't see a payment on this account yet.",
+    "waiting": "Finish checkout in your browser. The app continues as soon as your payment goes through.",
+    "otherAccount": "Sign in with a different account"
+  },
   "visualizer": {
     "loading": "Loading visualization…"
   },

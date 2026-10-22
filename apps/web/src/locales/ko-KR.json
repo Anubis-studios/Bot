@@ -4077,6 +4077,24 @@
     "waitingTitle": "브라우저에서 결제를 완료하세요",
     "waitingToSend": "전송 대기 중: “{{text}}”"
   },
+  "paymentRequired": {
+    "unconfirmedTitle": "AbacusAI Bot을 계속 사용하려면 요금제를 선택하세요",
+    "unconfirmedBody": "로그인되었지만 AbacusAI Bot을 사용하려면 계정에 요금제가 필요합니다.",
+    "alreadySubscribed": "이미 구독 중이신가요? {{link}}",
+    "reportIssue": "문제 신고",
+    "trialEndedTitle": "무료 체험이 끝났습니다",
+    "trialEndedBody": "이 계정으로 AbacusAI Bot을 계속 사용하려면 업그레이드하세요.",
+    "lapsedTitle": "구독이 종료되었습니다",
+    "lapsedBody": "이 계정으로 AbacusAI Bot을 계속 사용하려면 요금제를 갱신하세요.",
+    "upgrade": "업그레이드",
+    "renew": "갱신",
+    "webAgent": "웹에서 Abacus AI Agent로 이동 →",
+    "tryAgain": "다시 시도",
+    "checking": "확인 중…",
+    "stillBlocked": "아직 이 계정의 결제가 확인되지 않습니다.",
+    "waiting": "브라우저에서 결제를 완료하세요. 결제가 완료되면 앱이 바로 이어집니다.",
+    "otherAccount": "다른 계정으로 로그인"
+  },
   "visualizer": {
     "loading": "시각화를 불러오는 중…"
   },

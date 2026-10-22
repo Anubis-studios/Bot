@@ -46,8 +46,11 @@ vi.mock("./services/mcp/mcp-oauth-service", () => ({
 }));
 vi.mock("./services/providers/abacus", () => ({
   abacusCredentialRejected: vi.fn(() => false),
+  abacusPaymentRequired: vi.fn(() => null),
   clearAbacusCache: vi.fn(),
   fetchAbacusAccount: vi.fn(async () => null),
+  onAbacusPaymentChange: vi.fn(() => () => {}),
+  requestAbacusAccount: vi.fn(async () => ({ kind: "unavailable" })),
 }));
 vi.mock("./services/providers/account-service", () => ({
   signOut: vi.fn(),
@@ -70,6 +73,10 @@ vi.mock("./services/providers/abacus-connector-service", () => ({
   disconnectAbacusConnector: vi.fn(),
   listAbacusConnectors: vi.fn(),
 }));
+vi.mock("./services/providers/abacus-upgrade", () => ({
+  fetchBillingPlan: vi.fn(async () => null),
+  fetchUpgradeUrl: vi.fn(async () => null),
+}));
 vi.mock("./services/providers/models", () => ({
   listAvailableModels: vi.fn(async () => []),
 }));
@@ -90,8 +97,11 @@ import { activateProfile, profileKeyFor } from "./profile-home";
 import { readSettings, saveApiKey } from "./services/config/settings";
 import {
   abacusCredentialRejected,
+  abacusPaymentRequired,
   fetchAbacusAccount,
+  requestAbacusAccount,
 } from "./services/providers/abacus";
+import { fetchUpgradeUrl } from "./services/providers/abacus-upgrade";
 import {
   adoptWebAccount,
   signOut,
@@ -126,6 +136,9 @@ beforeEach(() => {
   vi.mocked(readSettings).mockReturnValue({ apiKeys: {} } as never);
   vi.mocked(saveApiKey).mockClear();
   vi.mocked(abacusCredentialRejected).mockReturnValue(false);
+  vi.mocked(abacusPaymentRequired).mockReturnValue(null);
+  vi.mocked(requestAbacusAccount).mockResolvedValue({ kind: "unavailable" });
+  vi.mocked(fetchAbacusAccount).mockClear();
   vi.mocked(fetchAbacusAccount).mockResolvedValue({
     email: "ada@example.com",
   } as never);
@@ -164,6 +177,11 @@ beforeEach(() => {
   handlers.set("account", (_event, ...args) =>
     operations.getAbacusAccount(...(args as [boolean]))
   );
+  handlers.set("payment", (_event, ...args) =>
+    operations.getAbacusPayment(...(args as [boolean]))
+  );
+  handlers.set("release", () => operations.releaseAbacusPayment());
+  handlers.set("upgrade-url", () => operations.getUpgradeUrl());
   // Startup reconciles the derived gateway from the stored credential. Each
   // case below asserts only the transition it triggers.
   ensureMcpServer.mockClear();
@@ -353,6 +371,130 @@ describe("signing in with a key that cannot be attributed", () => {
     const result = await handlers.get("auth")?.({});
 
     expect(result).toMatchObject({ ok: true });
+  });
+});
+
+/**
+ * A sign-in the platform's payment gate refuses (402). The key is good and
+ * the user is who they said; the account must pay. Retrying cannot change
+ * that and restoring the previous key sends the user back to sign-in, which
+ * read as a silent loop. The key is held, unstored (it has no identity for a
+ * profile yet), until Try again finds the account paid.
+ */
+describe("signing in to an account that must pay", () => {
+  const mustPay = (reason: "unconfirmed" | "trial_ended" | "lapsed") => {
+    vi.mocked(fetchAbacusAccount).mockResolvedValue(null);
+    vi.mocked(abacusPaymentRequired).mockReturnValue({ reason });
+  };
+  const paid = () => {
+    const account = { email: "ada@example.com" } as never;
+    vi.mocked(abacusPaymentRequired).mockReturnValue(null);
+    vi.mocked(requestAbacusAccount).mockResolvedValue({
+      kind: "account",
+      value: account,
+    });
+    vi.mocked(fetchAbacusAccount).mockResolvedValue(account);
+  };
+
+  it.each(["unconfirmed", "trial_ended", "lapsed"] as const)(
+    "says payment is required (%s), asks once, and opens no profile",
+    async (reason) => {
+      mustPay(reason);
+
+      await expect(handlers.get("auth")?.({})).resolves.toEqual({
+        ok: false,
+        error: "payment-required",
+      });
+
+      expect(fetchAbacusAccount).toHaveBeenCalledOnce();
+      expect(activateProfile).not.toHaveBeenCalled();
+      await expect(handlers.get("payment")?.({})).resolves.toEqual({
+        reason,
+      });
+    }
+  );
+
+  it("does not put the previous account's key back: that account is signed out", async () => {
+    vi.mocked(readSettings).mockReturnValue({
+      apiKeys: { ABACUS_API_KEY: "previous-key" },
+    } as never);
+    mustPay("lapsed");
+
+    await handlers.get("auth")?.({});
+
+    expect(stashSessionsForAccount).toHaveBeenCalledOnce();
+    expect(vi.mocked(saveApiKey).mock.calls.at(-1)).toEqual(["abacus", ""]);
+    await expect(handlers.get("payment")?.({})).resolves.toEqual({
+      reason: "lapsed",
+    });
+  });
+
+  it("mints the upgrade link with the held key", async () => {
+    mustPay("trial_ended");
+    await handlers.get("auth")?.({});
+
+    await handlers.get("upgrade-url")?.({});
+
+    expect(fetchUpgradeUrl).toHaveBeenCalledWith("app", "s2_key");
+  });
+
+  it("stays on the payment screen while the account still has not paid", async () => {
+    mustPay("unconfirmed");
+    await handlers.get("auth")?.({});
+    vi.mocked(requestAbacusAccount).mockResolvedValue({
+      kind: "payment-required",
+      payment: { reason: "unconfirmed" },
+    });
+    vi.mocked(saveApiKey).mockClear();
+
+    await expect(handlers.get("payment")?.({}, true)).resolves.toEqual({
+      reason: "unconfirmed",
+    });
+
+    expect(saveApiKey).not.toHaveBeenCalled();
+  });
+
+  it("signs in on Try again once the account has paid, without a restart", async () => {
+    mustPay("trial_ended");
+    await handlers.get("auth")?.({});
+    paid();
+
+    await expect(handlers.get("payment")?.({}, true)).resolves.toBeNull();
+
+    expect(vi.mocked(saveApiKey).mock.calls.at(-1)).toEqual([
+      "abacus",
+      "s2_key",
+    ]);
+    expect(activateProfile).toHaveBeenCalledWith(
+      expect.any(String),
+      "s2_key",
+      expect.any(Array)
+    );
+    await expect(handlers.get("payment")?.({})).resolves.toBeNull();
+  });
+
+  it("lets go of the held sign-in for a different account", async () => {
+    mustPay("lapsed");
+    await handlers.get("auth")?.({});
+    vi.mocked(abacusPaymentRequired).mockReturnValue(null);
+
+    await handlers.get("release")?.({});
+
+    await expect(handlers.get("payment")?.({})).resolves.toBeNull();
+  });
+
+  it("keeps a stored key that the gate refuses later, and shows why", async () => {
+    vi.mocked(readSettings).mockReturnValue({
+      apiKeys: { ABACUS_API_KEY: "stored-key" },
+    } as never);
+    mustPay("lapsed");
+
+    await expect(handlers.get("payment")?.({}, true)).resolves.toEqual({
+      reason: "lapsed",
+    });
+
+    expect(saveApiKey).not.toHaveBeenCalled();
+    expect(removeMcpServer).not.toHaveBeenCalled();
   });
 });
 

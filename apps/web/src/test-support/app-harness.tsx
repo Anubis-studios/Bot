@@ -269,6 +269,7 @@ const shellRouter = (
         return { account: null, apps: [], onboarded };
       }),
       abacus: os.account.abacus.handler(() => null),
+      payment: os.account.payment.handler(() => null),
     },
     workspaces: {
       checkPath: os.workspaces.checkPath.handler(({ input }) => ({

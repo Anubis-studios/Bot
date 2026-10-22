@@ -5,7 +5,9 @@ import path from "node:path";
 import { writeFileAtomicSync } from "@abacus-ai/agent/atomic-file";
 import {
   ABACUS_ACCOUNT_FOCI,
+  ABACUS_PAYMENT_REASONS,
   type AbacusAccountInfo,
+  type AbacusPaymentRequired,
 } from "@abacus-ai/contract/contracts";
 import {
   isPayingAbacusTier,
@@ -98,6 +100,49 @@ let credentialRejected = false;
 
 /** Whether the stored key has been refused outright. See `credentialRejected`. */
 export const abacusCredentialRejected = (): boolean => credentialRejected;
+
+/**
+ * The platform's payment gate (HTTP 402) refused the stored key: the key is
+ * good, but the account must pay before Abacus serves it. Not a sign-out.
+ */
+let paymentRequired: AbacusPaymentRequired | null = null;
+
+/** The payment gate's verdict on the stored key, as of the last read. */
+export const abacusPaymentRequired = (): AbacusPaymentRequired | null =>
+  paymentRequired;
+
+/** The verdict last announced, so a cache clear followed by the same answer stays quiet. */
+let announcedPayment: string | null = null;
+const paymentListeners = new Set<() => void>();
+
+/** Hears the payment gate's verdict change, whichever read saw it. */
+export function onAbacusPaymentChange(listener: () => void): () => void {
+  paymentListeners.add(listener);
+  return () => {
+    paymentListeners.delete(listener);
+  };
+}
+
+const setPaymentRequired = (next: AbacusPaymentRequired | null): void => {
+  paymentRequired = next;
+  const verdict = next == null ? null : (next.reason ?? "unknown");
+  if (verdict === announcedPayment) return;
+  announcedPayment = verdict;
+  for (const listener of Array.from(paymentListeners)) listener();
+};
+
+/** The 402's `reason`; null when the body carries none we know. */
+const paymentReasonOf = async (
+  response: Response
+): Promise<AbacusPaymentRequired> => {
+  const body = (await response.json().catch(() => null)) as {
+    reason?: unknown;
+  } | null;
+  return {
+    reason:
+      ABACUS_PAYMENT_REASONS.find((reason) => reason === body?.reason) ?? null,
+  };
+};
 
 const isTextModel = (model: AbacusModel): boolean => {
   if (model.model_type != null && model.model_type !== TEXT_MODEL_TYPE)
@@ -219,6 +264,14 @@ const noteFor = (model: AbacusModel): string => {
 /** What the platform says when the key itself is the problem. */
 const REJECTED_STATUSES = new Set([401, 403]);
 
+/** The payment gate: the key is valid, the account has to pay first. */
+const PAYMENT_REQUIRED_STATUS = 402;
+
+const abacusHeaders = (key: string) => ({
+  Authorization: `Bearer ${key}`,
+  "user-agent": abacusUserAgent(),
+});
+
 /** Through `credentialFor`, so the signed-in key wins over a shell export. */
 const resolveKey = (): string | undefined => {
   const key = credentialFor(ENV_VAR);
@@ -236,10 +289,7 @@ export const fetchAbacusModels = async (): Promise<ModelAvailability[]> => {
 
   try {
     const response = await fetch(`${abacusRoutellmV1()}/models`, {
-      headers: {
-        Authorization: `Bearer ${key}`,
-        "user-agent": abacusUserAgent(),
-      },
+      headers: abacusHeaders(key),
       signal: AbortSignal.timeout(8000),
     });
 
@@ -247,6 +297,11 @@ export const fetchAbacusModels = async (): Promise<ModelAvailability[]> => {
       if (REJECTED_STATUSES.has(response.status)) {
         credentialRejected = true;
         return withCurrentConfigured(cache);
+      }
+      // Every call on this key would answer 402 too: offer none of them.
+      if (response.status === PAYMENT_REQUIRED_STATUS) {
+        setPaymentRequired(await paymentReasonOf(response));
+        return [];
       }
 
       return withCurrentConfigured(cache ?? readLastGood(key));
@@ -380,9 +435,9 @@ export const planRefusedModel = (error?: {
     (action) => action.type === "model-unavailable" && action.cause === "plan"
   )?.model ?? null;
 
-/** Cached list, if a fetch already succeeded this run. */
+/** Cached list, if a fetch already succeeded this run; none while the account must pay. */
 export const cachedAbacusModels = (): ModelAvailability[] =>
-  withCurrentConfigured(cache);
+  paymentRequired != null ? [] : withCurrentConfigured(cache);
 
 /**
  * `configured` must reflect the key as it is *now*, not as it was when the
@@ -446,6 +501,7 @@ export const clearAbacusCache = (): void => {
   accountCache = null;
   // A new key deserves a fresh verdict.
   credentialRejected = false;
+  paymentRequired = null;
 };
 
 /**
@@ -512,12 +568,84 @@ const fetchProfilePicture = async (
   }
 };
 
+/** One /v1/account read for a key, with nothing cached. */
+type AccountRead =
+  | { kind: "account"; value: AbacusAccountInfo }
+  | { kind: "rejected" }
+  | { kind: "payment-required"; payment: AbacusPaymentRequired }
+  | { kind: "unavailable" };
+
+/** Who `key` belongs to, read now. Never a throw: a failure is `unavailable`. */
+export const requestAbacusAccount = async (
+  key: string
+): Promise<AccountRead> => {
+  try {
+    const response = await fetch(`${abacusRoutellmV1()}/account`, {
+      headers: abacusHeaders(key),
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!response.ok) {
+      console.warn(`[abacus] /account answered ${response.status}`);
+      if (REJECTED_STATUSES.has(response.status)) return { kind: "rejected" };
+      if (response.status === PAYMENT_REQUIRED_STATUS)
+        return {
+          kind: "payment-required",
+          payment: await paymentReasonOf(response),
+        };
+      // /account is not in every deployment; an authenticated /models call
+      // still tells a connected user from an invalid key.
+      if (response.status !== 404 && response.status !== 405)
+        return { kind: "unavailable" };
+
+      const modelsResponse = await fetch(`${abacusRoutellmV1()}/models`, {
+        headers: abacusHeaders(key),
+        signal: AbortSignal.timeout(8000),
+      });
+      return modelsResponse.ok
+        ? { kind: "account", value: connectedAccountWithoutProfile() }
+        : { kind: "unavailable" };
+    }
+
+    const body = (await response.json()) as Partial<AbacusAccountInfo> & {
+      user_id?: unknown;
+      organization_id?: unknown;
+    };
+    const identity = (value: unknown): string | null =>
+      typeof value === "string" || typeof value === "number"
+        ? String(value)
+        : null;
+    return {
+      kind: "account",
+      value: {
+        user_id: identity(body.user_id),
+        organization_id: identity(body.organization_id),
+        name: body.name ?? null,
+        email: body.email ?? null,
+        picture: await fetchProfilePicture(body.picture),
+        organization: body.organization ?? null,
+        org_user_count: body.org_user_count ?? null,
+        plan: body.plan ?? null,
+        subscription_tier: body.subscription_tier ?? null,
+        credits_used: body.credits_used ?? null,
+        credits_granted: body.credits_granted ?? null,
+        web_signup: body.web_signup === true,
+        google_sign_in: body.google_sign_in === true,
+        focus:
+          ABACUS_ACCOUNT_FOCI.find((focus) => focus === body.focus) ?? null,
+      },
+    };
+  } catch {
+    return { kind: "unavailable" };
+  }
+};
+
 export const fetchAbacusAccount = async (
   refresh = false
 ): Promise<AbacusAccountInfo | null> => {
   const key = resolveKey();
   if (key == null || key.length === 0) {
     accountCache = null;
+    setPaymentRequired(null);
 
     return null;
   }
@@ -529,73 +657,23 @@ export const fetchAbacusAccount = async (
     return accountCache.value;
   }
 
-  try {
-    const response = await fetch(`${abacusRoutellmV1()}/account`, {
-      headers: {
-        Authorization: `Bearer ${key}`,
-        "user-agent": abacusUserAgent(),
-      },
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!response.ok) {
-      console.warn(`[abacus] /account answered ${response.status}`);
-      // /account is not in every deployment; an authenticated /models call
-      // still tells a connected user from an invalid key.
-      if (response.status !== 404 && response.status !== 405) {
-        if (REJECTED_STATUSES.has(response.status)) {
-          credentialRejected = true;
-          accountCache = null;
-
-          return null;
-        }
-
-        return accountCache?.value ?? null;
-      }
-
-      const modelsResponse = await fetch(`${abacusRoutellmV1()}/models`, {
-        headers: {
-          Authorization: `Bearer ${key}`,
-          "user-agent": abacusUserAgent(),
-        },
-        signal: AbortSignal.timeout(8000),
-      });
-      if (!modelsResponse.ok) return accountCache?.value ?? null;
-
-      const value = connectedAccountWithoutProfile();
-      remember(value);
-
-      return value;
-    }
-
-    const body = (await response.json()) as Partial<AbacusAccountInfo> & {
-      user_id?: unknown;
-      organization_id?: unknown;
-    };
-    const identity = (value: unknown): string | null =>
-      typeof value === "string" || typeof value === "number"
-        ? String(value)
-        : null;
-    const value: AbacusAccountInfo = {
-      user_id: identity(body.user_id),
-      organization_id: identity(body.organization_id),
-      name: body.name ?? null,
-      email: body.email ?? null,
-      picture: await fetchProfilePicture(body.picture),
-      organization: body.organization ?? null,
-      org_user_count: body.org_user_count ?? null,
-      plan: body.plan ?? null,
-      subscription_tier: body.subscription_tier ?? null,
-      credits_used: body.credits_used ?? null,
-      credits_granted: body.credits_granted ?? null,
-      web_signup: body.web_signup === true,
-      google_sign_in: body.google_sign_in === true,
-      focus: ABACUS_ACCOUNT_FOCI.find((focus) => focus === body.focus) ?? null,
-    };
-    remember(value);
-
-    return value;
-  } catch {
-    return accountCache?.value ?? null;
+  const read = await requestAbacusAccount(key);
+  switch (read.kind) {
+    case "account":
+      setPaymentRequired(null);
+      remember(read.value);
+      return read.value;
+    case "rejected":
+      credentialRejected = true;
+      accountCache = null;
+      return null;
+    case "payment-required":
+      // Signed in, but nothing on this account runs until it pays.
+      accountCache = null;
+      setPaymentRequired(read.payment);
+      return null;
+    case "unavailable":
+      return accountCache?.value ?? null;
   }
 };
 

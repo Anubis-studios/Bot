@@ -23,6 +23,7 @@ const abacus = vi.hoisted(() => ({
 }));
 
 vi.mock("./abacus", () => ({
+  abacusPaymentRequired: () => null,
   cachedAbacusModels: () => abacus.live,
   clearAbacusCache: () => {},
   fetchAbacusAccount: async () =>

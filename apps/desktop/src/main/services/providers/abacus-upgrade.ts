@@ -29,9 +29,11 @@ const UPGRADE_URL_TTL_MS = 60_000;
 let cached: { key: string; url: string | null; at: number } | null = null;
 
 export const fetchUpgradeUrl = async (
-  src: "app" | "channel" = "app"
+  src: "app" | "channel" = "app",
+  /** A held sign-in's key, in place of the stored one. */
+  heldKey?: string
 ): Promise<string | null> => {
-  const key = credentialFor("ABACUS_API_KEY");
+  const key = heldKey ?? credentialFor("ABACUS_API_KEY");
   if (key.length === 0) return null;
   if (
     cached != null &&
@@ -41,7 +43,10 @@ export const fetchUpgradeUrl = async (
     return cached.url;
   const { ok, result } = await abacusApiCall(
     "_createAbacusbotUpgradeLink",
-    "GET"
+    "GET",
+    undefined,
+    undefined,
+    heldKey
   );
   // Offline or refused: the bot's own page, never no link at all. Not
   // cached, so the next ask mints again once the network is back.
@@ -63,12 +68,16 @@ export const fetchUpgradeUrl = async (
  * the call fails.
  */
 export const fetchBillingPlan = async (
-  upgrade: boolean
+  upgrade: boolean,
+  /** A held sign-in's key, in place of the stored one. */
+  heldKey?: string
 ): Promise<BillingPlan | null> => {
   const { ok, result } = await abacusApiCall(
     "_getAbacusbotBillingPlan",
     "GET",
-    upgrade ? { includeUpgradeLinks: true } : undefined
+    upgrade ? { includeUpgradeLinks: true } : undefined,
+    undefined,
+    heldKey
   );
   if (!ok || result == null || typeof result !== "object") return null;
   return result as BillingPlan;
