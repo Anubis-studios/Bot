@@ -522,4 +522,37 @@ describe("every turn closes once, with how it ended", () => {
 
     expect(records).toHaveLength(1);
   });
+
+  it("carries the reported error, actions and all, on a failed close", () => {
+    ledgered.markSent(WS, SESSION);
+    const error = {
+      message: "Out of credits",
+      cause: "credits_exhausted",
+      actions: [{ type: "upgrade-abacus" }],
+    };
+    feed(event({ type: "error", error }));
+    feed(statusChange(AgentStatus.Idle));
+
+    expect(records).toEqual([
+      expect.objectContaining({ kind: "failed", error }),
+    ]);
+  });
+
+  it("an error with no idle after it is still closed, by the watchdog", () => {
+    ledgered.markSent(WS, SESSION);
+    feed(statusChange(AgentStatus.Streaming));
+    feed(event({ type: "error", error: { message: "boom" } }));
+    expect(records).toEqual([]);
+
+    vi.advanceTimersByTime(TIMEOUT_MS + 1);
+
+    expect(records).toEqual([expect.objectContaining({ kind: "timed_out" })]);
+  });
+
+  it("a session cleared away ends its open turn", () => {
+    ledgered.markSent(WS, SESSION);
+    ledgered.clearSession(SESSION);
+
+    expect(records).toEqual([expect.objectContaining({ kind: "stopped" })]);
+  });
 });

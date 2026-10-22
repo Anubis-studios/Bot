@@ -56,9 +56,10 @@ const isBusyPhase = (phase: SessionTurnPhase): boolean =>
  * Single source of truth for "is this session busy with an agent turn?",
  * updated before dispatching to the CLI so the renderer's cache matches. After
  * a stop, CLI events are suppressed until the agent confirms idle. Only
- * `status_changed: idle` and `error` end a turn: `turn_complete` fires after
- * every tool round. A busy session silent for 10 minutes is forced idle (not
- * while `waiting_permission`, which waits on a person).
+ * `status_changed: idle` and `error` end the busy phase: `turn_complete` fires
+ * after every tool round. A session silent for 10 minutes while busy, or while
+ * its turn is still open in the ledger, is forced idle and its turn closed as
+ * timed out (not while `waiting_permission`, which waits on a person).
  */
 export class SessionTurnStateService {
   private readonly states = new Map<string, SessionTurnStateSnapshot>();
@@ -238,6 +239,8 @@ export class SessionTurnStateService {
   }
 
   clearSession(sessionId: string): void {
+    // The session is gone: a turn still open in it ends with it.
+    this.ledger?.end(sessionId, "stopped");
     this.clearActivityTimer(sessionId);
     this.states.delete(sessionId);
     this.suppressedSessions.delete(sessionId);
@@ -260,7 +263,10 @@ export class SessionTurnStateService {
     }
     // An approval waits on a person and has its own budget in the agent;
     // timing it here would declare a timeout with the prompt still on screen.
-    if (!isBusyPhase(phase) || phase === "waiting_permission") {
+    // A turn the ledger still holds open (an error with no idle after it) is
+    // still timed: the watchdog is what closes it if nothing else does.
+    const turnOpen = this.ledger?.isOpen(sessionId) === true;
+    if ((!isBusyPhase(phase) && !turnOpen) || phase === "waiting_permission") {
       this.clearActivityTimer(sessionId);
     } else if (prev?.phase === "waiting_permission") {
       this.startActivityTimer(workspaceId, sessionId);

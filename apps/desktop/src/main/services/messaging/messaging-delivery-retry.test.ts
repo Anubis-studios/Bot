@@ -8,19 +8,22 @@ import type { MessagingPlatformId } from "@abacus-ai/contract/messaging";
  */
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 
-const stored = vi.hoisted(() => ({ outbox: [] as unknown[] }));
+const stored = vi.hoisted(() => ({
+  outbox: null as { pending: unknown[]; done: string[] } | null,
+}));
 
 vi.mock("./messaging-config-service", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./messaging-config-service")>()),
   readStoredMessageLog: () => [],
   writeStoredMessageLog: () => {},
   readStoredOutbox: () => stored.outbox,
-  writeStoredOutbox: (entries: unknown[]) => {
-    stored.outbox = [...entries];
+  writeStoredOutbox: (state: { pending: unknown[]; done: string[] }) => {
+    stored.outbox = structuredClone(state);
   },
 }));
 
 const { MessagingGatewayService } = await import("./messaging-gateway-service");
+const { ChatOutbox } = await import("./messaging-outbox");
 
 const service = (
   sendText: (chatId: string, text: string) => Promise<void>,
@@ -72,7 +75,7 @@ const loggedIn = (
 
 beforeEach(() => {
   vi.useFakeTimers();
-  stored.outbox = [];
+  stored.outbox = null;
 });
 
 afterEach(() => {
@@ -131,13 +134,13 @@ describe("a message that still could not go", () => {
     const done = send(gateway);
     await vi.advanceTimersByTimeAsync(80_000);
     await done;
-    expect(stored.outbox).toHaveLength(1);
+    expect(stored.outbox?.pending).toHaveLength(1);
 
     down = false;
     await vi.advanceTimersByTimeAsync(5 * 60_000);
 
     expect(sent).toEqual(["Hey! How's it going?"]);
-    expect(stored.outbox).toEqual([]);
+    expect(stored.outbox?.pending).toEqual([]);
     expect(loggedIn(gateway).at(-1)?.text).toBe("Hey! How's it going?");
   });
 
@@ -175,7 +178,83 @@ describe("a message that still could not go", () => {
     await done;
     await vi.advanceTimersByTimeAsync(5 * 60_000 + 30 * 60_000 + 1_000);
 
-    expect(stored.outbox).toEqual([]);
+    expect(stored.outbox?.pending).toEqual([]);
     expect(sent).toEqual(["A message to someone could not be delivered."]);
+  });
+});
+
+describe("a message owed more than once", () => {
+  it("goes once when its platform connects while a retry is on its way", async () => {
+    let down = true;
+    let release: () => void = () => {};
+    const sent: string[] = [];
+    const gateway = service(async (_chatId, text) => {
+      if (down) throw new Error("offline");
+      // The retry is slow to come back: the reconnect lands meanwhile.
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      sent.push(text);
+    });
+    const done = send(gateway);
+    await vi.advanceTimersByTimeAsync(80_000);
+    await done;
+
+    down = false;
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
+    (
+      gateway as unknown as {
+        setState: (id: string, state: string) => void;
+      }
+    ).setState("whatsapp", "connected");
+    await vi.advanceTimersByTimeAsync(10);
+    release();
+    await vi.advanceTimersByTimeAsync(10);
+    release();
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(sent).toEqual(["Hey! How's it going?"]);
+    expect(stored.outbox?.pending).toEqual([]);
+  });
+
+  it("is owed once by its id, and never again once it went", async () => {
+    const sent: string[] = [];
+    let state: unknown = null;
+    const outbox = new ChatOutbox({
+      now: () => 0,
+      read: () => state,
+      write: (next) => {
+        state = structuredClone(next);
+      },
+      send: async (message) => {
+        sent.push(message.text);
+        return true;
+      },
+      giveUp: async () => {},
+    });
+    const message = {
+      id: "turn-1:chat",
+      platform: "whatsapp" as const,
+      chatId: "Ana",
+      text: "The app closed before I could reply.",
+      userName: "Ana",
+      firstFailedAt: 0,
+    };
+
+    expect(outbox.owe(message, 0)).toBe(true);
+    expect(outbox.owe(message, 0)).toBe(false);
+    await outbox.flush();
+    // A replay after a restart, from the file as it was left.
+    const replayed = new ChatOutbox({
+      now: () => 0,
+      read: () => state,
+      write: () => {},
+      send: async () => true,
+      giveUp: async () => {},
+    });
+    expect(replayed.owe(message, 0)).toBe(false);
+    expect(sent).toEqual(["The app closed before I could reply."]);
+    outbox.dispose();
+    replayed.dispose();
   });
 });

@@ -11,6 +11,7 @@ import {
 } from "@abacus-ai/contract/credit-thresholds";
 import { providerDisplayName } from "@abacus-ai/contract/settings";
 
+import type { TurnRecord } from "../session/turn-ledger";
 import type { ChannelWords } from "./channel-words";
 
 /**
@@ -76,8 +77,43 @@ const ABACUS_BILLING_URL = "https://apps.abacus.ai/chatllm/admin/profile";
 
 const NETWORK_UNREACHABLE_CODE = "network_unreachable";
 
-/** A turn that ended with nothing for the chat and no error saying why. */
-export const EMPTY_REPLY_CODE = "empty_reply";
+/** The cause a turn that answered with nothing is reported under (turn-outcome.ts). */
+const EMPTY_CAUSE = "empty";
+
+/**
+ * What the chat is told about a closed turn (TurnLedger), or null when the
+ * turn answered. `delivered`: something already reached the chat (the reply,
+ * the agent's own send, NO_REPLY), so a turn that merely ended on nothing
+ * more to say needs no line. A reply that never reached the chat is told as
+ * an empty one: the chat must not be left on silence.
+ */
+export const chatFailureOf = (
+  record: Pick<TurnRecord, "kind" | "cause" | "error">,
+  delivered: boolean
+): TurnFailure | null => {
+  switch (record.kind) {
+    case "reply":
+    case "empty":
+      return delivered ? null : { cause: EMPTY_CAUSE };
+    case "failed": {
+      const error = record.error;
+      const cause = error?.cause ?? record.cause;
+      if (cause === EMPTY_CAUSE && delivered) return null;
+      return {
+        ...(error?.code != null ? { code: error.code } : {}),
+        ...(cause != null ? { cause } : {}),
+        ...(error?.actions != null || error?.segmentData?.actions != null
+          ? { actions: error.actions ?? error.segmentData?.actions }
+          : {}),
+      };
+    }
+    case "timed_out":
+    case "agent_exited":
+      return { code: record.kind };
+    case "stopped":
+      return null;
+  }
+};
 
 /** Whose own key failed: the own-key offer, or the key to fix. */
 const ownKeyAction = (error: TurnFailure) =>
@@ -101,7 +137,7 @@ export const failureKind = (error: TurnFailure): FailureKind => {
   // Endings main decides: the inactivity watchdog, the agent going away.
   if (error.code === "timed_out") return "timed-out";
   if (error.code === "agent_exited") return "agent-exited";
-  if (error.code === EMPTY_REPLY_CODE) return "empty";
+  if (error.cause === EMPTY_CAUSE) return "empty";
   return "generic";
 };
 

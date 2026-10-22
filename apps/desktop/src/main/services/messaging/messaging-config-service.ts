@@ -67,21 +67,20 @@ export const readStoredMessageLog = (): unknown[] => {
 const outboxPath = (): string =>
   path.join(abacusBotHome(), "messaging-outbox.json");
 
-/** Chat messages that failed every immediate attempt, still to be retried. */
-export const readStoredOutbox = (): unknown[] => {
+/** Chat messages still owed (ChatOutbox): its file as it was last written. */
+export const readStoredOutbox = (): unknown => {
   try {
-    const parsed: unknown = JSON.parse(fs.readFileSync(outboxPath(), "utf8"));
-    return Array.isArray(parsed) ? parsed : [];
+    return JSON.parse(fs.readFileSync(outboxPath(), "utf8"));
   } catch {
-    return [];
+    return null;
   }
 };
 
-export const writeStoredOutbox = (entries: unknown[]): void => {
+export const writeStoredOutbox = (state: unknown): void => {
   const target = outboxPath();
   fs.mkdirSync(path.dirname(target), { recursive: true });
   const tmp = `${target}.${process.pid}.${Date.now()}.tmp`;
-  fs.writeFileSync(tmp, `${JSON.stringify(entries)}\n`, "utf8");
+  fs.writeFileSync(tmp, `${JSON.stringify(state)}\n`, "utf8");
   try {
     fs.chmodSync(tmp, 0o600);
   } catch {

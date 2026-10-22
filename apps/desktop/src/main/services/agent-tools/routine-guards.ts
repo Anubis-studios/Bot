@@ -95,21 +95,15 @@ export const shouldPauseAfter = (runs: RoutineRunItem[]): boolean =>
 const NETWORK_UNREACHABLE_CODE = "network_unreachable";
 
 /**
- * How an event ends a run: an error fails it (or files it `offline` when
- * the network never came back), idle completes it; anything else, nothing.
+ * How a closed turn (TurnLedger) files its run: a reply completes it, a
+ * network that never came back files it `offline`, anything else fails it.
  */
-export const runOutcomeOf = (event: {
-  type: string;
-  status?: string;
+export const runOutcomeOf = (ending: {
+  kind: string;
   error?: { code?: string };
-}): Exclude<RoutineRunOutcome, "running"> | null => {
-  if (event.type === "error")
-    return event.error?.code === NETWORK_UNREACHABLE_CODE
-      ? "offline"
-      : "failed";
-  return event.type === "status_changed" && event.status === "idle"
-    ? "completed"
-    : null;
+}): Exclude<RoutineRunOutcome, "running"> => {
+  if (ending.kind === "reply") return "completed";
+  return ending.error?.code === NETWORK_UNREACHABLE_CODE ? "offline" : "failed";
 };
 
 /**

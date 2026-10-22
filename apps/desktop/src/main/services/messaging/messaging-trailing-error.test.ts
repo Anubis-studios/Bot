@@ -25,6 +25,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { channelLocale, channelWords } from "./channel-words";
 import {
+  chatFailureOf,
   chatReplyForFailure,
   FAILURE_REPLY_WINDOW_MS,
   type ChannelOffer,
@@ -75,6 +76,7 @@ vi.mock("@abacus-ai/agent/user-language", () => ({
 }));
 
 const { MessagingGatewayService } = await import("./messaging-gateway-service");
+const { gatewayTurns } = await import("./messaging-turns.test-support");
 
 const UPGRADE_URL = "https://apps.example.test/u/1";
 const BOT_UPGRADE_URL =
@@ -203,6 +205,7 @@ const harness = ({
   const sessions = new Map<string, string>();
   let created = 0;
 
+  const turns = gatewayTurns(() => gateway);
   const gateway = new MessagingGatewayService({
     resolveWorkspaceId: () => "ws",
     createAgentSession: () => {
@@ -211,7 +214,7 @@ const harness = ({
     },
     updateSessionLabel: () => {},
     startSession: async () => ({ success: true }) as never,
-    sendMessage: () => {},
+    sendMessage: (_w: string, s: string) => turns.sent(s),
     emitUserMessage: () => {},
     emitChanged: () => {},
     now: () => clock.now,
@@ -251,7 +254,7 @@ const harness = ({
   const emit = (chatId: string, event: Record<string, unknown>): void => {
     const session = sessions.get(chatId);
     if (session == null) throw new Error(`no turn in ${chatId}`);
-    gateway.handleAgentEvent(session, { type: "event", event } as never);
+    turns.emit(session, event);
   };
 
   const chat = (chatId: string, userId: string, userName: string | null) => ({
@@ -270,14 +273,22 @@ const harness = ({
     say: (content: string) => emit(chatId, { type: "text_delta", content }),
     idle: () =>
       emit(chatId, { type: "status_changed", status: AgentStatus.Idle }),
-    fail: (error: Record<string, unknown>) =>
-      emit(chatId, { type: "error", error }),
+    /** A failed turn as the agent ends one: the error, then its close. */
+    fail: (error: Record<string, unknown>) => {
+      emit(chatId, { type: "error", error });
+      emit(chatId, {
+        type: "turn_complete",
+        outcome: { kind: "failed", cause: error.cause ?? error.code },
+      });
+      emit(chatId, { type: "status_changed", status: AgentStatus.Idle });
+    },
     busy: () => internals.routes.get(`discord:${chatId}`)!.busy,
   });
 
   const main = chat("C1", "U1", "Ana");
   return {
     gateway,
+    turns,
     clock,
     sessionOf: (chatId: string) => sessions.get(chatId)!,
     log,
@@ -761,8 +772,11 @@ describe("a turn that ends without a word", () => {
 });
 
 describe("a turn the app ended itself", () => {
-  const close = (h: ReturnType<typeof harness>, kind: string) =>
-    h.gateway.noteTurnClosed({ sessionId: h.sessionOf("C1"), kind });
+  /** Main ends the turn (the watchdog, the agent's exit, a Stop) in the ledger. */
+  const close = (
+    h: ReturnType<typeof harness>,
+    kind: "timed_out" | "agent_exited" | "stopped"
+  ) => h.turns.ledger.end(h.sessionOf("C1"), kind);
 
   it("the watchdog's timeout reaches the chat and frees it", async () => {
     const h = harness({ self: true });
@@ -1128,5 +1142,57 @@ describe("the chat app's own language", () => {
     expect(words.t("outcome.channel.generic")).not.toBe(
       ENGLISH.t("outcome.channel.generic")
     );
+  });
+});
+
+describe("what a closed turn owes its chat", () => {
+  it("nothing for a reply that reached it, or a Stop", () => {
+    expect(chatFailureOf({ kind: "reply" }, true)).toBeNull();
+    expect(chatFailureOf({ kind: "stopped" }, false)).toBeNull();
+  });
+
+  it("the empty line for a turn that reached it with nothing", () => {
+    expect(chatFailureOf({ kind: "reply" }, false)).toEqual({ cause: "empty" });
+    expect(chatFailureOf({ kind: "empty" }, false)).toEqual({ cause: "empty" });
+  });
+
+  it("no empty line once the agent's own send has answered the chat", () => {
+    expect(chatFailureOf({ kind: "empty" }, true)).toBeNull();
+    expect(
+      chatFailureOf(
+        { kind: "failed", cause: "empty", error: { cause: "empty" } },
+        true
+      )
+    ).toBeNull();
+  });
+
+  it("the reported error's code, cause and actions for a failure", () => {
+    expect(
+      chatFailureOf(
+        {
+          kind: "failed",
+          cause: "credits_exhausted",
+          error: {
+            code: "turn_failed",
+            cause: "credits_exhausted",
+            actions: [{ type: "upgrade-abacus" }],
+          },
+        },
+        true
+      )
+    ).toEqual({
+      code: "turn_failed",
+      cause: "credits_exhausted",
+      actions: [{ type: "upgrade-abacus" }],
+    });
+  });
+
+  it("main's own endings by their kind", () => {
+    expect(chatFailureOf({ kind: "timed_out" }, false)).toEqual({
+      code: "timed_out",
+    });
+    expect(chatFailureOf({ kind: "agent_exited" }, true)).toEqual({
+      code: "agent_exited",
+    });
   });
 });

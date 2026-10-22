@@ -26,6 +26,7 @@ vi.mock("./messaging-config-service", async (importOriginal) => {
 });
 
 const { MessagingGatewayService } = await import("./messaging-gateway-service");
+const { gatewayTurns } = await import("./messaging-turns.test-support");
 
 type Event =
   | { type: "text_delta"; content: string; messageId?: string }
@@ -43,11 +44,11 @@ const replyAfter = (events: Event[]): string[] => {
     emitChanged: () => {},
   } as never);
 
+  const turns = gatewayTurns(() => service);
   const sent: string[] = [];
   const internals = service as unknown as {
     routesBySession: Map<string, unknown>;
     routes: Map<string, unknown>;
-    handleAgentEvent: (sessionId: string, payload: unknown) => void;
     safeSend: (
       platform: string,
       chatId: string,
@@ -77,8 +78,8 @@ const replyAfter = (events: Event[]): string[] => {
   internals.routesBySession.set("s1", route);
   internals.routes.set("whatsapp:Ma", route);
 
-  for (const event of events)
-    internals.handleAgentEvent("s1", { type: "event", event });
+  turns.sent("s1");
+  for (const event of events) turns.emit("s1", event);
   return sent;
 };
 

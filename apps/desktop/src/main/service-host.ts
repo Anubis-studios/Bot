@@ -14,11 +14,7 @@ import {
   connectorById,
   connectorForService,
 } from "@abacus-ai/connectors/registry";
-import {
-  AgentStatus,
-  type AgentMode,
-  type DesktopEvent,
-} from "@abacus-ai/contract/agent-types";
+import type { AgentMode, DesktopEvent } from "@abacus-ai/contract/agent-types";
 import type {
   BotChangeNotice,
   Bot,
@@ -485,7 +481,7 @@ import { type StepEvent, StepEvents } from "./services/session/step-events";
 import { ThreadStore } from "./services/session/thread-store";
 import { TranscriptService } from "./services/session/transcript-service";
 import { TurnAbandoner } from "./services/session/turn-abandoner";
-import { TurnLedger } from "./services/session/turn-ledger";
+import { TurnLedger, type TurnRecord } from "./services/session/turn-ledger";
 import { VaultClient } from "./services/vault/vault-client";
 import { Vault } from "./services/vault/vault-tools";
 import { WhisperModelService } from "./services/voice/whisper-model-service";
@@ -540,9 +536,6 @@ const ROUTINE_FIRES_KEPT = 200;
 /** The longest an unattended run's agent may take to start. */
 const UNATTENDED_STARTUP_TIMEOUT_MS = 90_000;
 
-/** How long a finished turn waits for an error reported just after its idle. */
-const UNATTENDED_IDLE_GRACE_MS = 1_500;
-
 /** The folder every hosted routine run works in: one, kept out of the pickers. */
 const HOSTED_RUNS_FOLDER = "hosted-runs";
 
@@ -581,22 +574,12 @@ export class ServiceHost {
           });
     // A turn main ended itself never sends its idle: the chat app and the
     // routine record hear about it from the ledger, and the upload gets it.
+    // Every turn's one ending (TurnLedger) is what each sink acts on: the chat
+    // app it answers, the routine run it is, a caller waiting on its text.
     this.turnLedger.onClose((record) => {
       this.messagingGatewayService.noteTurnClosed(record);
-      if (
-        (record.kind === "timed_out" || record.kind === "agent_exited") &&
-        this.agentSessionManagerService.isRoutineSession(record.sessionId)
-      )
-        this.settleRoutineRun(record.sessionId, {
-          type: "event",
-          event: {
-            type: "error",
-            error: {
-              message: `The run ended: ${record.kind}`,
-              code: record.kind,
-            },
-          },
-        });
+      this.settleRoutineRun(record);
+      this.settleTurnWaiter(record);
       this.debugSyncService.enqueue(record.sessionId);
     });
     // A turn in any session (a chat, a bot, a routine with nobody watching)
@@ -2335,7 +2318,7 @@ export class ServiceHost {
         this.messagingGatewayService.handleAgentEvent(sessionId, payload);
         for (const listener of this.agentEventListeners)
           listener(sessionId, payload);
-        this.settleRoutineRun(sessionId, payload);
+        this.noteRoutineEvent(sessionId, payload);
         this.feedTurnWaiter(sessionId, payload);
       } else if (payload.type === "permission_needed") {
         // A post-Stop permission request must not reach handleDesktopEvent:
@@ -3781,8 +3764,10 @@ export class ServiceHost {
       (result) => result.outcome !== "undeliverable"
     );
 
+    // No agent could take it: the turn it opened ends as the agent's going
+    // away, so a chat it came from hears so instead of waiting on nothing.
     if (outcome === "undeliverable") {
-      this.sessionTurnStateService.markStopped(
+      this.sessionTurnStateService.markClosed(
         request.workspaceId,
         request.sessionId
       );
@@ -4773,12 +4758,8 @@ export class ServiceHost {
     Set<Promise<RoutineRunStart>>
   >();
 
-  /**
-   * A run's end off its event stream: an error fails it, idle completes it.
-   * The agent reports a failed turn after its idle, so a run filed as
-   * completed can still fail; it is filed again when it does.
-   */
-  private settleRoutineRun(sessionId: string, payload: DesktopEvent): void {
+  /** What a routine run says as it goes, and whether it is waiting out the network. */
+  private noteRoutineEvent(sessionId: string, payload: DesktopEvent): void {
     if (payload.type !== "event") return;
     if (!this.agentSessionManagerService.isRoutineSession(sessionId)) return;
     const event = payload.event;
@@ -4787,16 +4768,18 @@ export class ServiceHost {
       event.type === "retry" && event.waitingForConnection === true,
       Date.now()
     );
-    if (event.type === "text_delta") {
-      const text = this.routineRunText.get(sessionId) ?? [];
-      text.push(event.content);
-      this.routineRunText.set(sessionId, text);
-      return;
-    }
-    const outcome = runOutcomeOf(event);
-    if (outcome == null) return;
+    if (event.type !== "text_delta") return;
+    const text = this.routineRunText.get(sessionId) ?? [];
+    text.push(event.content);
+    this.routineRunText.set(sessionId, text);
+  }
+
+  /** A routine run's turn closed (TurnLedger): the run is filed with how it ended. */
+  private settleRoutineRun(record: TurnRecord): void {
+    const { sessionId } = record;
+    if (!this.agentSessionManagerService.isRoutineSession(sessionId)) return;
+    const outcome = runOutcomeOf(record);
     this.routineNetworkWaits.forget(sessionId);
-    // An error's trailing idle must not overwrite the failure.
     if (!this.agentSessionManagerService.setRunOutcome(sessionId, outcome))
       return;
     const session = this.agentSessionManagerService.get(sessionId);
@@ -4807,14 +4790,15 @@ export class ServiceHost {
     recordRoutineRun(this.routineHome(finishedJob), {
       sessionId,
       startedAt: session.createdAt,
-      endedAt: new Date().toISOString(),
+      endedAt: new Date(record.endedAt).toISOString(),
       outcome,
       reply: text.join("").trim(),
     });
-    // Offline is not the routine's failure: no pause, no streak.
-    if (outcome !== "failed" || event.type !== "error") return;
+    // Offline is not the routine's failure, and a Stop is the user's: no
+    // pause, no streak.
+    if (outcome !== "failed" || record.kind === "stopped") return;
     // No credits fails every fire the same way until the user tops up.
-    if (ranOutOfAbacusCredits(event.error))
+    if (record.error != null && ranOutOfAbacusCredits(record.error))
       this.pauseRoutine(session.routineId, "paused: out of Abacus.AI credits");
     else this.pauseIfFailingRepeatedly(session.routineId);
   }
@@ -4873,7 +4857,6 @@ export class ServiceHost {
     // Only what follows the run's own message counts: startup reports its
     // own statuses, an idle among them.
     let sent = false;
-    let turnStarted = false;
     let settle!: (result: {
       outcome: "completed" | "failed";
       creditsOut?: boolean;
@@ -4884,39 +4867,30 @@ export class ServiceHost {
     }>((resolve) => {
       settle = resolve;
     });
-    // A failed turn can report its error just after its idle: the idle
-    // settles only once that has had a moment to arrive.
-    let idleTimer: NodeJS.Timeout | undefined;
     const stopListening = this.onAgentEvent((sessionId, payload) => {
       if (sessionId !== session.id || payload.type !== "event" || !sent) return;
       const event = payload.event;
-      if (event.type === "text_delta") {
-        turnStarted = true;
-        const id = event.messageId ?? "message";
-        lastMessage = id;
-        texts.set(id, (texts.get(id) ?? "") + event.content);
-      } else if (event.type === "error") {
-        clearTimeout(idleTimer);
-        settle({
-          outcome: "failed",
-          creditsOut: ranOutOfAbacusCredits(event.error),
-        });
-      } else if (event.type === "status_changed") {
-        if (event.status !== AgentStatus.Idle) {
-          turnStarted = true;
-          clearTimeout(idleTimer);
-        } else if (turnStarted) {
-          clearTimeout(idleTimer);
-          idleTimer = setTimeout(
-            () => settle({ outcome: "completed" }),
-            UNATTENDED_IDLE_GRACE_MS
-          );
-        }
-      }
+      if (event.type !== "text_delta") return;
+      const id = event.messageId ?? "message";
+      lastMessage = id;
+      texts.set(id, (texts.get(id) ?? "") + event.content);
+    });
+    // The run's turn closes once (TurnLedger), with how it ended.
+    const stopWaiting = this.turnLedger.onClose((record) => {
+      if (record.sessionId !== session.id) return;
+      settle(
+        record.kind === "reply"
+          ? { outcome: "completed" }
+          : {
+              outcome: "failed",
+              creditsOut:
+                record.error != null && ranOutOfAbacusCredits(record.error),
+            }
+      );
     });
     const stop = async (): Promise<void> => {
-      clearTimeout(idleTimer);
       stopListening();
+      stopWaiting();
       await this.agentManagerService
         .stopSessionAndWait(target, session.id)
         .catch(() => undefined);
@@ -5059,19 +5033,20 @@ export class ServiceHost {
   private feedTurnWaiter(sessionId: string, payload: DesktopEvent): void {
     const waiter = this.turnWaiters.get(sessionId);
     if (waiter == null || payload.type !== "event") return;
-    const event = payload.event;
-    if (event.type === "text_delta") {
-      waiter.text.push(event.content);
-    } else if (event.type === "error") {
-      this.turnWaiters.delete(sessionId);
-      waiter.reject(new Error(event.error?.message ?? "The turn failed."));
-    } else if (
-      event.type === "status_changed" &&
-      event.status === AgentStatus.Idle
-    ) {
-      this.turnWaiters.delete(sessionId);
-      waiter.resolve(waiter.text.join("").trim());
-    }
+    if (payload.event.type === "text_delta")
+      waiter.text.push(payload.event.content);
+  }
+
+  /** The waited-on turn closed: its text if it answered, else why not. */
+  private settleTurnWaiter(record: TurnRecord): void {
+    const waiter = this.turnWaiters.get(record.sessionId);
+    if (waiter == null) return;
+    this.turnWaiters.delete(record.sessionId);
+    if (record.kind === "reply") waiter.resolve(waiter.text.join("").trim());
+    else
+      waiter.reject(
+        new Error(record.error?.message ?? "The editor did not answer.")
+      );
   }
 
   private waitForTurn(sessionId: string, timeoutMs: number): Promise<string> {
@@ -5155,7 +5130,8 @@ export class ServiceHost {
     ].join("\n");
 
     const answer = this.waitForTurn(editor.id, 90_000);
-    const delivered = await this.sendAgentMessage({
+    // A message no agent took closes its turn too: `answer` then rejects.
+    await this.sendAgentMessage({
       workspaceId,
       sessionId: editor.id,
       message: prompt,
@@ -5166,10 +5142,6 @@ export class ServiceHost {
         },
       },
     });
-    if (!delivered) {
-      this.turnWaiters.delete(editor.id);
-      throw new Error("The editor did not take the message.");
-    }
     const reply = await answer;
     this.emitEvent({
       type: "cronjobs-updated",

@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import {
+  type AgentEvent,
   AgentStatus,
   type DesktopEvent,
   type TurnOutcome,
@@ -13,12 +14,17 @@ import {
  */
 export type TurnEnd = TurnOutcome["kind"] | "timed_out" | "agent_exited";
 
+/** The error a turn reported, as its event carried it. */
+export type TurnError = Extract<AgentEvent, { type: "error" }>["error"];
+
 export interface TurnRecord {
   turnId: string;
   sessionId: string;
   kind: TurnEnd;
   /** Why: the error's cause for `failed`, what was running for `timed_out`. */
   cause?: string;
+  /** For `failed`: the error the turn reported, actions and all. */
+  error?: TurnError;
   startedAt: number;
   endedAt: number;
 }
@@ -28,7 +34,7 @@ interface OpenTurn {
   startedAt: number;
   /** Assistant text was streamed: what an outcome-less agent's turn is judged by. */
   spoke: boolean;
-  failure: string | null;
+  error: TurnError | null;
   outcome: TurnOutcome | null;
 }
 
@@ -72,7 +78,7 @@ export class TurnLedger {
       turnId: `${startedAt.toString(36)}-${this.sequence.toString(36)}`,
       startedAt,
       spoke: false,
-      failure: null,
+      error: null,
       outcome: null,
     });
   }
@@ -91,7 +97,7 @@ export class TurnLedger {
         if (event.content.trim().length > 0) turn.spoke = true;
         return;
       case "error":
-        turn.failure = event.error?.cause ?? event.error?.code ?? "error";
+        turn.error = event.error ?? {};
         return;
       case "turn_complete":
         if (event.outcome != null) turn.outcome = event.outcome;
@@ -136,7 +142,11 @@ export class TurnLedger {
         kind: turn.outcome.kind,
         ...(turn.outcome.cause != null ? { cause: turn.outcome.cause } : {}),
       };
-    if (turn.failure != null) return { kind: "failed", cause: turn.failure };
+    if (turn.error != null)
+      return {
+        kind: "failed",
+        cause: turn.error.cause ?? turn.error.code ?? "error",
+      };
     return { kind: turn.spoke ? "reply" : "empty" };
   }
 
@@ -152,6 +162,9 @@ export class TurnLedger {
       sessionId,
       kind: ending.kind,
       ...(ending.cause != null ? { cause: ending.cause } : {}),
+      ...(ending.kind === "failed" && turn.error != null
+        ? { error: turn.error }
+        : {}),
       startedAt: turn.startedAt,
       endedAt: this.now(),
     };
@@ -176,7 +189,8 @@ export class TurnLedger {
     return path.join(dir, `${sessionId}.json`);
   }
 
-  private keep(record: TurnRecord): void {
+  /** Kept without the error itself: the kind and cause are what is uploaded. */
+  private keep({ error: _error, ...record }: TurnRecord): void {
     const file = this.fileOf(record.sessionId);
     if (file == null) return;
     try {

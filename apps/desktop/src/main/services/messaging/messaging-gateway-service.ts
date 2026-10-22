@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { modelPath } from "@abacus-ai/agent/model-path";
 import { readUserLanguage } from "@abacus-ai/agent/user-language";
 import type { UserTextTags } from "@abacus-ai/contract/agent-types";
@@ -36,13 +38,14 @@ import {
   fetchUpgradeUrl,
 } from "../providers/abacus-upgrade";
 import { environmentNoticeService } from "../providers/environment-notice-service";
+import type { TurnRecord } from "../session/turn-ledger";
 import { AbacusChannelsConnector } from "./abacus-channels-connector";
 import { channelLocale, channelWords } from "./channel-words";
 import {
   chatLineForCreditThreshold,
+  chatFailureOf,
   chatReplyForFailure,
   contactFailureNotice,
-  EMPTY_REPLY_CODE,
   FailureReplyThrottle,
   failureKind,
   wantsUpgradeUrl,
@@ -74,6 +77,11 @@ import {
   writeStoredMessageLog,
   writeStoredOutbox,
 } from "./messaging-config-service";
+import {
+  ChatOutbox,
+  OUTBOX_RETRY_MS,
+  type OwedMessage,
+} from "./messaging-outbox";
 import type { SenderCandidate } from "./sender-resolution";
 import { TelegramWebConnector } from "./telegram-web-connector";
 import { WhatsAppWebConnector } from "./whatsapp-web-connector";
@@ -139,13 +147,6 @@ const REPLY_REMINDER =
  * the cap the sender is told once rather than silently dropped.
  */
 const MAX_QUEUED_MESSAGES = 20;
-
-/**
- * How long a route may stay busy before an inbound message resets it. A turn
- * stopped from the desktop never delivers its idle event here, so without
- * this the route stays busy forever. The host forces idle after 10 minutes.
- */
-const BUSY_RESET_MS = 15 * 60 * 1000;
 
 /**
  * How long a platform may sit in `connecting` before it is called a failure.
@@ -329,27 +330,8 @@ const SYNC_WATCH_POLL_MS = 2_000;
 /** How long appendLog batches writes before the log touches disk. */
 const MESSAGE_LOG_SAVE_DELAY_MS = 1_000;
 
-/**
- * A message that failed every immediate attempt is kept on disk and tried
- * again after these waits (and whenever its platform connects), across a
- * restart too. Past the last, or a day old, the user is told it never went.
- */
-const OUTBOX_RETRY_MS = [5 * 60_000, 30 * 60_000];
-const OUTBOX_MAX_AGE_MS = 24 * 60 * 60_000;
 /** After a start, the connectors get this long to come up before a retry. */
 const OUTBOX_STARTUP_DELAY_MS = 60_000;
-
-type OutboxEntry = {
-  platform: MessagingPlatformId;
-  chatId: string;
-  text: string;
-  replyContext?: Record<string, string>;
-  /** Who it was for, for the notice if it never goes. */
-  userName: string | null;
-  firstFailedAt: number;
-  /** Later attempts made; the immediate ones are not counted. */
-  tries: number;
-};
 
 /** A conversation in flight: which session it owns and what it's waiting on. */
 type Route = {
@@ -406,12 +388,10 @@ type Route = {
   failureReply: Promise<void> | null;
   /**
    * This turn has reached the chat: a reply, the agent's own send, or its
-   * decision not to answer (NO_REPLY). A turn that ends without any of these,
-   * and without a failure line, has said nothing, and the chat hears why.
+   * decision not to answer (NO_REPLY). A turn that closes without any of
+   * these has said nothing, and the chat hears why (chatFailureOf).
    */
   delivered: boolean;
-  /** This turn's failure line is going or has gone; at most one per turn. */
-  failureSaid: boolean;
 };
 
 /** How long a login probe may take before the last known state is used. */
@@ -462,11 +442,14 @@ export class MessagingGatewayService {
   /** Everything seen and sent, oldest first, reloaded from the last run. */
   private readonly messageLog: ChatLogEntry[] =
     readStoredMessageLog() as ChatLogEntry[];
-  /** Messages still owed to a chat; see OUTBOX_RETRY_MS. */
-  private readonly outbox: OutboxEntry[] = (
-    readStoredOutbox() as OutboxEntry[]
-  ).filter((entry) => typeof entry?.chatId === "string");
-  private outboxTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Messages still owed to a chat (ChatOutbox), across restarts too. */
+  private readonly outbox = new ChatOutbox({
+    now: () => this.options.now?.() ?? Date.now(),
+    read: readStoredOutbox,
+    write: writeStoredOutbox,
+    send: (message) => this.sendOwed(message),
+    giveUp: (message) => this.tellUndelivered(message),
+  });
 
   /** Armed by appendLog; one write covers a burst of messages. */
   private logSaveTimer: NodeJS.Timeout | null = null;
@@ -493,7 +476,7 @@ export class MessagingGatewayService {
   constructor(private readonly options: GatewayOptions) {
     this.failureThrottle = new FailureReplyThrottle(options.now);
     // Owed from the last run: tried once the connectors have had a moment.
-    if (this.outbox.length > 0) this.scheduleOutbox(OUTBOX_STARTUP_DELAY_MS);
+    if (this.outbox.size > 0) this.outbox.schedule(OUTBOX_STARTUP_DELAY_MS);
   }
 
   /**
@@ -541,8 +524,7 @@ export class MessagingGatewayService {
   }
 
   async dispose(): Promise<void> {
-    if (this.outboxTimer != null) clearTimeout(this.outboxTimer);
-    this.outboxTimer = null;
+    this.outbox.dispose();
     for (const timer of this.releasedLogins.values()) clearTimeout(timer);
     this.releasedLogins.clear();
     if (this.logSaveTimer != null) {
@@ -762,8 +744,7 @@ export class MessagingGatewayService {
     // and what it still owes a chat goes now.
     if (state === "connected") {
       this.restartBackoff.delete(platformId);
-      if (this.outbox.some((entry) => entry.platform === platformId))
-        this.scheduleOutbox(0);
+      if (this.outbox.owes(platformId)) this.outbox.schedule(0);
     }
     // Every transition to the main log, so an export says what the card showed.
     console.log(
@@ -997,20 +978,6 @@ export class MessagingGatewayService {
     // two turns' output into one buffer.
     const active = this.routesBySession.get(route.sessionId);
 
-    // A stopped or crashed session never delivers its idle event here, so a
-    // route stuck busy past any plausible turn length is reset.
-    if (
-      active != null &&
-      active.busy &&
-      Date.now() - active.busySince > BUSY_RESET_MS
-    ) {
-      console.log(
-        `[messaging] ${active.platform}:${active.chatId} turn stuck busy, resetting`
-      );
-      active.busy = false;
-      active.buffer = "";
-    }
-
     // A turn someone started in the app is theirs there; a message steered
     // into it would carry its answer off to this chat.
     const appTurn =
@@ -1117,7 +1084,6 @@ export class MessagingGatewayService {
             : null,
         failureReply: null,
         delivered: false,
-        failureSaid: false,
       };
 
       if (existing != null) this.routesBySession.delete(existing.sessionId);
@@ -1216,7 +1182,6 @@ export class MessagingGatewayService {
       pendingIntro: null,
       failureReply: null,
       delivered: false,
-      failureSaid: false,
     };
 
     if (existing != null) {
@@ -1254,7 +1219,6 @@ export class MessagingGatewayService {
     // A fresh turn may fill the queue again, and deserves to say so again.
     route.queueFullNotified = false;
     route.delivered = false;
-    route.failureSaid = false;
     // Set at dispatch time, not arrival: the context must describe the message
     // this turn is answering, not one that queued behind it.
     route.replyContext = replyContext;
@@ -1365,46 +1329,15 @@ export class MessagingGatewayService {
       return;
     }
 
-    // `turn_complete` is not the end of a user-level turn (the CLI emits one
-    // per round of tool calls); the only authoritative terminators are
-    // `status_changed: idle` and `error`.
-    if (event.type === "error") {
-      const raw =
-        event.error?.message ??
-        event.error?.segmentData?.message ??
-        "The agent hit an error.";
-      // Some provider failures are reported after the turn's idle event.
-      // Forwarding one would send the remote user raw provider text about a
-      // turn that was already answered; the pane and the log still show it.
-      if (!route.busy) {
-        console.log(
-          `[messaging] ${route.platform}:${route.chatId} error after the turn ended: ${raw}`
-        );
-        return;
-      }
-
-      // What the agent produced goes as it is; what the chat hears about the
-      // failure is chatReplyForFailure's. The route stays busy until the
-      // trailing idle, and that idle waits on the line, so a queued message
-      // cannot race a turn winding down.
-      console.log(
-        `[messaging] ${route.platform}:${route.chatId} turn failed: ${raw}`
-      );
-      this.flushReply(route);
-      this.startFailureReply(route, {
-        code: event.error?.code,
-        cause: event.error?.cause,
-        actions: event.error?.actions ?? event.error?.segmentData?.actions,
-      });
-      return;
-    }
-
-    if (event.type === "status_changed" && event.status === AgentStatus.Idle) {
-      // Not this gateway's turn (one the user ran in the app): what waited
-      // on it starts now.
-      if (route.busy) this.finishTurn(route);
-      else this.startQueued(route);
-    }
+    // A turn ends only where the TurnLedger closes it (noteTurnClosed), never
+    // on an event read here. An idle with no turn open (a run the agent
+    // started on its own) only frees the session for what queued behind it.
+    if (
+      event.type === "status_changed" &&
+      event.status === AgentStatus.Idle &&
+      !route.busy
+    )
+      this.startQueued(route);
   }
 
   /**
@@ -1607,8 +1540,6 @@ export class MessagingGatewayService {
 
   /** Word and send the turn's failure line; the turn ends once it has gone. */
   private startFailureReply(route: Route, failure: TurnFailure): void {
-    if (route.failureSaid) return;
-    route.failureSaid = true;
     route.failureReply = this.replyToFailure(route, failure)
       .catch((error: unknown) => {
         console.error(
@@ -1622,33 +1553,42 @@ export class MessagingGatewayService {
   }
 
   /**
-   * A turn main ended itself: the inactivity watchdog, the agent process
-   * going away, or a Stop in the app. The agent's idle never reaches the
-   * route then, which used to hold the chat busy, and silent, for fifteen
-   * minutes. The chat hears why (not for a Stop, which the user chose), and
-   * the route is freed for what queued behind it.
+   * The session's turn closed: the one place a chat's turn ends. Every turn
+   * the gateway dispatches is closed exactly once by the TurnLedger (the
+   * agent's outcome, a Stop, the watchdog, the agent going away), so the
+   * route is freed whatever ended it and the chat hears one ending: the
+   * reply, or the failure line, never silence. A Stop ends it quietly.
    */
-  noteTurnClosed(record: { sessionId: string; kind: string }): void {
+  noteTurnClosed(record: TurnRecord): void {
     const route = this.routesBySession.get(record.sessionId);
-    if (route == null || !route.busy) return;
+    if (route == null) return;
+    // Not this gateway's turn (one the user ran in the app): what waited on
+    // it starts now.
+    if (!route.busy) {
+      this.startQueued(route);
+      return;
+    }
     if (record.kind === "stopped") {
       // What a stopped turn had not said yet stays unsaid.
       route.buffer = "";
       route.taggedReply = null;
-      route.delivered = true;
       this.finishTurn(route);
       return;
     }
-    if (record.kind !== "timed_out" && record.kind !== "agent_exited") return;
-    console.log(
-      `[messaging] ${route.platform}:${route.chatId} turn ended by the app: ${record.kind}`
-    );
     this.flushReply(route);
-    this.startFailureReply(route, { code: record.kind });
+    const failure = chatFailureOf(record, route.delivered);
+    if (failure != null) {
+      console.log(
+        `[messaging] ${route.platform}:${route.chatId} turn ended ${record.kind}` +
+          (record.cause != null ? ` (${record.cause})` : "") +
+          (record.error?.message != null ? `: ${record.error.message}` : "")
+      );
+      this.startFailureReply(route, failure);
+    }
     this.finishTurn(route);
   }
 
-  /** Flush the buffered reply, free the route, start the next queued turn. */
+  /** Free the route once any failure line has gone; start what queued. */
   private finishTurn(route: Route): void {
     if (!route.busy) return;
 
@@ -1658,17 +1598,6 @@ export class MessagingGatewayService {
       return;
     }
 
-    this.flushReply(route);
-    // Nothing reached the chat and nothing said why: the turn still ends on
-    // a line, never on silence.
-    if (!route.delivered && !route.failureSaid) {
-      console.log(
-        `[messaging] ${route.platform}:${route.chatId} turn ended with no reply`
-      );
-      this.startFailureReply(route, { code: EMPTY_REPLY_CODE });
-      void route.failureReply?.then(() => this.finishTurn(route));
-      return;
-    }
     route.busy = false;
     this.chatTurnEndedAt.set(
       route.sessionId,
@@ -1785,15 +1714,18 @@ export class MessagingGatewayService {
     console.error(
       `[messaging] ${platformId} send to ${chatId} failed after ${delays.length} attempts, kept to retry`
     );
-    this.park({
-      platform: platformId,
-      chatId,
-      text,
-      ...(replyContext != null ? { replyContext } : {}),
-      userName: this.routes.get(`${platformId}:${chatId}`)?.userName ?? null,
-      firstFailedAt: this.options.now?.() ?? Date.now(),
-      tries: 0,
-    });
+    this.outbox.owe(
+      {
+        id: randomUUID(),
+        platform: platformId,
+        chatId,
+        text,
+        ...(replyContext != null ? { replyContext } : {}),
+        userName: this.routes.get(`${platformId}:${chatId}`)?.userName ?? null,
+        firstFailedAt: this.options.now?.() ?? Date.now(),
+      },
+      OUTBOX_RETRY_MS[0] ?? 0
+    );
     this.appendLog({
       platform: platformId,
       chatId,
@@ -1813,84 +1745,29 @@ export class MessagingGatewayService {
     if (route?.busy === true) route.delivered = true;
   }
 
-  /** Keep a message that could not go, and try it again later. */
-  private park(entry: OutboxEntry): void {
-    this.outbox.push(entry);
-    this.saveOutbox();
-    this.scheduleOutbox(OUTBOX_RETRY_MS[0] ?? 0);
-  }
-
-  private scheduleOutbox(delayMs: number): void {
-    if (this.outboxTimer != null) clearTimeout(this.outboxTimer);
-    this.outboxTimer = setTimeout(() => {
-      this.outboxTimer = null;
-      void this.flushOutbox();
-    }, delayMs);
-    this.outboxTimer.unref?.();
-  }
-
-  /** One more attempt at everything owed; what still fails waits longer. */
-  private async flushOutbox(): Promise<void> {
-    const now = (): number => this.options.now?.() ?? Date.now();
-    // A copy: entries that go, or are given up on, leave the outbox as it runs.
-    for (const entry of this.outbox.slice()) {
-      const connector = this.connectors.get(entry.platform);
-      let sent = false;
-      if (connector != null) {
-        try {
-          await connector.sendText(
-            entry.chatId,
-            entry.text,
-            entry.replyContext
-          );
-          sent = true;
-        } catch (error) {
-          console.error(
-            `[messaging] ${entry.platform} retry of an undelivered message failed:`,
-            error
-          );
-        }
-      }
-      if (sent) {
-        this.dropFromOutbox(entry);
-        this.appendLog({
-          platform: entry.platform,
-          chatId: entry.chatId,
-          userId: "me",
-          userName: null,
-          text: entry.text,
-          direction: "out",
-          at: new Date(now()).toISOString(),
-        });
-        continue;
-      }
-      entry.tries += 1;
-      if (
-        entry.tries >= OUTBOX_RETRY_MS.length ||
-        now() - entry.firstFailedAt > OUTBOX_MAX_AGE_MS
-      ) {
-        this.dropFromOutbox(entry);
-        await this.tellUndelivered(entry);
-      }
-    }
-    this.saveOutbox();
-    const next = Math.min(
-      ...this.outbox.map(
-        (entry) =>
-          OUTBOX_RETRY_MS[Math.min(entry.tries, OUTBOX_RETRY_MS.length - 1)] ??
-          0
-      )
+  /** One later attempt at a message still owed; true once it went. */
+  private async sendOwed(message: OwedMessage): Promise<boolean> {
+    const connector = this.connectors.get(message.platform);
+    if (connector == null) return false;
+    await connector.sendText(
+      message.chatId,
+      message.text,
+      message.replyContext
     );
-    if (this.outbox.length > 0) this.scheduleOutbox(next);
-  }
-
-  private dropFromOutbox(entry: OutboxEntry): void {
-    const at = this.outbox.indexOf(entry);
-    if (at >= 0) this.outbox.splice(at, 1);
+    this.appendLog({
+      platform: message.platform,
+      chatId: message.chatId,
+      userId: "me",
+      userName: null,
+      text: message.text,
+      direction: "out",
+      at: new Date(this.options.now?.() ?? Date.now()).toISOString(),
+    });
+    return true;
   }
 
   /** The user's own chat hears which message never went, unless it was theirs. */
-  private async tellUndelivered(entry: OutboxEntry): Promise<void> {
+  private async tellUndelivered(entry: OwedMessage): Promise<void> {
     console.error(
       `[messaging] ${entry.platform} message to ${entry.chatId} given up on`
     );
@@ -1911,14 +1788,6 @@ export class MessagingGatewayService {
         ? entry.userName.trim()
         : words.t("outcome.channel.someone");
     this.deliverToSelf(own, words.t("outcome.channel.undelivered", { name }));
-  }
-
-  private saveOutbox(): void {
-    try {
-      writeStoredOutbox(this.outbox);
-    } catch (error) {
-      console.error("[messaging] could not persist the outbox:", error);
-    }
   }
 
   // ---------------------------------------------------------------------------
