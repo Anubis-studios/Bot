@@ -1,10 +1,34 @@
 import type { UserTextTags } from "./protocol.js";
 
-const SYSTEM_REMINDER = /<system_reminder>[\s\S]*?<\/system_reminder>/g;
+const REMINDER_OPEN = "<system_reminder>";
+const REMINDER_CLOSE = "</system_reminder>";
 const ROUTINE_FIRE = /^\[routine\] "/;
 
-export const hasSystemReminder = (text: string): boolean =>
-  text.search(SYSTEM_REMINDER) >= 0;
+/**
+ * Removes each `<system_reminder>...</system_reminder>` block (shortest match,
+ * left to right). A plain scan rather than a lazy regex, which goes quadratic
+ * on many unclosed openers.
+ */
+const stripSystemReminders = (text: string): string => {
+  let out = "";
+  let pos = 0;
+  while (pos < text.length) {
+    const open = text.indexOf(REMINDER_OPEN, pos);
+    if (open < 0) break;
+    const close = text.indexOf(REMINDER_CLOSE, open + REMINDER_OPEN.length);
+    if (close < 0) break;
+    out += text.slice(pos, open);
+    pos = close + REMINDER_CLOSE.length;
+  }
+  return out + text.slice(pos);
+};
+
+export const hasSystemReminder = (text: string): boolean => {
+  const open = text.indexOf(REMINDER_OPEN);
+  return (
+    open >= 0 && text.indexOf(REMINDER_CLOSE, open + REMINDER_OPEN.length) >= 0
+  );
+};
 
 /** Old transcripts lack tags. Only the known, anchored envelopes are recognised. */
 export const legacyOperator = (text: string): UserTextTags["operator"] => {
@@ -52,11 +76,11 @@ export const visibleUserText = (text: string, tags?: UserTextTags): string => {
     boundary != null && Number.isInteger(boundary) && boundary >= 0
       ? text.slice(boundary)
       : text;
-  const withoutReminders = human.replaceAll(SYSTEM_REMINDER, "").trim();
+  const withoutReminders = stripSystemReminders(human).trim();
   if (ROUTINE_FIRE.test(withoutReminders)) return "";
   return withoutReminders;
 };
 
 /** A routine firing: the message is hidden entirely in the old UI. */
 export const isRoutineFire = (text: string): boolean =>
-  ROUTINE_FIRE.test(text.replaceAll(SYSTEM_REMINDER, "").trim());
+  ROUTINE_FIRE.test(stripSystemReminders(text).trim());

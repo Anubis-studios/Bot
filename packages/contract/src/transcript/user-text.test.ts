@@ -2,7 +2,13 @@ import * as v from "valibot";
 import { describe, expect, it } from "vitest";
 
 import { MigratedThreadFileV2Schema } from "./thread-file";
-import { isHiddenUserText, legacyOperator, visibleUserText } from "./user-text";
+import {
+  hasSystemReminder,
+  isHiddenUserText,
+  isRoutineFire,
+  legacyOperator,
+  visibleUserText,
+} from "./user-text";
 import { v1ToUiMessages } from "./v1-to-ui-messages";
 
 describe("operator user text", () => {
@@ -94,6 +100,41 @@ describe("operator user text", () => {
     expect(v.safeParse(MigratedThreadFileV2Schema, file(1.5)).success).toBe(
       false
     );
+  });
+});
+
+describe("system reminders", () => {
+  const open = "<system_reminder>";
+  const close = "</system_reminder>";
+  it.each([
+    ["", false, ""],
+    ["hello", false, "hello"],
+    [`hi ${open}x${close} there`, true, "hi  there"],
+    [`${open}${close}`, true, ""],
+    [`a${open}1${close}b${open}2${close}c`, true, "abc"],
+    [`a${open}1${open}2${close}b${close}c`, true, `ab${close}c`],
+    [`${open}multi\nline\t😀${close}\n\t é `, true, "é"],
+    [`keep ${open}unclosed`, false, `keep ${open}unclosed`],
+    [`${close} before ${open}`, false, `${close} before ${open}`],
+    [`x${open}1${close}y${open}2`, true, `xy${open}2`],
+    [open + close.slice(0, -1), false, open + close.slice(0, -1)],
+    [" \n\t \u00a0", false, ""],
+  ])("strips %j", (text, has, visible) => {
+    expect(hasSystemReminder(text)).toBe(has);
+    expect(visibleUserText(text)).toBe(visible);
+  });
+  it("sees a routine firing behind a reminder", () => {
+    expect(isRoutineFire(`${open}x${close} [routine] "Digest"`)).toBe(true);
+    expect(isRoutineFire(`${open}x [routine] "Digest"`)).toBe(false);
+  });
+  it("stays linear on many unclosed openers", () => {
+    const text = open.repeat(100_000);
+    const start = performance.now();
+    expect(hasSystemReminder(text)).toBe(false);
+    expect(isRoutineFire(text)).toBe(false);
+    expect(visibleUserText(text)).toBe(text);
+    expect(visibleUserText(`${text}${close}`)).toBe("");
+    expect(performance.now() - start).toBeLessThan(1000);
   });
 });
 
