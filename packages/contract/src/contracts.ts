@@ -1562,6 +1562,19 @@ export interface AbacusAccountInfo {
   focus?: AbacusAccountFocus | null;
 }
 
+/** Why the platform's payment gate refuses a signed-in account: the 402's `reason`. */
+export const ABACUS_PAYMENT_REASONS = [
+  "unconfirmed",
+  "trial_ended",
+  "lapsed",
+] as const;
+export type AbacusPaymentReason = (typeof ABACUS_PAYMENT_REASONS)[number];
+
+/** A signed-in account the platform will not serve until it pays; null reason from a server that sends none. */
+export interface AbacusPaymentRequired {
+  reason: AbacusPaymentReason | null;
+}
+
 export const ABACUS_ACCOUNT_FOCI = [
   "sessions",
   "bots",

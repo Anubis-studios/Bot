@@ -4077,6 +4077,22 @@
     "waitingTitle": "Ödemeyi tarayıcında tamamla",
     "waitingToSend": "Gönderilmeyi bekliyor: “{{text}}”"
   },
+  "paymentRequired": {
+    "unconfirmedTitle": "AbacusAI Bot'u kullanmaya devam etmek için bir plan seçin",
+    "unconfirmedBody": "Oturum açtınız, ancak AbacusAI Bot'un çalışması için hesabınızın bir plana ihtiyacı var.",
+    "trialEndedTitle": "Ücretsiz denemeniz sona erdi",
+    "trialEndedBody": "AbacusAI Bot'u bu hesapla kullanmaya devam etmek için yükseltin.",
+    "lapsedTitle": "Aboneliğiniz sona erdi",
+    "lapsedBody": "AbacusAI Bot'u bu hesapla kullanmaya devam etmek için planınızı yenileyin.",
+    "upgrade": "Yükselt",
+    "renew": "Yenile",
+    "webAgent": "Web'deki Abacus AI Agent'a git →",
+    "tryAgain": "Tekrar dene",
+    "checking": "Kontrol ediliyor…",
+    "stillBlocked": "Bu hesapta henüz bir ödeme görünmüyor.",
+    "waiting": "Ödemeyi tarayıcınızda tamamlayın. Ödemeniz geçer geçmez uygulama devam eder.",
+    "otherAccount": "Farklı bir hesapla oturum açın"
+  },
   "visualizer": {
     "loading": "Görselleştirme yükleniyor…"
   },

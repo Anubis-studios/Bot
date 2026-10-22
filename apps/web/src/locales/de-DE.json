@@ -4077,6 +4077,22 @@
     "waitingTitle": "Schließe den Checkout in deinem Browser ab",
     "waitingToSend": "Wartet auf Senden: „{{text}}“"
   },
+  "paymentRequired": {
+    "unconfirmedTitle": "Wähle einen Plan, um AbacusAI Bot weiter zu nutzen",
+    "unconfirmedBody": "Du bist angemeldet, aber dein Konto braucht einen Plan, damit AbacusAI Bot funktioniert.",
+    "trialEndedTitle": "Deine kostenlose Testphase ist abgelaufen",
+    "trialEndedBody": "Führe ein Upgrade durch, um AbacusAI Bot mit diesem Konto weiter zu nutzen.",
+    "lapsedTitle": "Dein Abonnement ist abgelaufen",
+    "lapsedBody": "Verlängere deinen Plan, um AbacusAI Bot mit diesem Konto weiter zu nutzen.",
+    "upgrade": "Upgrade",
+    "renew": "Verlängern",
+    "webAgent": "Zu Abacus AI Agent im Web →",
+    "tryAgain": "Erneut versuchen",
+    "checking": "Wird geprüft…",
+    "stillBlocked": "Für dieses Konto ist noch keine Zahlung zu sehen.",
+    "waiting": "Schließe den Kauf in deinem Browser ab. Die App macht weiter, sobald deine Zahlung eingegangen ist.",
+    "otherAccount": "Mit einem anderen Konto anmelden"
+  },
   "visualizer": {
     "loading": "Visualisierung wird geladen …"
   },

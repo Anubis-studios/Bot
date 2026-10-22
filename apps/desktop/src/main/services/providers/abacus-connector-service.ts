@@ -35,9 +35,11 @@ export const abacusApiCall = async (
   method: string,
   httpMethod: "POST" | "DELETE" | "GET",
   body?: Record<string, unknown>,
-  timeoutMs?: number
+  timeoutMs?: number,
+  /** A key other than the stored one: a sign-in held until its account pays. */
+  keyOverride?: string
 ): Promise<{ ok: boolean; result: unknown }> => {
-  const key = abacusApiKey();
+  const key = keyOverride ?? abacusApiKey();
   if (key.length === 0) return { ok: false, result: null };
   try {
     const url = apiUrl(method);

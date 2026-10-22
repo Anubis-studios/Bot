@@ -21,9 +21,12 @@ vi.stubGlobal("fetch", fetchMock);
 
 const {
   abacusCredentialRejected,
+  abacusPaymentRequired,
+  cachedAbacusModels,
   clearAbacusCache,
   fetchAbacusAccount,
   fetchAbacusModels,
+  onAbacusPaymentChange,
 } = await import("./abacus");
 const { ConnectivityService } =
   await import("../connectivity/connectivity-service");
@@ -206,6 +209,98 @@ describe("whether the key has been refused outright", () => {
     fetchMock.mockResolvedValueOnce(new Response(null, { status: 403 }));
 
     await expect(fetchAbacusAccount(true)).resolves.toBeNull();
+  });
+});
+
+/**
+ * The payment gate's 402: the key is good, the account has to pay. It is
+ * neither a refused key (no sign-out) nor a blip (no stale profile).
+ */
+describe("an account the payment gate refuses", () => {
+  const refusal = (reason?: string) =>
+    new Response(
+      JSON.stringify({
+        success: false,
+        error: "Payment required",
+        errorType: "PaymentMethodRequired",
+        ...(reason == null ? {} : { reason, abacusaibotOnly: true }),
+      }),
+      { status: 402 }
+    );
+
+  it.each(["unconfirmed", "trial_ended", "lapsed"] as const)(
+    "is signed in but must pay (%s), and the key is not refused",
+    async (reason) => {
+      fetchMock.mockResolvedValueOnce(refusal(reason));
+
+      await expect(fetchAbacusAccount(true)).resolves.toBeNull();
+
+      expect(abacusPaymentRequired()).toEqual({ reason });
+      expect(abacusCredentialRejected()).toBe(false);
+    }
+  );
+
+  it("has no reason from a server that sends none", async () => {
+    fetchMock.mockResolvedValueOnce(refusal());
+
+    await fetchAbacusAccount(true);
+
+    expect(abacusPaymentRequired()).toEqual({ reason: null });
+  });
+
+  it("keeps 401 and 403 as a refused key, not a payment", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 401 }));
+
+    await fetchAbacusAccount(true);
+
+    expect(abacusCredentialRejected()).toBe(true);
+    expect(abacusPaymentRequired()).toBeNull();
+  });
+
+  it("does not keep serving the profile it had before the refusal", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ name: "Ada" }), { status: 200 })
+    );
+    await fetchAbacusAccount(true);
+    fetchMock.mockResolvedValueOnce(refusal("lapsed"));
+
+    await expect(fetchAbacusAccount(true)).resolves.toBeNull();
+    await expect(fetchAbacusAccount()).resolves.toBeNull();
+  });
+
+  it("offers no Abacus model while the account must pay", async () => {
+    fetchMock.mockResolvedValueOnce(refusal("trial_ended"));
+
+    await expect(fetchAbacusModels()).resolves.toEqual([]);
+
+    expect(abacusPaymentRequired()).toEqual({ reason: "trial_ended" });
+    expect(cachedAbacusModels()).toEqual([]);
+  });
+
+  it("is over once the account pays, and says so once per change", async () => {
+    fetchMock.mockResolvedValueOnce(new Response("{}", { status: 200 }));
+    await fetchAbacusAccount(true);
+    const heard = vi.fn();
+    const stop = onAbacusPaymentChange(heard);
+    fetchMock.mockResolvedValueOnce(refusal("trial_ended"));
+    await fetchAbacusAccount(true);
+    // A key change clears the verdict; the same answer again is not news.
+    clearAbacusCache();
+    fetchMock.mockResolvedValueOnce(refusal("trial_ended"));
+    await fetchAbacusAccount(true);
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ subscription_tier: "basic" }), {
+        status: 200,
+      })
+    );
+
+    await expect(fetchAbacusAccount(true)).resolves.toMatchObject({
+      subscription_tier: "basic",
+    });
+
+    expect(abacusPaymentRequired()).toBeNull();
+    expect(heard).toHaveBeenCalledTimes(2);
+    stop();
   });
 });
 

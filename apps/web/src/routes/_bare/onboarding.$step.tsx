@@ -112,6 +112,11 @@ const OnboardingRoute = () => {
           if (onboardingStore.state.signIn?.id !== attemptId) return;
           await go("connected");
         } else if (outcome.cancelled) await go("welcome");
+        // Held for payment: the screen reads why from the host.
+        else if (outcome.error === "payment-required")
+          await queryClient.invalidateQueries({
+            queryKey: transport.orpc.account.payment.key(),
+          });
       }) &&
       step !== "models"
     )

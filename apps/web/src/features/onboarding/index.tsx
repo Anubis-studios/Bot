@@ -6,6 +6,10 @@ import { useSelector } from "@tanstack/react-store";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import {
+  PaymentRequiredPanel,
+  usePaymentRequired,
+} from "#renderer/components/payment-required";
 import { useDb } from "#renderer/data/db";
 import { connectErrorText } from "#renderer/lib/connect-page";
 import type { OnboardingStepId } from "#renderer/lib/navigation/areas";
@@ -20,6 +24,7 @@ import { ConnectorsStep } from "./steps/connectors";
 import type { OnboardingPageProps, StepContext } from "./steps/context";
 import { DoneStep } from "./steps/done";
 import { FirstBotStep } from "./steps/first-bot";
+import { StepTitle } from "./steps/kit";
 import { ModelsStep } from "./steps/models";
 import { WelcomeStep } from "./steps/welcome";
 import { onboardingStore } from "./store";
@@ -78,6 +83,17 @@ export const OnboardingStepPage = (props: OnboardingPageProps) => {
     ? { state: "ready" as const, result: props.previewBot }
     : liveFirst;
   const attempt = useSelector(onboardingStore, (s) => s.signIn);
+  const payment = usePaymentRequired(
+    !props.preview && (step === "welcome" || step === "connect")
+  );
+  // Signed in, but the account must pay first: its screen, never the sign-in again.
+  const paymentShown =
+    !props.preview &&
+    (step === "welcome" || step === "connect") &&
+    (payment.data != null ||
+      (attempt?.status === "failed" &&
+        attempt.outcome?.ok === false &&
+        attempt.outcome.error === "payment-required"));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -203,6 +219,7 @@ export const OnboardingStepPage = (props: OnboardingPageProps) => {
       event.metaKey ||
       busy ||
       isKeyboardTarget(event.target) ||
+      paymentShown ||
       document.querySelector('[role="dialog"], [role="menu"]') != null
     )
       return;
@@ -274,8 +291,22 @@ export const OnboardingStepPage = (props: OnboardingPageProps) => {
               }
         }
       />
-      {step === "welcome" && <WelcomeStep ctx={ctx} heading={heading} />}
-      {step === "connect" && (
+      {paymentShown && (
+        <PaymentRequiredPanel
+          payment={payment.data ?? null}
+          title={(text) => (
+            <StepTitle ref={heading} size="medium">
+              {text}
+            </StepTitle>
+          )}
+          onSignedIn={() => props.navigate("connected")}
+          onSwitchAccount={() => props.signIn("signin")}
+        />
+      )}
+      {!paymentShown && step === "welcome" && (
+        <WelcomeStep ctx={ctx} heading={heading} />
+      )}
+      {!paymentShown && step === "connect" && (
         <ConnectStep ctx={ctx} attempt={attempt} heading={heading} />
       )}
       {step === "connected" && <ConnectedStep ctx={ctx} heading={heading} />}

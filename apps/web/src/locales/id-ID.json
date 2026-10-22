@@ -4077,6 +4077,22 @@
     "waitingTitle": "Selesaikan pembayaran di browser Anda",
     "waitingToSend": "Menunggu dikirim: “{{text}}”"
   },
+  "paymentRequired": {
+    "unconfirmedTitle": "Pilih paket untuk terus menggunakan AbacusAI Bot",
+    "unconfirmedBody": "Anda sudah masuk, tetapi akun Anda memerlukan paket agar AbacusAI Bot dapat bekerja.",
+    "trialEndedTitle": "Uji coba gratis Anda telah berakhir",
+    "trialEndedBody": "Upgrade untuk terus menggunakan AbacusAI Bot dengan akun ini.",
+    "lapsedTitle": "Langganan Anda telah berakhir",
+    "lapsedBody": "Perpanjang paket Anda untuk terus menggunakan AbacusAI Bot dengan akun ini.",
+    "upgrade": "Upgrade",
+    "renew": "Perpanjang",
+    "webAgent": "Buka Abacus AI Agent di web →",
+    "tryAgain": "Coba lagi",
+    "checking": "Memeriksa…",
+    "stillBlocked": "Kami belum melihat pembayaran di akun ini.",
+    "waiting": "Selesaikan pembayaran di browser Anda. Aplikasi akan lanjut begitu pembayaran Anda berhasil.",
+    "otherAccount": "Masuk dengan akun lain"
+  },
   "visualizer": {
     "loading": "Memuat visualisasi…"
   },

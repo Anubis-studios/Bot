@@ -12,6 +12,7 @@ import { PROVIDER_KEY_FIELDS } from "@abacus-ai/contract/settings";
 import { abacusBotHome } from "../../paths";
 import { hasCredential, hasOAuthCredential } from "../config/settings";
 import {
+  abacusPaymentRequired,
   cachedAbacusModels,
   clearAbacusCache,
   fetchAbacusAccount,
@@ -103,7 +104,7 @@ export const listAvailableModels = async (
 
   // Live catalogs, each gated on its own key, fetched in parallel so the
   // picker does not wait for them in series.
-  const [openRouterFree, abacusModels, abacusAccount, groqLive] =
+  const [openRouterFree, liveAbacusModels, abacusAccount, groqLive] =
     await Promise.all([
       refresh || cachedFreeOpenRouterModels().length === 0
         ? fetchFreeOpenRouterModels()
@@ -123,11 +124,15 @@ export const listAvailableModels = async (
     ]);
 
   const config = readConfig();
+  // An account the payment gate refuses runs nothing on Abacus: no row may
+  // read as configured, or every turn on it would answer 402.
+  const abacusBlocked = abacusPaymentRequired() != null;
+  const abacusModels = abacusBlocked ? [] : liveAbacusModels;
 
   // OpenLLM pools every free-or-nearly-free source, so "configured" means any
   // of their keys exists; a single `requiresEnv` cannot say that.
   const openLlmConfigured =
-    hasCredential("ABACUS_API_KEY") ||
+    (hasCredential("ABACUS_API_KEY") && !abacusBlocked) ||
     FREE_POOL_PROVIDERS.some((provider) => {
       const envVar = PROVIDER_KEY_FIELDS.find(
         (field) => field.provider === provider
@@ -262,7 +267,7 @@ export const listAvailableModels = async (
     ? staticAbacus.filter((model) => !liveAbacusIds.has(model.id)).map(lock)
     : [];
   const withoutStaticAbacus =
-    abacusModels.length > 0 || freeTier
+    abacusModels.length > 0 || freeTier || abacusBlocked
       ? withoutStaleFree.filter((model) => model.provider !== "abacus")
       : withoutStaleFree;
   const listedIds = new Set([
