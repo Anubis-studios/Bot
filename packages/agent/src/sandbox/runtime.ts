@@ -15,6 +15,7 @@ import {
   type SandboxRuntimeConfig,
 } from "@anthropic-ai/sandbox-runtime";
 
+import { trashSocket } from "../trash.js";
 import type { Denial } from "./approvals.js";
 import type { SandboxPolicy } from "./policy.js";
 import { probeVerdict, type ProbeExec } from "./probe.js";
@@ -229,7 +230,12 @@ export async function ensureRuntime(): Promise<boolean> {
   if (failure !== null) return false;
   if (starting === null) {
     starting = SandboxManager.initialize(
-      baseConfig([...DEFAULT_HOSTS, ...configuredHosts()], agentSockets()),
+      // And the app's trash socket, so a confined delete can still go to the
+      // trash (macOS; Linux's filter allows no socket by path).
+      baseConfig(
+        [...DEFAULT_HOSTS, ...configuredHosts()],
+        [...agentSockets(), trashSocket()]
+      ),
       ({ host, port }) =>
         onceHosts.delete(host.trim().toLowerCase())
           ? Promise.resolve(true)

@@ -95,6 +95,13 @@ vi.mock("./sandbox/shell.js", async (importOriginal) => ({
   loginEnvironment: () => SHELL_ENV,
 }));
 
+// The environment as the backend builds it; the trash launchers it then adds
+// are backends.test.ts's, run through a real shell.
+vi.mock("./trash.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./trash.js")>()),
+  trashShimEnv: (env: Record<string, string>) => env,
+}));
+
 /** A child's pipe: an emitter the backend is also allowed to tear down. */
 class FakeStream extends EventEmitter {
   destroy = vi.fn();

@@ -18,6 +18,7 @@ import {
   lineCounts,
   pathKey,
 } from "../checkpoint-store.js";
+import { setTrashMover } from "../trash.js";
 import {
   bashTargets,
   callTargets,
@@ -352,6 +353,55 @@ describe("restoring", () => {
       .execute("d", { turn: 1 }, undefined, undefined, ctx());
     expect(diff.content[0]?.text).toContain("-ok()");
     expect(diff.content[0]?.text).toContain("+oops(");
+  });
+  /** A turn that created `made.txt`, then the agent's restore of it. */
+  const restoreCreated = async (): Promise<string> => {
+    tracker.beginTurn();
+    await call("bash", { command: "./make" }, () =>
+      fs.writeFileSync(at("made.txt"), "new")
+    );
+    await settle();
+    tracker.beginTurn();
+    const answer = await pi.tools
+      .get("restore_checkpoint")!
+      .execute("r", { turn: 1 }, undefined, undefined, ctx());
+    await settle();
+    return answer.content[0]?.text ?? "";
+  };
+
+  it("sends a file the turn created to the trash", async () => {
+    const binned: string[] = [];
+    setTrashMover(async (file) => {
+      binned.push(file);
+      fs.renameSync(file, path.join(base, "binned.txt"));
+    });
+    try {
+      const text = await restoreCreated();
+
+      expect(binned).toEqual([at("made.txt")]);
+      expect(fs.existsSync(at("made.txt"))).toBe(false);
+      expect(fs.readFileSync(path.join(base, "binned.txt"), "utf8")).toBe(
+        "new"
+      );
+      expect(text).not.toContain("permanently");
+    } finally {
+      setTrashMover(null);
+    }
+  });
+
+  it("deletes it anyway when the trash refuses, and says so", async () => {
+    setTrashMover(async () => {
+      throw new Error("no Trash on this drive");
+    });
+    try {
+      const text = await restoreCreated();
+
+      expect(fs.existsSync(at("made.txt"))).toBe(false);
+      expect(text).toContain("no Trash on this drive");
+      expect(text).toContain("deleted it permanently instead");
+    } finally {
+      setTrashMover(null);
+    }
   });
 });
 

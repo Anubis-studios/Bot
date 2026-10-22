@@ -576,7 +576,9 @@ export type HostService =
   /** Re-read the Abacus account; answers with its credit snapshot or null. */
   | "credit_balance"
   /** Set up the app's own Python environment if it is not there yet. */
-  | "python_env";
+  | "python_env"
+  /** Move one absolute path to the OS Recycle Bin / Trash. */
+  | "trash_item";
 
 /** Events sent from ndjson IPC host to main process (stdout). */
 export type DesktopEvent =

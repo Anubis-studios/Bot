@@ -142,6 +142,11 @@ export interface RestoreOptions {
   record?: boolean;
   /** The caller is the turn holding the lock (the agent's own tool). */
   insideTurn?: boolean;
+  /**
+   * Deletes a file the turn created; a plain delete by default. Answers a
+   * note when it could only delete for good (the agent's goes to the trash).
+   */
+  remove?: (file: string) => Promise<string | null>;
 }
 
 export interface RestoreResult {
@@ -152,6 +157,8 @@ export interface RestoreResult {
   unrestorable: string[];
   /** The undoable entry the restore made, when recorded. */
   restoreSeq?: number;
+  /** What `remove` said about files it could not send to the trash. */
+  notes?: string[];
 }
 
 export class CheckpointNotFoundError extends Error {
@@ -546,7 +553,10 @@ export class CheckpointStore {
             : { sha: null, size: now.image.size };
       }
       if (file.before == null) {
-        await retrying(() => fsp.rm(file.path, { force: true }));
+        let note: string | null = null;
+        if (options.remove != null) note = await options.remove(file.path);
+        else await retrying(() => fsp.rm(file.path, { force: true }));
+        if (note != null) (result.notes ??= []).push(note);
       } else {
         const bytes = await this.readBlob(file.before.sha!);
         await retrying(() => writeFileAtomic(file.path, bytes));

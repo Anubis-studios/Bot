@@ -3,7 +3,6 @@ import * as path from "node:path";
 import { GATEWAY_SERVER_NAME } from "@abacus-ai/connectors/registry";
 import {
   createAgentSession,
-  createLocalBashOperations,
   DefaultResourceLoader,
   type AgentSession,
   type AgentSessionEvent,
@@ -18,7 +17,7 @@ import { sponsoredRunActive } from "./abacus-endpoint.js";
 import { Allowances } from "./allowances.js";
 import { allowedPathsFromEnv } from "./allowed-paths.js";
 import {
-  backendOperations,
+  agentShellOperations,
   PYTHON_SETUP_TIMEOUT_MS,
   setPythonProvisioner,
 } from "./backends.js";
@@ -181,6 +180,7 @@ import { ToolCallStream } from "./tool-call-stream.js";
 import { ToolHeartbeat } from "./tool-heartbeat.js";
 import { type ToolOrigin, type UnattendedPolicy } from "./tool-policy.js";
 import { TOOLS_ARRIVED_TYPE, toolsArrivedPrompt } from "./tools-arrived.js";
+import { setTrashMover, TRASH_TIMEOUT_MS } from "./trash.js";
 import {
   EMPTY_REPLY_FAILURE,
   OPENLLM_POOL_EMPTY_MESSAGE,
@@ -894,6 +894,18 @@ export class AbacusBotSession {
         ? () => this.hostServices.request("credit_balance", {})
         : null
     );
+    // The desktop moves what the agent deletes to the trash.
+    setTrashMover(
+      hostServices
+        ? async (file) => {
+            await this.hostServices.request(
+              "trash_item",
+              { path: file },
+              TRASH_TIMEOUT_MS
+            );
+          }
+        : null
+    );
     // The desktop owns the app's Python; a shell command that needs it asks.
     setPythonProvisioner(
       hostServices
@@ -1182,9 +1194,7 @@ export class AbacusBotSession {
         excluded,
         // Background runs go through the same operations as the foreground
         // ones, so `background: true` cannot become a way around the sandbox.
-        operations:
-          backendOperations(this.sandboxApprovals) ??
-          createLocalBashOperations(),
+        operations: agentShellOperations(this.sandboxApprovals),
         // A getter: refreshMcp swaps `this.mcp`, and captured routes would
         // call closed clients forever.
         mcp: () => this.mcp,

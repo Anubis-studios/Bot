@@ -43,6 +43,7 @@ function toolGuidelinesPrompt(edit: EditTool): string {
     "Show file paths clearly when working with files",
     "Use read to examine files instead of cat or sed",
     "Use write only for new files or complete rewrites",
+    "What you delete goes to the Recycle Bin/Trash. Never empty the Recycle Bin/Trash or delete anything in it; if it needs emptying, ask the user to do it",
     ...(edit === "ours"
       ? [
           "When the user says something broke or asks to undo, use checkpoint_diff and restore_checkpoint first: every turn's file changes are kept, so never rebuild a file from memory",

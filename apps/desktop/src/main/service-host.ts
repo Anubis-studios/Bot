@@ -2572,6 +2572,14 @@ export class ServiceHost {
       case "python_env":
         await ensureShellPython();
         return null;
+      case "trash_item": {
+        const file = (payload as { path?: unknown } | null)?.path;
+        if (typeof file !== "string" || !path.isAbsolute(file))
+          throw new Error("trash_item needs an absolute path");
+        const { shell } = await import("electron");
+        await shell.trashItem(file);
+        return null;
+      }
       default:
         throw new Error(`Unknown host service: ${String(service)}`);
     }

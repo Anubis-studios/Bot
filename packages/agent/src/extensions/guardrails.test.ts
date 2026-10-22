@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ALLOWED_PATHS_ENV } from "../allowed-paths.js";
 import { setCurrentMode } from "../current-mode.js";
 import { AgentMode } from "../protocol.js";
+import { emptyTrashMessage } from "../trash.js";
 import guardrails, { bashWriteTargets, isProtectedPath } from "./guardrails.js";
 
 let cwd: string;
@@ -78,6 +79,28 @@ describe("the guards that stay", () => {
     )) as { block: boolean; reason: string };
     expect(blocked?.block).toBe(true);
     expect(blocked.reason).toContain("Read");
+  });
+
+  it("never lets a command empty the trash, pi's own bash included", async () => {
+    for (const command of [
+      "Clear-RecycleBin -Force",
+      'rm -rf "$HOME/.Trash/"*',
+    ]) {
+      const blocked = (await pi.fire(
+        "tool_call",
+        { toolName: "bash", input: { command } },
+        ctx()
+      )) as { block: boolean; reason: string };
+      expect(blocked?.block, command).toBe(true);
+      expect(blocked.reason, command).toBe(emptyTrashMessage());
+    }
+    expect(
+      await pi.fire(
+        "tool_call",
+        { toolName: "bash", input: { command: "rm -rf build" } },
+        ctx()
+      )
+    ).toBeUndefined();
   });
 });
 

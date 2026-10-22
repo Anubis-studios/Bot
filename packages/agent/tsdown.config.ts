@@ -65,6 +65,9 @@ export default defineConfig({
     "src/sandbox/secrets.ts",
     // Saved travelers: main's browser types a passport number from it.
     "src/traveler/traveler-store.ts",
+    // What the agent shell's rm, find, git clean, cmd and PowerShell run to
+    // send deletes to the trash, once per command: node builtins only.
+    "src/trash-shim.ts",
     // Libraries the agent's own Node scripts `require` (Word and Excel files),
     // one file each under dist/modules, which NODE_PATH names (bundled-tools.ts).
     "src/modules/docx.js",
