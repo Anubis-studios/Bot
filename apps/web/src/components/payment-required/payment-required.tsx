@@ -6,6 +6,7 @@
  */
 import {
   type BillingPlan,
+  planPitch,
   planPrice,
   wallOffer,
 } from "@abacus-ai/contract/billing-plan";
@@ -194,7 +195,7 @@ export const PaymentRequiredPanel = ({
             })}
           </p>
           <ul className="flex flex-col gap-1.5">
-            {offer.features.map((feature) => (
+            {planPitch(t, billing, i18n.language).map((feature) => (
               <li key={feature} className="flex gap-2 text-sm/5">
                 <Check
                   aria-hidden

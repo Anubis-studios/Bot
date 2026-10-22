@@ -2,6 +2,11 @@ import { botHelpPlace } from "@abacus-ai/contract/bot-help";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
+import {
+  closeUpgradeDialog,
+  upgradeDialogStore,
+} from "#renderer/lib/upgrade-dialog";
+
 import { inertHostActions } from "../runtime/host-actions";
 import { renderWithDb } from "../testing";
 import { FeatureLimitNotice } from "./parts";
@@ -60,7 +65,7 @@ it.each([
   ],
   ["video", "Video Analysis is included in Basic"],
 ] as const)(
-  "names the paid-plan capability %s and upgrades a free account",
+  "names the paid-plan capability %s and opens the plan dialog for a free account",
   async (feature, title) => {
     const openUpgrade = vi.fn(async () => {});
     const openExternal = vi.fn(async () => {});
@@ -77,8 +82,12 @@ it.each([
         "Basic includes creating and editing images and videos, and making audio, on the web in Abacus AI Agent."
       ) != null
     ).toBe(feature !== "video");
-    fireEvent.click(screen.getByRole("button", { name: "Upgrade for $7" }));
-    expect(openUpgrade).toHaveBeenCalledOnce();
+    // The plan's whole pitch and price are the upgrade dialog's.
+    expect(screen.queryByText(/\$\d/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Upgrade" }));
+    expect(upgradeDialogStore.state.request).toMatchObject({ kind: "plan" });
+    closeUpgradeDialog();
+    expect(openUpgrade).not.toHaveBeenCalled();
     expect(openExternal).not.toHaveBeenCalled();
   }
 );

@@ -10,9 +10,11 @@ import { hiddenUserMessage, userMessageText } from "#renderer/lib/user-message";
  * still chats on its own model key but a connector call needs Abacus credits,
  * `own-key` when a free account's turn on its own provider key failed for
  * want of credit, a rate limit, or a provider that stopped answering.
- * Triggers ask; the shell's host confirms on a fresh account read and opens.
+ * `plan` when a free account asked to see the plan (a See Basic, an Upgrade
+ * on a card or the model picker). Triggers ask; the shell's host confirms on
+ * a fresh account read and opens.
  */
-export type UpgradeDialogKind = "credits" | "connectors" | "own-key";
+export type UpgradeDialogKind = "credits" | "connectors" | "own-key" | "plan";
 
 export interface UpgradeDialogRequest {
   kind: UpgradeDialogKind;
@@ -90,6 +92,16 @@ export const closeUpgradeDialog = (dismissed = false): void => {
 
 export const useUpgradeDialogRequest = () =>
   useStore(upgradeDialogStore, (state) => state.request);
+
+/**
+ * The person asked to see the plan from `source` (a card, the model picker):
+ * the dialog with its whole pitch, never a bare page.
+ */
+export const requestPlanDialog = (source: string): void =>
+  requestUpgradeDialog(
+    { kind: "plan", key: `plan:${source}:${Date.now()}`, threadId: source },
+    true
+  );
 
 /** The Abacus connectors gateway's tools are named `abacus-connectors_<Tool>`. */
 const CONNECTOR_TOOL_PREFIX = "abacus-connectors";

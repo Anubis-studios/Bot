@@ -768,13 +768,9 @@ export const ModelChip = ({
                 aria-hidden
                 className="text-primary size-3.5 shrink-0"
               />
-              <span className="flex min-w-0 flex-col">
-                <span className="text-xs font-medium">
-                  {t("chat.composer.upgradeModels")}
-                </span>
-                <span className="text-muted-foreground truncate text-xs">
-                  {t("chat.composer.upgradeModelsPrice")}
-                </span>
+              {/* A teaser: the plan's models and price are the dialog's. */}
+              <span className="text-xs font-medium">
+                {t("chat.composer.upgradeModels")}
               </span>
             </button>
           ) : null}

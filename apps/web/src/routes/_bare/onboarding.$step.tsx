@@ -55,6 +55,7 @@ import {
   startBuildDraft,
 } from "#renderer/features/sessions/start/start-session";
 import { startTour } from "#renderer/features/tour/store";
+import { UpgradeDialogHost } from "#renderer/features/upgrade-dialog";
 import {
   ONBOARDING_STEPS,
   type OnboardingStepId,
@@ -62,7 +63,7 @@ import {
 import { useAppNavigate } from "#renderer/lib/navigation/use-app-navigate";
 import { IS_ELECTRON } from "#renderer/lib/platform";
 import { platformSystem } from "#renderer/lib/platform-system";
-import { openUpgrade } from "#renderer/lib/upgrade";
+import { requestPlanDialog } from "#renderer/lib/upgrade-dialog";
 const OnboardingRoute = () => {
   const { t } = useTranslation();
   const step = Route.useParams().step as OnboardingStepId;
@@ -238,12 +239,13 @@ const OnboardingRoute = () => {
         return;
       }
       case "images":
-        // The plan's page on a free account; Abacus AI Agent on a paid one, as the media card does.
+        // The upgrade dialog with the plan's whole pitch on a free account;
+        // Abacus AI Agent on a paid one, as the media card does.
         if (facts.payingTier)
           await platformSystem(transport.client).openExternal({
             url: abacusAgentPromptUrl(),
           });
-        else await openUpgrade(transport.client);
+        else requestPlanDialog("onboarding");
         return;
       case "bot":
         await open(choice.botId);
@@ -271,6 +273,8 @@ const OnboardingRoute = () => {
   };
   return (
     <>
+      {/* Outside the shell, which hosts the dialog everywhere else. */}
+      <UpgradeDialogHost />
       <OnboardingStepPage
         step={step}
         facts={facts}

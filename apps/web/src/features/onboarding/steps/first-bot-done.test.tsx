@@ -90,11 +90,9 @@ describe("FirstBotStep: what to do first", () => {
     ).toBe("true");
     expect(screen.queryByText(/Chief of Staff/)).toBeNull();
     expect(screen.queryByText("We made your first bot for you")).toBeNull();
-    // The price is the plan's own, from the upgrade copy.
+    // A one-line teaser: the plan's price and whole pitch are the dialog's.
     expect(
-      screen.getByText(
-        `Logos, product photos, posts and clips. ${fixedT()("upgradeDialog.price")} first month.`
-      )
+      screen.getByText("Logos, product photos, posts and clips.")
     ).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Portfolio site" }));

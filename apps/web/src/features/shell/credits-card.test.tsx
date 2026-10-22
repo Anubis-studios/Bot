@@ -2,7 +2,12 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { initI18n } from "#renderer/lib/i18n";
-import { onPlanActive } from "#renderer/lib/upgrade";
+import { onPlanActive, openUpgrade } from "#renderer/lib/upgrade";
+import {
+  closeUpgradeDialog,
+  upgradeDialogStore,
+} from "#renderer/lib/upgrade-dialog";
+import { useAppContext } from "#renderer/lib/use-app-context";
 
 import { UpgradePromo } from "./credits-card";
 import { PromoOutlet } from "./promo-host";
@@ -200,9 +205,18 @@ it("after Upgrade, reads the account until the plan is active, then tells the ap
   const stop = onPlanActive(heard);
   try {
     render(promo());
+    // The card's Upgrade opens the dialog with the plan's whole pitch; its
+    // Upgrade starts the checkout below.
     fireEvent.click(screen.getByRole("button", { name: "Upgrade" }));
+    expect(upgradeDialogStore.state.request).toMatchObject({ kind: "plan" });
+    closeUpgradeDialog();
+    expect(state.open).not.toHaveBeenCalled();
+    const { client } = useAppContext().transport as unknown as {
+      client: Parameters<typeof openUpgrade>[0];
+    };
+    void openUpgrade(client);
     // A second click while checkout is open watches nothing twice.
-    fireEvent.click(screen.getByRole("button", { name: "Upgrade" }));
+    void openUpgrade(client);
     await vi.advanceTimersByTimeAsync(0);
     expect(state.open).toHaveBeenCalledWith({
       url: "https://checkout.example/once",

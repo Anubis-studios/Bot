@@ -22,7 +22,7 @@ import {
 import { creditsTier } from "#renderer/lib/credits";
 import { useAppNavigate } from "#renderer/lib/navigation/use-app-navigate";
 import { showError } from "#renderer/lib/toast";
-import { openUpgrade } from "#renderer/lib/upgrade";
+import { requestPlanDialog } from "#renderer/lib/upgrade-dialog";
 import { useCreditsAccount } from "#renderer/lib/use-credits-account";
 
 import { useCheckoutQueries, useSessionsTransport } from "./queries";
@@ -134,7 +134,7 @@ export const useSessionComposerModel = (
       onConfigureProviders: () =>
         void navigate({ to: "/settings/models", transition: "settings-in" }),
       ...(creditsTier(account.data) === "free"
-        ? { onUpgrade: () => void openUpgrade(transport.client) }
+        ? { onUpgrade: () => requestPlanDialog("model-picker") }
         : {}),
       ...(other != null && creditsTier(account.data) === "free"
         ? {
@@ -167,7 +167,7 @@ export const useSessionComposerModel = (
               ? t("chat.composer.includedInPaid")
               : t("chat.composer.includedIn", { plan }),
         },
-        onUpgrade: () => void openUpgrade(transport.client),
+        onUpgrade: () => requestPlanDialog("model-picker"),
         onConnect: (provider) =>
           void navigate({
             to: "/settings/models",

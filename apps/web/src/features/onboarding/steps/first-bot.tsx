@@ -358,9 +358,7 @@ export const FirstBotStep = ({
               </Badge>
             </>
           }
-          body={t("onboarding.firstRun.images.body", {
-            price: t("upgradeDialog.price"),
-          })}
+          body={t("onboarding.firstRun.images.body")}
           action={
             <CardAction
               primary={false}
