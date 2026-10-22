@@ -1,6 +1,7 @@
 /**
  * `send_chat_message` with an attachment: the file must exist, fit the cap,
- * and go through the file lane with the message as its caption.
+ * sit in the workspace outside every credential store, and go through the
+ * file lane (from a copy of the checked bytes) with the message as caption.
  */
 import fs from "fs";
 import os from "os";
@@ -12,13 +13,19 @@ import { McpAgentToolsServer } from "./mcp-agent-tools-server";
 
 let dir: string;
 const send = vi.fn(async () => undefined);
-const sendFile = vi.fn(async () => undefined);
+const staged: Array<{ name: string; bytes: string }> = [];
+const sendFile = vi.fn(async (_platform: string, _to: string, file: string) => {
+  staged.push({
+    name: path.basename(file),
+    bytes: fs.readFileSync(file, "utf8"),
+  });
+});
 
 const server = (): McpAgentToolsServer =>
   new McpAgentToolsServer({
     skillsService: {} as never,
     enabledToolsets: () => new Set(["messaging"]),
-    workspacePath: () => null,
+    workspacePath: () => dir,
     messaging: {
       runningPlatforms: () => ["whatsapp"],
       listChats: () => [],
@@ -45,6 +52,7 @@ beforeEach(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), "send-file-"));
   send.mockClear();
   sendFile.mockClear();
+  staged.length = 0;
 });
 
 afterEach(() => {
@@ -66,9 +74,10 @@ describe("sending a file", () => {
     expect(sendFile).toHaveBeenCalledWith(
       "whatsapp",
       "Baba",
-      file,
+      expect.not.stringContaining(dir),
       "the report"
     );
+    expect(staged).toEqual([{ name: "report.pdf", bytes: "pdf bytes" }]);
     expect(send).not.toHaveBeenCalled();
     expect(text).toContain("Sent the file");
   });
@@ -78,7 +87,12 @@ describe("sending a file", () => {
     fs.writeFileSync(file, "jpg");
 
     await call({ platform: "whatsapp", to: "Baba", attachment_path: file });
-    expect(sendFile).toHaveBeenCalledWith("whatsapp", "Baba", file, undefined);
+    expect(sendFile).toHaveBeenCalledWith(
+      "whatsapp",
+      "Baba",
+      expect.stringMatching(/photo\.jpg$/),
+      undefined
+    );
 
     const text = await call({ platform: "whatsapp", to: "Baba" });
     expect(text).toContain("no message");
@@ -108,5 +122,45 @@ describe("sending a file", () => {
     expect(sendFile).not.toHaveBeenCalled();
     expect(text).toContain("26MB");
     expect(text).toContain("25MB");
+  });
+
+  it("refuses a file outside the workspace, sending nothing", async () => {
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "send-file-out-"));
+    try {
+      const file = path.join(outside, "id_rsa");
+      fs.writeFileSync(file, "secret");
+
+      const text = await call({
+        platform: "whatsapp",
+        to: "Baba",
+        attachment_path: file,
+      });
+
+      expect(sendFile).not.toHaveBeenCalled();
+      expect(text).toContain("only files in the workspace");
+    } finally {
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it("ignores an attachment_path a per-platform send does not declare", async () => {
+    const file = path.join(dir, "report.pdf");
+    fs.writeFileSync(file, "pdf bytes");
+
+    await (
+      server() as unknown as {
+        executeTool: (
+          name: string,
+          args: Record<string, unknown>
+        ) => Promise<unknown>;
+      }
+    ).executeTool("send_whatsapp_message", {
+      to: "Baba",
+      message: "hi",
+      attachment_path: file,
+    });
+
+    expect(sendFile).not.toHaveBeenCalled();
+    expect(send).toHaveBeenCalledWith("whatsapp", "Baba", "hi", undefined);
   });
 });

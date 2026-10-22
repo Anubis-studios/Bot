@@ -4524,7 +4524,9 @@
       "generic": "Bei mir ist etwas schiefgelaufen, daher konnte ich das nicht abschließen. Bitte versuche es gleich noch einmal.",
       "contactFailed": "Ich konnte {{name}} gerade nicht antworten.",
       "contactFailedGeneric": "Ich konnte {{name}} gerade nicht antworten: Bei mir ist etwas schiefgelaufen.",
-      "someone": "jemandem"
+      "someone": "jemandem",
+      "fileNotSent_one": "{{files}} konnte hier nicht gesendet werden. Die Datei ist in der AbacusAI Bot App auf deinem Computer.",
+      "fileNotSent_other": "{{files}} konnten hier nicht gesendet werden. Die Dateien sind in der AbacusAI Bot App auf deinem Computer."
     },
     "unavailable": {
       "title": {

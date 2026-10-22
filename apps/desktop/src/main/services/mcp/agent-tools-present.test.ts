@@ -10,9 +10,11 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 
+import { declaredMedia } from "@abacus-ai/agent/send-media";
 import { sessionConversationKey } from "@abacus-ai/contract/conversation-scope";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { MediaStore } from "../messaging/media-store";
 import { PreviewTargets } from "../session/preview-targets";
 import { McpAgentToolsServer } from "./mcp-agent-tools-server";
 
@@ -330,5 +332,129 @@ describe("offer_session", () => {
     expect(ok.content[0]?.text).toContain("button");
     const refused = await server().executeTool("offer_session", args, "linked");
     expect(refused.isError).toBe(true);
+  });
+});
+
+/**
+ * A turn answering a chat app (the user's WhatsApp, the Abacus AI bot's
+ * Telegram DM): files go into that chat, never to a card the phone cannot
+ * open; someone else's chat gets none.
+ */
+describe("presenting from a turn that answers a chat app", () => {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "chat-turn-"));
+  fs.writeFileSync(path.join(workspace, "notes.docx"), "PK notes");
+  fs.writeFileSync(path.join(workspace, "app.py"), "print(1)");
+  fs.writeFileSync(path.join(workspace, "big.pdf"), Buffer.alloc(2048));
+
+  const chatServer = (turn: unknown, store = new MediaStore()) =>
+    server({
+      workspacePath: () => workspace,
+      botIdForSession: () => "bot-1",
+      chatTurn: () => turn,
+      chatMedia: () => ({
+        keep: (
+          sessionId: string,
+          data: Buffer,
+          filename: string,
+          limits: never
+        ) => store.putFile(sessionId, data, filename, limits),
+        screenshot: async () => ({ reason: "no browser" }),
+      }),
+    }) as unknown as Executable;
+  const text = (result: { content: { text?: string }[] }) =>
+    result.content.map((part) => part.text ?? "").join("\n");
+  const limits = { documentTypes: ["docx", "py"], documentMaxBytes: 1024 };
+
+  it("sends the files into the user's own chat, with no card and no pane", async () => {
+    const store = new MediaStore();
+    const result = await chatServer(
+      { app: "WhatsApp", owner: true, files: limits },
+      store
+    ).executeTool(
+      "present_deliverable",
+      { items: [{ path: "notes.docx" }, { path: "app.py" }] },
+      "bot-session"
+    );
+    const said = text(result);
+    expect(said).toContain("Sending 2 items to this WhatsApp chat");
+    expect(said).not.toMatch(/files card|preview pane/);
+    const ids = declaredMedia(said);
+    expect(ids).toHaveLength(2);
+    expect(store.resolve(ids[1]!, "bot-session")).toMatchObject({
+      ok: true,
+      kind: "document",
+      filename: "app.py",
+    });
+    expect(sent).not.toHaveBeenCalled();
+  });
+
+  it("says what is too big for the chat, and that it is in the app", async () => {
+    const said = text(
+      await chatServer({
+        app: "Discord",
+        owner: true,
+        files: limits,
+      }).executeTool(
+        "present_deliverable",
+        { items: [{ path: "big.pdf" }] },
+        "bot-session"
+      )
+    );
+    expect(said).toContain("Nothing was sent to the chat.");
+    expect(said).toContain("larger than 0 MB");
+    expect(said).toContain("in the AbacusAI Bot app on their computer");
+  });
+
+  it("sends nothing to someone else's chat, and says not to mention it", async () => {
+    const said = text(
+      await chatServer({
+        app: "WhatsApp",
+        owner: false,
+        files: null,
+      }).executeTool(
+        "present_deliverable",
+        { items: [{ path: "notes.docx" }] },
+        "bot-session"
+      )
+    );
+    expect(said).toContain("files never go to other people");
+    expect(declaredMedia(said)).toEqual([]);
+  });
+
+  it("on a chat that takes no files, says the file is in the app, never its path", async () => {
+    const said = text(
+      await chatServer({
+        app: "Telegram",
+        owner: true,
+        files: null,
+      }).executeTool(
+        "present_deliverable",
+        { items: [{ path: "notes.docx" }] },
+        "bot-session"
+      )
+    );
+    expect(said).toContain("Telegram cannot take files from this app");
+    expect(said).toContain("Never give a file path");
+    expect(declaredMedia(said)).toEqual([]);
+  });
+
+  it("tells serve's caller the URL opens on this computer only", async () => {
+    fs.mkdirSync(path.join(workspace, "site"), { recursive: true });
+    fs.writeFileSync(path.join(workspace, "site", "index.html"), "<h1>x</h1>");
+    const target = chatServer({ app: "WhatsApp", owner: true, files: limits });
+    const said = text(
+      await target.executeTool(
+        "serve",
+        { action: "start", directory: "site" },
+        "bot-session"
+      )
+    );
+    await target.executeTool(
+      "serve",
+      { action: "stop", directory: "site" },
+      "bot-session"
+    );
+    expect(said).toContain("opens on this computer only");
+    expect(said).toContain("never give it to them");
   });
 });

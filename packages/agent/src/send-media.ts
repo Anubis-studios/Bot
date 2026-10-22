@@ -54,6 +54,49 @@ export const DOCUMENT_EXTENSIONS: readonly string[] = [
   "html",
 ];
 
+/**
+ * Source and config files, which Telegram and Discord carry as documents (as
+ * plain text) and WhatsApp's own number does not.
+ */
+export const CODE_EXTENSIONS: readonly string[] = [
+  "py",
+  "js",
+  "jsx",
+  "ts",
+  "tsx",
+  "css",
+  "java",
+  "kt",
+  "swift",
+  "c",
+  "h",
+  "cpp",
+  "cs",
+  "go",
+  "rs",
+  "rb",
+  "php",
+  "sh",
+  "sql",
+  "yaml",
+  "yml",
+  "xml",
+  "toml",
+  "ini",
+];
+
+/** What files one chat takes: a document's types and largest size. */
+export interface ChatFileLimits {
+  documentTypes: readonly string[];
+  documentMaxBytes: number;
+}
+
+/** AbacusAI Bot's WhatsApp number: what the server sends there. */
+export const WHATSAPP_FILE_LIMITS: ChatFileLimits = {
+  documentTypes: DOCUMENT_EXTENSIONS,
+  documentMaxBytes: DOCUMENT_MAX_BYTES,
+};
+
 export type MediaMimeType = "image/jpeg" | "image/png" | "image/webp";
 
 /** Media ready to send, or why it cannot go, in words the model can act on. */
@@ -168,22 +211,31 @@ const extensionOf = (filename: string): string => {
 const EXTENSION_ALIASES: Record<string, string> = { htm: "html" };
 
 /** The name the chat shows a document under, or null for a type it does not take. */
-function documentName(filename: string): string | null {
+function documentName(
+  filename: string,
+  types: readonly string[]
+): string | null {
   const extension = extensionOf(filename);
   const alias = EXTENSION_ALIASES[extension];
-  if (!DOCUMENT_EXTENSIONS.includes(alias ?? extension)) return null;
+  if (!types.includes(alias ?? extension)) return null;
   return alias == null
     ? filename
     : `${filename.slice(0, -extension.length)}${alias}`;
 }
 
 /** Whether the chat takes a file of this name as a document at all. */
-export const takesDocument = (filename: string): boolean =>
-  documentName(filename) != null;
+export const takesDocument = (
+  filename: string,
+  limits: ChatFileLimits = WHATSAPP_FILE_LIMITS
+): boolean => documentName(filename, limits.documentTypes) != null;
 
 /** The bytes, checked: a document of a type and size the chat takes. */
-export function checkedDocument(data: Buffer, filename: string): ResolvedMedia {
-  const name = documentName(filename);
+export function checkedDocument(
+  data: Buffer,
+  filename: string,
+  limits: ChatFileLimits = WHATSAPP_FILE_LIMITS
+): ResolvedMedia {
+  const name = documentName(filename, limits.documentTypes);
   if (name == null) {
     const extension = extensionOf(filename);
     return {
@@ -195,7 +247,10 @@ export function checkedDocument(data: Buffer, filename: string): ResolvedMedia {
     };
   }
   if (data.length === 0) return { ok: false, reason: "The file is empty." };
-  if (data.length > DOCUMENT_MAX_BYTES)
-    return { ok: false, reason: "The file is larger than 16 MB." };
+  if (data.length > limits.documentMaxBytes)
+    return {
+      ok: false,
+      reason: `The file is larger than ${Math.round(limits.documentMaxBytes / 1024 / 1024)} MB.`,
+    };
   return { ok: true, kind: "document", data, filename: name };
 }

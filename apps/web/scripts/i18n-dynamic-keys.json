@@ -1613,10 +1613,12 @@
       "generic",
       "contactFailed",
       "contactFailedGeneric",
-      "someone"
+      "someone",
+      "fileNotSent"
     ],
     "sources": [
-      "../../desktop/src/main/services/messaging/chat-failure-reply.ts"
+      "../../desktop/src/main/services/messaging/chat-failure-reply.ts",
+      "../../desktop/src/main/services/messaging/messaging-gateway-service.ts"
     ]
   },
   {

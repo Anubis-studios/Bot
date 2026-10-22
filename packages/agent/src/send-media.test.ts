@@ -5,7 +5,15 @@
 import { describe, expect, it } from "vitest";
 
 import { buildSendMediaTool } from "./send-media-tool.js";
-import { checkedImage, MEDIA_MAX_BYTES, parseSendMedia } from "./send-media.js";
+import {
+  checkedDocument,
+  checkedImage,
+  CODE_EXTENSIONS,
+  DOCUMENT_EXTENSIONS,
+  MEDIA_MAX_BYTES,
+  parseSendMedia,
+  takesDocument,
+} from "./send-media.js";
 
 const ID = "media-0123456789abcdef0123";
 const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]);
@@ -61,5 +69,28 @@ describe("send_media", () => {
     expect(
       checkedImage(Buffer.concat([JPEG, Buffer.alloc(MEDIA_MAX_BYTES)]))
     ).toEqual({ ok: false, reason: "The image is larger than 5 MB." });
+  });
+});
+
+describe("a chat's own file limits", () => {
+  const discord = {
+    documentTypes: [...DOCUMENT_EXTENSIONS, ...CODE_EXTENSIONS],
+    documentMaxBytes: 10,
+  };
+
+  it("take the chat's types and size, and leave WhatsApp's number as it was", () => {
+    expect(
+      checkedDocument(Buffer.from("print(1)"), "app.py", discord)
+    ).toMatchObject({
+      ok: true,
+      filename: "app.py",
+    });
+    expect(checkedDocument(Buffer.alloc(11), "a.pdf", discord)).toEqual({
+      ok: false,
+      reason: "The file is larger than 0 MB.",
+    });
+    expect(checkedDocument(Buffer.from("print(1)"), "app.py").ok).toBe(false);
+    expect(takesDocument("app.py", discord)).toBe(true);
+    expect(takesDocument("app.py")).toBe(false);
   });
 });

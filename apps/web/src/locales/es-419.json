@@ -4524,7 +4524,9 @@
       "generic": "Algo falló de mi lado y no pude terminar. Inténtalo de nuevo en un momento.",
       "contactFailed": "No pude responderle a {{name}} hace un momento.",
       "contactFailedGeneric": "No pude responderle a {{name}} hace un momento: algo falló de mi lado.",
-      "someone": "alguien"
+      "someone": "alguien",
+      "fileNotSent_one": "No se pudo enviar {{files}} aquí. Está en la app AbacusAI Bot de tu computadora.",
+      "fileNotSent_other": "No se pudieron enviar {{files}} aquí. Están en la app AbacusAI Bot de tu computadora."
     },
     "unavailable": {
       "title": {

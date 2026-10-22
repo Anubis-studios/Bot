@@ -5,6 +5,20 @@ import type { ToolDefinition } from "./definition";
  * cross-platform originals stay callable for a model holding an older list
  * but are hidden, so one platform's chats never sit beside another's.
  */
+/**
+ * A per-platform send's input, as its schema declares it: `to` and `message`
+ * only. Anything else the model adds (an `attachment_path`) never reaches
+ * the send.
+ */
+const sendArgs = (
+  args: Record<string, unknown>,
+  platform: string
+): Record<string, unknown> => ({
+  to: args.to,
+  message: args.message,
+  platform,
+});
+
 export const MESSAGING_TOOLS: ToolDefinition[] = [
   {
     name: "send_chat_message",
@@ -223,7 +237,7 @@ export const MESSAGING_TOOLS: ToolDefinition[] = [
       required: ["to", "message"],
     },
     run: (host, args, callerSession) =>
-      host.sendChatMessage({ ...args, platform: "whatsapp" }, callerSession),
+      host.sendChatMessage(sendArgs(args, "whatsapp"), callerSession),
   },
   {
     name: "read_whatsapp_messages",
@@ -336,7 +350,7 @@ export const MESSAGING_TOOLS: ToolDefinition[] = [
       required: ["to", "message"],
     },
     run: (host, args, callerSession) =>
-      host.sendChatMessage({ ...args, platform: "telegram" }, callerSession),
+      host.sendChatMessage(sendArgs(args, "telegram"), callerSession),
   },
   {
     name: "read_telegram_messages",
@@ -439,7 +453,7 @@ export const MESSAGING_TOOLS: ToolDefinition[] = [
       required: ["to", "message"],
     },
     run: (host, args, callerSession) =>
-      host.sendChatMessage({ ...args, platform: "discord" }, callerSession),
+      host.sendChatMessage(sendArgs(args, "discord"), callerSession),
   },
   {
     name: "read_discord_messages",

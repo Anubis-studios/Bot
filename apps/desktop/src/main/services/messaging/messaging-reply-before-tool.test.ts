@@ -136,3 +136,155 @@ describe("a reply wrapped before a tool call", () => {
     expect(h.sent).toEqual(["Love you too", "Noted."]);
   });
 });
+
+/**
+ * Files a relayed turn hands over with present_deliverable go into the chat
+ * after its words: only the user's own chat, never someone else's.
+ */
+const fileHarness = (owner: boolean) => {
+  const sent: string[] = [];
+  const files: Array<{ name: string; bytes: string; reply?: string }> = [];
+  const released: string[] = [];
+  let failSend = false;
+  const pdf = {
+    ok: true as const,
+    kind: "document" as const,
+    data: Buffer.from("%PDF"),
+    filename: "report.pdf",
+  };
+  const gateway = new MessagingGatewayService({
+    resolveWorkspaceId: () => "ws",
+    createAgentSession: () => ({ id: "s1" }) as never,
+    updateSessionLabel: () => {},
+    startSession: async () => ({ success: true }) as never,
+    sendMessage: () => {},
+    emitUserMessage: () => {},
+    emitChanged: () => {},
+    resolveMedia: (ref: string) =>
+      ref === "media-0123456789abcdef0123"
+        ? pdf
+        : { ok: false, reason: "unknown" },
+    releaseMedia: (ref: string) => {
+      released.push(ref);
+    },
+  } as never);
+  (gateway as unknown as { connectors: Map<string, unknown> }).connectors.set(
+    "discord",
+    {
+      id: "discord",
+      start: async () => {},
+      stop: async () => {},
+      selfChatId: () => (owner ? "U1" : null),
+      fileLimits: () => ({ documentTypes: ["pdf"], documentMaxBytes: 1024 }),
+      sendText: async (_chatId: string, text: string) => {
+        sent.push(text);
+      },
+      sendFile: async (
+        _chatId: string,
+        filePath: string,
+        _caption?: string,
+        replyContext?: Record<string, string>
+      ) => {
+        if (failSend) throw new Error("refused");
+        const { readFile } = await import("node:fs/promises");
+        files.push({
+          name: filePath.split(/[\\/]/).pop() ?? "",
+          bytes: await readFile(filePath, "utf8"),
+          reply: replyContext?.message_id,
+        });
+      },
+    }
+  );
+  const internals = gateway as unknown as {
+    handleInbound: (
+      id: MessagingPlatformId,
+      m: Record<string, unknown>
+    ) => Promise<void>;
+  };
+  const emit = (event: Record<string, unknown>): void =>
+    gateway.handleAgentEvent("s1", { type: "event", event } as never);
+  return {
+    gateway,
+    sent,
+    files,
+    released,
+    failNextSends: () => {
+      failSend = true;
+    },
+    inbound: () =>
+      internals.handleInbound("discord", {
+        userId: "U1",
+        userName: "S",
+        chatId: "C1",
+        text: "make me the report",
+        replyContext: { message_id: "e1" },
+      }),
+    present: () =>
+      emit({
+        type: "tool_execution_complete",
+        tool: { name: "agent-tools_present_deliverable", input: {} },
+        result: {
+          content:
+            "Sending 1 item\n[media] media-0123456789abcdef0123\n[artifact] /w/report.pdf",
+        },
+      }),
+    say: (content: string) =>
+      emit({ type: "text_delta", content, messageId: "m1" }),
+    idle: () => emit({ type: "status_changed", status: AgentStatus.Idle }),
+  };
+};
+
+const settle = () => new Promise((resolve) => setTimeout(resolve, 50));
+
+describe("files a turn hands to its chat", () => {
+  it("go to the user's own chat after the words, as the answer to their message", async () => {
+    const h = fileHarness(true);
+    await h.inbound();
+    expect(h.gateway.chatTurn("s1")).toEqual({
+      app: "Discord",
+      owner: true,
+      files: { documentTypes: ["pdf"], documentMaxBytes: 1024 },
+    });
+    h.present();
+    h.say("<reply>Here is your report.</reply>");
+    h.idle();
+    // Staged on disk and sent in order: slow file systems take their time.
+    await vi.waitFor(() => expect(h.files).toHaveLength(1));
+    expect(h.sent).toEqual(["Here is your report."]);
+    expect(h.files).toEqual([
+      { name: "report.pdf", bytes: "%PDF", reply: "e1" },
+    ]);
+    expect(h.released).toEqual(["media-0123456789abcdef0123"]);
+    expect(h.gateway.chatTurn("s1")).toBeNull();
+  });
+
+  it("name a file that did not go, instead of leaving the user waiting", async () => {
+    const h = fileHarness(true);
+    h.failNextSends();
+    await h.inbound();
+    h.present();
+    h.say("<reply>Here it is.</reply>");
+    h.idle();
+    await vi.waitFor(() => expect(h.sent).toHaveLength(2));
+    expect(h.files).toEqual([]);
+    expect(h.sent[0]).toBe("Here it is.");
+    expect(h.sent[1]).toContain("report.pdf");
+    expect(h.sent[1]).toContain("AbacusAI Bot app");
+  });
+
+  it("never go to someone else's chat", async () => {
+    const h = fileHarness(false);
+    await h.inbound();
+    expect(h.gateway.chatTurn("s1")).toEqual({
+      app: "Discord",
+      owner: false,
+      files: null,
+    });
+    h.present();
+    h.say("Here you go.");
+    h.idle();
+    await settle();
+    expect(h.files).toEqual([]);
+    expect(h.released).toEqual(["media-0123456789abcdef0123"]);
+  });
+});
