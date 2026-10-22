@@ -433,9 +433,9 @@
       "senderReadOnly": "स्वतः-उत्तर वार्तालाप: {{bot}} यहाँ आपकी ओर से {{sender}} को उत्तर देता है। आप देख सकते हैं पर लिख नहीं सकते; बदलाव के लिए {{bot}} को उसकी अपनी चैट में बताएँ।",
       "openError": "बॉट की चैट नहीं खुल सकी।",
       "senderReadOnlyFallback": "{{bot}} इस बातचीत में जवाब देता है।",
-      "sessionOfferHeading": "इसे एक सेशन में बनाएं",
-      "sessionOfferOpen": "सेशन खोलें",
-      "sessionOfferDismiss": "यहीं बात जारी रखें"
+      "sessionOfferHeading": "Build this in a session",
+      "sessionOfferOpen": "Open session",
+      "sessionOfferDismiss": "Keep chatting here"
     },
     "deleteDialog": {
       "checkIn": "Its check-in keeps running as an ordinary routine.",
@@ -580,7 +580,7 @@
       "device_snapshot": "स्क्रीन को एलिमेंट की सूची के रूप में पढ़ें।",
       "disconnect_connector": "Detach a connected service's account.",
       "discord_auto_reply": "चुने हुए लोगों के Discord संदेशों का स्वतः उत्तर दें (केवल बॉट)।",
-      "take_chat_app_messages": "आपकी अपनी WhatsApp, Telegram या Discord चैट इस बॉट को भेजता है (केवल बॉट)।",
+      "take_chat_app_messages": "Send your own WhatsApp, Telegram or Discord chat to this bot (bots only).",
       "document": "Write a document and print it as a PDF.",
       "edit": "फ़ाइल के अंदर ठीक वही टेक्स्ट बदलें।",
       "exit_plan_mode": "Ask to leave plan mode and start carrying out the plan.",
@@ -855,16 +855,16 @@
     "wrongAccountBrowser": "{{name}} attached to a different Abacus.AI account: your browser is signed into another one. In the browser, sign into the account this app uses, then connect again."
   },
   "creditsCard": {
-    "paidBody": "जारी रखने के लिए अपना अकाउंट टॉप अप करें।",
-    "paidTitle": "आपने अपने सभी Pro Abacus.AI क्रेडिट इस्तेमाल कर लिए हैं",
-    "topUpCta": "टॉप अप करें",
-    "cta": "अपग्रेड करें",
+    "paidBody": "Top up your account to keep going.",
+    "paidTitle": "You've used all your Pro Abacus.AI credits",
+    "topUpCta": "Top up",
+    "cta": "Upgrade",
     "upsellTitle": "Unlock the full potential on desktop and web",
-    "levelUpTitle": "अगले लेवल के लिए तैयार हैं?",
-    "progress": "{{total}} में से {{remaining}} क्रेडिट बचे हैं",
-    "used": "इस्तेमाल किए गए क्रेडिट",
-    "lowTitle": "क्रेडिट कम हो रहे हैं",
-    "outTitle": "आपने अपने मुफ़्त क्रेडिट इस्तेमाल कर लिए हैं",
+    "levelUpTitle": "Ready for your next level?",
+    "progress": "{{remaining}} of {{total}} credits left",
+    "used": "Credits used",
+    "lowTitle": "Running low on credits",
+    "outTitle": "You've used your free credits",
     "expiredTitle": "Your free credits have expired",
     "readyTitle": "What's ready",
     "paidWebTitle": "Do even more on AbacusAI Agent",
@@ -1058,8 +1058,8 @@
     },
     "fromEnvironment": "आपके एनवायरनमेंट में {{key}} द्वारा सेट किया गया",
     "finishLinkFirst": "Finish linking the Abacus AI bot to complete setup.",
-    "homeBot": "आपके संदेश यहाँ जाते हैं:",
-    "homeBotUnset": "अभी तय नहीं",
+    "homeBot": "Your messages go to:",
+    "homeBotUnset": "Not set yet",
     "getCredentials": "अपने क्रेडेंशियल लें",
     "needsSetup": "सेटअप बाकी है",
     "openSetupGuide": "सेटअप गाइड खोलें",
@@ -1518,7 +1518,7 @@
       "unread_other": "{{count}} new results",
       "notifyDone": "A new result is in.",
       "notifyFailed": "This routine's last run did not finish.",
-      "planRequired": "रूटीन सशुल्क प्लान में उपलब्ध हैं।",
+      "planRequired": "Routines are available with a paid plan.",
       "upgrade": "Upgrade",
       "status": {
         "done": "Done",
@@ -1603,8 +1603,8 @@
       "other": "The routine could not be saved as it is. Check its settings and try again."
     },
     "upgrade": {
-      "title": "रूटीन अनलॉक करें",
-      "description": "टास्क शेड्यूल करने और काम ऑटोमेट करने के लिए अपग्रेड करें।"
+      "title": "Unlock routines",
+      "description": "Upgrade to schedule tasks and automate your work."
     }
   },
   "sessions": {
@@ -1711,7 +1711,7 @@
     },
     "dock": {
       "add": "Add tab",
-      "new": "नया टैब",
+      "new": "New tab",
       "chat": "Chat",
       "changes": "Changes",
       "files": "Files",
@@ -1729,7 +1729,7 @@
         "top": "Split above",
         "bottom": "Split below"
       },
-      "pr": "पुल रिक्वेस्ट"
+      "pr": "Pull request"
     },
     "browser": {
       "activate": "Click to use this browser",
@@ -1851,103 +1851,103 @@
       "closed": "बंद",
       "success": "Passed",
       "failure": "Failed",
-      "open": "खुला",
-      "chip": "पुल रिक्वेस्ट #{{number}}",
-      "openOnGithub": "GitHub पर खोलें",
-      "openReview": "रिव्यू खोलें",
-      "refs": "{{head}} से {{base}} में",
-      "loading": "पुल रिक्वेस्ट लोड हो रहा है…",
-      "description": "विवरण",
-      "noDescription": "कोई विवरण नहीं दिया गया।",
-      "labels": "लेबल",
+      "open": "Open",
+      "chip": "Pull request #{{number}}",
+      "openOnGithub": "Open on GitHub",
+      "openReview": "Open review",
+      "refs": "{{head}} into {{base}}",
+      "loading": "Loading pull request…",
+      "description": "Description",
+      "noDescription": "No description provided.",
+      "labels": "Labels",
       "ci": {
-        "success": "चेक पास हुए",
-        "failure": "चेक फ़ेल हो रहे हैं",
-        "pending": "चेक चल रहे हैं"
+        "success": "Checks passed",
+        "failure": "Checks failing",
+        "pending": "Checks running"
       },
       "checks": {
-        "title": "चेक",
-        "passed": "सभी चेक पास हुए",
-        "failing": "{{total}} में से {{failing}} फ़ेल",
-        "running": "{{total}} में से {{pending}} चल रहे हैं",
-        "none": "कोई चेक नहीं",
-        "details": "विवरण",
-        "showAll": "सभी {{total}} दिखाएँ",
-        "showLess": "कम दिखाएँ",
-        "more": "+{{extra}} और"
+        "title": "Checks",
+        "passed": "All checks passed",
+        "failing": "{{failing}} of {{total}} failing",
+        "running": "{{pending}} of {{total}} running",
+        "none": "No checks",
+        "details": "Details",
+        "showAll": "Show all {{total}}",
+        "showLess": "Show less",
+        "more": "+{{extra}} more"
       },
       "review": {
-        "approved": "स्वीकृत · {{approvals}}",
-        "required": "रिव्यू ज़रूरी · {{requested}} अनुरोधित"
+        "approved": "Approved · {{approvals}}",
+        "required": "Review required · {{requested}} requested"
       },
       "reviewers": {
-        "title": "रिव्यूअर",
-        "awaiting": "रिव्यू बाकी"
+        "title": "Reviewers",
+        "awaiting": "Awaiting review"
       },
       "verdict": {
-        "APPROVED": "स्वीकृत",
-        "CHANGES_REQUESTED": "बदलाव माँगे गए",
-        "COMMENTED": "टिप्पणी की",
-        "DISMISSED": "खारिज",
-        "PENDING": "बाकी"
+        "APPROVED": "Approved",
+        "CHANGES_REQUESTED": "Changes requested",
+        "COMMENTED": "Commented",
+        "DISMISSED": "Dismissed",
+        "PENDING": "Pending"
       },
       "conversation": {
-        "title": "बातचीत",
-        "empty": "अभी कोई टिप्पणी नहीं।",
-        "commented": "ने टिप्पणी की",
-        "APPROVED": "ने स्वीकृत किया",
-        "CHANGES_REQUESTED": "ने बदलाव माँगे",
-        "COMMENTED": "ने रिव्यू किया",
-        "DISMISSED": "रिव्यू खारिज",
-        "PENDING": "रिव्यू बाकी"
+        "title": "Conversation",
+        "empty": "No comments yet.",
+        "commented": "commented",
+        "APPROVED": "approved",
+        "CHANGES_REQUESTED": "requested changes",
+        "COMMENTED": "reviewed",
+        "DISMISSED": "review dismissed",
+        "PENDING": "review pending"
       },
       "files": {
-        "title": "बदली गई फ़ाइलें",
-        "back": "सभी फ़ाइलें",
-        "loading": "डिफ़ लोड हो रहा है…",
-        "failed": "डिफ़ लोड नहीं हो सका।",
-        "truncated": "यह डिफ़ यहाँ दिखाने के लिए बहुत बड़ा है। इसे GitHub पर खोलें।",
-        "empty": "इस फ़ाइल में दिखाने के लिए कोई बदलाव नहीं।"
+        "title": "Files changed",
+        "back": "All files",
+        "loading": "Loading diff…",
+        "failed": "Couldn't load the diff.",
+        "truncated": "This diff is too large to show here. Open it on GitHub.",
+        "empty": "No changes to show for this file."
       },
       "composer": {
-        "label": "रिव्यू",
-        "placeholder": "रिव्यू टिप्पणी लिखें…",
-        "verdict": "रिव्यू का प्रकार",
-        "comment": "टिप्पणी",
-        "approve": "स्वीकृत करें",
-        "request_changes": "बदलाव माँगें",
-        "submit": "रिव्यू भेजें",
-        "sent": "रिव्यू भेजा गया"
+        "label": "Review",
+        "placeholder": "Leave a review comment…",
+        "verdict": "Review type",
+        "comment": "Comment",
+        "approve": "Approve",
+        "request_changes": "Request changes",
+        "submit": "Submit review",
+        "sent": "Review submitted"
       },
       "state": {
-        "retry": "फिर से कोशिश करें",
-        "settings": "सेटिंग्स खोलें",
-        "install": "GitHub CLI पाएँ",
+        "retry": "Retry",
+        "settings": "Open Settings",
+        "install": "Get the GitHub CLI",
         "disabled": {
-          "title": "GitHub इंटीग्रेशन बंद है",
-          "detail": "इस ब्रांच का पुल रिक्वेस्ट, चेक और रिव्यू देखने के लिए इसे सेटिंग्स में चालू करें।"
+          "title": "GitHub integration is off",
+          "detail": "Turn it on in Settings to see this branch's pull request, checks and reviews."
         },
         "none": {
-          "title": "{{branch}} के लिए अभी कोई पुल रिक्वेस्ट नहीं",
-          "detail": "GitHub पर एक खोलें, या टर्मिनल से बनाएँ:",
-          "detached": "इस चेकआउट के लिए कोई पुल रिक्वेस्ट नहीं",
-          "detachedDetail": "किसी ब्रांच का पुल रिक्वेस्ट देखने के लिए उसे चेकआउट करें।"
+          "title": "No pull request for {{branch}} yet",
+          "detail": "Open one on GitHub, or create it from a terminal:",
+          "detached": "No pull request for this checkout",
+          "detachedDetail": "Check out a branch to see its pull request."
         },
         "unsupported": {
-          "title": "यह GitHub रिपॉज़िटरी नहीं है",
-          "detail": "इस चेकआउट में कोई GitHub रिमोट नहीं है, इसलिए इसके पुल रिक्वेस्ट नहीं हैं।"
+          "title": "Not a GitHub repository",
+          "detail": "This checkout has no GitHub remote, so it has no pull requests."
         },
         "missing": {
-          "title": "GitHub CLI इंस्टॉल नहीं है",
-          "detail": "पुल रिक्वेस्ट GitHub CLI (gh) से आते हैं। इसे cli.github.com से इंस्टॉल करें (macOS: brew install gh), फिर साइन इन करें:"
+          "title": "GitHub CLI not installed",
+          "detail": "Pull requests come from the GitHub CLI (gh). Install it from cli.github.com (macOS: brew install gh), then sign in:"
         },
         "unauthenticated": {
-          "title": "GitHub में साइन इन नहीं है",
-          "detail": "टर्मिनल में GitHub CLI में साइन इन करें, फिर दोबारा कोशिश करें:"
+          "title": "Not signed in to GitHub",
+          "detail": "Sign in to the GitHub CLI in a terminal, then retry:"
         },
         "error": {
-          "title": "GitHub तक नहीं पहुँच सके",
-          "detail": "GitHub CLI ने जवाब नहीं दिया। फिर से कोशिश करें।"
+          "title": "Couldn't reach GitHub",
+          "detail": "The GitHub CLI didn't answer. Try again."
         }
       }
     },
@@ -2007,9 +2007,9 @@
     "progress": "चरण {{current}} / {{total}}",
     "replay": "टूर देखें",
     "newLook": {
-      "message": "AbacusAI Bot का नया रूप आ गया है। आपके बॉट, सेशन और रूटीन साथ आ गए हैं।",
-      "start": "छोटा टूर लें",
-      "dismiss": "समझ गया"
+      "message": "AbacusAI Bot has a new look. Your bots, sessions and routines came with you.",
+      "start": "Take a quick tour",
+      "dismiss": "Got it"
     },
     "stops": {
       "sessions": {
@@ -2581,7 +2581,7 @@
         "agent": "Agent",
         "device": "Device",
         "thread": "Thread",
-        "pr": "पुल रिक्वेस्ट"
+        "pr": "Pull request"
       },
       "addTab": "Add a tab",
       "closeTab": "Close {{name}}",
@@ -2788,21 +2788,21 @@
     },
     "github": {
       "title": "GitHub",
-      "integration": "GitHub इंटीग्रेशन",
-      "integrationDetail": "सेशन में पुल रिक्वेस्ट की स्थिति, CI चेक और रिव्यू दिखाएँ, उसी जगह के GitHub CLI (gh) से जहाँ सेशन चलते हैं।",
+      "integration": "GitHub integration",
+      "integrationDetail": "Show pull request status, CI checks and reviews in sessions, using the GitHub CLI (gh) where they run.",
       "cli": "GitHub CLI",
-      "connectedAs": "{{host}} पर @{{account}} के रूप में साइन इन",
-      "missingDetail": "cli.github.com से gh इंस्टॉल करें (macOS: brew install gh), फिर gh auth login चलाएँ।",
-      "unauthenticatedDetail": "टर्मिनल में gh auth login चलाएँ, फिर दोबारा जाँचें।",
-      "checking": "जाँच हो रही है…",
-      "checkAgain": "फिर से जाँचें",
-      "install": "gh पाएँ",
+      "connectedAs": "Signed in as @{{account}} on {{host}}",
+      "missingDetail": "Install gh from cli.github.com (macOS: brew install gh), then run gh auth login.",
+      "unauthenticatedDetail": "Run gh auth login in a terminal, then check again.",
+      "checking": "Checking…",
+      "checkAgain": "Check again",
+      "install": "Get gh",
       "state": {
-        "ok": "कनेक्टेड",
-        "missing": "इंस्टॉल नहीं",
-        "unauthenticated": "साइन इन नहीं",
-        "disabled": "बंद",
-        "error": "उपलब्ध नहीं"
+        "ok": "Connected",
+        "missing": "Not installed",
+        "unauthenticated": "Not signed in",
+        "disabled": "Off",
+        "error": "Unavailable"
       }
     }
   },
@@ -2835,7 +2835,7 @@
       "tools_one": "Running {{count}} tool",
       "tools_other": "Running {{count}} tools",
       "typing": "Typing",
-      "waitingForConnection": "कनेक्शन की प्रतीक्षा हो रही है…",
+      "waitingForConnection": "Waiting for connection…",
       "working": "Working"
     },
     "code": {
@@ -3230,7 +3230,7 @@
       "connected": "कनेक्ट हो गया। मॉडल चुनें",
       "storedOnHost": "कुंजियाँ आपकी होस्ट VM पर सेव होती हैं।"
     },
-    "imageEnlarge": "बड़ा देखें",
+    "imageEnlarge": "View larger",
     "visualizer": {
       "title": "Interactive visual",
       "drawing": "Drawing the visual"
@@ -3257,7 +3257,7 @@
       "call": "बात करें",
       "pause": "Pause check-ins",
       "resume": "Resume check-ins",
-      "settings": "नॉच सेटिंग्स"
+      "settings": "Notch settings"
     },
     "wings": {
       "idle": "आपके तैयार होते ही तैयार",
@@ -3392,15 +3392,15 @@
       "webhook": "वेबहुक",
       "manual": "On demand",
       "scheduled": "Scheduled",
-      "waiting": "कनेक्शन की प्रतीक्षा"
+      "waiting": "Waiting for connection"
     },
     "outcomes": {
       "running": "Running",
       "completed": "Completed",
       "failed": "Failed",
       "skipped": "Skipped",
-      "skipped-offline": "छोड़ा गया: ऑफ़लाइन",
-      "offline": "Abacus से कनेक्ट नहीं हो सका",
+      "skipped-offline": "Skipped: offline",
+      "offline": "Couldn't reach Abacus",
       "unknown": "Unknown",
       "paused": "Paused"
     },
@@ -3794,7 +3794,7 @@
       "payments": "Payments",
       "support": "Support",
       "web": "Web",
-      "messaging": "मैसेजिंग"
+      "messaging": "Messaging"
     },
     "formats": {
       "pdf": "PDF",
@@ -4232,27 +4232,27 @@
     "uploadTitle": "अपने कंप्यूटर से Skill इंपोर्ट करें"
   },
   "upgradeDialog": {
-    "checkAgain": "मैंने अपग्रेड कर लिया है",
-    "close": "बंद करें",
-    "connectorsBody": "आप अपनी मॉडल की से चैट जारी रख सकते हैं। ईमेल, कैलेंडर और दूसरे ऐप पढ़ने में AbacusAI क्रेडिट लगते हैं।",
+    "checkAgain": "I've upgraded",
+    "close": "Close",
+    "connectorsBody": "You can keep chatting on your own model key. Reading your email, calendar and other apps runs on AbacusAI credits.",
     "connectorsCount": "100+",
-    "connectorsEyebrow": "Gmail · Calendar · Slack · Drive और भी बहुत कुछ",
-    "connectorsTitle": "कनेक्टर AbacusAI क्रेडिट के साथ उपलब्ध हैं",
-    "creditsBody": "आपका मैसेज सेव है। अपग्रेड करें और यह तुरंत भेज दिया जाएगा।",
-    "creditsBodyNoMessage": "टॉप मॉडल, कनेक्टर और रूटीन के साथ आगे बढ़ने के लिए अपग्रेड करें।",
-    "creditsTitle": "AbacusAI Bot के साथ आगे बढ़ें",
-    "keepChatting": "कनेक्टर के बिना चैट जारी रखें",
-    "notNow": "अभी नहीं",
+    "connectorsEyebrow": "Gmail · Calendar · Slack · Drive and more",
+    "connectorsTitle": "Connectors are available with AbacusAI credits",
+    "creditsBody": "Your message is saved. Upgrade and it sends right away.",
+    "creditsBodyNoMessage": "Upgrade to keep going with the top models, connectors and routines.",
+    "creditsTitle": "Keep going with AbacusAI Bot",
+    "keepChatting": "Keep chatting without connectors",
+    "notNow": "Not now",
     "ownKeyBody": "No separate API bill. Upgrade and your message sends right away.",
     "ownKeyBodyNoMessage": "No separate API bill. Upgrade to keep going on the top models.",
     "ownKeyTitle": "Use any model on AbacusAI",
-    "planLine": "{{plan}} प्लान · कभी भी रद्द करें",
+    "planLine": "{{plan}} plan · cancel anytime",
     "planTitle": "Everything {{plan}} gives you",
-    "startAt": "शुरुआत",
-    "waitingBody": "आपका प्लान चालू होते ही मैसेज भेज दिया जाएगा।",
-    "waitingBodyNoMessage": "आपका प्लान चालू होते ही यह बंद हो जाएगा।",
-    "waitingTitle": "अपने ब्राउज़र में चेकआउट पूरा करें",
-    "waitingToSend": "भेजने का इंतज़ार: “{{text}}”"
+    "startAt": "Start at",
+    "waitingBody": "Your message sends as soon as your plan is active.",
+    "waitingBodyNoMessage": "This closes as soon as your plan is active.",
+    "waitingTitle": "Finish checkout in your browser",
+    "waitingToSend": "Waiting to send: “{{text}}”"
   },
   "paymentRequired": {
     "unconfirmedTitle": "Choose a plan to keep using AbacusAI Bot",
@@ -4417,22 +4417,22 @@
       "doneTitle": "You're all set",
       "doneBody": "Your bot is on WhatsApp. Message it there anytime.",
       "useDifferentNumber": "Use a different number",
-      "skipDownload": "छोड़ें, इसके बजाय ऐप डाउनलोड करें",
-      "desktopDoneBody": "आपका बॉट WhatsApp पर है। इस कंप्यूटर पर भी इस्तेमाल करने के लिए डेस्कटॉप ऐप पाएं।",
-      "download": "डेस्कटॉप ऐप डाउनलोड करें",
-      "downloadingTitle": "आपका डाउनलोड शुरू हो गया है",
-      "downloadingBody": "इस कंप्यूटर पर इस्तेमाल करने के लिए AbacusAI Bot इंस्टॉल करें।",
-      "connectInstead": "इसके बजाय WhatsApp कनेक्ट करें"
+      "skipDownload": "Skip, download the app instead",
+      "desktopDoneBody": "Your bot is on WhatsApp. Get the desktop app to use it on this computer too.",
+      "download": "Download the desktop app",
+      "downloadingTitle": "Your download has started",
+      "downloadingBody": "Install AbacusAI Bot to use it on this computer.",
+      "connectInstead": "Connect WhatsApp instead"
     },
     "signOutDetail": "This ends your website session and clears this browser's bot data.",
     "routines": {
-      "download": "डेस्कटॉप ऐप डाउनलोड करें",
-      "desktopAlternative": "अपने कंप्यूटर पर AbacusAI Bot इस्तेमाल करें।"
+      "download": "Download desktop",
+      "desktopAlternative": "Use AbacusAI Bot on your computer."
     },
     "phoneError": {
-      "trialEndedTitle": "आपका मुफ़्त ट्रायल खत्म हो गया है",
-      "trialEnded": "WhatsApp पर AbacusAI Bot का इस्तेमाल जारी रखने के लिए अपग्रेड करें।",
-      "upgrade": "अपग्रेड करें",
+      "trialEndedTitle": "Your free trial has ended",
+      "trialEnded": "Upgrade to keep using AbacusAI Bot on WhatsApp.",
+      "upgrade": "Upgrade",
       "title": "Something went wrong",
       "connection": "We couldn't reach AbacusAI Bot. Check your connection, then try again.",
       "refused": "This account can't use AbacusAI Bot on this site."
@@ -4518,8 +4518,8 @@
       "contactFailed": "I couldn't reply to {{name}} just now.",
       "contactFailedGeneric": "I couldn't reply to {{name}} just now: something went wrong on my side.",
       "someone": "someone",
-      "payment": "मैं रुक गया हूँ क्योंकि हम आपके पिछले भुगतान की पुष्टि नहीं कर सके। अगर आपकी सदस्यता सक्रिय है, तो support@abacus.ai से संपर्क करें और कृपया दोबारा खरीदारी न करें। बिलिंग: {{link}}",
-      "paymentLapsed": "मैं रुक गया हूँ क्योंकि आपकी Abacus.AI सदस्यता समाप्त हो गई है। यहाँ नवीनीकरण करें: {{link}}"
+      "payment": "I've paused because we couldn't confirm your last payment. If your subscription is active, contact support@abacus.ai, and please don't purchase again. Billing: {{link}}",
+      "paymentLapsed": "I've paused because your Abacus.AI subscription has ended. Renew it here: {{link}}"
     },
     "unavailable": {
       "title": {
@@ -4544,9 +4544,9 @@
       "planBodyAny": "Keep going on a free model now, or upgrade your plan to use it."
     },
     "payment": {
-      "title": "हम आपके पिछले भुगतान की पुष्टि नहीं कर सके",
-      "body": "अगर आपकी सदस्यता सक्रिय है, तो support@abacus.ai से संपर्क करें। कृपया दोबारा खरीदारी न करें।",
-      "billing": "बिलिंग खोलें"
+      "title": "We couldn't confirm your last payment",
+      "body": "If your subscription is active, contact support@abacus.ai. Please don't purchase again.",
+      "billing": "Open billing"
     }
   },
   "creditThreshold": {
