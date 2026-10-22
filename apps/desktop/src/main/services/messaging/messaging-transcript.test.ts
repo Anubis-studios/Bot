@@ -29,12 +29,14 @@ vi.mock("./messaging-config-service", async (importOriginal) => {
 });
 
 const { MessagingGatewayService } = await import("./messaging-gateway-service");
+const { gatewayTurns } = await import("./messaging-turns.test-support");
 
 const harness = () => {
   const shown: Array<{ from: "user" | "agent"; content: string }> = [];
   const prompts: string[] = [];
   const sent: string[] = [];
 
+  const turns = gatewayTurns(() => gateway);
   const gateway = new MessagingGatewayService({
     resolveWorkspaceId: () => "ws",
     createAgentSession: () => {
@@ -42,8 +44,10 @@ const harness = () => {
     },
     updateSessionLabel: () => {},
     startSession: async () => ({ success: true }) as never,
-    sendMessage: (_w: string, _s: string, message: string) =>
-      prompts.push(message),
+    sendMessage: (_w: string, s: string, message: string) => {
+      turns.sent(s);
+      prompts.push(message);
+    },
     emitUserMessage: (_w: string, _s: string, content: string) =>
       shown.push({ from: "user", content }),
     emitAgentMessage: (_w: string, _s: string, content: string) =>
@@ -95,15 +99,12 @@ const harness = () => {
         text,
       }),
     delta: (content: string) =>
-      gateway.handleAgentEvent("bot-chat", {
-        type: "event",
-        event: { type: "text_delta", content },
-      } as never),
+      turns.emit("bot-chat", { type: "text_delta", content }),
     idle: () =>
-      gateway.handleAgentEvent("bot-chat", {
-        type: "event",
-        event: { type: "status_changed", status: AgentStatus.Idle },
-      } as never),
+      turns.emit("bot-chat", {
+        type: "status_changed",
+        status: AgentStatus.Idle,
+      }),
   };
 };
 

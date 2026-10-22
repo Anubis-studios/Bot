@@ -129,15 +129,13 @@ describe("the out-of-credits pause", () => {
 describe("a run the network let down", () => {
   it("is filed offline, apart from a failure", () => {
     expect(
-      runOutcomeOf({ type: "error", error: { code: "network_unreachable" } })
+      runOutcomeOf({ kind: "failed", error: { code: "network_unreachable" } })
     ).toBe("offline");
     expect(
-      runOutcomeOf({ type: "error", error: { code: "turn_failed" } })
+      runOutcomeOf({ kind: "failed", error: { code: "turn_failed" } })
     ).toBe("failed");
-    expect(runOutcomeOf({ type: "status_changed", status: "idle" })).toBe(
-      "completed"
-    );
-    expect(runOutcomeOf({ type: "text_delta" })).toBeNull();
+    expect(runOutcomeOf({ kind: "reply" })).toBe("completed");
+    expect(runOutcomeOf({ kind: "timed_out" })).toBe("failed");
   });
 
   it("never counts toward the pause, nor breaks a real streak", () => {

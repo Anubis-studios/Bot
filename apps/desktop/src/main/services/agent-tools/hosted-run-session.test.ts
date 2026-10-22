@@ -95,23 +95,35 @@ const harness = async () => {
   const start = vi
     .spyOn(host, "startAgentSession")
     .mockResolvedValue({ success: true } as never);
+  // What the agent says passes the turn state (and so the TurnLedger) first,
+  // then the listeners, as the real stream does.
   const emit = (sessionId: string, event: Record<string, unknown>): void => {
+    const payload = { type: "event", event };
+    internals.sessionTurnStateService.filterDesktopEvent(
+      "w",
+      sessionId,
+      payload
+    );
     for (const listener of internals.agentEventListeners as Set<
       (id: string, payload: unknown) => void
     >)
-      listener(sessionId, { type: "event", event });
+      listener(sessionId, payload);
   };
-  return { host, internals, stop, start, emit };
+  /** The run's message reached its agent: its turn is open. */
+  const sent = (sessionId: string): void =>
+    internals.sessionTurnStateService.markSent("w", sessionId);
+  return { host, internals, stop, start, emit, sent };
 };
 
 it("runs held to the routine's reach and returns its final message", async () => {
-  const { host, internals, stop, start, emit } = await harness();
+  const { host, internals, stop, start, emit, sent: opened } = await harness();
   const sent: string[] = [];
   vi.spyOn(host, "sendAgentMessage").mockImplementation(((request: {
     sessionId: string;
     message: string;
   }) => {
     sent.push(request.message);
+    opened(request.sessionId);
     queueMicrotask(() => {
       emit(request.sessionId, {
         type: "status_changed",
@@ -168,7 +180,7 @@ it("runs held to the routine's reach and returns its final message", async () =>
 });
 
 it("does not take startup's own statuses for the run's end", async () => {
-  const { host, start, emit } = await harness();
+  const { host, start, emit, sent } = await harness();
   start.mockImplementation((async (request: { sessionId: string }) => {
     emit(request.sessionId, {
       type: "status_changed",
@@ -183,6 +195,7 @@ it("does not take startup's own statuses for the run's end", async () => {
   vi.spyOn(host, "sendAgentMessage").mockImplementation(((request: {
     sessionId: string;
   }) => {
+    sent(request.sessionId);
     queueMicrotask(() => {
       emit(request.sessionId, {
         type: "text_delta",
@@ -202,39 +215,59 @@ it("does not take startup's own statuses for the run's end", async () => {
 });
 
 it("tells a credits failure apart", async () => {
-  const { host, emit } = await harness();
+  const { host, emit, sent } = await harness();
   vi.spyOn(host, "sendAgentMessage").mockImplementation(((request: {
     sessionId: string;
   }) => {
-    queueMicrotask(() =>
-      emit(request.sessionId, {
-        type: "error",
-        error: {
-          message: "Out of credits",
-          actions: [{ type: "upgrade-abacus" }],
-        },
-      })
-    );
-  }) as never);
-  const result = await host.runUnattended(REQUEST);
-  expect(result.outcome).toBe("failed");
-  expect(result.creditsOut).toBe(true);
-});
-
-it("counts an error reported just after the idle as the run's end", async () => {
-  const { host, emit } = await harness();
-  vi.spyOn(host, "sendAgentMessage").mockImplementation(((request: {
-    sessionId: string;
-  }) => {
+    sent(request.sessionId);
     queueMicrotask(() => {
       emit(request.sessionId, {
         type: "status_changed",
         status: AgentStatus.Streaming,
       });
       emit(request.sessionId, {
+        type: "error",
+        error: {
+          message: "Out of credits",
+          actions: [{ type: "upgrade-abacus" }],
+        },
+      });
+      emit(request.sessionId, {
+        type: "turn_complete",
+        outcome: { kind: "failed", cause: "credits_exhausted" },
+      });
+      emit(request.sessionId, {
         type: "status_changed",
         status: AgentStatus.Idle,
       });
+    });
+  }) as never);
+  const result = await host.runUnattended(REQUEST);
+  expect(result.outcome).toBe("failed");
+  expect(result.creditsOut).toBe(true);
+});
+
+it("ends on the turn's one close, whatever comes after it", async () => {
+  const { host, emit, sent } = await harness();
+  vi.spyOn(host, "sendAgentMessage").mockImplementation(((request: {
+    sessionId: string;
+  }) => {
+    sent(request.sessionId);
+    queueMicrotask(() => {
+      emit(request.sessionId, {
+        type: "status_changed",
+        status: AgentStatus.Streaming,
+      });
+      emit(request.sessionId, {
+        type: "text_delta",
+        content: "done",
+        messageId: "m1",
+      });
+      emit(request.sessionId, {
+        type: "status_changed",
+        status: AgentStatus.Idle,
+      });
+      // A stray error once the turn has closed belongs to no turn.
       emit(request.sessionId, {
         type: "error",
         error: { message: "Out", actions: [{ type: "upgrade-abacus" }] },
@@ -242,7 +275,7 @@ it("counts an error reported just after the idle as the run's end", async () => 
     });
   }) as never);
   const result = await host.runUnattended(REQUEST);
-  expect(result).toMatchObject({ outcome: "failed", creditsOut: true });
+  expect(result).toEqual({ outcome: "completed", text: "done" });
 });
 
 it("stops the run at its deadline", async () => {

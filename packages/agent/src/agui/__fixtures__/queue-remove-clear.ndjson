@@ -9,6 +9,6 @@
 {"type":"queue_updated","messages":[{"id":"q-2","message":"b","waitingFor":"step"}],"dequeued":null}
 {"type":"queue_updated","messages":[],"dequeued":null}
 {"type":"event","event":{"type":"text_delta","content":"Done.","messageId":"msg-1"}}
-{"type":"event","event":{"type":"turn_complete","usage":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"requests":1,"model":"fake-1"}}}
+{"type":"event","event":{"type":"turn_complete","outcome":{"kind":"reply"},"usage":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"requests":1,"model":"fake-1"}}}
 {"type":"event","event":{"type":"status_changed","status":"idle"}}
 {"type":"event","event":{"type":"status_changed","status":"idle"}}

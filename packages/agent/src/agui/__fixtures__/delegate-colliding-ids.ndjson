@@ -21,6 +21,6 @@
 {"type":"event","event":{"type":"subtask_end","id":"delegate-<T>-2","status":"completed"}}
 {"type":"event","event":{"type":"tool_execution_complete","tool":{"id":"call-0-1","name":"delegate_task","type":"delegate_task","input":{"task":"task B: list files"},"args":{"task":"task B: list files"}},"result":{"id":"call-0-1","content":"B looked.","rejected":false}}}
 {"type":"event","event":{"type":"text_delta","content":"Both delegates reported.","messageId":"msg-2"}}
-{"type":"event","event":{"type":"turn_complete","usage":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"requests":2,"model":"fake-1"}}}
+{"type":"event","event":{"type":"turn_complete","outcome":{"kind":"reply"},"usage":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"requests":2,"model":"fake-1"}}}
 {"type":"event","event":{"type":"status_changed","status":"idle"}}
 {"type":"event","event":{"type":"status_changed","status":"idle"}}

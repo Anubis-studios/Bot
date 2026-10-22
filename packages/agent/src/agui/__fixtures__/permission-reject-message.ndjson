@@ -11,6 +11,6 @@
 {"type":"queue_updated","messages":[],"dequeued":null}
 {"type":"event","event":{"type":"tool_execution_complete","tool":{"id":"call-0-0","name":"write","type":"write","input":{"path":"b.txt","content":"nope\n"},"args":{"path":"b.txt","content":"nope\n"}},"result":{"id":"call-0-0","content":"The user rejected this tool call: not now","rejected":true}}}
 {"type":"event","event":{"type":"text_delta","content":"Understood.","messageId":"msg-2"}}
-{"type":"event","event":{"type":"turn_complete","usage":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"requests":2,"model":"fake-1"}}}
+{"type":"event","event":{"type":"turn_complete","outcome":{"kind":"reply"},"usage":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"requests":2,"model":"fake-1"}}}
 {"type":"event","event":{"type":"status_changed","status":"idle"}}
 {"type":"event","event":{"type":"status_changed","status":"idle"}}

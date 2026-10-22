@@ -203,12 +203,19 @@ describe("routine creation plan admission", () => {
 });
 
 describe("a routine run the network let down", () => {
-  const settle = (service: object, event: Record<string, unknown>): void =>
+  /** The run's turn closing, as the TurnLedger hands it over. */
+  const settle = (service: object, ending: Record<string, unknown>): void =>
     (
       ServiceHost.prototype as unknown as {
-        settleRoutineRun: (sessionId: string, payload: unknown) => void;
+        settleRoutineRun: (record: unknown) => void;
       }
-    ).settleRoutineRun.call(service, "run-1", { type: "event", event });
+    ).settleRoutineRun.call(service, {
+      turnId: "t1",
+      sessionId: "run-1",
+      startedAt: 0,
+      endedAt: 1,
+      ...ending,
+    });
 
   it("is filed offline, and never pauses the routine", async () => {
     const { createJob } = await import("./services/agent-tools/cron-store");
@@ -238,13 +245,13 @@ describe("a routine run the network let down", () => {
     };
 
     settle(service, {
-      type: "error",
+      kind: "failed",
+      cause: "network_unreachable",
       error: {
         message: "Couldn't reach Abacus — check your connection.",
         code: "network_unreachable",
       },
     });
-    settle(service, { type: "status_changed", status: "idle" });
 
     expect(outcomes).toEqual(["offline"]);
     expect(readLastRoutineRun(dir)?.outcome).toBe("offline");

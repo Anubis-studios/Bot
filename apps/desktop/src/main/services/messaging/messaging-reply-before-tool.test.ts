@@ -34,11 +34,13 @@ vi.mock("./messaging-config-service", async (importOriginal) => {
 });
 
 const { MessagingGatewayService } = await import("./messaging-gateway-service");
+const { gatewayTurns } = await import("./messaging-turns.test-support");
 
 const harness = () => {
   const sent: string[] = [];
   let currentSession = "";
   let created = 0;
+  const turns = gatewayTurns(() => gateway);
   const gateway = new MessagingGatewayService({
     resolveWorkspaceId: () => "ws",
     createAgentSession: () => {
@@ -48,7 +50,7 @@ const harness = () => {
     },
     updateSessionLabel: () => {},
     startSession: async () => ({ success: true }) as never,
-    sendMessage: () => {},
+    sendMessage: (_w: string, s: string) => turns.sent(s),
     emitUserMessage: () => {},
     emitChanged: () => {},
   } as never);
@@ -70,7 +72,7 @@ const harness = () => {
     ) => Promise<void>;
   };
   const emit = (event: Record<string, unknown>): void =>
-    gateway.handleAgentEvent(currentSession, { type: "event", event } as never);
+    turns.emit(currentSession, event);
   return {
     sent,
     inbound: (text: string) =>

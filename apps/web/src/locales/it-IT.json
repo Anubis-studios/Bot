@@ -4519,7 +4519,13 @@
       "contactFailedGeneric": "Non sono riuscito a rispondere a {{name}} poco fa: qualcosa è andato storto da parte mia.",
       "someone": "qualcuno",
       "payment": "Mi sono fermato perché non siamo riusciti a confermare il tuo ultimo pagamento. Se il tuo abbonamento è attivo, contatta support@abacus.ai e non acquistare di nuovo. Fatturazione: {{link}}",
-      "paymentLapsed": "Mi sono fermato perché il tuo abbonamento Abacus.AI è terminato. Rinnovalo qui: {{link}}"
+      "paymentLapsed": "Mi sono fermato perché il tuo abbonamento Abacus.AI è terminato. Rinnovalo qui: {{link}}",
+      "timedOut": "Ci è voluto troppo ed è stato interrotto prima che potessi rispondere. Rimandalo per riprendere.",
+      "agentExited": "L'app si è chiusa prima che potessi rispondere. Rimandalo per riprendere.",
+      "empty": "Non sono riuscito a preparare una risposta. Rimandalo, per favore.",
+      "contactNeutral": "Scusa, ora non posso rispondere. Ti rispondo presto.",
+      "contactEmpty": "Non ho risposto a {{name}}: non è arrivata nessuna risposta. Apri l'app per rispondergli, oppure dimmi cosa scrivere.",
+      "undelivered": "Non è stato possibile consegnare un messaggio a {{name}}."
     },
     "unavailable": {
       "title": {

@@ -18,6 +18,7 @@ import {
   INACTIVITY_TIMEOUT_MINUTES,
 } from "./session-turn-state-service";
 import { TurnAbandoner, type TurnAbandonerPorts } from "./turn-abandoner";
+import { TurnLedger } from "./turn-ledger";
 
 const WS = "ws-1";
 const SESSION = "session-1";
@@ -430,5 +431,131 @@ describe("abandoning a turn", () => {
     await vi.advanceTimersByTimeAsync(1_000);
     await expect(done).resolves.toBe("closed");
     expect(calls).toEqual(["clear", "mark", "stop", "close"]);
+  });
+});
+
+describe("every turn closes once, with how it ended", () => {
+  let records: Array<{ kind: string; cause?: string }>;
+  let lines: string[];
+  let ledgered: SessionTurnStateService;
+  const event = (e: Record<string, unknown>): DesktopEvent =>
+    ({ type: "event", event: e }) as DesktopEvent;
+  const feed = (message: DesktopEvent): void => {
+    ledgered.filterDesktopEvent(WS, SESSION, message);
+  };
+
+  beforeEach(() => {
+    records = [];
+    lines = [];
+    const ledger = new TurnLedger({
+      now: () => Date.now(),
+      log: (line) => lines.push(line),
+    });
+    ledger.onClose((record) => records.push(record));
+    ledgered = new SessionTurnStateService(() => {}, onTimeout, ledger);
+  });
+
+  it("takes the agent's own outcome off its closing turn_complete", () => {
+    ledgered.markSent(WS, SESSION);
+    feed(event({ type: "error", error: { cause: "rate_limited" } }));
+    feed(
+      event({
+        type: "turn_complete",
+        outcome: { kind: "failed", cause: "rate_limited" },
+      })
+    );
+    feed(statusChange(AgentStatus.Idle));
+
+    expect(records).toEqual([
+      expect.objectContaining({ kind: "failed", cause: "rate_limited" }),
+    ]);
+    expect(lines).toEqual([
+      expect.stringMatching(
+        /^\[session-\] turn outcome failed cause=rate_limited ms=\d+$/
+      ),
+    ]);
+  });
+
+  it("judges an older agent's turn by what it streamed", () => {
+    ledgered.markSent(WS, SESSION);
+    feed(statusChange(AgentStatus.Idle));
+    ledgered.markSent(WS, SESSION);
+    feed(event({ type: "text_delta", content: "Hello" }));
+    feed(statusChange(AgentStatus.Idle));
+
+    expect(records).toEqual([
+      expect.objectContaining({ kind: "failed", cause: "empty" }),
+      expect.objectContaining({ kind: "reply" }),
+    ]);
+  });
+
+  it("closes a watchdog's turn as timed out, naming what ran, and only once", () => {
+    ledgered.markSent(WS, SESSION);
+    feed(toolStart("bash", { command: "npm install" }));
+    vi.advanceTimersByTime(TIMEOUT_MS + 1);
+    // The Stop that follows, and the agent's late idle, are the same ending.
+    ledgered.markStopped(WS, SESSION);
+    feed(statusChange(AgentStatus.Idle));
+
+    expect(records).toEqual([
+      expect.objectContaining({
+        kind: "timed_out",
+        cause: "bash (npm install)",
+      }),
+    ]);
+  });
+
+  it("closes a stopped turn, and one whose agent went away", () => {
+    ledgered.markSent(WS, SESSION);
+    ledgered.markStopped(WS, SESSION);
+    ledgered.markSent(WS, SESSION);
+    ledgered.markClosed(WS, SESSION);
+
+    expect(records.map((record) => record.kind)).toEqual([
+      "stopped",
+      "agent_exited",
+    ]);
+  });
+
+  it("a message sent into a running turn does not open a second one", () => {
+    ledgered.markSent(WS, SESSION);
+    ledgered.markSent(WS, SESSION);
+    feed(event({ type: "text_delta", content: "Both answered" }));
+    feed(statusChange(AgentStatus.Idle));
+
+    expect(records).toHaveLength(1);
+  });
+
+  it("carries the reported error, actions and all, on a failed close", () => {
+    ledgered.markSent(WS, SESSION);
+    const error = {
+      message: "Out of credits",
+      cause: "credits_exhausted",
+      actions: [{ type: "upgrade-abacus" }],
+    };
+    feed(event({ type: "error", error }));
+    feed(statusChange(AgentStatus.Idle));
+
+    expect(records).toEqual([
+      expect.objectContaining({ kind: "failed", error }),
+    ]);
+  });
+
+  it("an error with no idle after it is still closed, by the watchdog", () => {
+    ledgered.markSent(WS, SESSION);
+    feed(statusChange(AgentStatus.Streaming));
+    feed(event({ type: "error", error: { message: "boom" } }));
+    expect(records).toEqual([]);
+
+    vi.advanceTimersByTime(TIMEOUT_MS + 1);
+
+    expect(records).toEqual([expect.objectContaining({ kind: "timed_out" })]);
+  });
+
+  it("a session cleared away ends its open turn", () => {
+    ledgered.markSent(WS, SESSION);
+    ledgered.clearSession(SESSION);
+
+    expect(records).toEqual([expect.objectContaining({ kind: "stopped" })]);
   });
 });

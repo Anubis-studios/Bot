@@ -64,6 +64,31 @@ export const readStoredMessageLog = (): unknown[] => {
   }
 };
 
+const outboxPath = (): string =>
+  path.join(abacusBotHome(), "messaging-outbox.json");
+
+/** Chat messages still owed (ChatOutbox): its file as it was last written. */
+export const readStoredOutbox = (): unknown => {
+  try {
+    return JSON.parse(fs.readFileSync(outboxPath(), "utf8"));
+  } catch {
+    return null;
+  }
+};
+
+export const writeStoredOutbox = (state: unknown): void => {
+  const target = outboxPath();
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  const tmp = `${target}.${process.pid}.${Date.now()}.tmp`;
+  fs.writeFileSync(tmp, `${JSON.stringify(state)}\n`, "utf8");
+  try {
+    fs.chmodSync(tmp, 0o600);
+  } catch {
+    // Windows and some network filesystems don't implement POSIX modes.
+  }
+  fs.renameSync(tmp, target);
+};
+
 export const writeStoredMessageLog = (entries: unknown[]): void => {
   const target = messageLogPath();
   fs.mkdirSync(path.dirname(target), { recursive: true });

@@ -273,6 +273,38 @@ describe("debug sync, feedback and previews on v2 AG-UI threads", () => {
       } as unknown as UIMessage)
     ).toBe("text:0:1");
   });
+
+  it("uploads how each turn ended, keyed by turn, after the messages", () => {
+    const log = syncLogFor("s", {
+      readV1: () => null,
+      readThread: () => ({
+        source: { kind: "agui" },
+        messages: [
+          { id: "run-1:a", role: "assistant", parts: [{ type: "tool-call" }] },
+        ],
+      }),
+      readOutcomes: () => [
+        {
+          turnId: "t1",
+          kind: "timed_out",
+          cause: "bash (npm install)",
+          startedAt: 1,
+          endedAt: 600_001,
+        },
+      ],
+    });
+    expect(log?.segments).toEqual([
+      expect.objectContaining({ id: "run-1:a" }),
+      {
+        id: "turn-outcome:t1",
+        type: "turn-outcome",
+        kind: "timed_out",
+        cause: "bash (npm install)",
+        startedAt: 1,
+        at: 600_001,
+      },
+    ]);
+  });
 });
 
 it("debug-sync reads v1 history without creating or repairing its v2 twin", () => {

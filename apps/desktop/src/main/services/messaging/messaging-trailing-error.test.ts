@@ -14,14 +14,18 @@ import type { MessagingPlatformId } from "@abacus-ai/contract/messaging";
  *
  * Mid-turn, the raw error went out too: provider JSON and the credit wall's
  * "429: … no remaining credits" reached phones, and other people's chats. Now
- * the user's own chat hears one plain line, someone else's chat hears nothing
- * beyond what the agent wrote, and the user's own chat is told who went
- * unanswered.
+ * the user's own chat hears one plain line, someone else's chat hears one
+ * neutral line and nothing about why, and the user's own chat is told who went
+ * unanswered, with the whole line every time.
+ *
+ * A turn never ends on silence: one that said nothing, or that the app ended
+ * itself (the inactivity watchdog, the agent going away), still ends on a line.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { channelLocale, channelWords } from "./channel-words";
 import {
+  chatFailureOf,
   chatReplyForFailure,
   FAILURE_REPLY_WINDOW_MS,
   type ChannelOffer,
@@ -72,6 +76,7 @@ vi.mock("@abacus-ai/agent/user-language", () => ({
 }));
 
 const { MessagingGatewayService } = await import("./messaging-gateway-service");
+const { gatewayTurns } = await import("./messaging-turns.test-support");
 
 const UPGRADE_URL = "https://apps.example.test/u/1";
 const BOT_UPGRADE_URL =
@@ -200,6 +205,7 @@ const harness = ({
   const sessions = new Map<string, string>();
   let created = 0;
 
+  const turns = gatewayTurns(() => gateway);
   const gateway = new MessagingGatewayService({
     resolveWorkspaceId: () => "ws",
     createAgentSession: () => {
@@ -208,7 +214,7 @@ const harness = ({
     },
     updateSessionLabel: () => {},
     startSession: async () => ({ success: true }) as never,
-    sendMessage: () => {},
+    sendMessage: (_w: string, s: string) => turns.sent(s),
     emitUserMessage: () => {},
     emitChanged: () => {},
     now: () => clock.now,
@@ -248,7 +254,7 @@ const harness = ({
   const emit = (chatId: string, event: Record<string, unknown>): void => {
     const session = sessions.get(chatId);
     if (session == null) throw new Error(`no turn in ${chatId}`);
-    gateway.handleAgentEvent(session, { type: "event", event } as never);
+    turns.emit(session, event);
   };
 
   const chat = (chatId: string, userId: string, userName: string | null) => ({
@@ -267,14 +273,22 @@ const harness = ({
     say: (content: string) => emit(chatId, { type: "text_delta", content }),
     idle: () =>
       emit(chatId, { type: "status_changed", status: AgentStatus.Idle }),
-    fail: (error: Record<string, unknown>) =>
-      emit(chatId, { type: "error", error }),
+    /** A failed turn as the agent ends one: the error, then its close. */
+    fail: (error: Record<string, unknown>) => {
+      emit(chatId, { type: "error", error });
+      emit(chatId, {
+        type: "turn_complete",
+        outcome: { kind: "failed", cause: error.cause ?? error.code },
+      });
+      emit(chatId, { type: "status_changed", status: AgentStatus.Idle });
+    },
     busy: () => internals.routes.get(`discord:${chatId}`)!.busy,
   });
 
   const main = chat("C1", "U1", "Ana");
   return {
     gateway,
+    turns,
     clock,
     sessionOf: (chatId: string) => sessions.get(chatId)!,
     log,
@@ -287,6 +301,8 @@ const harness = ({
 
 /** Let the failure line's upgrade-link fetch settle. */
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+const NEUTRAL = "Sorry, I can't reply right now. I'll get back to you soon.";
 
 describe("the user's own chat, on the free plan", () => {
   it("at the credit wall, gets the Basic offer with the account's own link", async () => {
@@ -499,26 +515,29 @@ describe("someone else's chat", () => {
     ["the free pool", POOL_OUT],
     ["no model", NO_MODEL],
     ["anything else", { message: "402: out of credit" }],
-  ])("hears nothing about %s", async (_name, error) => {
-    for (const account of [FREE, PAID, null]) {
-      mocks.account = account;
-      const h = harness({ selfId: null });
-      await h.inbound("write the report");
-      h.fail(error);
-      await settle();
+  ])(
+    "hears one neutral line about %s, and nothing of why",
+    async (_name, error) => {
+      for (const account of [FREE, PAID, null]) {
+        mocks.account = account;
+        const h = harness({ selfId: null });
+        await h.inbound("write the report");
+        h.fail(error);
+        await settle();
 
-      expect(h.log).toEqual([]);
+        expect(h.log).toEqual([`C1: ${NEUTRAL}`]);
+      }
     }
-  });
+  );
 
-  it("gets only what the agent had produced", async () => {
+  it("gets what the agent had produced, then the neutral line", async () => {
     const h = harness({ selfId: null });
     await h.inbound("do the thing");
     h.say("Starting…");
     h.fail(WALL);
     await settle();
 
-    expect(h.log).toEqual(["C1: Starting…"]);
+    expect(h.log).toEqual(["C1: Starting…", `C1: ${NEUTRAL}`]);
   });
 });
 
@@ -532,6 +551,7 @@ describe("the notice in the user's own chat", () => {
 
     expect(h.log).toEqual([
       "C1: On it",
+      `C1: ${NEUTRAL}`,
       `ME: I couldn't reply to Ana just now. ${wallLine(UPGRADE_URL)}`,
     ]);
   });
@@ -543,6 +563,7 @@ describe("the notice in the user's own chat", () => {
     await settle();
 
     expect(h.log).toEqual([
+      `C1: ${NEUTRAL}`,
       "ME: I couldn't reply to Ana just now: something went wrong on my side.",
     ]);
   });
@@ -555,6 +576,7 @@ describe("the notice in the user's own chat", () => {
     await settle();
 
     expect(h.log).toEqual([
+      `C2: ${NEUTRAL}`,
       "ME: I couldn't reply to someone just now: something went wrong on my side.",
     ]);
   });
@@ -566,6 +588,7 @@ describe("the notice in the user's own chat", () => {
     await settle();
 
     expect(h.log).toEqual([
+      `C1: ${NEUTRAL}`,
       "shared me: I couldn't reply to Ana just now. DeepSeek isn't responding right now. Switch to Abacus.AI in the app's model picker to keep going on your free Abacus credits.",
     ]);
   });
@@ -576,7 +599,7 @@ describe("the notice in the user's own chat", () => {
     h.fail(WALL);
     await settle();
 
-    expect(h.log).toEqual([]);
+    expect(h.log).toEqual([`C1: ${NEUTRAL}`]);
   });
 });
 
@@ -632,7 +655,7 @@ describe("the six-hour throttle", () => {
     ]);
   });
 
-  it("one notice per contact per window; the offer inside it shrinks", async () => {
+  it("a contact that went unanswered is told every time, with the whole line", async () => {
     const clock = { now: 0 };
     const h = harness({ clock });
     const bob = h.chat("C2", "U2", "Bob");
@@ -650,14 +673,17 @@ describe("the six-hour throttle", () => {
       who.idle();
     }
 
+    const full = (name: string) =>
+      `ME: I couldn't reply to ${name} just now. ${wallLine(UPGRADE_URL)}`;
     expect(h.log).toEqual([
-      expect.stringMatching(
-        /^ME: I couldn't reply to Ana just now\. I've paused/
-      ),
-      `ME: I couldn't reply to Bob just now. Still paused: ${UPGRADE_URL}`,
-      expect.stringMatching(
-        /^ME: I couldn't reply to Ana just now\. I've paused/
-      ),
+      `C1: ${NEUTRAL}`,
+      full("Ana"),
+      `C1: ${NEUTRAL}`,
+      full("Ana"),
+      `C2: ${NEUTRAL}`,
+      full("Bob"),
+      `C1: ${NEUTRAL}`,
+      full("Ana"),
     ]);
   });
 });
@@ -707,6 +733,96 @@ describe("an upgrade link that never comes", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("a turn that ends without a word", () => {
+  it("the user's own chat hears that no reply came, once", async () => {
+    const h = harness({ self: true });
+    await h.inbound("hello?");
+    h.idle();
+    await settle();
+
+    expect(h.sent()).toEqual([
+      "I couldn't put a reply together for that. Please send it again.",
+    ]);
+    expect(h.busy()).toBe(false);
+  });
+
+  it("a contact hears nothing; the user is told and decides", async () => {
+    const h = harness();
+    await h.inbound("are you there?");
+    h.idle();
+    await settle();
+
+    expect(h.log).toEqual([
+      "ME: I didn't reply to Ana: no answer came back. Open the app to answer them, or tell me what to say.",
+    ]);
+  });
+
+  it("a deliberate NO_REPLY is a decision, not a silent turn", async () => {
+    const h = harness();
+    await h.inbound("ok 👍");
+    h.say("NO_REPLY");
+    h.idle();
+    await settle();
+
+    expect(h.log).toEqual([]);
+  });
+});
+
+describe("a turn the app ended itself", () => {
+  /** Main ends the turn (the watchdog, the agent's exit, a Stop) in the ledger. */
+  const close = (
+    h: ReturnType<typeof harness>,
+    kind: "timed_out" | "agent_exited" | "stopped"
+  ) => h.turns.ledger.end(h.sessionOf("C1"), kind);
+
+  it("the watchdog's timeout reaches the chat and frees it", async () => {
+    const h = harness({ self: true });
+    await h.inbound("build the site");
+    h.say("Working on it");
+    close(h, "timed_out");
+    await settle();
+
+    expect(h.sent()).toEqual([
+      "Working on it",
+      "That took too long and was stopped before I could reply. Send it again to pick it back up.",
+    ]);
+    expect(h.busy()).toBe(false);
+  });
+
+  it("an agent that went away is said too; a contact gets the neutral line", async () => {
+    const h = harness();
+    await h.inbound("hi");
+    close(h, "agent_exited");
+    await settle();
+
+    expect(h.log).toEqual([
+      `C1: ${NEUTRAL}`,
+      "ME: I couldn't reply to Ana just now. The app stopped before I could reply. Send it again to pick it back up.",
+    ]);
+  });
+
+  it("a Stop in the app frees the chat without a word", async () => {
+    const h = harness({ self: true });
+    await h.inbound("long job");
+    close(h, "stopped");
+    await settle();
+
+    expect(h.sent()).toEqual([]);
+    expect(h.busy()).toBe(false);
+  });
+
+  it("an ending after the agent's own idle changes nothing", async () => {
+    const h = harness({ self: true });
+    await h.inbound("hi");
+    h.say("Hello!");
+    h.idle();
+    close(h, "timed_out");
+    await settle();
+
+    expect(h.sent()).toEqual(["Hello!"]);
   });
 });
 
@@ -784,6 +900,7 @@ describe("a credit milestone crossed in a chat-app turn", () => {
   it("at four fifths urges the upgrade, without an estimate it cannot make", async () => {
     const h = harness({ self: true });
     await h.inbound("plan my week");
+    h.say("Done.");
     h.idle();
     await h.gateway.tellCreditThreshold(
       h.sessionOf("C1"),
@@ -801,9 +918,11 @@ describe("a credit milestone crossed in a chat-app turn", () => {
   it("a contact's chat never hears it; the user's own chat does", async () => {
     const h = harness();
     await h.inbound("hi");
+    h.say("Hi!");
     h.idle();
     await h.gateway.tellCreditThreshold(h.sessionOf("C1"), mark());
     expect(h.log).toEqual([
+      "C1: Hi!",
       expect.stringMatching(/^ME: You've used half your free credits\n/),
     ]);
   });
@@ -814,18 +933,20 @@ describe("a credit milestone crossed in a chat-app turn", () => {
       false
     );
     await h.inbound("plan my week");
+    h.say("Done.");
     h.idle();
     h.clock.now += 10 * 60_000;
     expect(await h.gateway.tellCreditThreshold(h.sessionOf("C1"), mark())).toBe(
       false
     );
-    expect(h.sent()).toEqual([]);
+    expect(h.sent()).toEqual(["Done."]);
   });
 
   it("is worded in the user's language, plural and all", async () => {
     mocks.language = "portuguese";
     const h = harness({ self: true });
     await h.inbound("oi");
+    h.say("Pronto.");
     h.idle();
     await h.gateway.tellCreditThreshold(
       h.sessionOf("C1"),
@@ -1021,5 +1142,61 @@ describe("the chat app's own language", () => {
     expect(words.t("outcome.channel.generic")).not.toBe(
       ENGLISH.t("outcome.channel.generic")
     );
+  });
+});
+
+describe("what a closed turn owes its chat", () => {
+  it("nothing for a reply that reached it, or a Stop", () => {
+    expect(chatFailureOf({ kind: "reply" }, true)).toBeNull();
+    expect(chatFailureOf({ kind: "stopped" }, false)).toBeNull();
+  });
+
+  it("the empty line for a turn that reached it with nothing", () => {
+    expect(chatFailureOf({ kind: "reply" }, false)).toEqual({ cause: "empty" });
+    expect(
+      chatFailureOf(
+        { kind: "failed", cause: "empty", error: { cause: "empty" } },
+        false
+      )
+    ).toEqual({ cause: "empty" });
+  });
+
+  it("no empty line once the agent's own send has answered the chat", () => {
+    expect(
+      chatFailureOf(
+        { kind: "failed", cause: "empty", error: { cause: "empty" } },
+        true
+      )
+    ).toBeNull();
+  });
+
+  it("the reported error's code, cause and actions for a failure", () => {
+    expect(
+      chatFailureOf(
+        {
+          kind: "failed",
+          cause: "credits_exhausted",
+          error: {
+            code: "turn_failed",
+            cause: "credits_exhausted",
+            actions: [{ type: "upgrade-abacus" }],
+          },
+        },
+        true
+      )
+    ).toEqual({
+      code: "turn_failed",
+      cause: "credits_exhausted",
+      actions: [{ type: "upgrade-abacus" }],
+    });
+  });
+
+  it("main's own endings by their kind", () => {
+    expect(chatFailureOf({ kind: "timed_out" }, false)).toEqual({
+      code: "timed_out",
+    });
+    expect(chatFailureOf({ kind: "agent_exited" }, true)).toEqual({
+      code: "agent_exited",
+    });
   });
 });

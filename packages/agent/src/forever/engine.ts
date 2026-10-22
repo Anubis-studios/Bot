@@ -90,6 +90,7 @@ import {
 } from "../openllm-router.js";
 import { isOpenLlmReference, OPENLLM_ID } from "../openllm.js";
 import { refreshOpenRouterLive } from "../openrouter-live.js";
+import { OwnedTurn } from "../owned-turn.js";
 import { PendingSteers, type PendingSteer } from "../pending-steers.js";
 import {
   gateToolCall,
@@ -108,6 +109,7 @@ import {
   type PermissionDecision,
   type PermissionRequest,
   type ToolRequest,
+  type TurnOutcome,
 } from "../protocol.js";
 import {
   createModelRuntime,
@@ -329,10 +331,10 @@ export class ForeverEngine {
   private readonly emptyReplies = new EmptyReplies();
   /** The same model is to be asked again, out of sight, for its answer. */
   private pendingEmptyAsk = false;
-  /** The run that ended the turn answered with no text and no tool call. */
-  private turnEndedEmpty = false;
   /** Whether a user turn is in flight: a refresh landing now is mid-turn. */
   private turnRunning = false;
+  /** The turn the running `send` owns; its end waits for the send's report. */
+  private ownedTurn: OwnedTurn | null = null;
   /** Tools a change deferred under this turn adds; continued into once. */
   private pendingToolArrival: string[] | null = null;
   private toolArrivalsThisTurn = 0;
@@ -663,6 +665,26 @@ export class ForeverEngine {
   // ---------------------------------------------------------------- commands
 
   async send(text: string, turn?: TurnHandle): Promise<void> {
+    const slot: { owned?: OwnedTurn } = {};
+    try {
+      await this.sendTurn(text, turn, slot);
+    } finally {
+      // Whatever path the send left by, its turn closes, and only once.
+      if (slot.owned != null) this.closeOwnedTurn(slot.owned);
+    }
+  }
+
+  /** Emit the owned turn's held end with its outcome; see OwnedTurn. */
+  private closeOwnedTurn(owned: OwnedTurn): void {
+    if (this.ownedTurn === owned) this.ownedTurn = null;
+    owned.close(this.interrupted);
+  }
+
+  private async sendTurn(
+    text: string,
+    turn: TurnHandle | undefined,
+    slot: { owned?: OwnedTurn }
+  ): Promise<void> {
     const session = this.requireSession();
     this.reply.begin(turn?.messageId);
 
@@ -715,11 +737,13 @@ export class ForeverEngine {
     this.pendingLanguageRepair = null;
     this.pendingEmptyAsk = false;
     this.emptyReplies.begin();
-    this.turnEndedEmpty = false;
     this.mcpTools.atTurnStart();
     this.pendingToolArrival = null;
     this.toolArrivalsThisTurn = 0;
     this.turnRunning = true;
+    const owned = new OwnedTurn();
+    this.ownedTurn = owned;
+    slot.owned = owned;
 
     this.emitAgentEvent({
       type: "status_changed",
@@ -735,6 +759,7 @@ export class ForeverEngine {
     if (wall != null) {
       this.emitFailure(wall);
       this.finishTurn();
+      this.closeOwnedTurn(owned);
       this.emitReply();
       turn?.settled?.();
       return;
@@ -756,6 +781,7 @@ export class ForeverEngine {
       await session.prompt(text);
       await this.continuePastRecoverableFailures();
       this.reportTurnFailure();
+      this.closeOwnedTurn(owned);
       this.emitReply();
       // Steers pi has not delivered yet are still queued at the host.
       this.upkeep = true;
@@ -772,6 +798,7 @@ export class ForeverEngine {
       this.router.chain.failed(raw, this.session?.model?.provider);
       this.reportFailure();
       if (this.turnRunning) this.finishTurn();
+      this.closeOwnedTurn(owned);
       this.emitReply();
       turn?.settled?.();
     } finally {
@@ -1386,7 +1413,7 @@ export class ForeverEngine {
       this.router.chain.failed(message, this.session?.model?.provider);
     // Still nothing after the recoveries: the turn ends on the empty-reply
     // failure, never in silence.
-    else if (this.turnEndedEmpty)
+    else if (this.ownedTurn?.endedEmpty === true)
       this.router.chain.failed(
         EMPTY_REPLY_FAILURE,
         this.session?.model?.provider
@@ -2032,6 +2059,9 @@ export class ForeverEngine {
 
         // A call that answered ends any outage this turn was riding out.
         if (runMadeProgress(event.messages)) this.networkWait.reset();
+        // The run that ends the turn is the last to set it.
+        if (this.ownedTurn != null && !this.hiddenTurn)
+          this.ownedTurn.endedEmpty = endedEmpty(event.messages);
         // The network's failure is checked (and waited out) before anything
         // reads it as the model's: no cooldown, no rotation, no compaction.
         // A hidden turn has nobody waiting, so it neither waits nor blames.
@@ -2102,13 +2132,13 @@ export class ForeverEngine {
             : this.mcpTools.pendingArrivals();
         this.pendingToolArrival = arrivals.length > 0 ? arrivals : null;
         // Nothing at all, with no other way on: the turn tries again rather
-        // than ending on silence (EmptyReplies). A hidden housekeeping turn
-        // has no reader to answer.
-        this.turnEndedEmpty =
-          !this.hiddenTurn && !this.interrupted && endedEmpty(event.messages);
+        // than ending on silence (EmptyReplies). Only a send's own turn
+        // (OwnedTurn) is asked: a hidden housekeeping turn has no reader.
         const emptyStep =
           !event.willRetry &&
-          this.turnEndedEmpty &&
+          !this.hiddenTurn &&
+          !this.interrupted &&
+          this.ownedTurn?.endedEmpty === true &&
           !this.continuingPastMalformedToolCall &&
           this.pendingContextCompaction == null &&
           this.pendingOpenLlmRotation == null &&
@@ -2204,12 +2234,27 @@ export class ForeverEngine {
               : {}),
           }
         : this.lastTurnUsage;
-    this.emitAgentEvent({
-      type: "turn_complete",
-      ...(usage != null ? { usage } : {}),
-    });
     this.lastTurnUsage = null;
-    this.emitAgentEvent({ type: "status_changed", status: AgentStatus.Idle });
+    const end = (outcome?: TurnOutcome): void => {
+      this.emitAgentEvent({
+        type: "turn_complete",
+        ...(outcome != null ? { outcome } : {}),
+        ...(usage != null ? { usage } : {}),
+      });
+      this.emitAgentEvent({ type: "status_changed", status: AgentStatus.Idle });
+    };
+    // A send's turn ends after the send has said why (OwnedTurn); a hidden
+    // turn or a run pi started on its own has no send to wait for.
+    const owned = this.hiddenTurn ? null : this.ownedTurn;
+    if (!this.interrupted && owned?.hold(end) === true) return;
+    // A stopped turn ends now: nothing is left to report, and a Stop or a
+    // reset must not see the old turn's end arrive after it.
+    if (this.interrupted && owned != null) {
+      owned.hold(end);
+      this.closeOwnedTurn(owned);
+      return;
+    }
+    end();
   }
 
   // ------------------------------------------------------------- approval flow
@@ -2472,6 +2517,8 @@ export class ForeverEngine {
 
   private emitAgentEvent(event: AgentEvent, meta?: EventMeta): void {
     if (event.type === "error" && meta?.origin === "turn") this.reply.fail();
+    if (event.type === "error" && meta?.origin !== "startup")
+      this.ownedTurn?.noteError(event.error);
     if (meta != null) tagEvent(event, meta);
     this.options.emit({ type: "event", event });
   }

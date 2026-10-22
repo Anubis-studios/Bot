@@ -31,6 +31,7 @@ vi.mock("./messaging-config-service", async (importOriginal) => {
 });
 
 const { MessagingGatewayService } = await import("./messaging-gateway-service");
+const { gatewayTurns } = await import("./messaging-turns.test-support");
 
 type Harness = {
   gateway: InstanceType<typeof MessagingGatewayService>;
@@ -48,6 +49,7 @@ const harness = (): Harness => {
   let created = 0;
   let currentSession = "";
 
+  const turns = gatewayTurns(() => gateway);
   const gateway = new MessagingGatewayService({
     resolveWorkspaceId: () => "ws",
     createAgentSession: () => {
@@ -57,8 +59,10 @@ const harness = (): Harness => {
     },
     updateSessionLabel: () => {},
     startSession: async () => ({ success: true }) as never,
-    sendMessage: (_w: string, _s: string, message: string) =>
-      prompts.push(message),
+    sendMessage: (_w: string, s: string, message: string) => {
+      turns.sent(s);
+      prompts.push(message);
+    },
     emitUserMessage: () => {},
     emitChanged: () => {},
   } as never);
@@ -97,10 +101,10 @@ const harness = (): Harness => {
         text,
       }),
     idle: () =>
-      gateway.handleAgentEvent(currentSession, {
-        type: "event",
-        event: { type: "status_changed", status: AgentStatus.Idle },
-      } as never),
+      turns.emit(currentSession, {
+        type: "status_changed",
+        status: AgentStatus.Idle,
+      }),
   };
 };
 

@@ -15,7 +15,7 @@
 {"type":"event","event":{"type":"retry","attempt":3,"maxAttempts":3,"delayMs":0,"isNetworkError":false}}
 {"type":"event","event":{"type":"model_changed","model":"openllm/auto"}}
 {"type":"event","event":{"type":"status_changed","status":"streaming"}}
-{"type":"event","event":{"type":"turn_complete","usage":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"requests":1,"model":"big:free"}}}
-{"type":"event","event":{"type":"status_changed","status":"idle"}}
 {"type":"event","event":{"type":"error","error":{"message":"All free models are busy right now. Try again in a few minutes, or switch to a different model.","code":"turn_failed","cause":"rate_limited","actions":[{"type":"free-pool-out","cause":"busy"},{"type":"switch-model"}]}}}
+{"type":"event","event":{"type":"turn_complete","outcome":{"kind":"failed","cause":"rate_limited"},"usage":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"requests":1,"model":"big:free"}}}
+{"type":"event","event":{"type":"status_changed","status":"idle"}}
 {"type":"event","event":{"type":"status_changed","status":"idle"}}

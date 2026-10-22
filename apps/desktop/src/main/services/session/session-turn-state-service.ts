@@ -7,6 +7,8 @@ import type {
   SessionTurnStateSnapshot,
 } from "@abacus-ai/contract/contracts";
 
+import type { TurnLedger } from "./turn-ledger";
+
 type EmitChange = (snapshot: SessionTurnStateSnapshot) => void;
 type OnInactivityTimeout = (
   workspaceId: string,
@@ -54,9 +56,10 @@ const isBusyPhase = (phase: SessionTurnPhase): boolean =>
  * Single source of truth for "is this session busy with an agent turn?",
  * updated before dispatching to the CLI so the renderer's cache matches. After
  * a stop, CLI events are suppressed until the agent confirms idle. Only
- * `status_changed: idle` and `error` end a turn: `turn_complete` fires after
- * every tool round. A busy session silent for 10 minutes is forced idle (not
- * while `waiting_permission`, which waits on a person).
+ * `status_changed: idle` and `error` end the busy phase: `turn_complete` fires
+ * after every tool round. A session silent for 10 minutes while busy, or while
+ * its turn is still open in the ledger, is forced idle and its turn closed as
+ * timed out (not while `waiting_permission`, which waits on a person).
  */
 export class SessionTurnStateService {
   private readonly states = new Map<string, SessionTurnStateSnapshot>();
@@ -75,7 +78,9 @@ export class SessionTurnStateService {
 
   constructor(
     private readonly emitChange: EmitChange,
-    private readonly onInactivityTimeout?: OnInactivityTimeout
+    private readonly onInactivityTimeout?: OnInactivityTimeout,
+    /** Told every turn's start and ending; see TurnLedger. */
+    private readonly ledger?: TurnLedger
   ) {}
 
   get(workspaceId: string, sessionId: string): SessionTurnStateSnapshot {
@@ -102,6 +107,7 @@ export class SessionTurnStateService {
   }
 
   markSent(workspaceId: string, sessionId: string): void {
+    this.ledger?.begin(sessionId);
     this.suppressedSessions.delete(sessionId);
     this.releaseStopWaiters(sessionId);
     this.lastActivity.delete(sessionId);
@@ -110,6 +116,8 @@ export class SessionTurnStateService {
   }
 
   markStopped(workspaceId: string, sessionId: string): void {
+    // A Stop; the watchdog and a closed process have closed theirs already.
+    this.ledger?.end(sessionId, "stopped");
     this.suppressedSessions.add(sessionId);
     this.clearActivityTimer(sessionId);
     this.set(workspaceId, sessionId, "idle");
@@ -117,6 +125,7 @@ export class SessionTurnStateService {
 
   /** The agent process is gone: nothing more will settle its stop. */
   markClosed(workspaceId: string, sessionId: string): void {
+    this.ledger?.end(sessionId, "agent_exited");
     this.markStopped(workspaceId, sessionId);
     this.releaseStopWaiters(sessionId);
   }
@@ -200,6 +209,7 @@ export class SessionTurnStateService {
 
     // Any event from the CLI counts as activity.
     this.resetActivityTimer(workspaceId, sessionId);
+    this.ledger?.observe(sessionId, message);
 
     if (
       event?.type === "tool_execution_start" ||
@@ -229,6 +239,8 @@ export class SessionTurnStateService {
   }
 
   clearSession(sessionId: string): void {
+    // The session is gone: a turn still open in it ends with it.
+    this.ledger?.end(sessionId, "stopped");
     this.clearActivityTimer(sessionId);
     this.states.delete(sessionId);
     this.suppressedSessions.delete(sessionId);
@@ -251,7 +263,10 @@ export class SessionTurnStateService {
     }
     // An approval waits on a person and has its own budget in the agent;
     // timing it here would declare a timeout with the prompt still on screen.
-    if (!isBusyPhase(phase) || phase === "waiting_permission") {
+    // A turn the ledger still holds open (an error with no idle after it) is
+    // still timed: the watchdog is what closes it if nothing else does.
+    const turnOpen = this.ledger?.isOpen(sessionId) === true;
+    if ((!isBusyPhase(phase) && !turnOpen) || phase === "waiting_permission") {
       this.clearActivityTimer(sessionId);
     } else if (prev?.phase === "waiting_permission") {
       this.startActivityTimer(workspaceId, sessionId);
@@ -274,6 +289,7 @@ export class SessionTurnStateService {
       setTimeout(() => {
         this.activityTimers.delete(sessionId);
         const lastActivity = this.lastActivity.get(sessionId) ?? null;
+        this.ledger?.end(sessionId, "timed_out", lastActivity ?? undefined);
         // Same treatment as Stop: the tail of a slow tool must not flow back in
         // and make a timed-out session busy again.
         this.markStopped(workspaceId, sessionId);

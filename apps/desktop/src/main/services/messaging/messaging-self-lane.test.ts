@@ -40,6 +40,7 @@ vi.mock("./messaging-config-service", async (importOriginal) => ({
 }));
 
 const { MessagingGatewayService } = await import("./messaging-gateway-service");
+const { gatewayTurns } = await import("./messaging-turns.test-support");
 
 const harness = (
   withBots = true
@@ -59,6 +60,7 @@ const harness = (
   const sent: string[] = [];
   const state = { ensured: 0, appTurn: false };
 
+  const turns = gatewayTurns(() => gateway);
   const gateway = new MessagingGatewayService({
     ...(withBots
       ? {
@@ -81,8 +83,10 @@ const harness = (
     createAgentSession: () => ({ id: "session-1" }) as never,
     updateSessionLabel: () => {},
     startSession: async () => ({ success: true }) as never,
-    sendMessage: (_w: string, _s: string, message: string) =>
-      prompts.push(message),
+    sendMessage: (_w: string, s: string, message: string) => {
+      turns.sent(s);
+      prompts.push(message);
+    },
     emitUserMessage: () => {},
     emitChanged: () => {},
     isSessionBusy: () => state.appTurn,
@@ -122,15 +126,12 @@ const harness = (
       state.appTurn = value;
     },
     delta: (content: string) =>
-      gateway.handleAgentEvent("home-chat", {
-        type: "event",
-        event: { type: "text_delta", content },
-      } as never),
+      turns.emit("home-chat", { type: "text_delta", content }),
     idle: () =>
-      gateway.handleAgentEvent("home-chat", {
-        type: "event",
-        event: { type: "status_changed", status: AgentStatus.Idle },
-      } as never),
+      turns.emit("home-chat", {
+        type: "status_changed",
+        status: AgentStatus.Idle,
+      }),
     inbound: (userId: string, text: string) =>
       internals.handleInbound("whatsapp", {
         userId,

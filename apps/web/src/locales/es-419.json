@@ -4519,7 +4519,13 @@
       "contactFailedGeneric": "No pude responderle a {{name}} hace un momento: algo falló de mi lado.",
       "someone": "alguien",
       "payment": "Me detuve porque no pudimos confirmar tu último pago. Si tu suscripción está activa, escribe a support@abacus.ai y no vuelvas a comprar. Facturación: {{link}}",
-      "paymentLapsed": "Me detuve porque tu suscripción de Abacus.AI terminó. Renuévala aquí: {{link}}"
+      "paymentLapsed": "Me detuve porque tu suscripción de Abacus.AI terminó. Renuévala aquí: {{link}}",
+      "timedOut": "Tardó demasiado y se detuvo antes de que pudiera responder. Envíalo de nuevo para retomarlo.",
+      "agentExited": "La app se cerró antes de que pudiera responder. Envíalo de nuevo para retomarlo.",
+      "empty": "No pude armar una respuesta para eso. Envíalo de nuevo, por favor.",
+      "contactNeutral": "Perdón, ahora no puedo responder. Te contesto pronto.",
+      "contactEmpty": "No le respondí a {{name}}: no llegó ninguna respuesta. Abre la app para contestarle o dime qué decirle.",
+      "undelivered": "No se pudo entregar un mensaje a {{name}}."
     },
     "unavailable": {
       "title": {
