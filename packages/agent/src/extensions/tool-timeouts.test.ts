@@ -11,6 +11,7 @@ import {
   budgetSecondsFor,
   mcpCallBudgetSeconds,
   default as toolTimeouts,
+  withCallBudget,
 } from "./tool-timeouts.js";
 
 function withTimeouts() {
@@ -169,6 +170,15 @@ describe("declared budgets", () => {
   it("gives an MCP tool call its budget: a connector's default, or the tool's own", () => {
     expect(mcpCallBudgetSeconds("abacus-connectors_Gmail_Tool")).toBe(90);
     expect(mcpCallBudgetSeconds("pdf")).toBe(300);
+    expect(mcpCallBudgetSeconds("image_generate")).toBe(360);
+  });
+
+  it("stops an MCP call before the watchdog would report on it", () => {
+    // MCP tools are not in the table by name, so the watchdog arms for them
+    // at the default; the call must be over by then.
+    expect(mcpCallBudgetSeconds("any_server_any_tool")).toBeLessThan(
+      budgetSecondsFor("any_server_any_tool")
+    );
   });
 });
 
@@ -291,14 +301,49 @@ describe("the watchdog", () => {
     const result = (await pi.fire("tool_result", {
       toolName: "bash",
       toolCallId: "call-1",
+      input: { command: "npm run build" },
       content: [{ type: "text", text: "Command timed out after 120 seconds" }],
     })) as { content: Array<{ text: string }> };
 
     expect(result.content[0]!.text).toBe("Command timed out after 120 seconds");
-    expect(result.content[1]!.text).toMatch(/larger `timeout`/);
+    expect(result.content[1]!.text).toMatch(
+      /larger `timeout` \(up to 600 seconds\)/
+    );
     expect(result.content[1]!.text).toMatch(
       /never for an install or a scaffold/
     );
+  });
+
+  it("does not offer more time to a command already killed at its ceiling", async () => {
+    // An install killed at 1800 cannot be given more; "raise the timeout"
+    // would send the model round the same loop.
+    const pi = withTimeouts();
+    const result = (await pi.fire("tool_result", {
+      toolName: "bash",
+      toolCallId: "call-1",
+      input: { command: "winget install --id MiKTeX.MiKTeX" },
+      content: [{ type: "text", text: "Command timed out after 1800 seconds" }],
+    })) as { content: Array<{ text: string }> };
+
+    expect(result.content[1]!.text).not.toMatch(/larger `timeout`/);
+    expect(result.content[1]!.text).toMatch(/1800 seconds is the most/);
+  });
+
+  it("leaves a call that is stopped at its budget to that, with no note on top", async () => {
+    vi.useFakeTimers();
+    try {
+      const pi = withTimeouts();
+      await pi.fire("tool_execution_start", {
+        toolName: "web_search",
+        toolCallId: "w5",
+        args: {},
+      });
+      await vi.advanceTimersByTimeAsync(600_000);
+
+      expect(pi.notifications).toHaveLength(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("leaves a bash result that did not time out alone", async () => {
@@ -310,5 +355,81 @@ describe("the watchdog", () => {
     });
 
     expect(result).toBeUndefined();
+  });
+});
+
+describe("a call held to its budget", () => {
+  /** A tool that does whatever `run` does with the signal it is handed. */
+  const tool = (run: (signal?: AbortSignal) => Promise<string>) =>
+    withCallBudget(
+      {
+        name: "slow_tool",
+        execute: async (
+          _id: string,
+          _params: Record<string, unknown>,
+          signal?: AbortSignal
+        ) => run(signal),
+      },
+      90
+    );
+
+  it("answers a fast call as it came", async () => {
+    await expect(tool(async () => "done").execute("c", {})).resolves.toBe(
+      "done"
+    );
+  });
+
+  it("aborts the tool's signal at the budget and fails the call with a lead for the model", async () => {
+    vi.useFakeTimers();
+    try {
+      let seen: AbortSignal | undefined;
+      const call = tool(
+        (signal) =>
+          new Promise((_resolve, reject) => {
+            seen = signal;
+            signal?.addEventListener("abort", () => reject(signal.reason));
+          })
+      ).execute("c", {});
+      const settled = expect(call).rejects.toThrow(
+        "slow_tool did not answer within 90s, so the call was stopped. Carry on without it"
+      );
+
+      await vi.advanceTimersByTimeAsync(89_000);
+      expect(seen?.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(1_000);
+
+      await settled;
+      expect(seen?.aborted).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("answers at the budget even when the tool ignores its signal", async () => {
+    vi.useFakeTimers();
+    try {
+      const call = tool(() => new Promise(() => {})).execute("c", {});
+      const settled = expect(call).rejects.toThrow("did not answer within 90s");
+
+      await vi.advanceTimersByTimeAsync(90_000);
+
+      await settled;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("passes Stop through to the tool at once", async () => {
+    const stop = new AbortController();
+    const call = tool(
+      (signal) =>
+        new Promise((_resolve, reject) => {
+          signal?.addEventListener("abort", () => reject(new Error("aborted")));
+        })
+    ).execute("c", {}, stop.signal);
+
+    stop.abort();
+
+    await expect(call).rejects.toThrow("aborted");
   });
 });

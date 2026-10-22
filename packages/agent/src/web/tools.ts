@@ -10,6 +10,10 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
 import { fetchHold } from "../current-mode.js";
+import {
+  budgetSecondsFor,
+  withCallBudget,
+} from "../extensions/tool-timeouts.js";
 import { fetchUrl, WebFetchError } from "./fetch.js";
 import {
   search,
@@ -57,91 +61,99 @@ export default function (pi: ExtensionAPI): void {
   // Registered unconditionally: availability is decided per call, not at
   // session start, so a key added mid-session (free-tier sign-in from the
   // tour) enables search in the chat the user is already looking at.
-  pi.registerTool({
-    name: "web_search",
-    label: "Web Search",
-    description:
-      "Search the web and get back real result URLs with titles and excerpts. " +
-      "Use it whenever the answer depends on something you cannot know: current " +
-      "events, recent releases, live prices, version-specific behaviour, or anything " +
-      "the user says is time-sensitive. Returns sources only: follow up with " +
-      "web_fetch to read any of them in full. If it reports no results, that means " +
-      "nothing was found: say so rather than answering from memory.",
-    parameters: Type.Object({
-      query: Type.String({
-        description: "What to search for, phrased as a search query",
-      }),
-      max_results: Type.Optional(
-        Type.Number({
-          description: "How many sources to return (default 10)",
-        })
-      ),
-    }),
-    async execute(_toolCallId, params, signal) {
-      if (!searchAvailable()) {
-        return {
-          content: [
-            {
-              type: "text",
-              text:
-                "Web search is not configured. It reuses whichever model key the app " +
-                "already has: an Abacus.AI account, Claude, DeepSeek, OpenAI, Gemini " +
-                "and OpenRouter all run it, so signing in or adding a key in Settings " +
-                "enables search too, with no separate search account. Tell the user " +
-                "that; do not answer from memory as though you had searched.",
-            },
-          ],
-          isError: true,
-          details: { sources: 0 },
-        };
-      }
+  pi.registerTool(
+    withCallBudget(
+      {
+        name: "web_search",
+        label: "Web Search",
+        description:
+          "Search the web and get back real result URLs with titles and excerpts. " +
+          "Use it whenever the answer depends on something you cannot know: current " +
+          "events, recent releases, live prices, version-specific behaviour, or anything " +
+          "the user says is time-sensitive. Returns sources only: follow up with " +
+          "web_fetch to read any of them in full. If it reports no results, that means " +
+          "nothing was found: say so rather than answering from memory.",
+        parameters: Type.Object({
+          query: Type.String({
+            description: "What to search for, phrased as a search query",
+          }),
+          max_results: Type.Optional(
+            Type.Number({
+              description: "How many sources to return (default 10)",
+            })
+          ),
+        }),
+        async execute(_toolCallId, params, signal) {
+          if (!searchAvailable()) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text:
+                    "Web search is not configured. It reuses whichever model key the app " +
+                    "already has: an Abacus.AI account, Claude, DeepSeek, OpenAI, Gemini " +
+                    "and OpenRouter all run it, so signing in or adding a key in Settings " +
+                    "enables search too, with no separate search account. Tell the user " +
+                    "that; do not answer from memory as though you had searched.",
+                },
+              ],
+              isError: true,
+              details: { sources: 0 },
+            };
+          }
 
-      try {
-        const result = await search(params.query, {
-          // A model's own search tool can open pages; a routine's cannot.
-          restOnly: fetchHold() != null,
-          ...(params.max_results != null
-            ? { maxResults: params.max_results }
-            : {}),
-          ...(signal != null ? { signal } : {}),
-        });
+          try {
+            const result = await search(params.query, {
+              // A model's own search tool can open pages; a routine's cannot.
+              restOnly: fetchHold() != null,
+              ...(params.max_results != null
+                ? { maxResults: params.max_results }
+                : {}),
+              ...(signal != null ? { signal } : {}),
+            });
 
-        const lines = result.sources.map((source, index) => {
-          const parts = [`${index + 1}. ${source.title}`, `   ${source.url}`];
-          if (source.publishedAt != null)
-            parts.push(`   published: ${source.publishedAt}`);
-          if (source.snippet != null) parts.push(`   ${source.snippet}`);
+            const lines = result.sources.map((source, index) => {
+              const parts = [
+                `${index + 1}. ${source.title}`,
+                `   ${source.url}`,
+              ];
+              if (source.publishedAt != null)
+                parts.push(`   published: ${source.publishedAt}`);
+              if (source.snippet != null) parts.push(`   ${source.snippet}`);
 
-          return parts.join("\n");
-        });
+              return parts.join("\n");
+            });
 
-        return {
-          content: [
-            {
-              type: "text",
-              text:
-                `${result.sources.length} result${result.sources.length === 1 ? "" : "s"} for ` +
-                `"${params.query}":\n\n` +
-                // Titles and snippets are written by whoever ranks for the query,
-                // so they get the same fence as a fetched page.
-                envelope("web search results", lines.join("\n\n")) +
-                (result.summary != null
-                  ? `\n\nProvider summary:\n${result.summary}`
-                  : ""),
-            },
-          ],
-          details: { sources: result.sources.length },
-          isError: false,
-        };
-      } catch (error) {
-        return {
-          content: [{ type: "text", text: describe(error) }],
-          isError: true,
-          details: { sources: 0 },
-        };
-      }
-    },
-  });
+            return {
+              content: [
+                {
+                  type: "text",
+                  text:
+                    `${result.sources.length} result${result.sources.length === 1 ? "" : "s"} for ` +
+                    `"${params.query}":\n\n` +
+                    // Titles and snippets are written by whoever ranks for the query,
+                    // so they get the same fence as a fetched page.
+                    envelope("web search results", lines.join("\n\n")) +
+                    (result.summary != null
+                      ? `\n\nProvider summary:\n${result.summary}`
+                      : ""),
+                },
+              ],
+              details: { sources: result.sources.length },
+              isError: false,
+            };
+          } catch (error) {
+            return {
+              content: [{ type: "text", text: describe(error) }],
+              isError: true,
+              details: { sources: 0 },
+            };
+          }
+        },
+      },
+      budgetSecondsFor("web_search")
+    )
+  );
 
   // X search runs on whichever model key the app holds, so it is gated neither
   // on a signup nor on a key existing at session start. The agent-tools
@@ -149,71 +161,81 @@ export default function (pi: ExtensionAPI): void {
   // directly and is the better answer when an Abacus key exists;
   // isSupersededWebTool keeps the two from colliding.
   if (!desktopXSearchAvailable()) {
-    pi.registerTool({
-      name: "x_search",
-      label: "X Search",
-      description:
-        "Search public posts on X (Twitter) and get back real post URLs with titles " +
-        "and excerpts. Use it when the question is about what people are saying right " +
-        "now: reaction to a release, whether an outage is widespread, what an author " +
-        "said about their own work. Results are restricted to x.com: anything found " +
-        "elsewhere is discarded rather than returned. If it reports no results, that " +
-        "means nothing was found on X: say so rather than answering from memory.",
-      parameters: Type.Object({
-        query: Type.String({
-          description: "What to look for on X, phrased as a search query",
-        }),
-        max_results: Type.Optional(
-          Type.Number({ description: "How many posts to return (default 10)" })
-        ),
-      }),
-      async execute(_toolCallId, params, signal) {
-        try {
-          const result = await search(params.query, {
-            sites: X_SITES,
-            restOnly: fetchHold() != null,
-            ...(params.max_results != null
-              ? { maxResults: params.max_results }
-              : {}),
-            ...(signal != null ? { signal } : {}),
-          });
+    pi.registerTool(
+      withCallBudget(
+        {
+          name: "x_search",
+          label: "X Search",
+          description:
+            "Search public posts on X (Twitter) and get back real post URLs with titles " +
+            "and excerpts. Use it when the question is about what people are saying right " +
+            "now: reaction to a release, whether an outage is widespread, what an author " +
+            "said about their own work. Results are restricted to x.com: anything found " +
+            "elsewhere is discarded rather than returned. If it reports no results, that " +
+            "means nothing was found on X: say so rather than answering from memory.",
+          parameters: Type.Object({
+            query: Type.String({
+              description: "What to look for on X, phrased as a search query",
+            }),
+            max_results: Type.Optional(
+              Type.Number({
+                description: "How many posts to return (default 10)",
+              })
+            ),
+          }),
+          async execute(_toolCallId, params, signal) {
+            try {
+              const result = await search(params.query, {
+                sites: X_SITES,
+                restOnly: fetchHold() != null,
+                ...(params.max_results != null
+                  ? { maxResults: params.max_results }
+                  : {}),
+                ...(signal != null ? { signal } : {}),
+              });
 
-          const lines = result.sources.map((source, index) => {
-            const parts = [`${index + 1}. ${source.title}`, `   ${source.url}`];
-            if (source.publishedAt != null)
-              parts.push(`   published: ${source.publishedAt}`);
-            if (source.snippet != null) parts.push(`   ${source.snippet}`);
+              const lines = result.sources.map((source, index) => {
+                const parts = [
+                  `${index + 1}. ${source.title}`,
+                  `   ${source.url}`,
+                ];
+                if (source.publishedAt != null)
+                  parts.push(`   published: ${source.publishedAt}`);
+                if (source.snippet != null) parts.push(`   ${source.snippet}`);
 
-            return parts.join("\n");
-          });
+                return parts.join("\n");
+              });
 
-          return {
-            content: [
-              {
-                type: "text",
-                text:
-                  `${result.sources.length} post${result.sources.length === 1 ? "" : "s"} on X for ` +
-                  `"${params.query}":\n\n` +
-                  // A post is written by whoever posted it. Same fence as any other
-                  // untrusted text the model is about to read.
-                  envelope("X search results", lines.join("\n\n")) +
-                  (result.summary != null
-                    ? `\n\nProvider summary:\n${result.summary}`
-                    : ""),
-              },
-            ],
-            details: { sources: result.sources.length },
-            isError: false,
-          };
-        } catch (error) {
-          return {
-            content: [{ type: "text", text: describe(error) }],
-            isError: true,
-            details: { sources: 0 },
-          };
-        }
-      },
-    });
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text:
+                      `${result.sources.length} post${result.sources.length === 1 ? "" : "s"} on X for ` +
+                      `"${params.query}":\n\n` +
+                      // A post is written by whoever posted it. Same fence as any other
+                      // untrusted text the model is about to read.
+                      envelope("X search results", lines.join("\n\n")) +
+                      (result.summary != null
+                        ? `\n\nProvider summary:\n${result.summary}`
+                        : ""),
+                  },
+                ],
+                details: { sources: result.sources.length },
+                isError: false,
+              };
+            } catch (error) {
+              return {
+                content: [{ type: "text", text: describe(error) }],
+                isError: true,
+                details: { sources: 0 },
+              };
+            }
+          },
+        },
+        budgetSecondsFor("x_search")
+      )
+    );
   }
 
   pi.registerTool({
