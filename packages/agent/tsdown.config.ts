@@ -50,6 +50,8 @@ export default defineConfig({
     "src/model-path.ts",
     // The language the user wants replies in, for the chat apps' fixed lines.
     "src/user-language.ts",
+    // Turn checkpoints: main lists, diffs and restores them. node builtins and atomic-file only.
+    "src/checkpoint-store.ts",
     // The phone reply's bubble split, for the hosted app's WhatsApp lane.
     "src/phone/phone-bubbles.ts",
     // The phone loop's zone, check-in language and due loops, for its agenda.

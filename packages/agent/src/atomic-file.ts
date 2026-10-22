@@ -100,7 +100,7 @@ export function writeFileAtomicSync(
 /** Async counterpart. */
 export async function writeFileAtomic(
   filePath: string,
-  contents: string,
+  contents: string | Uint8Array,
   options: AtomicWriteOptions = {}
 ): Promise<void> {
   await fsPromises.mkdir(path.dirname(filePath), { recursive: true });

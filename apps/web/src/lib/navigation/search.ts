@@ -82,8 +82,13 @@ export const SessionSearch = v.object({
 export const DiffSearch = v.object({
   ...SessionSearch.entries,
   path: v.pipe(v.string(), v.minLength(1), v.maxLength(4096)),
-  source: v.optional(v.fallback(v.picklist(["git", "tool"]), "git"), "git"),
+  source: v.optional(
+    v.fallback(v.picklist(["git", "tool", "checkpoint"]), "git"),
+    "git"
+  ),
   toolKey: optionalField(v.string()),
+  /** The checkpointed turn, when `source` is `checkpoint`. */
+  seq: optionalField(v.pipe(v.number(), v.integer(), v.minValue(1))),
   mode: v.optional(
     v.fallback(v.picklist(["unified", "split"]), "unified"),
     "unified"
