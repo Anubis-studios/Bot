@@ -707,8 +707,11 @@ describe("a turn's reply", () => {
     expect(replies(events)).toMatchObject([
       { messageIds: ["m4"], failed: true },
     ]);
-    // One ask on a model the user picked: the turn is not moved off it.
-    expect(provider.calls).toHaveLength(2);
+    // Two asks on a model the user picked: the turn is not moved off it.
+    expect(provider.calls).toHaveLength(3);
+    expect(new Set(provider.calls.map((call) => call.model))).toEqual(
+      new Set(["small:free"])
+    );
     provider.script(() => ({ say: "ok" }));
   });
 

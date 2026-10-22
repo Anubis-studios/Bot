@@ -59,6 +59,7 @@ import {
 import { deckToolEnabled } from "./deck-tool.js";
 import { designToolEnabled } from "./design-tool.js";
 import { documentToolEnabled } from "./document-tool.js";
+import { EmptyReplies } from "./empty-reply.js";
 import { tagEvent, type EventMeta } from "./event-meta.js";
 import { excludedTools, TOOL_NAME_ALIASES } from "./excluded-tools.js";
 import { EXIT_PLAN_TOOL_NAME } from "./exit-plan-tool.js";
@@ -828,6 +829,10 @@ export class AbacusBotSession {
   private languageRepairsThisTurn = 0;
   /** The run that ended the turn answered with no text and no tool call. */
   private turnEndedEmpty = false;
+  /** The turn's recoveries from an empty reply (empty-reply.ts). */
+  private readonly emptyReplies = new EmptyReplies();
+  /** The same model is to be asked again, out of sight, for its answer. */
+  private pendingEmptyAsk = false;
   /**
    * Set at `agent_end` when the turn died on a provider error the router can
    * route around: the error text, and the free model to move to. Like the
@@ -1384,6 +1389,8 @@ export class AbacusBotSession {
     this.languageRepairsThisTurn = 0;
     this.pendingLanguageRepair = null;
     this.turnEndedEmpty = false;
+    this.emptyReplies.begin();
+    this.pendingEmptyAsk = false;
     this.mcpTools.atTurnStart();
     this.pendingToolArrival = null;
     this.toolArrivalsThisTurn = 0;
@@ -1472,8 +1479,8 @@ export class AbacusBotSession {
       message.length > 0
     )
       this.router.chain.failed(message, this.session?.model?.provider);
-    // Still nothing after output repair's asks: the turn ends on the
-    // empty-reply card, never in silence.
+    // Still nothing after the recoveries: the turn ends on the empty-reply
+    // card, never in silence.
     else if (this.turnEndedEmpty)
       this.router.chain.failed(
         EMPTY_REPLY_FAILURE,
@@ -1600,11 +1607,13 @@ export class AbacusBotSession {
       this.pendingToolArrival != null ||
       this.pendingStall != null ||
       this.pendingNetworkFailure != null ||
-      this.pendingBusyWait != null
+      this.pendingBusyWait != null ||
+      this.pendingEmptyAsk
     ) {
       // Stop cancels the continuation, but the withheld idle event still has
       // to go out or the session stays busy forever.
       if (this.interrupted) {
+        this.pendingEmptyAsk = false;
         this.pendingNetworkFailure = null;
         this.pendingBusyWait = null;
         this.continuingPastMalformedToolCall = false;
@@ -1654,6 +1663,21 @@ export class AbacusBotSession {
           {
             customType: TOOLS_ARRIVED_TYPE,
             content: toolsArrivedPrompt(arrived),
+            display: false,
+          },
+          { triggerTurn: true }
+        );
+
+        continue;
+      }
+
+      if (this.pendingEmptyAsk) {
+        this.pendingEmptyAsk = false;
+
+        await this.session?.sendCustomMessage(
+          {
+            customType: EMPTY_REPLY_TYPE,
+            content: EMPTY_REPLY_PROMPT,
             display: false,
           },
           { triggerTurn: true }
@@ -1962,12 +1986,7 @@ export class AbacusBotSession {
     if (!this.openLlmActive || this.interrupted) return none;
 
     const failure =
-      endedOnProviderError(messages) ??
-      endedOnLeakedToolCall(messages) ??
-      // Nothing at all after an earlier call failed: another model answers.
-      (this.router.chain.hadFailure && endedEmpty(messages)
-        ? EMPTY_REPLY_FAILURE
-        : null);
+      endedOnProviderError(messages) ?? endedOnLeakedToolCall(messages);
 
     if (failure == null) return none;
 
@@ -2918,8 +2937,6 @@ export class AbacusBotSession {
 
         // A call that answered ends any outage this turn was riding out.
         if (runMadeProgress(event.messages)) this.networkWait.reset();
-        // Output repair has already asked again (twice at most) by the time
-        // the run ends; still nothing is how the turn ended.
         this.turnEndedEmpty = !this.interrupted && endedEmpty(event.messages);
         // The network's failure is checked (and waited out) before anything
         // reads it as the model's: no cooldown, no rotation, no compaction.
@@ -2981,6 +2998,28 @@ export class AbacusBotSession {
             ? []
             : this.mcpTools.pendingArrivals();
         this.pendingToolArrival = arrivals.length > 0 ? arrivals : null;
+        // Nothing at all, with no other way on: the turn tries again rather
+        // than ending on silence (EmptyReplies).
+        const emptyStep =
+          !event.willRetry &&
+          this.turnEndedEmpty &&
+          !this.continuingPastMalformedToolCall &&
+          this.pendingContextCompaction == null &&
+          this.pendingOpenLlmRotation == null &&
+          this.pendingBusyWait == null &&
+          this.pendingLanguageRepair == null &&
+          this.pendingToolArrival == null
+            ? this.emptyReplies.next(
+                this.openLlmActive,
+                this.router.chain.hadFailure
+              )
+            : null;
+        if (emptyStep === "rotate")
+          this.pendingOpenLlmRotation =
+            this.routeAfterFailure(EMPTY_REPLY_FAILURE).rotation;
+        // With no other model to move to, the same one is asked.
+        this.pendingEmptyAsk =
+          emptyStep != null && this.pendingOpenLlmRotation == null;
         if (
           !event.willRetry &&
           !this.continuingPastMalformedToolCall &&
@@ -2988,7 +3027,8 @@ export class AbacusBotSession {
           this.pendingOpenLlmRotation == null &&
           this.pendingBusyWait == null &&
           this.pendingLanguageRepair == null &&
-          this.pendingToolArrival == null
+          this.pendingToolArrival == null &&
+          !this.pendingEmptyAsk
         ) {
           this.finishTurn();
         }
@@ -3782,6 +3822,12 @@ const MALFORMED_CONTINUATION_TYPE = "abacusai-bot:malformed-tool-call";
 
 /** Marks a wrong-language repair in the session log as ours. */
 const LANGUAGE_REPAIR_TYPE = "abacusai-bot:reply-language";
+
+/** One more ask after a response with no text and no tool call. */
+const EMPTY_REPLY_TYPE = "abacusai-bot:empty-reply";
+
+const EMPTY_REPLY_PROMPT =
+  "Your last response was empty: no text and no tool call. Continue the task: either call a tool or state your final answer in plain text. If work was done, say what came of it.";
 
 /**
  * What the model is told when its botched call is dropped: a bare "continue"
