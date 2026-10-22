@@ -4585,5 +4585,14 @@
     "upgradeMonthly": "Yükselt · aylık {{price}}",
     "upgrade": "Yükselt",
     "continueFree": "Ücretsiz devam et"
+  },
+  "kickoff": {
+    "connectOne": "Önce, sistem hatırlatıcısı {{name}} için bağlı demiyorsa hemen bunun için connect_connector çağır.",
+    "connectMany": "Önce, {{names}} arasından sistem hatırlatıcısının bağlı olarak listelemediği her biri için hemen connect_connector çağır.",
+    "introduce": "Kendini bir kez tanıt, sonra {{start}}.",
+    "startMission": "görevine başla",
+    "startGoal": "kullanıcının istediği şeye doğru ilk adımı at: \"{{goal}}\"",
+    "continuing": "Bir araç sonucundan sonra gelen her şey, devam eden aynı yanıttır. İkinci bir selamlama yok, görevi yeniden anlatmak yok.",
+    "write": "Kullanıcının dili olan {{language}} ile yaz; kullanıcı sana başka bir dilde yazarsa o dilde yaz."
   }
 }

@@ -83,7 +83,7 @@ describe("the phone loop's clock and check-ins", () => {
       replyLanguageLine({ name: "English", chosen: false })
     );
     expect(flat(phoneOperatingPrompt(null, null, "hi"))).toContain(
-      "reply in English. Write the whole reply"
+      "The user's language is English."
     );
     expect(flat(phoneOperatingPrompt(null))).not.toMatch(
       /not known yet|reply in Hindi/

@@ -1601,6 +1601,19 @@
     "sources": ["../../../packages/contract/src/billing-plan.ts"]
   },
   {
+    "prefix": "kickoff.",
+    "values": [
+      "connectOne",
+      "connectMany",
+      "introduce",
+      "startMission",
+      "startGoal",
+      "continuing",
+      "write"
+    ],
+    "sources": ["../../desktop/src/main/services/bots/bot-service.ts"]
+  },
+  {
     "prefix": "outcome.channel.",
     "values": [
       "wall",

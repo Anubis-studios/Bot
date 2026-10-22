@@ -4585,5 +4585,14 @@
     "upgradeMonthly": "Upgrade · {{price}}/month",
     "upgrade": "Upgrade",
     "continueFree": "Continue free"
+  },
+  "kickoff": {
+    "connectOne": "First, if the system reminder does not list {{name}} as connected, call connect_connector for it now.",
+    "connectMany": "First, call connect_connector now for each of {{names}} that the system reminder does not list as connected.",
+    "introduce": "Introduce yourself once, then {{start}}.",
+    "startMission": "get started on your mission",
+    "startGoal": "take the first step toward what the user asked for: \"{{goal}}\"",
+    "continuing": "Everything after a tool result is the same reply continuing. No second greeting, no restating the mission.",
+    "write": "Write in {{language}}, the user's language, unless they write to you in another."
   }
 }

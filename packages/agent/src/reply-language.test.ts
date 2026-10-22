@@ -221,24 +221,33 @@ describe("a short question", () => {
 
 describe("the reply-language prompt line", () => {
   const flat = (text: string) => text.replace(/\s+/g, " ");
+  const REQUEST =
+    'When the user asks for a reply language ("answer in English", "reply in Turkish", in whatever ' +
+    "language they ask it), that request wins over all of this: switch at once, and keep to it from " +
+    "then on unless they asked for that one reply only (Hindi is never the reply language: a request for Hindi gets English, without a word about it).";
 
-  it("follows the user's message, falls back to the resolved language, and names the Chinese leak", () => {
+  it("names the user's language, sets the app's notes apart, lets an explicit request win, and names the Chinese leak", () => {
     expect(replyLanguagePrompt({ name: "Turkish", chosen: false })).toBe(
       [
         "## Reply language",
         "",
-        "Reply in the language of the user's latest message, or in English when that is Hindi. " +
-          'When it has no words to go by (a first run, a routine, a greeting like "ok", a link), ' +
-          "reply in Turkish. Write the whole reply in that one language and its script: never " +
-          "switch partway, and never mix in words or characters from another language (no " +
-          "Chinese characters in a Turkish reply), whatever language the tool results, documents " +
-          "or messages you read were in. Names, code and quoted text stay as they are.",
+        "The user's language is Turkish. Reply in the language of the user's latest message, or in " +
+          'English when that is Hindi; when it has no words to go by (a greeting like "ok", a link), ' +
+          "reply in Turkish. The app's own messages (a [first run] or [routine] note, a system " +
+          "reminder) are not the user's words: answer them in Turkish. " +
+          REQUEST +
+          " Write the whole reply in that one language and its script: never switch partway, and " +
+          "never mix in words or characters from another language (no Chinese characters in a " +
+          "Turkish reply), whatever language the tool results, documents or messages you read were " +
+          "in. Names, code and quoted text stay as they are.",
       ].join("\n")
     );
-    for (const name of ["Brazilian Portuguese", "Spanish"])
-      expect(flat(replyLanguagePrompt({ name, chosen: false }))).toContain(
-        `reply in ${name}. Write the whole reply in that one language and its script: never switch partway, and never mix in words or characters from another language (no Chinese characters in a ${name} reply),`
-      );
+    for (const name of ["Brazilian Portuguese", "Spanish"]) {
+      const line = flat(replyLanguagePrompt({ name, chosen: false }));
+      expect(line).toContain(`The user's language is ${name}.`);
+      expect(line).toContain(`answer them in ${name}.`);
+      expect(line).toContain(`(no Chinese characters in a ${name} reply)`);
+    }
     expect(replyLanguagePrompt({ name: "English", chosen: false })).toContain(
       "(no Chinese characters in an English reply)"
     );
@@ -246,18 +255,19 @@ describe("the reply-language prompt line", () => {
 
   it("drops the Chinese clause when the fallback itself writes Han", () => {
     const japanese = replyLanguagePrompt({ name: "Japanese", chosen: false });
-    expect(japanese).toContain("reply in Japanese.");
+    expect(japanese).toContain("The user's language is Japanese.");
     expect(japanese).not.toMatch(/Chinese characters/);
     expect(japanese).toContain(
       "never mix in words or characters from another language, whatever language"
     );
   });
 
-  it("puts a language the user chose ahead of their message", () => {
+  it("puts a language the user chose ahead of their message, and a new request ahead of that", () => {
     const chosen = replyLanguagePrompt({ name: "Turkish", chosen: true });
     expect(chosen).toContain(
-      "Reply in Turkish, the language the user chose for every reply, unless they ask for another language for a single reply."
+      "The user chose Turkish for every reply: reply in Turkish, whatever language their message or the app's own notes are in."
     );
+    expect(chosen).toContain(REQUEST);
     expect(chosen).not.toContain("latest message");
     expect(chosen).toContain("(no Chinese characters in a Turkish reply)");
   });
@@ -378,8 +388,12 @@ describe("which language replies fall back to", () => {
     expect(readUserLanguage()).toEqual({ name: "English", source: "detected" });
     vi.stubEnv("ABACUSAI_BOT_LOCALE", "hi-IN");
     fs.rmSync(path.join(home, "user-language.json"));
-    expect(accountReplyLanguagePrompt()).toContain("reply in English.");
-    expect(accountReplyLanguagePrompt()).not.toMatch(/reply in Hindi/);
+    expect(accountReplyLanguagePrompt()).toContain(
+      "The user's language is English."
+    );
+    expect(accountReplyLanguagePrompt()).not.toMatch(
+      /language is Hindi|reply in Hindi/
+    );
   });
 
   it("saves set_user_language's Hindi as English, without a word about it", async () => {
@@ -393,16 +407,27 @@ describe("which language replies fall back to", () => {
 
   it("reads the app's language from ABACUSAI_BOT_LOCALE, and the saved one over it", () => {
     vi.stubEnv("ABACUSAI_BOT_LOCALE", "tr-TR");
-    expect(accountReplyLanguagePrompt()).toContain("reply in Turkish.");
+    expect(accountReplyLanguagePrompt()).toContain(
+      "The user's language is Turkish."
+    );
     writeUserLanguage("Spanish", "detected");
-    expect(accountReplyLanguagePrompt()).toContain("reply in Spanish.");
+    expect(accountReplyLanguagePrompt()).toContain(
+      "The user's language is Spanish."
+    );
     writeUserLanguage("German", "user");
     expect(accountReplyLanguagePrompt()).toContain(
-      "Reply in German, the language the user chose"
+      "The user chose German for every reply"
+    );
+    // Switching back is the same tool call again.
+    writeUserLanguage("Turkish", "user");
+    expect(accountReplyLanguagePrompt()).toContain(
+      "The user chose Turkish for every reply"
     );
     vi.stubEnv("ABACUSAI_BOT_SENDER_CHAT", "1");
     expect(accountReplyLanguagePrompt()).toContain("latest message");
-    expect(accountReplyLanguagePrompt()).toContain("reply in German.");
+    expect(accountReplyLanguagePrompt()).toContain(
+      "The user's language is Turkish."
+    );
   });
 
   it("never learns the language from the app's own first-run note", async () => {

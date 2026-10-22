@@ -183,8 +183,9 @@ export function buildPhoneCheckinsTool(
       '"on" turns them back on. "quiet" sets local quiet hours ("21:00-09:00").',
       '"limit" sets how many may go between the user\'s messages (0 to 10).',
       '"timezone" sets the user\'s IANA zone. "language" sets the code of the',
-      'language they write in ("es", "pt-BR"). null for limit, timezone or',
-      "language resets it.",
+      'language they write in ("es", "pt-BR"), or of the one they ask every reply',
+      "in from now on (also when they ask to go back to an earlier one). null for",
+      "limit, timezone or language resets it.",
     ].join("\n"),
     parameters: {
       type: "object",

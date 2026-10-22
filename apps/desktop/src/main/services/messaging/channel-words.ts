@@ -68,17 +68,27 @@ const shippedLocale = (tag: string): SupportedLanguage | null => {
 };
 
 /**
- * The locale a chat-app line is written in: the language the bot answers
- * this person in, else the app's own, else English.
+ * A language name's locale: "Turkish", or a regional name such as "European
+ * Spanish" or "American English" by its last word.
+ */
+const namedLocale = (name: string): SupportedLanguage | undefined => {
+  const lower = name.trim().toLowerCase();
+  if (lower === "european spanish") return "es-ES";
+  return (
+    LANGUAGE_LOCALES[lower] ?? LANGUAGE_LOCALES[lower.split(" ").at(-1) ?? ""]
+  );
+};
+
+/**
+ * The locale a chat-app line (or the app's own first-run note) is written
+ * in: the language the bot answers this person in, else the app's own,
+ * else English.
  */
 export function channelLocale(
   userLanguage: string | null,
   appLanguage: string | null
 ): SupportedLanguage {
-  const named =
-    userLanguage != null
-      ? LANGUAGE_LOCALES[userLanguage.trim().toLowerCase()]
-      : undefined;
+  const named = userLanguage != null ? namedLocale(userLanguage) : undefined;
   if (named != null) return named;
   const app = appLanguage != null ? shippedLocale(appLanguage) : null;
   return app ?? "en-US";

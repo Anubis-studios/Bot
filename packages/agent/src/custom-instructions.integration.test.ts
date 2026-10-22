@@ -166,7 +166,7 @@ describe("the reply-language block in a real conversation", () => {
     agent.dispose();
 
     const first = systemPrompt(0);
-    expect(block(first)).toContain("reply in Turkish.");
+    expect(block(first)).toContain("The user's language is Turkish.");
     expect(block(first)).toContain("the user's latest message");
     for (let index = 1; index < provider.calls.length; index++)
       expect(systemPrompt(index)).toBe(first);
@@ -186,8 +186,10 @@ describe("the reply-language block in a real conversation", () => {
 
     const prompts = provider.calls.map((_call, index) => systemPrompt(index));
     expect(new Set(prompts).size).toBe(2);
-    expect(block(prompts[0]!)).toContain("reply in Brazilian Portuguese.");
-    expect(block(prompts.at(-1)!)).toContain("reply in Spanish.");
+    expect(block(prompts[0]!)).toContain(
+      "The user's language is Brazilian Portuguese."
+    );
+    expect(block(prompts.at(-1)!)).toContain("The user's language is Spanish.");
     // One change, between the second turn and the third: never back.
     const changes = prompts.filter(
       (prompt, index) => index > 0 && prompt !== prompts[index - 1]
@@ -203,7 +205,7 @@ describe("the reply-language block in a real conversation", () => {
     await agent.send("hello");
     agent.dispose();
 
-    expect(block(systemPrompt(0))).toContain("reply in English.");
-    expect(systemPrompt(0)).not.toMatch(/reply in Hindi/);
+    expect(block(systemPrompt(0))).toContain("The user's language is English.");
+    expect(systemPrompt(0)).not.toMatch(/language is Hindi|reply in Hindi/);
   }, 120_000);
 });

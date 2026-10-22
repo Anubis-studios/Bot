@@ -4585,5 +4585,14 @@
     "upgradeMonthly": "Upgrade · {{price}}/mese",
     "upgrade": "Upgrade",
     "continueFree": "Continua gratis"
+  },
+  "kickoff": {
+    "connectOne": "Per prima cosa, se il promemoria di sistema non indica {{name}} come connesso, chiama subito connect_connector per collegarlo.",
+    "connectMany": "Per prima cosa, chiama subito connect_connector per ciascuno di {{names}} che il promemoria di sistema non indica come connesso.",
+    "introduce": "Presentati una sola volta, poi {{start}}.",
+    "startMission": "inizia la tua missione",
+    "startGoal": "fai il primo passo verso ciò che l'utente ha chiesto: «{{goal}}»",
+    "continuing": "Tutto ciò che segue il risultato di uno strumento è la stessa risposta che continua. Niente secondo saluto, niente ripetizione della missione.",
+    "write": "Scrivi in {{language}}, la lingua dell'utente, a meno che non ti scriva in un'altra."
   }
 }

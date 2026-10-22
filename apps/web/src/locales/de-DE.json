@@ -4585,5 +4585,14 @@
     "upgradeMonthly": "Upgrade · {{price}}/Monat",
     "upgrade": "Upgrade",
     "continueFree": "Kostenlos weitermachen"
+  },
+  "kickoff": {
+    "connectOne": "Falls die Systemerinnerung {{name}} nicht als verbunden aufführt, rufe zuerst sofort connect_connector dafür auf.",
+    "connectMany": "Rufe zuerst sofort connect_connector für jeden von {{names}} auf, den die Systemerinnerung nicht als verbunden aufführt.",
+    "introduce": "Stell dich einmal vor, dann {{start}}.",
+    "startMission": "beginne mit deiner Mission",
+    "startGoal": "mach den ersten Schritt zu dem, worum der Nutzer gebeten hat: „{{goal}}“",
+    "continuing": "Alles nach einem Tool-Ergebnis ist dieselbe Antwort, die weitergeht. Keine zweite Begrüßung, keine Wiederholung der Mission.",
+    "write": "Schreib auf {{language}}, der Sprache des Nutzers, es sei denn, er schreibt dir in einer anderen."
   }
 }

@@ -225,18 +225,29 @@ export interface ReplyLanguage {
 const CJK_LANGUAGE = /chinese|japanese|korean|cantonese|mandarin/i;
 
 /**
- * The reply-language rule, one sentence for every chat. Depends on nothing
+ * The reply-language rule, one paragraph for every chat. Depends on nothing
  * but `language`, which changes at most when the user picks a language or
  * the first one is detected, so the prompt stays byte-identical per turn.
+ * The fallback is named outright and the app's own notes are called out:
+ * a first-run or routine note is text from the app, and a model reads it
+ * as the user's latest message otherwise.
  */
 export const replyLanguageLine = ({ name, chosen }: ReplyLanguage): string => {
   const article = /^[aeiou]/i.test(name) ? "an" : "a";
   const noHan = CJK_LANGUAGE.test(name)
     ? ""
     : ` (no Chinese characters in ${article} ${name} reply)`;
+  const request =
+    'When the user asks for a reply language ("answer in English", "reply in Turkish", in whatever ' +
+    "language they ask it), that request wins over all of this: switch at once, and keep to it from " +
+    "then on unless they asked for that one reply only (Hindi is never the reply language: a request for Hindi gets English, without a word about it).";
   const which = chosen
-    ? `Reply in ${name}, the language the user chose for every reply, unless they ask for another language for a single reply.`
-    : `Reply in the language of the user's latest message, or in English when that is Hindi. When it has no words to go by (a first run, a routine, a greeting like "ok", a link), reply in ${name}.`;
+    ? `The user chose ${name} for every reply: reply in ${name}, whatever language their message ` +
+      `or the app's own notes are in. ${request}`
+    : `The user's language is ${name}. Reply in the language of the user's latest message, or in ` +
+      `English when that is Hindi; when it has no words to go by (a greeting like "ok", a link), ` +
+      `reply in ${name}. The app's own messages (a [first run] or [routine] note, a system reminder) ` +
+      `are not the user's words: answer them in ${name}. ${request}`;
   return (
     `${which} Write the whole reply in that one language and its script: never switch partway, ` +
     `and never mix in words or characters from another language${noHan}, whatever language ` +

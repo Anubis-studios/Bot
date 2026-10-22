@@ -239,8 +239,10 @@ export function buildSetUserLanguageTool() {
       "Save the language the user wants every reply in, for this and all future",
       "conversations, bots and scheduled runs. Call it when the user asks to be answered",
       'in a language from now on, including a bare language name such as "türkçe" or',
-      '"in English please". Do not call it for a one-off request (translate this, write',
-      "this email in German). Then answer in that language.",
+      '"in English please", whatever language they ask in, and when they ask to go back',
+      'to an earlier one ("go back to Turkish"). Do not call it for a one-off request',
+      "(say this in English, translate this, write this email in German). Then answer in",
+      "that language.",
     ].join(" "),
     parameters: {
       type: "object",

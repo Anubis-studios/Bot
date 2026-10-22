@@ -4585,5 +4585,14 @@
     "upgradeMonthly": "Upgrade · {{price}}/bulan",
     "upgrade": "Upgrade",
     "continueFree": "Lanjut gratis"
+  },
+  "kickoff": {
+    "connectOne": "Pertama, jika pengingat sistem tidak mencantumkan {{name}} sebagai terhubung, panggil connect_connector untuknya sekarang.",
+    "connectMany": "Pertama, panggil connect_connector sekarang untuk setiap {{names}} yang tidak dicantumkan sebagai terhubung oleh pengingat sistem.",
+    "introduce": "Perkenalkan dirimu sekali, lalu {{start}}.",
+    "startMission": "mulailah misimu",
+    "startGoal": "ambil langkah pertama menuju apa yang diminta pengguna: \"{{goal}}\"",
+    "continuing": "Semua yang muncul setelah hasil alat adalah balasan yang sama yang berlanjut. Jangan menyapa untuk kedua kalinya, jangan mengulang misi.",
+    "write": "Tulis dalam bahasa {{language}}, bahasa pengguna, kecuali mereka menulis kepadamu dalam bahasa lain."
   }
 }

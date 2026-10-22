@@ -4585,5 +4585,14 @@
     "upgradeMonthly": "Passer au forfait · {{price}}/mois",
     "upgrade": "Passer au forfait",
     "continueFree": "Continuer gratuitement"
+  },
+  "kickoff": {
+    "connectOne": "D'abord, si le rappel système n'indique pas {{name}} comme connecté, appelle connect_connector pour le connecter maintenant.",
+    "connectMany": "D'abord, appelle connect_connector maintenant pour chacun de {{names}} que le rappel système n'indique pas comme connecté.",
+    "introduce": "Présente-toi une seule fois, puis {{start}}.",
+    "startMission": "commence ta mission",
+    "startGoal": "fais le premier pas vers ce que l'utilisateur a demandé : « {{goal}} »",
+    "continuing": "Tout ce qui suit un résultat d'outil est la même réponse qui continue. Pas de deuxième salutation, pas de reformulation de la mission.",
+    "write": "Écris en {{language}}, la langue de l'utilisateur, sauf s'il t'écrit dans une autre."
   }
 }

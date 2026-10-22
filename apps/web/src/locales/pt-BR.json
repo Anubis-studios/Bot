@@ -4585,5 +4585,14 @@
     "upgradeMonthly": "Fazer upgrade · {{price}}/mês",
     "upgrade": "Fazer upgrade",
     "continueFree": "Continuar grátis"
+  },
+  "kickoff": {
+    "connectOne": "Primeiro, se o lembrete do sistema não listar {{name}} como conectado, chame connect_connector para ele agora.",
+    "connectMany": "Primeiro, chame connect_connector agora para cada um de {{names}} que o lembrete do sistema não listar como conectado.",
+    "introduce": "Apresente-se uma única vez e depois {{start}}.",
+    "startMission": "comece sua missão",
+    "startGoal": "dê o primeiro passo rumo ao que o usuário pediu: \"{{goal}}\"",
+    "continuing": "Tudo o que vem depois de um resultado de ferramenta é a mesma resposta continuando. Sem segunda saudação, sem repetir a missão.",
+    "write": "Escreva em {{language}}, o idioma do usuário, a menos que ele escreva para você em outro."
   }
 }

@@ -4585,5 +4585,14 @@
     "upgradeMonthly": "업그레이드 · 월 {{price}}",
     "upgrade": "업그레이드",
     "continueFree": "무료로 계속하기"
+  },
+  "kickoff": {
+    "connectOne": "먼저, 시스템 알림에 {{name}}이(가) 연결됨으로 표시되지 않으면 지금 connect_connector를 호출하세요.",
+    "connectMany": "먼저, {{names}} 중 시스템 알림에 연결됨으로 표시되지 않은 각 항목에 대해 지금 connect_connector를 호출하세요.",
+    "introduce": "자기소개는 한 번만 하고, 그다음 {{start}}.",
+    "startMission": "미션을 시작하세요",
+    "startGoal": "사용자가 요청한 것을 향해 첫걸음을 내디디세요: \"{{goal}}\"",
+    "continuing": "도구 결과 뒤에 오는 모든 내용은 이어지는 같은 답변입니다. 다시 인사하지 말고, 미션을 다시 설명하지 마세요.",
+    "write": "사용자의 언어인 {{language}}로 작성하세요. 단, 사용자가 다른 언어로 쓰면 그 언어로 작성하세요."
   }
 }
