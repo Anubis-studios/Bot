@@ -4080,6 +4080,7 @@
   "paymentRequired": {
     "unconfirmedTitle": "Escolha um plano para continuar usando o AbacusAI Bot",
     "unconfirmedBody": "Você entrou, mas sua conta precisa de um plano para o AbacusAI Bot funcionar.",
+    "alreadySubscribed": "Já tem assinatura? Fale com {{email}}",
     "trialEndedTitle": "Seu teste gratuito terminou",
     "trialEndedBody": "Faça upgrade para continuar usando o AbacusAI Bot com esta conta.",
     "lapsedTitle": "Sua assinatura terminou",

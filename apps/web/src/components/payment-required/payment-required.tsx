@@ -22,6 +22,9 @@ import { useAppContext } from "#renderer/lib/use-app-context";
 import { Button } from "#renderer/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "#renderer/ui/dialog";
 
+/** Where a subscriber whose payment did not confirm goes instead of paying twice. */
+const SUPPORT_EMAIL = "support@abacus.ai";
+
 /** How often the account is asked again while checkout is open. */
 const CHECKOUT_POLL_MS = 5_000;
 /** The checkout link lives 30 minutes; the watch stops after it. */
@@ -150,6 +153,35 @@ export const PaymentRequiredPanel = ({
         </span>
         {title(t(copy.title))}
         <p className="text-muted-foreground text-sm/[21px]">{t(copy.body)}</p>
+        {copy === COPY.unconfirmed && (
+          <p
+            className="text-muted-foreground text-xs"
+            data-slot="payment-support"
+          >
+            {/* Split on the address so each locale keeps its own word order. */}
+            {t("paymentRequired.alreadySubscribed", { email: SUPPORT_EMAIL })
+              .split(SUPPORT_EMAIL)
+              .flatMap((part, index) =>
+                index === 0
+                  ? [part]
+                  : [
+                      <Button
+                        key="email"
+                        variant="link"
+                        className="text-muted-foreground h-auto p-0 text-xs underline"
+                        onClick={() =>
+                          void platformSystem(transport.client).openExternal({
+                            url: `mailto:${SUPPORT_EMAIL}`,
+                          })
+                        }
+                      >
+                        {SUPPORT_EMAIL}
+                      </Button>,
+                      part,
+                    ]
+              )}
+          </p>
+        )}
       </div>
       {offer != null && (
         <div className="flex flex-col gap-2" data-slot="payment-offer">

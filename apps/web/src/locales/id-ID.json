@@ -4080,6 +4080,7 @@
   "paymentRequired": {
     "unconfirmedTitle": "Pilih paket untuk terus menggunakan AbacusAI Bot",
     "unconfirmedBody": "Anda sudah masuk, tetapi akun Anda memerlukan paket agar AbacusAI Bot dapat bekerja.",
+    "alreadySubscribed": "Sudah berlangganan? Hubungi {{email}}",
     "trialEndedTitle": "Uji coba gratis Anda telah berakhir",
     "trialEndedBody": "Upgrade untuk terus menggunakan AbacusAI Bot dengan akun ini.",
     "lapsedTitle": "Langganan Anda telah berakhir",
