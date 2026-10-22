@@ -365,11 +365,7 @@ export const UpgradeDialogHost = () => {
       .then((account) => {
         if (!live) return;
         if (askedAccount(request, account)) setConfirmed(request.key);
-        else {
-          // A paid account asking to see the plan gets the plan page, as before.
-          if (request.kind === "plan") void openUpgrade(transport.client);
-          closeUpgradeDialog();
-        }
+        else closeUpgradeDialog();
       })
       .catch(() => {
         if (live) closeUpgradeDialog();
