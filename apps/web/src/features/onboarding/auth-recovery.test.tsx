@@ -166,6 +166,11 @@ const paymentScreens = [
     title: "Choose a plan to keep using AbacusAI Bot",
     cta: "Upgrade",
   },
+  {
+    reason: null,
+    title: "Choose a plan to keep using AbacusAI Bot",
+    cta: "Upgrade",
+  },
   { reason: "trial_ended", title: "Your free trial has ended", cta: "Upgrade" },
   { reason: "lapsed", title: "Your subscription has ended", cta: "Renew" },
 ] as const;
@@ -184,7 +189,9 @@ it.each(paymentScreens)(
       authStart,
       procedures: {
         account: {
-          payment: os.account.payment.handler(() => (held ? { reason } : null)),
+          payment: os.account.payment.handler(() =>
+            held ? ((reason != null ? { reason } : {}) as never) : null
+          ),
           billingPlan: os.account.billingPlan.handler(
             () =>
               ({
@@ -194,13 +201,32 @@ it.each(paymentScreens)(
                   creditsGranted: null,
                   freeTierExpiresAt: null,
                 },
-                plans: [],
+                plans: [
+                  {
+                    plan: "free",
+                    planName: "Free",
+                    priceText: "Free",
+                    features: [],
+                    creditsPerMonth: 2000,
+                    current: true,
+                  },
+                  {
+                    plan: "basic",
+                    planName: "Basic",
+                    priceText: "Intro offer",
+                    features: [],
+                    creditsPerMonth: 20000,
+                    current: false,
+                  },
+                ],
                 upgrades: [
                   {
                     plan: "basic",
                     planName: "Basic",
                     priceText: "Intro offer",
-                    features: ["Top models"],
+                    features: [
+                      "Top models including Model A, Model B, Model C, Model D and Model E",
+                    ],
                     url: null,
                   },
                 ],
@@ -232,10 +258,27 @@ it.each(paymentScreens)(
     expect(
       screen.queryByRole("button", { name: "Sign up for free" })
     ).toBeNull();
+    // The offer carries the plan's whole pitch, never a part of it.
+    expect(
+      [...document.querySelectorAll('[data-slot="payment-offer"] li')].map(
+        (item) => item.textContent
+      )
+    ).toEqual(
+      reason === "lapsed"
+        ? []
+        : [
+            "20,000 credits a month (10x the free plan)",
+            "Top models: Model A, Model B, Model C, Model D",
+            "Image and video generation",
+            "Personal agents in Abacus AI Agent on the web that run 24/7: WhatsApp, Discord and Telegram auto-replies, all your routines, and everything your bot does",
+            "100+ connectors: Gmail, Google Calendar, Slack, Drive, Notion and more",
+            "Build and publish web apps",
+          ]
+    );
     // Only a plan whose payment did not confirm offers subscribers a report.
     expect(
       screen.queryByRole("button", { name: "Report an issue" }) != null
-    ).toBe(reason === "unconfirmed");
+    ).toBe(reason === "unconfirmed" || reason == null);
     expect(authStart).toHaveBeenCalledOnce();
   }
 );

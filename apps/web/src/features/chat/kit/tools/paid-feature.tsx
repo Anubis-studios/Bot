@@ -14,6 +14,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useVisibleContextualUpsell } from "#renderer/lib/contextual-upsell";
+import { requestPlanDialog } from "#renderer/lib/upgrade-dialog";
 import { Button } from "#renderer/ui/button";
 
 import type { ChatHostActions } from "../../runtime/host-actions";
@@ -79,11 +80,7 @@ export const PaidFeatureCard = ({
               )}
             </p>
           )}
-          {free && (
-            <p className="text-muted-foreground text-xs leading-4">
-              {`${t("upgradeDialog.price")} ${t("upgradeDialog.pricePeriod")} · ${t("upgradeDialog.plan")}`}
-            </p>
-          )}
+
           <div>
             {web ? (
               <Button
@@ -96,8 +93,13 @@ export const PaidFeatureCard = ({
                 <ExternalLink aria-hidden className="size-3" />
               </Button>
             ) : (
-              <Button size="sm" onClick={() => void host.openUpgrade()}>
-                {t("upgradeDialog.upgradeCta")}
+              // The plan's whole pitch and price are the upgrade dialog's.
+              <Button
+                size="sm"
+                data-action="see-plan"
+                onClick={() => requestPlanDialog("paid-feature")}
+              >
+                {t("creditsCard.cta")}
               </Button>
             )}
           </div>

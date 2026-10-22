@@ -214,6 +214,94 @@ it("Start building opens a new session on the build examples and makes no bot", 
   ).toHaveLength(1);
 });
 
+it("See Basic on a free account opens the upgrade dialog with the plan's whole pitch, not a page", async () => {
+  const os = implement(contract);
+  const seed = defaultSeed();
+  seed.bots = [];
+  seed.routines = [];
+  harness = await renderApp("/onboarding/first-bot", {
+    onboarded: false,
+    signedIn: true,
+    seed,
+    procedures: {
+      account: {
+        abacus: os.account.abacus.handler(() => ({
+          user_id: "u1",
+          organization_id: "o1",
+          name: null,
+          email: null,
+          picture: null,
+          organization: null,
+          org_user_count: null,
+          plan: null,
+          subscription_tier: "free",
+          credits_granted: 2000,
+          credits_used: 0,
+        })),
+        billingPlan: os.account.billingPlan.handler(
+          () =>
+            ({
+              current: {
+                planName: "Free",
+                creditsRemaining: 2000,
+                creditsGranted: 2000,
+                freeTierExpiresAt: null,
+              },
+              plans: [
+                {
+                  plan: "free",
+                  planName: "Free",
+                  priceText: "Free",
+                  features: [],
+                  creditsPerMonth: 2000,
+                  current: true,
+                },
+                {
+                  plan: "basic",
+                  planName: "Basic",
+                  priceText: "$10/mo",
+                  firstMonthPriceCents: 700,
+                  priceCents: 1000,
+                  features: [],
+                  creditsPerMonth: 20000,
+                  current: false,
+                },
+              ],
+              upgrades: [
+                {
+                  plan: "basic",
+                  planName: "Basic",
+                  priceText: "$10/mo",
+                  firstMonthPriceCents: 700,
+                  priceCents: 1000,
+                  features: [
+                    "Top models including Model A, Model B, Model C, Model D and Model E",
+                  ],
+                  url: null,
+                },
+              ],
+              topUpUrl: null,
+              upgradeInMobileApp: false,
+            }) as never
+        ),
+      },
+    },
+  });
+  fireEvent.click(await screen.findByRole("button", { name: "See Basic" }));
+  const dialog = await screen.findByRole("dialog");
+  await waitFor(() =>
+    expect(
+      dialog.querySelectorAll('[data-slot="upgrade-pitch"] li')
+    ).toHaveLength(6)
+  );
+  expect(within(dialog).getByText("Everything Basic gives you")).toBeTruthy();
+  expect(dialog.textContent).toContain("$7 your first month, then $10/month");
+  expect(
+    harness.calls.filter(([name]) => name === "system.openExternal")
+  ).toHaveLength(0);
+  expect(harness.router.state.location.pathname).toBe("/onboarding/first-bot");
+});
+
 it("the first-run choices wait for a pick, and a pick opens the bot it made", async () => {
   const seed = defaultSeed();
   seed.bots = [];

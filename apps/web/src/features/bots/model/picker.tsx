@@ -16,7 +16,7 @@ import { usePrefs } from "#renderer/data/db/prefs";
 import { accountTier } from "#renderer/lib/credits";
 import { useMotionPreference } from "#renderer/lib/motion";
 import { useAppNavigate } from "#renderer/lib/navigation/use-app-navigate";
-import { openUpgrade } from "#renderer/lib/upgrade";
+import { requestPlanDialog } from "#renderer/lib/upgrade-dialog";
 import { Button } from "#renderer/ui/button";
 import { Input } from "#renderer/ui/input";
 import { Popover, PopoverTrigger, PopoverContent } from "#renderer/ui/popover";
@@ -64,7 +64,7 @@ export const useBotModelBinding = (
           ? t("chat.composer.includedInPaid")
           : t("chat.composer.includedIn", { plan }),
     },
-    onUpgrade: () => void openUpgrade(transport.client),
+    onUpgrade: () => requestPlanDialog("model-picker"),
     onConnect: (provider) =>
       void navigate({
         to: "/settings/models",
@@ -84,7 +84,7 @@ export const useBotModelBinding = (
     onConfigureProviders: () =>
       void navigate({ to: "/settings/models", transition: "settings-in" }),
     ...(accountTier(account.data) === "free"
-      ? { onUpgrade: () => void openUpgrade(transport.client) }
+      ? { onUpgrade: () => requestPlanDialog("model-picker") }
       : {}),
     ...(other != null && accountTier(account.data) === "free"
       ? {

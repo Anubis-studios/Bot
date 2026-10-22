@@ -1,10 +1,8 @@
 import {
   ArrowUpRight,
-  Bot,
   FileText,
   Globe,
   ImageIcon,
-  MessageSquare,
   Sparkles,
 } from "lucide-react";
 import { AnimatePresence, motion, animate } from "motion/react";
@@ -15,7 +13,7 @@ import { useTranslation } from "react-i18next";
 import { usePrefs } from "#renderer/data/db/prefs";
 import { ABACUS_AGENT_URL } from "#renderer/lib/abacus-links";
 import { useHasContextualUpsell } from "#renderer/lib/contextual-upsell";
-import { creditsTier, upgradePitch } from "#renderer/lib/credits";
+import { creditsTier } from "#renderer/lib/credits";
 import {
   durations,
   easings,
@@ -25,7 +23,7 @@ import {
   useMotionPreference,
 } from "#renderer/lib/motion";
 import { platformSystem } from "#renderer/lib/platform-system";
-import { openUpgrade } from "#renderer/lib/upgrade";
+import { requestPlanDialog } from "#renderer/lib/upgrade-dialog";
 import { useAppContext } from "#renderer/lib/use-app-context";
 import { useCreditsAccount } from "#renderer/lib/use-credits-account";
 import { useNow } from "#renderer/lib/use-now";
@@ -37,10 +35,6 @@ import { promoAccountKey, promoState } from "./promo-state";
 
 /** Under this share of the month's credits left, the card says they are running low. */
 const LOW_CREDITS_SHARE = 0.2;
-const SIDES = [
-  { key: "creditsCard.sideSessions", icon: MessageSquare },
-  { key: "creditsCard.sideBots", icon: Bot },
-] as const;
 /** What a paid plan does on the web that the app does not. */
 const WEB_LINES = [
   { key: "creditsCard.paidWebApps", icon: Globe },
@@ -106,7 +100,6 @@ export const UpgradePromo = () => {
     : promoState(account.data, prefs.creditsExhaustedAt, now);
   const [excited, setExcited] = useState(false);
   const tier = creditsTier(account.data);
-  const pitch = upgradePitch(account.data);
   const remaining =
     account.data?.credits_granted != null && account.data.credits_used != null
       ? Math.max(0, account.data.credits_granted - account.data.credits_used)
@@ -121,10 +114,10 @@ export const UpgradePromo = () => {
           remaining / granted < LOW_CREDITS_SHARE
         ? "creditsCard.lowTitle"
         : "creditsCard.levelUpTitle";
-  // Both sides' gains, the person's own first; new accounts lead with Sessions.
-  const sides = pitch === "bots" ? SIDES.slice().reverse() : SIDES;
   const web = state === "web";
-  const lines = web ? WEB_LINES : sides;
+  // A free account's card names no gains of its own: Upgrade opens the
+  // dialog with the plan's whole pitch.
+  const lines = web ? WEB_LINES : [];
   if ((tier !== "free" && !web) || contextualUpsell || !host)
     return createPortal(null, target);
   return createPortal(
@@ -161,14 +154,16 @@ export const UpgradePromo = () => {
               <p className="text-sm font-semibold">
                 {t(web ? "creditsCard.paidWebTitle" : title)}
               </p>
-              <ul className="text-muted-foreground mt-0.5 flex flex-col gap-0.5 text-xs">
-                {lines.map(({ key, icon: Icon }) => (
-                  <li key={key} className="flex gap-1.5">
-                    <Icon aria-hidden className="mt-0.5 size-3 shrink-0" />
-                    <span>{t(key)}</span>
-                  </li>
-                ))}
-              </ul>
+              {lines.length > 0 && (
+                <ul className="text-muted-foreground mt-0.5 flex flex-col gap-0.5 text-xs">
+                  {lines.map(({ key, icon: Icon }) => (
+                    <li key={key} className="flex gap-1.5">
+                      <Icon aria-hidden className="mt-0.5 size-3 shrink-0" />
+                      <span>{t(key)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
               {remaining != null ? (
                 <p className="text-muted-foreground mt-1 text-xs">
                   {t("creditsCard.progress", {
@@ -230,7 +225,7 @@ export const UpgradePromo = () => {
                 ? platformSystem(transport.client).openExternal({
                     url: ABACUS_AGENT_URL,
                   })
-                : openUpgrade(transport.client))
+                : requestPlanDialog("sidebar"))
             }
           >
             {web ? (

@@ -55,12 +55,12 @@ export const spentFreeAccount = (
   account.credits_used != null &&
   account.credits_used >= account.credits_granted;
 
-/** Who a request is for: own-key asks any free account, spent or not. */
+/** Who a request is for: own-key and plan ask any free account, spent or not. */
 const askedAccount = (
   request: UpgradeDialogRequest,
   account: AbacusAccountInfo | null | undefined
 ): boolean =>
-  request.kind === "own-key"
+  request.kind === "own-key" || request.kind === "plan"
     ? creditsTier(account) === "free"
     : spentFreeAccount(account);
 
@@ -122,6 +122,7 @@ const DialogBody = ({
   const [waiting, setWaiting] = useState(false);
   const connectors = request.kind === "connectors";
   const ownKey = request.kind === "own-key";
+  const plan = request.kind === "plan";
   const offer = wallOffer(billing ?? null);
   // Never half a pitch: the list waits for the plan it is read from.
   const pitch =
@@ -223,41 +224,49 @@ const DialogBody = ({
             <Bot className="size-6" />
           </span>
         )}
-        <p className="text-muted-foreground text-xs font-medium tracking-[0.02em]">
-          {request.ownKey != null
-            ? t(ownKeyHeadlineKey(request.ownKey.cause), {
-                provider: providerDisplayName(request.ownKey.provider),
-              })
-            : t(
-                connectors
-                  ? "upgradeDialog.connectorsEyebrow"
-                  : request.expired === true
-                    ? "outcome.wall.expiredTitle"
-                    : "outcome.wall.title"
-              )}
-        </p>
+        {!plan && (
+          <p className="text-muted-foreground text-xs font-medium tracking-[0.02em]">
+            {request.ownKey != null
+              ? t(ownKeyHeadlineKey(request.ownKey.cause), {
+                  provider: providerDisplayName(request.ownKey.provider),
+                })
+              : t(
+                  connectors
+                    ? "upgradeDialog.connectorsEyebrow"
+                    : request.expired === true
+                      ? "outcome.wall.expiredTitle"
+                      : "outcome.wall.title"
+                )}
+          </p>
+        )}
         <DialogTitle className="text-[22px]/7 font-semibold tracking-[-0.01em] text-balance">
-          {ownKey
-            ? t("upgradeDialog.ownKeyTitle")
-            : t(
-                connectors
-                  ? "upgradeDialog.connectorsTitle"
-                  : "upgradeDialog.creditsTitle"
-              )}
+          {plan
+            ? offer != null
+              ? t("upgradeDialog.planTitle", { plan: offer.planName })
+              : t("upgradeDialog.creditsTitle")
+            : ownKey
+              ? t("upgradeDialog.ownKeyTitle")
+              : t(
+                  connectors
+                    ? "upgradeDialog.connectorsTitle"
+                    : "upgradeDialog.creditsTitle"
+                )}
         </DialogTitle>
-        <p className="text-muted-foreground text-sm/[21px]">
-          {t(
-            connectors
-              ? "upgradeDialog.connectorsBody"
-              : ownKey
-                ? request.pendingText != null
-                  ? "upgradeDialog.ownKeyBody"
-                  : "upgradeDialog.ownKeyBodyNoMessage"
-                : request.pendingText != null
-                  ? "upgradeDialog.creditsBody"
-                  : "upgradeDialog.creditsBodyNoMessage"
-          )}
-        </p>
+        {!plan && (
+          <p className="text-muted-foreground text-sm/[21px]">
+            {t(
+              connectors
+                ? "upgradeDialog.connectorsBody"
+                : ownKey
+                  ? request.pendingText != null
+                    ? "upgradeDialog.ownKeyBody"
+                    : "upgradeDialog.ownKeyBodyNoMessage"
+                  : request.pendingText != null
+                    ? "upgradeDialog.creditsBody"
+                    : "upgradeDialog.creditsBodyNoMessage"
+            )}
+          </p>
+        )}
       </div>
       {request.pendingText != null && (
         <div className="bg-muted flex min-w-0 items-center gap-2.5 rounded-[10px] px-3 py-2.5">

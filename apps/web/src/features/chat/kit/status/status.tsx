@@ -391,7 +391,7 @@ const OwnKeyCard = ({
                   )
                 }
               >
-                {t("upgradeDialog.upgradeCta")}
+                {t("creditsCard.cta")}
               </Button>
             )
           ) : (
