@@ -2,10 +2,10 @@
  * Ported from codingagent-lite (abacusai/codingagent-lite), MIT; only the
  * env-var prefix changed (CALITE_* -> ABACUSAI_BOT_*).
  *
- * Output repair: cheap models emit tool calls as fenced text, return empty
- * responses, or call tools that don't exist, each of which stalls a run. A
- * corrective message steers the run back, capped so a confused model cannot
- * ping-pong with the repair loop forever.
+ * Output repair: cheap models emit tool calls as fenced text or call tools
+ * that don't exist, each of which stalls a run. A corrective message steers
+ * the run back, capped so a confused model cannot ping-pong with the repair
+ * loop forever. An empty response is the loop's to recover (empty-reply.ts).
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
@@ -57,14 +57,9 @@ export default function (pi: ExtensionAPI) {
   // whereas ctx.signal is cleared once the agent stops streaming.
   let turnSignal: AbortSignal | undefined;
 
-  /**
-   * An empty reply is asked about on every prompt, whatever the session has
-   * spent: past the session cap a long chat's later turns ended in silence.
-   * The per-prompt cap still bounds it, and the turn then ends on an error.
-   */
-  const nudge = (text: string, everyPrompt = false) => {
+  const nudge = (text: string) => {
     if (
-      (!everyPrompt && nudges >= MAX_NUDGES_PER_SESSION) ||
+      nudges >= MAX_NUDGES_PER_SESSION ||
       nudgesThisPrompt >= MAX_NUDGES_PER_PROMPT
     )
       return;
@@ -102,9 +97,8 @@ export default function (pi: ExtensionAPI) {
     )
       return;
 
-    // An empty message is only a model failure when the provider call
-    // succeeded. "error" (pi retries it itself) and "aborted" both arrive with
-    // no content; nudging on them lands after pi's retry has already produced
+    // "error" (pi retries it itself) and "aborted" arrive with whatever had
+    // streamed; nudging on them lands after pi's retry has already produced
     // the real answer, and repeats it once per failed request.
     const stopReason = (msg as { stopReason?: string }).stopReason;
     if (stopReason === "error" || stopReason === "aborted") return;
@@ -116,14 +110,6 @@ export default function (pi: ExtensionAPI) {
       .map((b) => b.text)
       .join("")
       .trim();
-
-    if (text.length === 0) {
-      nudge(
-        "Your last response was empty. Continue the task: either call a tool or state your final answer in plain text.",
-        true
-      );
-      return;
-    }
 
     if (FENCED_TOOL_CALL_PATTERNS.some((re) => re.test(text))) {
       nudge(

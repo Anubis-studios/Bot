@@ -435,8 +435,10 @@ describe("a turn", () => {
     const reported = harness.agent("error").map((event) => event.error);
     expect(reported).toHaveLength(1);
     expect(reported[0]?.cause).toBe("empty");
-    // Output repair asks twice; then the turn says so instead of going quiet.
+    // A model the user picked is asked twice; then the turn says so instead
+    // of going quiet. Hidden asks: nothing for the chat to draw.
     expect(provider.calls.length).toBe(3);
+    expect(harness.text).toBe("");
   });
 
   it("brackets a tool call with a start and a settled result", async () => {
@@ -1123,6 +1125,63 @@ describe("OpenLLM", () => {
     // The picker keeps highlighting the router, not the model of the day.
     expect(harness.agent("model_changed").at(-1)?.model).toBe("openllm/auto");
     log.restore();
+  });
+
+  it("asks a model that answered with nothing once, then moves to the next", async () => {
+    const harness = session({ mode: "yolo" });
+
+    provider.scriptSequence([{ say: "" }, { say: "" }, { say: "Here it is." }]);
+    await harness.session.start();
+    await harness.session.send("hi");
+    await harness.until(() => harness.agent("turn_complete").length > 0);
+
+    expect(harness.text).toContain("Here it is.");
+    expect(harness.agent("error")).toEqual([]);
+    expect(provider.calls.map((call) => call.model)).toEqual([
+      "big:free",
+      "big:free",
+      "small:free",
+    ]);
+  });
+
+  it("spends at most two more calls on empty replies after an earlier failure", async () => {
+    // A pool with more models than the budget: each one answering with
+    // nothing used to be tried in turn.
+    fs.writeFileSync(
+      path.join(home, "config.json"),
+      JSON.stringify({
+        defaultModel: "openllm/auto",
+        customProviders: [
+          {
+            id: "openrouter",
+            baseUrl: provider.baseUrl,
+            apiKey: "test-key",
+            models: ["a", "b", "c", "d", "e"].map((id, index) => ({
+              id: `${id}:free`,
+              contextWindow: 131072 - index * 1024,
+            })),
+          },
+        ],
+      }),
+      "utf8"
+    );
+    const harness = session({ mode: "yolo" });
+    provider.script((_call, index) =>
+      index === 0
+        ? { fail: { status: 429, message: "rate limited upstream" } }
+        : { say: "" }
+    );
+    try {
+      await harness.session.start();
+      await harness.session.send("hi");
+      await harness.until(() => harness.agent("error").length > 0);
+      await settled();
+
+      expect(harness.agent("error")).toHaveLength(1);
+      expect(provider.calls).toHaveLength(4);
+    } finally {
+      fs.writeFileSync(path.join(home, "config.json"), openLlmConfig(), "utf8");
+    }
   });
 
   // Output repair nudges the same model up to twice first; a model that

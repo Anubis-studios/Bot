@@ -46,6 +46,7 @@ import {
   setCurrentMode,
   setUnattendedPolicy,
 } from "../current-mode.js";
+import { EmptyReplies } from "../empty-reply.js";
 import { tagEvent, type EventMeta } from "../event-meta.js";
 import { TOOL_NAME_ALIASES } from "../excluded-tools.js";
 import background from "../extensions/background.js";
@@ -181,9 +182,6 @@ const FOREVER_CONTEXT_TYPE = "abacusai-bot:forever-turn-context";
 const MALFORMED_TOOL_CALL_PATTERN = /malformed[ _]?(function|tool)[ _]?call/i;
 
 const MAX_MALFORMED_CONTINUATIONS = 1;
-
-/** Extra calls a turn may spend on getting an answer after an empty one. */
-const EMPTY_REPLY_RECOVERIES = 2;
 
 function approvalTimeoutMs(): number {
   const raw = Number(process.env.ABACUSAI_BOT_APPROVAL_TIMEOUT_MS);
@@ -327,9 +325,10 @@ export class ForeverEngine {
   /** A reply in the wrong language, to be asked for again (once per turn). */
   private pendingLanguageRepair: ReplyLanguageMismatch | null = null;
   private languageRepairsThisTurn = 0;
-  /** The turn's last call answered with nothing; see recoverEmptyReply. */
-  private pendingEmptyReply = false;
-  private emptyRepliesThisTurn = 0;
+  /** The turn's recoveries from an empty reply (empty-reply.ts). */
+  private readonly emptyReplies = new EmptyReplies();
+  /** The same model is to be asked again, out of sight, for its answer. */
+  private pendingEmptyAsk = false;
   /** The run that ended the turn answered with no text and no tool call. */
   private turnEndedEmpty = false;
   /** Whether a user turn is in flight: a refresh landing now is mid-turn. */
@@ -714,8 +713,8 @@ export class ForeverEngine {
     this.stallFailureReported = false;
     this.languageRepairsThisTurn = 0;
     this.pendingLanguageRepair = null;
-    this.pendingEmptyReply = false;
-    this.emptyRepliesThisTurn = 0;
+    this.pendingEmptyAsk = false;
+    this.emptyReplies.begin();
     this.turnEndedEmpty = false;
     this.mcpTools.atTurnStart();
     this.pendingToolArrival = null;
@@ -913,10 +912,10 @@ export class ForeverEngine {
       this.pendingStall != null ||
       this.pendingNetworkFailure != null ||
       this.pendingBusyWait != null ||
-      this.pendingEmptyReply
+      this.pendingEmptyAsk
     ) {
       if (this.interrupted) {
-        this.pendingEmptyReply = false;
+        this.pendingEmptyAsk = false;
         this.pendingNetworkFailure = null;
         this.pendingBusyWait = null;
         this.continuingPastMalformedToolCall = false;
@@ -980,9 +979,9 @@ export class ForeverEngine {
         continue;
       }
 
-      if (this.pendingEmptyReply) {
-        this.pendingEmptyReply = false;
-        await this.recoverEmptyReply();
+      if (this.pendingEmptyAsk) {
+        this.pendingEmptyAsk = false;
+        await this.askAfterEmptyReply();
 
         continue;
       }
@@ -1034,19 +1033,13 @@ export class ForeverEngine {
     if (!this.openLlmActive || this.interrupted) return none;
 
     const failure =
-      endedOnProviderError(messages) ??
-      endedOnLeakedToolCall(messages) ??
-      // Nothing at all after an earlier call failed: another model answers.
-      (this.router.chain.hadFailure &&
-      endedEmpty(messages) &&
-      this.emptyRepliesThisTurn < EMPTY_REPLY_RECOVERIES
-        ? this.spendEmptyReply()
-        : null);
+      endedOnProviderError(messages) ?? endedOnLeakedToolCall(messages);
     const current = this.session?.model;
 
     if (failure == null) {
       // The model answered: proof it works, else its failure count only climbs.
-      if (current != null)
+      // An empty reply is no answer (EmptyReplies decides what follows it).
+      if (current != null && !endedEmpty(messages))
         this.router.succeeded(`${current.provider}/${current.id}`);
       return none;
     }
@@ -1402,54 +1395,16 @@ export class ForeverEngine {
     this.reportFailure();
   }
 
-  /**
-   * The last call answered with no text and no tool call. First the same
-   * model is asked, out of sight, to answer; on the free pool the next model
-   * is the second try. A model the user picked is not swapped behind their
-   * back: after one ask, the turn ends on the empty-reply failure. At most
-   * two extra calls a turn (EMPTY_REPLY_RECOVERIES).
-   */
-  /** An empty reply's next model, counted against EMPTY_REPLY_RECOVERIES. */
-  private spendEmptyReply(): string {
-    this.emptyRepliesThisTurn += 1;
-    return EMPTY_REPLY_FAILURE;
-  }
-
-  private async recoverEmptyReply(): Promise<void> {
-    this.emptyRepliesThisTurn += 1;
+  /** The model answered with nothing: it is asked, out of sight, to answer. */
+  private async askAfterEmptyReply(): Promise<void> {
     const model = this.session?.model;
-    const name = model != null ? `${model.provider}/${model.id}` : "the model";
-    if (this.emptyRepliesThisTurn === 1 || !this.openLlmActive) {
-      if (this.emptyRepliesThisTurn > 1) {
-        this.finishTurn();
-
-        return;
-      }
-      process.stderr.write(
-        `[provider] ${name} returned an empty reply; asking it to answer.\n`
-      );
-      await this.session?.sendCustomMessage(
-        {
-          customType: this.profile.continuations.emptyReply.customType,
-          content: this.profile.continuations.emptyReply.content,
-          display: false,
-        },
-        { triggerTurn: true }
-      );
-
-      return;
-    }
-    this.router.chain.failed(EMPTY_REPLY_FAILURE, model?.provider);
-    const route = this.routeAfterFailure(EMPTY_REPLY_FAILURE);
-    if (route.rotation == null) {
-      this.finishTurn();
-
-      return;
-    }
     process.stderr.write(
-      `[provider] ${name} returned an empty reply again; routing to the next model.\n`
+      `[provider] ${model != null ? `${model.provider}/${model.id}` : "the model"} returned an empty reply; asking it to answer.\n`
     );
-    this.pendingOpenLlmRotation = route.rotation;
+    await this.session?.sendCustomMessage(
+      { ...this.profile.continuations.emptyReply, display: false },
+      { triggerTurn: true }
+    );
   }
 
   /**
@@ -2146,22 +2101,32 @@ export class ForeverEngine {
             ? []
             : this.mcpTools.pendingArrivals();
         this.pendingToolArrival = arrivals.length > 0 ? arrivals : null;
-        // Nothing at all, with no other way on: asked for again rather than
-        // ending the turn on silence (recoverEmptyReply). A hidden
-        // housekeeping turn has no reader to answer.
+        // Nothing at all, with no other way on: the turn tries again rather
+        // than ending on silence (EmptyReplies). A hidden housekeeping turn
+        // has no reader to answer.
         this.turnEndedEmpty =
           !this.hiddenTurn && !this.interrupted && endedEmpty(event.messages);
-        this.pendingEmptyReply =
+        const emptyStep =
           !event.willRetry &&
           this.turnEndedEmpty &&
-          this.emptyRepliesThisTurn < EMPTY_REPLY_RECOVERIES &&
           !this.continuingPastMalformedToolCall &&
           this.pendingContextCompaction == null &&
           this.pendingOpenLlmRotation == null &&
           this.pendingBusyWait == null &&
           this.pendingLanguageRepair == null &&
           this.pendingToolArrival == null &&
-          this.pendingStall == null;
+          this.pendingStall == null
+            ? this.emptyReplies.next(
+                this.openLlmActive,
+                this.router.chain.hadFailure
+              )
+            : null;
+        if (emptyStep === "rotate")
+          this.pendingOpenLlmRotation =
+            this.routeAfterFailure(EMPTY_REPLY_FAILURE).rotation;
+        // With no other model to move to, the same one is asked.
+        this.pendingEmptyAsk =
+          emptyStep != null && this.pendingOpenLlmRotation == null;
         if (
           !event.willRetry &&
           !this.continuingPastMalformedToolCall &&
@@ -2171,7 +2136,7 @@ export class ForeverEngine {
           this.pendingLanguageRepair == null &&
           this.pendingToolArrival == null &&
           this.pendingStall == null &&
-          !this.pendingEmptyReply
+          !this.pendingEmptyAsk
         ) {
           this.finishTurn();
         }
