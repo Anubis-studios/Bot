@@ -1627,10 +1627,17 @@
       "contactFailedGeneric",
       "someone",
       "payment",
-      "paymentLapsed"
+      "paymentLapsed",
+      "timedOut",
+      "agentExited",
+      "empty",
+      "contactNeutral",
+      "contactEmpty",
+      "undelivered"
     ],
     "sources": [
-      "../../desktop/src/main/services/messaging/chat-failure-reply.ts"
+      "../../desktop/src/main/services/messaging/chat-failure-reply.ts",
+      "../../desktop/src/main/services/messaging/messaging-gateway-service.ts"
     ]
   },
   {
