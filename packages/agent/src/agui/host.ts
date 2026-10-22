@@ -579,7 +579,10 @@ export class AguiHost {
 
       this.core.preparing = false;
       prompted = true;
-      await this.core.runHeld(text, "run", { token });
+      await this.core.runHeld(text, "run", {
+        token,
+        ...(newest?.id != null ? { messageId: newest.id } : {}),
+      });
     } catch (error) {
       // Something other than the session's own reporting threw before the
       // prompt: the run is this command's own, so it ends in RUN_ERROR.

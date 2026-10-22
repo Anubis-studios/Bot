@@ -99,6 +99,17 @@ export function creditWall(raw: string): CreditWall | null {
     : null;
 }
 
+/**
+ * The platform refusing a model the account's plan does not include (a free
+ * key asking for a paid model), as opposed to the key itself being bad: the
+ * same key runs every model its own /v1/models lists.
+ */
+export function isPlanRejection(raw: string): boolean {
+  return /not available on (?:the|your) (?:free tier|plan)|not included in your plan/i.test(
+    raw
+  );
+}
+
 /** Out of Abacus credits for any reason: never a mere rate limit. */
 export const isOutOfCredits = (raw: string): boolean => creditWall(raw) != null;
 

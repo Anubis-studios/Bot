@@ -7,7 +7,11 @@ import {
   ABACUS_ACCOUNT_FOCI,
   type AbacusAccountInfo,
 } from "@abacus-ai/contract/contracts";
-import type { ModelAvailability, ModelTier } from "@abacus-ai/contract/models";
+import {
+  isPayingAbacusTier,
+  type ModelAvailability,
+  type ModelTier,
+} from "@abacus-ai/contract/models";
 
 import { abacusBotHome } from "../../paths";
 import { credentialFor, hasCredential } from "../config/settings";
@@ -294,6 +298,87 @@ export const fetchAbacusModels = async (): Promise<ModelAvailability[]> => {
     return withCurrentConfigured(cache ?? readLastGood(key));
   }
 };
+
+/**
+ * Models the platform refused for the account's plan at run time, for the
+ * key and plan tier they were refused on. The refusal outranks the live list
+ * while the plan is the same (the platform said no to this very call); a new
+ * key or a new tier starts clean, so an upgrade lifts every lock at once.
+ */
+interface PlanLocks {
+  key: string;
+  tier: string | null;
+  ids: string[];
+}
+
+const planLocksFile = (key: string): string =>
+  lastGoodFile(key).replace(/\.json$/, ".plan-locked.json");
+
+let planLocks: PlanLocks | null = null;
+
+const currentTier = (): string | null =>
+  accountCache?.value.subscription_tier ?? null;
+
+const readPlanLocks = (key: string): PlanLocks | null => {
+  if (planLocks?.key === key) return planLocks;
+  try {
+    const parsed = JSON.parse(
+      fs.readFileSync(planLocksFile(key), "utf8")
+    ) as Partial<PlanLocks>;
+    planLocks = {
+      key,
+      tier: typeof parsed.tier === "string" ? parsed.tier : null,
+      ids: Array.isArray(parsed.ids)
+        ? parsed.ids.filter((id): id is string => typeof id === "string")
+        : [],
+    };
+  } catch {
+    // Nothing refused on this machine yet.
+    planLocks = { key, tier: currentTier(), ids: [] };
+  }
+  return planLocks;
+};
+
+/** The `abacus/…` ids the account's plan refused, while it is on that plan. */
+export const planLockedAbacusIds = (): ReadonlySet<string> => {
+  const key = resolveKey();
+  if (key == null) return new Set();
+  const locks = readPlanLocks(key);
+  const tier = currentTier();
+  // A tier read since the refusal that differs from it: the plan changed.
+  // Refused before any tier was read: lifted once the account reads paying.
+  const planChanged =
+    tier != null &&
+    (locks.tier != null ? tier !== locks.tier : isPayingAbacusTier(tier));
+  return planChanged ? new Set() : new Set(locks.ids);
+};
+
+/** Records that the platform refused `id` (an `abacus/…` id) for the plan. */
+export const lockAbacusModelForPlan = (id: string): void => {
+  const key = resolveKey();
+  if (key == null || !id.startsWith("abacus/")) return;
+  const tier = currentTier();
+  const known = planLockedAbacusIds();
+  if (known.has(id)) return;
+  planLocks = { key, tier, ids: [...known, id] };
+  try {
+    writeFileAtomicSync(
+      planLocksFile(key),
+      JSON.stringify({ tier, ids: planLocks.ids }),
+      { restrict: true }
+    );
+  } catch {
+    // Lost only across a restart: the next refusal records it again.
+  }
+};
+
+/** The model a failed turn's card says the plan does not include. */
+export const planRefusedModel = (error?: {
+  actions?: ReadonlyArray<{ type: string; cause?: string; model?: string }>;
+}): string | null =>
+  error?.actions?.find(
+    (action) => action.type === "model-unavailable" && action.cause === "plan"
+  )?.model ?? null;
 
 /** Cached list, if a fetch already succeeded this run. */
 export const cachedAbacusModels = (): ModelAvailability[] =>

@@ -5,6 +5,11 @@ import path from "path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
+  APP_QUESTIONS_PROMPT,
+  basePrompt,
+  subAgentBasePrompt,
+} from "./base-prompt.js";
+import {
   identityPrompt,
   MAX_PERSONA,
   personaPrompt,
@@ -71,5 +76,29 @@ describe("who the agent says it is", () => {
 
     expect(identity).toMatch(/^You are AbacusAI Bot, here to help the user/);
     expect(identity).toMatch(/never introduce yourself as another assistant/);
+  });
+});
+
+describe("questions about the app itself", () => {
+  /**
+   * From memory the model said routines run on a server and that outside
+   * models cannot be added; bot_help reads the app instead. One fixed line
+   * right after who the agent is, the same for every session, so the cached
+   * prefix never changes.
+   */
+  it("go to bot_help, in one fixed line after the identity block", () => {
+    for (const edit of ["ours", "builtin"] as const) {
+      const prompt = basePrompt(edit);
+      expect(
+        prompt.startsWith(`${identityPrompt()}\n${APP_QUESTIONS_PROMPT}\n\n`)
+      ).toBe(true);
+      expect(basePrompt(edit)).toBe(prompt);
+    }
+    expect(APP_QUESTIONS_PROMPT).toContain("bot_help, never from memory");
+  });
+
+  it("is not a sub-agent's: it has no bot_help", () => {
+    expect(subAgentBasePrompt(true)).not.toContain("bot_help");
+    expect(subAgentBasePrompt(false)).not.toContain("bot_help");
   });
 });

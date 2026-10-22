@@ -419,8 +419,10 @@ import {
   cachedAbacusAccount,
   creditSnapshot,
   fetchAbacusAccount,
+  lockAbacusModelForPlan,
   onAbacusAccountRead,
   onFreePlan,
+  planRefusedModel,
 } from "./services/providers/abacus";
 import {
   connectButtonLink,
@@ -453,6 +455,7 @@ import {
   clearBackendProbeCache,
   resolveBackend,
 } from "./services/providers/exec-backend-service";
+import { listAvailableModels } from "./services/providers/models";
 import { resolveSessionModel } from "./services/providers/session-model";
 import { SandboxProbeService } from "./services/sandbox/sandbox-probe-service";
 import { agentTurnBusy } from "./services/session/agent-busy";
@@ -566,6 +569,9 @@ export class ServiceHost {
     // next launch and every agent stops at it.
     this.onAgentEvent((_sessionId, payload) => {
       if (payload.type !== "event" || payload.event.type !== "error") return;
+      // A model the plan refused at run time is not offered again.
+      const model = planRefusedModel(payload.event.error);
+      if (model != null) lockAbacusModelForPlan(model);
       const prefs = this.prefs?.();
       if (prefs == null) return;
       const patch = wallAfterError(
@@ -1087,6 +1093,10 @@ export class ServiceHost {
       return new Set(Object.keys(states).filter((id) => states[id]));
     },
     planTier: () => abacusPlanTier(cachedAbacusAccount()),
+    planName: () => cachedAbacusAccount()?.plan ?? null,
+    models: () => listAvailableModels(),
+    bots: () =>
+      this.botService.list().map((bot) => ({ id: bot.id, name: bot.name })),
     workspacePath: () => {
       const workspace = this.workspaceService.getActiveWorkspace();
       return workspace?.isRemote === true ? null : (workspace?.path ?? null);

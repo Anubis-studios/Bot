@@ -6,36 +6,17 @@ import * as path from "node:path";
  * Ported from codingagent-lite (abacusai/codingagent-lite), MIT; only the
  * env-var prefix changed (CALITE_* -> ABACUSAI_BOT_*).
  *
- * Guardrails for cheap-model sloppiness: `write` over an existing file keeps
- * a copy; `edit` needs a read first; protected paths are refused; bash is
- * denied destructive commands and `>` onto an existing file. Whether a write
- * may leave the workspace is the permission gate's question, not this one's.
+ * Guardrails for cheap-model sloppiness: `edit` needs a read first; protected
+ * paths are refused; bash is denied destructive commands and `>` onto an
+ * existing file. Copies of what a turn changes are checkpoints.ts's job, and
+ * whether a write may leave the workspace is the permission gate's question.
  */
 import {
   type ExtensionAPI,
   isToolCallEventType,
 } from "@earendil-works/pi-coding-agent";
 
-import { modelPath } from "../model-path.js";
 import { isInsideDirectory, realPathOf } from "../workspace-path.js";
-
-/**
- * Backups live inside the workspace, under `.abacusai-bot/` rather than beside
- * the original: a sibling `file.bak` shows up in git status and gets committed.
- */
-const BACKUP_DIR = path.join(".abacusai-bot", "backups");
-
-/**
- * Timestamped copies kept per file, oldest dropped first: a second overwrite
- * must not destroy the copy the first one made.
- */
-const BACKUPS_PER_FILE = 5;
-
-/**
- * Above this a build artifact rewritten repeatedly would fill the disk a copy
- * at a time, so the write is refused instead of going through unbacked.
- */
-const MAX_BACKUP_BYTES = 25 * 1024 * 1024;
 
 const PROTECTED_PATH_PATTERNS: RegExp[] = [
   /(^|\/)\.env(\.[^/]*)?$/,
@@ -210,67 +191,10 @@ const isScratch = (abs: string): boolean => {
   return SCRATCH_PREFIXES.some((prefix) => candidate.startsWith(fold(prefix)));
 };
 
-/**
- * Copy what is about to be replaced and return where it went, or null when
- * there was nothing to copy. The layout mirrors the workspace so two files
- * with the same name stay apart.
- */
-function backUpExistingFile(abs: string, cwd: string): string | null {
-  const relative = path.relative(cwd, abs);
-  // A path outside the workspace has already been refused by the time we get
-  // here; this is belt and braces against a backup escaping the project.
-  if (relative.startsWith("..") || path.isAbsolute(relative)) return null;
-
-  const directory = path.join(cwd, BACKUP_DIR, path.dirname(relative));
-  fs.mkdirSync(directory, { recursive: true });
-
-  // Self-ignoring: the workspace is someone else's repo and does not ignore
-  // ours, so without this every backup reads as a file the agent left behind.
-  fs.writeFileSync(path.join(cwd, BACKUP_DIR, ".gitignore"), "*\n");
-
-  // Two rewrites within one millisecond share a stamp; take the next free name
-  // rather than land on the older copy, which is the one a rescue wants.
-  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const base = path.join(directory, `${path.basename(relative)}.${stamp}`);
-  let destination = `${base}.bak`;
-  for (let attempt = 2; fs.existsSync(destination); attempt += 1) {
-    destination = `${base}-${attempt}.bak`;
-  }
-  fs.copyFileSync(abs, destination);
-
-  pruneOldBackups(directory, path.basename(relative));
-
-  return destination;
-}
-
-/** Keep the newest few copies of one file; drop the rest. */
-function pruneOldBackups(directory: string, name: string): void {
-  try {
-    const mine = fs
-      .readdirSync(directory)
-      .filter((entry) => entry.startsWith(`${name}.`) && entry.endsWith(".bak"))
-      .sort();
-
-    for (const stale of mine.slice(
-      0,
-      Math.max(0, mine.length - BACKUPS_PER_FILE)
-    )) {
-      fs.rmSync(path.join(directory, stale), { force: true });
-    }
-  } catch {
-    // Pruning is housekeeping. Failing it must never fail the write that
-    // prompted it, and the backup that matters has already been made.
-  }
-}
-
 export default function (pi: ExtensionAPI) {
   // Files read (or created by us) this session. In-memory by design: after a
   // restart the model must re-read before editing, which is the safe default.
   const knownFiles = new Set<string>();
-
-  // Files replaced this session and where the copy went. Consumed once by the
-  // result hook; a stale entry would name an earlier write's copy as this one's.
-  const backups = new Map<string, string>();
 
   // Resolve symlinks first, or `ln -s .env notes.txt` then a write to notes.txt
   // slips past on the name alone. realPathOf resolves the nearest existing
@@ -320,31 +244,6 @@ export default function (pi: ExtensionAPI) {
           block: true,
           reason: `${event.input.path} is a protected path; do not modify it.`,
         };
-      }
-      if (fs.existsSync(abs) && fs.statSync(abs).isFile()) {
-        // Rewriting a whole file is legitimate; what made it dangerous was
-        // that the previous contents were simply gone, so keep them.
-        if (fs.statSync(abs).size > MAX_BACKUP_BYTES) {
-          return {
-            block: true,
-            reason:
-              `${event.input.path} is too large to keep a copy of before replacing it. ` +
-              `Use the edit tool to change it in place (read it first if you have not this session).`,
-          };
-        }
-
-        try {
-          const backup = backUpExistingFile(abs, ctx.cwd);
-          if (backup != null) backups.set(abs, path.relative(ctx.cwd, backup));
-        } catch (error) {
-          // No copy means no safety net; refuse rather than let it through.
-          return {
-            block: true,
-            reason:
-              `Could not keep a copy of ${event.input.path} before replacing it ` +
-              `(${error instanceof Error ? error.message : String(error)}). Use the edit tool instead.`,
-          };
-        }
       }
       return;
     }
@@ -437,26 +336,7 @@ export default function (pi: ExtensionAPI) {
       const input = event.input as { path?: string };
       if (!input.path) return;
 
-      const abs = path.resolve(ctx.cwd, input.path);
-      knownFiles.add(abs);
-
-      // Name the copy: the model can only restore what a rewrite dropped if
-      // it knows where the previous contents went.
-      const backup = backups.get(abs);
-      if (backup == null) return;
-      backups.delete(abs);
-
-      return {
-        content: [
-          ...event.content,
-          {
-            type: "text" as const,
-            text:
-              `The previous contents of ${input.path} were saved to ${modelPath(backup)}. ` +
-              `If this rewrite lost something, restore it with: cp ${modelPath(backup)} ${input.path}`,
-          },
-        ],
-      };
+      knownFiles.add(path.resolve(ctx.cwd, input.path));
     }
   });
 }

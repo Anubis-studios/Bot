@@ -458,3 +458,123 @@ describe("disconnecting", () => {
     expect(text).toContain('no connector called "myspace"');
   });
 });
+
+/**
+ * `bot_help` reads the same statuses: "Gmail isn't connected" was said
+ * while it was, and "external models can't be connected" while a Gemini key
+ * was one field away. Each answer comes from the state at call time.
+ */
+describe("bot_help", () => {
+  const guide = async (
+    args: Record<string, unknown>,
+    extra: Record<string, unknown> = {}
+  ): Promise<string> => {
+    const result = (await new McpAgentToolsServer({
+      skillsService: {} as never,
+      enabledToolsets: () => new Set<string>(),
+      workspacePath: () => null,
+      botIdForSession: (sessionId: string) =>
+        sessionId === "bot-session" ? "bot-prices" : null,
+      connectors: { list: async () => statuses, link, show, watch },
+      ...extra,
+    } as never).executeTool("bot_help", args, "session-1")) as {
+      content: Array<{ text?: string }>;
+    };
+    return result.content.map((part) => part.text ?? "").join("\n");
+  };
+
+  it("says what is connected now, with the account, and changes when it does", async () => {
+    const connected = await guide({ topic: "connectors", name: "gmail" });
+    expect(connected).toContain("Gmail: connected as Gmail - ada@example.com");
+    // Read whatever the Connectors switch says: bot_help is always listed.
+    statuses["abacus-gmailuser"] = { state: "available" };
+    const disconnected = await guide({ topic: "connectors", name: "gmail" });
+    expect(disconnected).toContain("Gmail: not connected");
+    expect(disconnected).toContain("Library → Connectors → Gmail");
+    // Nothing was asked for: no card, no link, no watch.
+    expect(show).not.toHaveBeenCalled();
+    expect(link).not.toHaveBeenCalled();
+    expect(watch).not.toHaveBeenCalled();
+  });
+
+  it("says which chat apps are linked, and that the app answers them only while it runs", async () => {
+    statuses["messaging-telegram"] = { state: "connected" };
+    const text = await guide({ topic: "chat_apps", name: "telegram" });
+    expect(text).toContain("Telegram: connected");
+    expect(text).toContain("only while");
+    expect(text).toContain("Where: Library → Messaging → Telegram");
+    // "Does it work with the app closed?" asked as a chat-app question.
+    expect(text).toContain("nothing of it runs on a server");
+  });
+
+  it('"can I use Gemini here?": the Gemini key row, set or not, and where to add it', async () => {
+    const previous = process.env.GEMINI_API_KEY;
+    delete process.env.GEMINI_API_KEY;
+    try {
+      const text = await guide(
+        { topic: "models", name: "gemini" },
+        {
+          models: async () => [
+            {
+              id: "gemini/gemini-3.6-flash",
+              label: "Gemini 3.6 Flash",
+              provider: "gemini",
+              tier: "fast",
+              configured: false,
+            },
+          ],
+        }
+      );
+      expect(text).toContain("Google Gemini (AI Studio) (gemini): no key yet");
+      expect(text).toContain("the user's own");
+      expect(text).toContain("Gemini 3.6 Flash (needs its key or plan)");
+      // No model runs on this computer any more: none is offered.
+      expect(text).not.toMatch(/local model|on this computer/i);
+      expect(text).toContain(
+        "Where: Settings → Models → Google Gemini (AI Studio)"
+      );
+      process.env.GEMINI_API_KEY = "test-key";
+      expect(await guide({ topic: "models", name: "gemini" })).toContain(
+        "Google Gemini (AI Studio) (gemini): key set"
+      );
+    } finally {
+      if (previous == null) delete process.env.GEMINI_API_KEY;
+      else process.env.GEMINI_API_KEY = previous;
+    }
+  });
+
+  it("points an app chat at its button, and a bot in a chat app at steps", async () => {
+    expect(await guide({ topic: "plan" })).toContain(
+      "A button under your reply opens the place"
+    );
+    const result = (await new McpAgentToolsServer({
+      skillsService: {} as never,
+      enabledToolsets: () => new Set<string>(),
+      workspacePath: () => null,
+      botIdForSession: () => "bot-prices",
+      isAppBotChat: () => false,
+    } as never).executeTool("bot_help", { topic: "bots" }, "bot-session")) as {
+      content: Array<{ text?: string }>;
+    };
+    const text = result.content.map((part) => part.text ?? "").join("\n");
+    expect(text).toContain("cannot click a button in this chat");
+    expect(text).not.toContain("A button under your reply");
+  });
+
+  it("answers the topic a name names, whatever topic it came under", async () => {
+    const text = await guide({ topic: "capabilities", name: "routines" });
+    expect(text).toContain("Routines:");
+    expect(text).toContain("only while it is on and the app is open");
+    expect(text).not.toContain("Capabilities (tool groups");
+  });
+
+  it("names a bot's editor by its name, and hands plan facts to billing_plan", async () => {
+    const bots = { bots: () => [{ id: "bot-prices", name: "Price Watch" }] };
+    expect(await guide({ topic: "bots", name: "price watch" }, bots)).toContain(
+      "Where: Bots → Price Watch → Edit bot"
+    );
+    const plan = await guide({ topic: "plan" });
+    expect(plan).toContain("call billing_plan");
+    expect(plan).toContain("Where: Settings → Account → Manage plan");
+  });
+});

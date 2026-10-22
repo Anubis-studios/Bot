@@ -26,7 +26,13 @@ export type AccountKind = "free" | "paid" | "unknown";
 export interface TurnFailure {
   code?: string;
   cause?: string;
-  actions?: ReadonlyArray<{ type: string; provider?: string; cause?: string }>;
+  actions?: ReadonlyArray<{
+    type: string;
+    provider?: string;
+    cause?: string;
+    model?: string;
+    label?: string;
+  }>;
 }
 
 /**
@@ -34,6 +40,7 @@ export interface TurnFailure {
  * sells a way out, which the throttle holds to once per window.
  */
 export type FailureKind =
+  | "model-gone"
   | "upgrade-abacus"
   | "own-key"
   | "key-rejected"
@@ -64,6 +71,8 @@ const ownKeyAction = (error: TurnFailure) =>
 
 export const failureKind = (error: TurnFailure): FailureKind => {
   const types = new Set(error.actions?.map((action) => action.type));
+  // The picked model cannot serve the turn: its own line, credits or not.
+  if (types.has("model-unavailable")) return "model-gone";
   if (types.has("upgrade-abacus")) return "upgrade-abacus";
   if (error.cause === "key_invalid" && types.has("fix-key"))
     return "key-rejected";
@@ -81,7 +90,7 @@ export const wantsUpgradeUrl = (
   account: AccountKind
 ): boolean => {
   const kind = failureKind(error);
-  if (kind === "upgrade-abacus" || kind === "own-key")
+  if (kind === "upgrade-abacus" || kind === "own-key" || kind === "model-gone")
     return account === "free";
   return kind === "free-pool-out" && account !== "paid";
 };
@@ -139,6 +148,42 @@ export const chatReplyForFailure = (
   const { t } = words;
   const reminder = t("outcome.channel.repeat", { link: offer.upgradeUrl });
   switch (failureKind(error)) {
+    case "model-gone": {
+      // The picked model cannot serve the turn. With credits left the way on
+      // is RouteLLM - Open, picked in the app (chat apps have no switch);
+      // with them used up, the plan.
+      const gone = error.actions?.find(
+        (action) => action.type === "model-unavailable"
+      );
+      const model = gone?.label ?? gone?.model ?? "";
+      const creditsOut =
+        error.actions?.some((action) => action.type === "upgrade-abacus") ===
+        true;
+      if (creditsOut)
+        return repeat
+          ? reminder
+          : account === "free"
+            ? [
+                t("outcome.channel.unavailableOut", { model }),
+                ...offerLines(words, offer, false),
+              ].join("\n")
+            : `${t("outcome.channel.unavailableOut", { model })} ${t("outcome.channel.paidOut", { link: offer.topUpUrl })}`;
+      if (gone?.cause !== "plan")
+        return t(
+          gone?.cause === "down"
+            ? "outcome.channel.unavailableDown"
+            : "outcome.channel.unavailable",
+          { model }
+        );
+      // Said again inside the throttle window: the line without the offer.
+      if (repeat) return t("outcome.channel.unavailablePlan", { model });
+      return account === "free"
+        ? [
+            t("outcome.channel.unavailablePlan", { model }),
+            ...offerLines(words, offer, false),
+          ].join("\n")
+        : `${t("outcome.channel.unavailablePlan", { model })} ${t("outcome.channel.link", { link: offer.upgradeUrl })}`;
+    }
     case "upgrade-abacus": {
       // Why the credit gate refused, when the agent could tell.
       const expired =

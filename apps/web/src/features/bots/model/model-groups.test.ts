@@ -137,6 +137,59 @@ describe("botModelGroups", () => {
     ).toBeUndefined();
   });
 
+  it("greys a model the plan does not include behind the upgrade, never as a choice", () => {
+    const onUpgrade = vi.fn();
+    const locked = model("abacus/claude-sonnet-5", "abacus", {
+      label: "Claude Sonnet 5",
+      configured: false,
+      access: "locked",
+      unlockPlan: "Basic",
+    });
+    const plainLocked = model("abacus/opus", "abacus", {
+      label: "Opus",
+      configured: false,
+      access: "locked",
+    });
+    const result = groups({
+      models: [...catalog, locked, plainLocked],
+      favorites: ["abacus/claude-sonnet-5"],
+      labels: {
+        ...labels,
+        includedIn: (plan) => (plan == null ? "Paid plans" : `In ${plan}`),
+      },
+      onUpgrade,
+    });
+    const abacusItems = result.find((group) => group.id === "abacus")!.items;
+    // After the runnable rows, each with its plan.
+    expect(abacusItems.map((item) => item.id)).toEqual([
+      "openllm/auto",
+      "abacus/route-llm",
+      "abacus/claude-sonnet-5",
+      "abacus/opus",
+    ]);
+    const sonnet = abacusItems.find(
+      (item) => item.id === "abacus/claude-sonnet-5"
+    )!;
+    expect(sonnet.locked?.label).toBe("In Basic");
+    expect(
+      abacusItems.find((item) => item.id === "abacus/opus")!.locked?.label
+    ).toBe("Paid plans");
+    sonnet.locked!.onSelect();
+    expect(onUpgrade).toHaveBeenCalledTimes(1);
+    // A favourite that is locked is not offered as one.
+    expect(result.find((group) => group.id === "favorites")).toBeUndefined();
+    // A key-less row is still left out: its provider's connect row asks for the key.
+    expect(
+      result.flatMap((group) => group.items).map((item) => item.id)
+    ).not.toContain("anthropic/opus");
+    // Without an upgrade to offer, locked rows are not shown at all.
+    expect(
+      groups({ models: [...catalog, locked] })
+        .flatMap((group) => group.items)
+        .map((item) => item.id)
+    ).not.toContain("abacus/claude-sonnet-5");
+  });
+
   it("searches label, id, provider name and note", () => {
     const ids = (query: string) =>
       groups({ query })

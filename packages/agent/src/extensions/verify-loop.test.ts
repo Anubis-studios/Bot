@@ -7,9 +7,23 @@
  * NaN for any malformed value, and `retriesUsed >= NaN` is false for every
  * number: a cap that never caps.
  */
-import { describe, expect, it } from "vitest";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 
-import { resolveMaxRetries } from "./verify-loop.js";
+import { fakePi } from "@abacus-ai/test-support/fake-pi";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { CheckpointStore, CheckpointTracker } from "../checkpoint-store.js";
+import { setCurrentMode } from "../current-mode.js";
+import { AgentMode } from "../protocol.js";
+import { checkpoints } from "./checkpoints.js";
+import { resolveMaxRetries, verifyLoop } from "./verify-loop.js";
+
+// The suite "fails" without running anything: the loop's decision is the subject.
+vi.mock("../backends.js", () => ({
+  execConfined: async () => ({ code: 1, stdout: "1 failed", stderr: "" }),
+}));
 
 describe("how many follow-ups the loop may send", () => {
   it("defaults to one when nothing is set", () => {
@@ -55,5 +69,70 @@ describe("how many follow-ups the loop may send", () => {
       expect(Number.isFinite(max)).toBe(true);
       expect(typeof (0 >= max)).toBe("boolean");
     }
+  });
+});
+
+describe("when the loop runs", () => {
+  let base: string | undefined;
+
+  afterEach(() => {
+    setCurrentMode(AgentMode.Normal);
+    if (base) fs.rmSync(base, { recursive: true, force: true });
+  });
+
+  const project = () => {
+    base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "verify-")));
+    const cwd = path.join(base, "home", "project");
+    fs.mkdirSync(cwd, { recursive: true });
+    fs.writeFileSync(
+      path.join(cwd, "package.json"),
+      JSON.stringify({ scripts: { test: "vitest run" } })
+    );
+    fs.writeFileSync(path.join(cwd, "app.js"), "ok()");
+    const tracker = new CheckpointTracker(
+      new CheckpointStore(path.join(base, "checkpoints")),
+      "s",
+      { home: path.join(base, "home"), temp: os.tmpdir() }
+    );
+    const pi = fakePi();
+    checkpoints(tracker)(pi.api as never);
+    verifyLoop(tracker)(pi.api as never);
+    setCurrentMode(AgentMode.AcceptEdits);
+    return { cwd, pi, tracker };
+  };
+
+  const bash = async (
+    pi: ReturnType<typeof fakePi>,
+    cwd: string,
+    change: () => void
+  ) => {
+    const event = {
+      toolName: "bash",
+      toolCallId: "b",
+      input: { command: "./x" },
+    };
+    await pi.fire("tool_call", event, { cwd });
+    change();
+    await pi.fire(
+      "tool_result",
+      { ...event, isError: false, content: [{ type: "text", text: "" }] },
+      { cwd }
+    );
+    await pi.fire("agent_settled", {}, { cwd });
+  };
+
+  it("fires on a turn whose only change was made by the shell", async () => {
+    const { cwd, pi, tracker } = project();
+    tracker.beginTurn();
+    await bash(pi, cwd, () => fs.writeFileSync(path.join(cwd, "app.js"), "x("));
+    expect(pi.userMessages).toHaveLength(1);
+    expect(pi.userMessages[0]?.text).toContain("1 failed");
+  });
+
+  it("stays quiet when the shell changed nothing", async () => {
+    const { cwd, pi, tracker } = project();
+    tracker.beginTurn();
+    await bash(pi, cwd, () => {});
+    expect(pi.userMessages).toEqual([]);
   });
 });

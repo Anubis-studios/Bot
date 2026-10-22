@@ -615,6 +615,110 @@ describe("the turn's outcome card", () => {
     });
   });
 
+  const unavailable = (cause: string, out = false) =>
+    failed({
+      message: "Sonnet 5 isn't available anymore. Your message is kept.",
+      cause: cause === "plan" ? "not_in_plan" : "model_unavailable",
+      actions: [
+        {
+          type: "model-unavailable",
+          cause,
+          model: "abacus/s5",
+          label: "Sonnet 5",
+        },
+        out
+          ? { type: "upgrade-abacus", cause: "exhausted" }
+          : { type: "switch-to-abacus" },
+      ],
+    });
+  const withCredits = {
+    billingPlan: async () => ({
+      ...BILLING,
+      current: { ...BILLING.current, creditsRemaining: 1500 },
+    }),
+  };
+
+  it("an unavailable model with credits left offers RouteLLM - Open, re-sending the kept message", async () => {
+    const relay = unavailable("retired");
+    current = await renderRelay(
+      relay,
+      "session",
+      {},
+      {},
+      host("free", withCredits)
+    );
+    const title = await screen.findByText("Sonnet 5 isn't available anymore");
+    const card = title.closest('[data-slot="credits-card"]') as HTMLElement;
+    expect(
+      within(card).getByText(
+        "It was removed from the models you can use. Your message is kept."
+      )
+    ).toBeTruthy();
+    expect(
+      await within(card).findByText("1,500 Abacus credits left")
+    ).toBeTruthy();
+    expect(within(card).queryByRole("button", { name: /Upgrade/ })).toBeNull();
+    // Nothing moved on its own.
+    expect(relay.stats.send).toHaveLength(0);
+    fireEvent.click(
+      within(card).getByRole("button", { name: "Switch to RouteLLM - Open" })
+    );
+    await waitFor(() => expect(relay.stats.send).toHaveLength(1));
+    expect(relay.stats.send[0]!.forwardedProps).toMatchObject({
+      model: OPENLLM_ID,
+    });
+  });
+
+  it("an unavailable model with the credits used up offers the plan, priced from billing_plan", async () => {
+    current = await renderRelay(
+      unavailable("retired", true),
+      "session",
+      {},
+      {},
+      host("free")
+    );
+    const title = await screen.findByText("Sonnet 5 isn't available anymore");
+    const card = title.closest('[data-slot="credits-card"]') as HTMLElement;
+    expect(
+      within(card).getByText("You've also used your free Abacus credits.")
+    ).toBeTruthy();
+    expect(
+      await within(card).findByRole("button", {
+        name: "Upgrade · $7 first month",
+      })
+    ).toBeTruthy();
+    expect(
+      within(card).getByRole("button", { name: "See plans" })
+    ).toBeTruthy();
+    expect(within(card).getByText("0 Abacus credits left")).toBeTruthy();
+    expect(within(card).queryByText("Switch to RouteLLM - Open")).toBeNull();
+  });
+
+  it("a model the plan does not include leads with RouteLLM - Open, the upgrade a link beside it", async () => {
+    current = await renderRelay(
+      unavailable("plan"),
+      "session",
+      {},
+      {},
+      host("free", withCredits)
+    );
+    const title = await screen.findByText(
+      "Sonnet 5 isn't included in your plan"
+    );
+    const card = title.closest('[data-slot="credits-card"]') as HTMLElement;
+    expect(
+      await within(card).findByText(
+        "Keep going on a free model now, or upgrade to Basic to use it."
+      )
+    ).toBeTruthy();
+    expect(
+      within(card).getByRole("button", { name: "Switch to RouteLLM - Open" })
+    ).toBeTruthy();
+    expect(
+      within(card).getByRole("button", { name: "Upgrade to Basic" })
+    ).toBeTruthy();
+  });
+
   it("a rejected own key with the Abacus credits used up shows the upgrade card, with the key fix beside it", async () => {
     current = await renderRelay(
       failed({

@@ -562,6 +562,7 @@
       "browser_snapshot": "Membaca halaman sebagai daftar elemen interaktif.",
       "browser_tabs": "Menampilkan, berpindah, dan menutup tab browser.",
       "browser_task": "Hand a whole web task to a browser sub-agent and get back the answer.",
+      "checkpoint_diff": "Show what earlier turns changed on disk, from their checkpoints.",
       "code_map": "Index the functions and classes in a file or folder.",
       "connect_connector": "Ask the user to attach a service, such as Gmail or Slack, so its tools become available.",
       "cronjob": "Create, list, pause, or run scheduled tasks.",
@@ -606,6 +607,7 @@
       "read_telegram_messages": "Baca pesan Telegram terbaru, saat diminta.",
       "read_whatsapp_messages": "Baca pesan WhatsApp terbaru, saat diminta.",
       "run_tests": "Run the project's tests and report what passed and failed.",
+      "restore_checkpoint": "Put files back as they were before an earlier turn changed them.",
       "send_discord_message": "Kirim pesan di Discord.",
       "send_telegram_message": "Kirim pesan di Telegram.",
       "send_to_whatsapp": "Kirim pesan ke WhatsApp Anda dari nomor AbacusAI Bot.",
@@ -2701,7 +2703,9 @@
       "providerConnectHint": "Hubungkan untuk memakai modelnya, termasuk yang gratis.",
       "retryAttachment": "Retry attachment",
       "folderItems_one": "{{count}} item",
-      "folderItems_other": "{{count}} items"
+      "folderItems_other": "{{count}} items",
+      "includedIn": "Termasuk dalam {{plan}}",
+      "includedInPaid": "Termasuk dalam paket berbayar"
     },
     "day": {
       "today": "Today",
@@ -3050,6 +3054,9 @@
       "agentTitle": "{{feature}} ada di Abacus AI Agent di web",
       "agentBody": "Paket Anda mencakup membuat dan mengedit gambar dan video, serta membuat audio, di web dalam Abacus AI Agent. Permintaan Anda sudah terisi di sana; lampirkan gambar apa pun yang ingin Anda edit.",
       "openAgent": "Buka di Abacus AI Agent"
+    },
+    "botHelp": {
+      "open": "Buka"
     }
   },
   "notch": {
@@ -3734,6 +3741,30 @@
     "showLess": "Show less",
     "showMore": "+{{count}} more"
   },
+  "checkpoints": {
+    "summary_one": "Changed {{count}} file",
+    "summary_other": "Changed {{count}} files",
+    "restore": "Restore to before this turn",
+    "restoreFile": "Restore this file",
+    "undoRestore": "Undo restore",
+    "busy": "Wait for the agent to finish this turn",
+    "binary": "binary",
+    "noCopy": "no copy kept",
+    "partial": "Some folders were too large to keep whole; files past the limit are not covered.",
+    "failed": "Could not restore. Try again once the agent has finished.",
+    "restored_one": "Restored {{count}} file.",
+    "restored_other": "Restored {{count}} files.",
+    "unrestorable_one": "{{count}} file was too large to keep a copy of.",
+    "unrestorable_other": "{{count}} files were too large to keep a copy of.",
+    "conflicts_one": "{{count}} file changed after this turn and was left as it is.",
+    "conflicts_other": "{{count}} files changed after this turn and were left as they are.",
+    "force": "Restore anyway",
+    "kind": {
+      "modified": "Edited",
+      "created": "Added",
+      "deleted": "Deleted"
+    }
+  },
   "devicePanel": {
     "axPermissionNeeded": "Izin Aksesibilitas diperlukan untuk mencerminkan simulator tanpa menampilkan jendelanya.",
     "boot": "Nyalakan",
@@ -4268,6 +4299,10 @@
       "link": "Upgrade di sini: {{link}}",
       "repeat": "Masih berhenti: {{link}}",
       "paidOut": "Aku berhenti sementara karena kredit bulan ini sudah habis. Tambahkan kredit untuk lanjut: {{link}}",
+      "unavailable": "{{model}} sudah tidak tersedia, jadi aku tidak bisa menyelesaikannya. Pesanmu tetap tersimpan: beralih ke RouteLLM - Open di pemilih model aplikasi untuk melanjutkan.",
+      "unavailableDown": "{{model}} sedang tidak tersedia: penyedianya terus gagal. Pesanmu tetap tersimpan: beralih ke RouteLLM - Open di pemilih model aplikasi untuk melanjutkan.",
+      "unavailablePlan": "{{model}} tidak termasuk dalam paketmu. Beralih ke RouteLLM - Open di pemilih model aplikasi untuk melanjutkan, atau upgrade untuk memakainya.",
+      "unavailableOut": "{{model}} tidak tersedia, dan kredit Abacus-mu sudah habis.",
       "ownKeyCredit": "Kunci {{provider}} kamu sudah kehabisan saldo.",
       "ownKeyRateLimit": "Kunci {{provider}} kamu sudah mencapai batas penggunaan.",
       "ownKeyDown": "{{provider}} sedang tidak merespons.",
@@ -4281,6 +4316,28 @@
       "contactFailed": "Aku tidak bisa membalas {{name}} barusan.",
       "contactFailedGeneric": "Aku tidak bisa membalas {{name}} barusan: ada yang salah di sisiku.",
       "someone": "seseorang"
+    },
+    "unavailable": {
+      "title": {
+        "retired": "{{model}} sudah tidak tersedia",
+        "down": "{{model}} sedang tidak tersedia",
+        "plan": "{{model}} tidak termasuk dalam paketmu"
+      },
+      "why": {
+        "retired": "Model ini sudah dihapus dari model yang bisa kamu pakai.",
+        "down": "Penyedianya terus gagal, bahkan setelah dicoba ulang."
+      },
+      "kept": "Pesanmu tetap tersimpan.",
+      "switch": "Beralih ke RouteLLM - Open",
+      "pickModel": "Pilih model lain",
+      "creditsLeft": "Sisa {{credits}} kredit Abacus",
+      "creditsOut": "Kredit Abacus gratismu juga sudah habis.",
+      "offer": "{{plan}} memberimu:",
+      "upgradeIntro": "Upgrade · {{price}} bulan pertama",
+      "upgradeMonthly": "Upgrade · {{price}}/bulan",
+      "seePlans": "Lihat paket",
+      "planBody": "Lanjutkan sekarang dengan model gratis, atau upgrade ke {{plan}} untuk memakainya.",
+      "planBodyAny": "Lanjutkan sekarang dengan model gratis, atau upgrade paketmu untuk memakainya."
     }
   }
 }

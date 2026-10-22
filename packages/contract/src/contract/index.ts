@@ -10,6 +10,7 @@ import { ai } from "./ai";
 import { auth } from "./auth";
 import { bots } from "./bots";
 import { browser } from "./browser";
+import { checkpoints } from "./checkpoints";
 import { connectors } from "./connectors";
 import { db } from "./db";
 import { devices } from "./devices";
@@ -36,6 +37,7 @@ import { workspaces } from "./workspaces";
 export const contract = {
   workspaces,
   git,
+  checkpoints,
   files,
   sessions,
   agent,
@@ -79,6 +81,7 @@ export type {
 } from "./ai";
 export type * from "./ai-thread";
 export type { BotsEvent } from "./bots";
+export type * from "./checkpoints";
 export type { RoutinesEvent } from "./routines";
 export type { BrowserEvent } from "./browser";
 export type { ConnectorsEvent } from "./connectors";

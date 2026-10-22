@@ -562,6 +562,7 @@
       "browser_snapshot": "Ler a página como uma lista de elementos interativos.",
       "browser_tabs": "Listar, alternar e fechar as abas do navegador.",
       "browser_task": "Hand a whole web task to a browser sub-agent and get back the answer.",
+      "checkpoint_diff": "Show what earlier turns changed on disk, from their checkpoints.",
       "code_map": "Index the functions and classes in a file or folder.",
       "connect_connector": "Ask the user to attach a service, such as Gmail or Slack, so its tools become available.",
       "cronjob": "Create, list, pause, or run scheduled tasks.",
@@ -606,6 +607,7 @@
       "read_telegram_messages": "Ler mensagens recentes do Telegram, quando pedido.",
       "read_whatsapp_messages": "Ler mensagens recentes do WhatsApp, quando pedido.",
       "run_tests": "Run the project's tests and report what passed and failed.",
+      "restore_checkpoint": "Put files back as they were before an earlier turn changed them.",
       "send_discord_message": "Enviar uma mensagem pelo Discord.",
       "send_telegram_message": "Enviar uma mensagem pelo Telegram.",
       "send_to_whatsapp": "Envia uma mensagem para o seu WhatsApp pelo número do AbacusAI Bot.",
@@ -2701,7 +2703,9 @@
       "providerConnectHint": "Conecte-o para usar seus modelos, incluindo os gratuitos.",
       "retryAttachment": "Retry attachment",
       "folderItems_one": "{{count}} item",
-      "folderItems_other": "{{count}} items"
+      "folderItems_other": "{{count}} items",
+      "includedIn": "Incluído no {{plan}}",
+      "includedInPaid": "Incluído nos planos pagos"
     },
     "day": {
       "today": "Today",
@@ -3050,6 +3054,9 @@
       "agentTitle": "{{feature}} está no Abacus AI Agent na web",
       "agentBody": "Seu plano inclui criar e editar imagens e vídeos, e gerar áudio, na web no Abacus AI Agent. Seu pedido já está preenchido lá; anexe lá qualquer imagem que quiser editar.",
       "openAgent": "Abrir no Abacus AI Agent"
+    },
+    "botHelp": {
+      "open": "Abrir"
     }
   },
   "notch": {
@@ -3734,6 +3741,30 @@
     "showLess": "Show less",
     "showMore": "+{{count}} more"
   },
+  "checkpoints": {
+    "summary_one": "Changed {{count}} file",
+    "summary_other": "Changed {{count}} files",
+    "restore": "Restore to before this turn",
+    "restoreFile": "Restore this file",
+    "undoRestore": "Undo restore",
+    "busy": "Wait for the agent to finish this turn",
+    "binary": "binary",
+    "noCopy": "no copy kept",
+    "partial": "Some folders were too large to keep whole; files past the limit are not covered.",
+    "failed": "Could not restore. Try again once the agent has finished.",
+    "restored_one": "Restored {{count}} file.",
+    "restored_other": "Restored {{count}} files.",
+    "unrestorable_one": "{{count}} file was too large to keep a copy of.",
+    "unrestorable_other": "{{count}} files were too large to keep a copy of.",
+    "conflicts_one": "{{count}} file changed after this turn and was left as it is.",
+    "conflicts_other": "{{count}} files changed after this turn and were left as they are.",
+    "force": "Restore anyway",
+    "kind": {
+      "modified": "Edited",
+      "created": "Added",
+      "deleted": "Deleted"
+    }
+  },
   "devicePanel": {
     "axPermissionNeeded": "A permissão de Acessibilidade é necessária para espelhar o simulador sem exibir sua janela.",
     "boot": "Iniciar",
@@ -4268,6 +4299,10 @@
       "link": "Faça upgrade aqui: {{link}}",
       "repeat": "Ainda pausado: {{link}}",
       "paidOut": "Pausei porque os créditos deste mês acabaram. Adicione créditos para continuar: {{link}}",
+      "unavailable": "{{model}} não está mais disponível, então não consegui terminar. Sua mensagem foi mantida: mude para RouteLLM - Open no seletor de modelos do app para continuar.",
+      "unavailableDown": "{{model}} não está disponível agora: o provedor continua falhando. Sua mensagem foi mantida: mude para RouteLLM - Open no seletor de modelos do app para continuar.",
+      "unavailablePlan": "{{model}} não está incluído no seu plano. Mude para RouteLLM - Open no seletor de modelos do app para continuar, ou faça upgrade para usá-lo.",
+      "unavailableOut": "{{model}} não está disponível e seus créditos da Abacus acabaram.",
       "ownKeyCredit": "Sua chave do {{provider}} ficou sem saldo.",
       "ownKeyRateLimit": "Sua chave do {{provider}} atingiu o limite de uso.",
       "ownKeyDown": "O {{provider}} não está respondendo agora.",
@@ -4281,6 +4316,28 @@
       "contactFailed": "Não consegui responder a {{name}} agora há pouco.",
       "contactFailedGeneric": "Não consegui responder a {{name}} agora há pouco: algo deu errado do meu lado.",
       "someone": "alguém"
+    },
+    "unavailable": {
+      "title": {
+        "retired": "{{model}} não está mais disponível",
+        "down": "{{model}} não está disponível agora",
+        "plan": "{{model}} não está incluído no seu plano"
+      },
+      "why": {
+        "retired": "Ele foi removido dos modelos que você pode usar.",
+        "down": "O provedor continua falhando, mesmo depois de novas tentativas."
+      },
+      "kept": "Sua mensagem foi mantida.",
+      "switch": "Mudar para RouteLLM - Open",
+      "pickModel": "Escolher outro modelo",
+      "creditsLeft": "{{credits}} créditos da Abacus restantes",
+      "creditsOut": "Você também já usou seus créditos gratuitos da Abacus.",
+      "offer": "O {{plan}} oferece:",
+      "upgradeIntro": "Fazer upgrade · {{price}} no primeiro mês",
+      "upgradeMonthly": "Fazer upgrade · {{price}}/mês",
+      "seePlans": "Ver planos",
+      "planBody": "Continue agora com um modelo gratuito, ou faça upgrade para o {{plan}} para usá-lo.",
+      "planBodyAny": "Continue agora com um modelo gratuito, ou faça upgrade do seu plano para usá-lo."
     }
   }
 }

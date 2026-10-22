@@ -562,6 +562,7 @@
       "browser_snapshot": "페이지를 상호작용 요소 목록으로 읽습니다.",
       "browser_tabs": "브라우저 탭을 나열하고 전환하고 닫습니다.",
       "browser_task": "Hand a whole web task to a browser sub-agent and get back the answer.",
+      "checkpoint_diff": "Show what earlier turns changed on disk, from their checkpoints.",
       "code_map": "Index the functions and classes in a file or folder.",
       "connect_connector": "Ask the user to attach a service, such as Gmail or Slack, so its tools become available.",
       "cronjob": "Create, list, pause, or run scheduled tasks.",
@@ -606,6 +607,7 @@
       "read_telegram_messages": "요청 시 최근 Telegram 메시지를 읽습니다.",
       "read_whatsapp_messages": "요청 시 최근 WhatsApp 메시지를 읽습니다.",
       "run_tests": "Run the project's tests and report what passed and failed.",
+      "restore_checkpoint": "Put files back as they were before an earlier turn changed them.",
       "send_discord_message": "Discord으로 메시지를 보냅니다.",
       "send_telegram_message": "Telegram으로 메시지를 보냅니다.",
       "send_to_whatsapp": "AbacusAI Bot 번호에서 내 WhatsApp으로 메시지를 보냅니다.",
@@ -2701,7 +2703,9 @@
       "providerConnectHint": "연결하면 무료 모델을 포함해 그 모델을 사용할 수 있습니다.",
       "retryAttachment": "Retry attachment",
       "folderItems_one": "{{count}} item",
-      "folderItems_other": "{{count}} items"
+      "folderItems_other": "{{count}} items",
+      "includedIn": "{{plan}}에 포함",
+      "includedInPaid": "유료 요금제에 포함"
     },
     "day": {
       "today": "Today",
@@ -3050,6 +3054,9 @@
       "agentTitle": "{{feature}}은(는) 웹의 Abacus AI Agent에서 사용할 수 있습니다",
       "agentBody": "요금제에 웹의 Abacus AI Agent에서 이미지와 동영상을 만들고 편집하고 오디오를 만드는 기능이 포함되어 있습니다. 요청이 미리 입력되어 있으니, 편집할 이미지는 그곳에서 첨부하세요.",
       "openAgent": "Abacus AI Agent에서 열기"
+    },
+    "botHelp": {
+      "open": "열기"
     }
   },
   "notch": {
@@ -3734,6 +3741,30 @@
     "showLess": "Show less",
     "showMore": "+{{count}} more"
   },
+  "checkpoints": {
+    "summary_one": "Changed {{count}} file",
+    "summary_other": "Changed {{count}} files",
+    "restore": "Restore to before this turn",
+    "restoreFile": "Restore this file",
+    "undoRestore": "Undo restore",
+    "busy": "Wait for the agent to finish this turn",
+    "binary": "binary",
+    "noCopy": "no copy kept",
+    "partial": "Some folders were too large to keep whole; files past the limit are not covered.",
+    "failed": "Could not restore. Try again once the agent has finished.",
+    "restored_one": "Restored {{count}} file.",
+    "restored_other": "Restored {{count}} files.",
+    "unrestorable_one": "{{count}} file was too large to keep a copy of.",
+    "unrestorable_other": "{{count}} files were too large to keep a copy of.",
+    "conflicts_one": "{{count}} file changed after this turn and was left as it is.",
+    "conflicts_other": "{{count}} files changed after this turn and were left as they are.",
+    "force": "Restore anyway",
+    "kind": {
+      "modified": "Edited",
+      "created": "Added",
+      "deleted": "Deleted"
+    }
+  },
   "devicePanel": {
     "axPermissionNeeded": "창을 표시하지 않고 시뮬레이터를 미러링하려면 손쉬운 사용 권한이 필요합니다.",
     "boot": "부팅",
@@ -4268,6 +4299,10 @@
       "link": "여기서 업그레이드하세요: {{link}}",
       "repeat": "아직 멈춰 있어요: {{link}}",
       "paidOut": "이번 달 크레딧을 모두 사용해서 잠시 멈췄어요. 계속하려면 크레딧을 추가하세요: {{link}}",
+      "unavailable": "{{model}}을(를) 더 이상 사용할 수 없어서 마무리하지 못했어요. 메시지는 그대로 보관돼요. 앱의 모델 선택에서 RouteLLM - Open으로 전환하면 계속할 수 있어요.",
+      "unavailableDown": "{{model}}을(를) 지금 사용할 수 없어요. 제공업체에서 계속 오류가 나요. 메시지는 그대로 보관돼요. 앱의 모델 선택에서 RouteLLM - Open으로 전환하면 계속할 수 있어요.",
+      "unavailablePlan": "{{model}}은(는) 현재 요금제에 포함되어 있지 않아요. 앱의 모델 선택에서 RouteLLM - Open으로 전환해 계속하거나, 업그레이드해서 사용하세요.",
+      "unavailableOut": "{{model}}을(를) 사용할 수 없고, Abacus 크레딧도 모두 사용했어요.",
       "ownKeyCredit": "{{provider}} 키의 잔액이 없어요.",
       "ownKeyRateLimit": "{{provider}} 키가 사용 한도에 도달했어요.",
       "ownKeyDown": "{{provider}}이(가) 지금 응답하지 않아요.",
@@ -4281,6 +4316,28 @@
       "contactFailed": "방금 {{name}}님에게 답장하지 못했어요.",
       "contactFailedGeneric": "방금 {{name}}님에게 답장하지 못했어요: 제 쪽에서 문제가 생겼어요.",
       "someone": "상대방"
+    },
+    "unavailable": {
+      "title": {
+        "retired": "{{model}}을(를) 더 이상 사용할 수 없어요",
+        "down": "{{model}}을(를) 지금 사용할 수 없어요",
+        "plan": "{{model}}은(는) 현재 요금제에 포함되어 있지 않아요"
+      },
+      "why": {
+        "retired": "사용할 수 있는 모델에서 제외되었어요.",
+        "down": "다시 시도해도 제공업체에서 계속 오류가 나요."
+      },
+      "kept": "메시지는 그대로 보관돼요.",
+      "switch": "RouteLLM - Open으로 전환",
+      "pickModel": "다른 모델 선택",
+      "creditsLeft": "Abacus 크레딧 {{credits}} 남음",
+      "creditsOut": "무료 Abacus 크레딧도 모두 사용했어요.",
+      "offer": "{{plan}}에서 받을 수 있는 것:",
+      "upgradeIntro": "업그레이드 · 첫 달 {{price}}",
+      "upgradeMonthly": "업그레이드 · 월 {{price}}",
+      "seePlans": "요금제 보기",
+      "planBody": "지금은 무료 모델로 계속하거나, {{plan}}(으)로 업그레이드해서 사용하세요.",
+      "planBodyAny": "지금은 무료 모델로 계속하거나, 요금제를 업그레이드해서 사용하세요."
     }
   }
 }

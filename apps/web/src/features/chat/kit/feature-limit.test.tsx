@@ -1,9 +1,11 @@
+import { botHelpPlace } from "@abacus-ai/contract/bot-help";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { inertHostActions } from "../runtime/host-actions";
 import { renderWithDb } from "../testing";
 import { FeatureLimitNotice } from "./parts";
+import { BotHelpCard } from "./tools/bot-help";
 import { PaidFeatureCard } from "./tools/paid-feature";
 let cleanup: (() => Promise<void>) | undefined;
 afterEach(async () => {
@@ -128,4 +130,17 @@ it.each([
   cleanup = rendered.cleanup;
   await waitFor(() => expect(accountTier).toHaveBeenCalled());
   expect(screen.queryByRole("button")).toBeNull();
+});
+
+it("bot_help's card names the place in the app's words and opens it", async () => {
+  const rendered = await renderWithDb(
+    <BotHelpCard place={botHelpPlace("models", "gemini")} />
+  );
+  cleanup = rendered.cleanup;
+  const card = rendered.view.container.querySelector('[data-slot="bot-help"]');
+  expect(card?.getAttribute("data-to")).toBe("/settings/models");
+  expect(card?.textContent).toContain(
+    "Settings → Models → Google Gemini (AI Studio)"
+  );
+  expect(screen.getByRole("button", { name: "Open" })).toBeTruthy();
 });

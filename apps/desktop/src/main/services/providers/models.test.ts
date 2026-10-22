@@ -15,11 +15,26 @@ vi.mock("../config/settings", () => ({
   hasCredential: (name: string) => credentials.current.has(name),
   hasOAuthCredential: () => false,
 }));
+const abacus = vi.hoisted(() => ({
+  tier: null as string | null,
+  live: [] as Array<Record<string, unknown>>,
+  refused: new Set<string>(),
+  unlockPlan: null as string | null,
+}));
+
 vi.mock("./abacus", () => ({
-  cachedAbacusModels: () => [],
+  cachedAbacusModels: () => abacus.live,
   clearAbacusCache: () => {},
-  fetchAbacusAccount: async () => null,
-  fetchAbacusModels: async () => [],
+  fetchAbacusAccount: async () =>
+    abacus.tier == null ? null : { subscription_tier: abacus.tier },
+  fetchAbacusModels: async () => abacus.live,
+  planLockedAbacusIds: () => abacus.refused,
+}));
+vi.mock("./abacus-upgrade", () => ({
+  fetchBillingPlan: async () =>
+    abacus.unlockPlan == null
+      ? null
+      : { upgrades: [{ planName: abacus.unlockPlan }] },
 }));
 vi.mock("./openrouter", () => ({
   cachedFreeOpenRouterModels: () => [],
@@ -43,6 +58,10 @@ const forProvider = (
 beforeEach(() => {
   credentials.current = new Set();
   groqLive.current = null;
+  abacus.tier = null;
+  abacus.live = [];
+  abacus.refused = new Set();
+  abacus.unlockPlan = null;
 });
 
 describe("a provider the user has a key for", () => {
@@ -165,5 +184,84 @@ describe("RouteLLM - Open", () => {
     );
 
     expect(pool?.configured).toBe(false);
+  });
+});
+
+describe("what a free Abacus.AI plan can run", () => {
+  // The audit: a free key was offered a paid model, and every turn on it
+  // came back refused. The account's own /v1/models is what it can run.
+  const liveFree = (id: string) => ({
+    id,
+    label: id,
+    provider: "abacus",
+    tier: "free",
+    requiresEnv: "ABACUS_API_KEY",
+    configured: true,
+  });
+
+  beforeEach(() => {
+    credentials.current = new Set(["ABACUS_API_KEY"]);
+    abacus.tier = "free";
+    abacus.live = [liveFree("abacus/deepseek-v4.1-flash")];
+    abacus.unlockPlan = "Basic";
+  });
+
+  it("locks the paid catalog behind the plan that includes it", async () => {
+    const models = await listAvailableModels(true);
+    const sonnet = models.find((m) => m.id === "abacus/claude-sonnet-5");
+
+    expect(sonnet).toMatchObject({
+      configured: false,
+      access: "locked",
+      unlockPlan: "Basic",
+    });
+    expect(
+      models.find((m) => m.id === "abacus/deepseek-v4.1-flash")
+    ).toMatchObject({ configured: true, access: "runnable" });
+  });
+
+  it("marks a model with no key as needing one, not locked", async () => {
+    const models = await listAvailableModels(true);
+
+    expect(
+      models.find((m) => m.id === "anthropic/claude-opus-5")
+    ).toMatchObject({ configured: false, access: "needs-key" });
+  });
+
+  it("keeps a model the platform refused locked, even when a list names it", async () => {
+    abacus.live = [
+      liveFree("abacus/deepseek-v4.1-flash"),
+      liveFree("abacus/some-paid-model"),
+    ];
+    abacus.refused = new Set(["abacus/some-paid-model", "abacus/gone-model"]);
+    const models = await listAvailableModels(true);
+
+    expect(models.find((m) => m.id === "abacus/some-paid-model")).toMatchObject(
+      { configured: false, access: "locked" }
+    );
+    // A refused id no list carries still shows, locked, so nothing resolves to it.
+    expect(models.find((m) => m.id === "abacus/gone-model")).toMatchObject({
+      configured: false,
+      access: "locked",
+      label: "gone-model",
+    });
+  });
+
+  it("says no plan when the platform offers none", async () => {
+    abacus.unlockPlan = null;
+    const sonnet = (await listAvailableModels(true)).find(
+      (m) => m.id === "abacus/claude-sonnet-5"
+    );
+
+    expect(sonnet?.access).toBe("locked");
+    expect(sonnet?.unlockPlan).toBeUndefined();
+  });
+
+  it("does not lock the paid catalog for a paying plan", async () => {
+    abacus.tier = "pro";
+    abacus.live = [{ ...liveFree("abacus/route-llm-code"), tier: "default" }];
+    const models = await listAvailableModels(true);
+
+    expect(models.some((m) => m.access === "locked")).toBe(false);
   });
 });

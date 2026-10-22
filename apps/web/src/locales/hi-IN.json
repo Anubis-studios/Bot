@@ -562,6 +562,7 @@
       "browser_snapshot": "पेज को इंटरैक्टिव एलिमेंट की सूची के रूप में पढ़ें।",
       "browser_tabs": "ब्राउज़र के टैब देखें, बदलें और बंद करें।",
       "browser_task": "Hand a whole web task to a browser sub-agent and get back the answer.",
+      "checkpoint_diff": "Show what earlier turns changed on disk, from their checkpoints.",
       "code_map": "Index the functions and classes in a file or folder.",
       "connect_connector": "Ask the user to attach a service, such as Gmail or Slack, so its tools become available.",
       "cronjob": "Create, list, pause, or run scheduled tasks.",
@@ -606,6 +607,7 @@
       "read_telegram_messages": "अनुरोध पर हाल के Telegram संदेश पढ़ें।",
       "read_whatsapp_messages": "अनुरोध पर हाल के WhatsApp संदेश पढ़ें।",
       "run_tests": "Run the project's tests and report what passed and failed.",
+      "restore_checkpoint": "Put files back as they were before an earlier turn changed them.",
       "send_discord_message": "Discord पर संदेश भेजें।",
       "send_telegram_message": "Telegram पर संदेश भेजें।",
       "send_to_whatsapp": "AbacusAI Bot के नंबर से आपके WhatsApp पर संदेश भेजें।",
@@ -2701,7 +2703,9 @@
       "providerConnectHint": "इसके मॉडल, मुफ़्त वाले भी, इस्तेमाल करने के लिए इसे कनेक्ट करें।",
       "retryAttachment": "Retry attachment",
       "folderItems_one": "{{count}} item",
-      "folderItems_other": "{{count}} items"
+      "folderItems_other": "{{count}} items",
+      "includedIn": "Included in {{plan}}",
+      "includedInPaid": "Included in paid plans"
     },
     "day": {
       "today": "Today",
@@ -3050,6 +3054,9 @@
       "agentTitle": "{{feature}} is in Abacus AI Agent on the web",
       "agentBody": "Your plan includes creating and editing images and videos, and making audio, on the web in Abacus AI Agent. Your request is filled in there; attach any image you want edited.",
       "openAgent": "Open in Abacus AI Agent"
+    },
+    "botHelp": {
+      "open": "Open"
     }
   },
   "notch": {
@@ -3734,6 +3741,30 @@
     "showLess": "Show less",
     "showMore": "+{{count}} more"
   },
+  "checkpoints": {
+    "summary_one": "Changed {{count}} file",
+    "summary_other": "Changed {{count}} files",
+    "restore": "Restore to before this turn",
+    "restoreFile": "Restore this file",
+    "undoRestore": "Undo restore",
+    "busy": "Wait for the agent to finish this turn",
+    "binary": "binary",
+    "noCopy": "no copy kept",
+    "partial": "Some folders were too large to keep whole; files past the limit are not covered.",
+    "failed": "Could not restore. Try again once the agent has finished.",
+    "restored_one": "Restored {{count}} file.",
+    "restored_other": "Restored {{count}} files.",
+    "unrestorable_one": "{{count}} file was too large to keep a copy of.",
+    "unrestorable_other": "{{count}} files were too large to keep a copy of.",
+    "conflicts_one": "{{count}} file changed after this turn and was left as it is.",
+    "conflicts_other": "{{count}} files changed after this turn and were left as they are.",
+    "force": "Restore anyway",
+    "kind": {
+      "modified": "Edited",
+      "created": "Added",
+      "deleted": "Deleted"
+    }
+  },
   "devicePanel": {
     "axPermissionNeeded": "सिम्युलेटर की विंडो दिखाए बिना उसे मिरर करने के लिए एक्सेसिबिलिटी अनुमति आवश्यक है।",
     "boot": "चालू करें",
@@ -4268,6 +4299,10 @@
       "link": "Upgrade here: {{link}}",
       "repeat": "Still paused: {{link}}",
       "paidOut": "I've paused because this month's credits are used up. Add credits to keep going: {{link}}",
+      "unavailable": "{{model}} isn't available anymore, so I couldn't finish that. Your message is kept: switch to RouteLLM - Open in the app's model picker to keep going.",
+      "unavailableDown": "{{model}} isn't available right now: its provider keeps failing. Your message is kept: switch to RouteLLM - Open in the app's model picker to keep going.",
+      "unavailablePlan": "{{model}} isn't included in your plan. Switch to RouteLLM - Open in the app's model picker to keep going, or upgrade to use it.",
+      "unavailableOut": "{{model}} isn't available, and your Abacus credits are used up.",
       "ownKeyCredit": "Your {{provider}} key is out of credit.",
       "ownKeyRateLimit": "Your {{provider}} key hit its rate limit.",
       "ownKeyDown": "{{provider}} isn't responding right now.",
@@ -4281,6 +4316,28 @@
       "contactFailed": "I couldn't reply to {{name}} just now.",
       "contactFailedGeneric": "I couldn't reply to {{name}} just now: something went wrong on my side.",
       "someone": "someone"
+    },
+    "unavailable": {
+      "title": {
+        "retired": "{{model}} isn't available anymore",
+        "down": "{{model}} isn't available right now",
+        "plan": "{{model}} isn't included in your plan"
+      },
+      "why": {
+        "retired": "It was removed from the models you can use.",
+        "down": "Its provider keeps failing, even after retrying."
+      },
+      "kept": "Your message is kept.",
+      "switch": "Switch to RouteLLM - Open",
+      "pickModel": "Pick another model",
+      "creditsLeft": "{{credits}} Abacus credits left",
+      "creditsOut": "You've also used your free Abacus credits.",
+      "offer": "{{plan}} gets you:",
+      "upgradeIntro": "Upgrade · {{price}} first month",
+      "upgradeMonthly": "Upgrade · {{price}}/month",
+      "seePlans": "See plans",
+      "planBody": "Keep going on a free model now, or upgrade to {{plan}} to use it.",
+      "planBodyAny": "Keep going on a free model now, or upgrade your plan to use it."
     }
   }
 }

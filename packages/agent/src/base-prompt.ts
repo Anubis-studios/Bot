@@ -28,6 +28,14 @@ const SUB_AGENT_IDENTITY_PROMPT = [
   "The model you happen to be running on is not your identity.",
 ].join("\n");
 
+/**
+ * Questions about the app itself go to bot_help, which reads the app's
+ * state: from memory the model said routines run on a server and that
+ * external models cannot be added. One fixed line, so the cached prefix holds.
+ */
+export const APP_QUESTIONS_PROMPT =
+  "Questions about AbacusAI Bot itself (what it can do, its settings, models, connectors, chat apps, routines, bots, limits, or where something is) are answered from bot_help, never from memory.";
+
 /** How to use the file tools; a session without one skips its lines. */
 function toolGuidelinesPrompt(edit: EditTool): string {
   const lines = [
@@ -35,6 +43,11 @@ function toolGuidelinesPrompt(edit: EditTool): string {
     "Show file paths clearly when working with files",
     "Use read to examine files instead of cat or sed",
     "Use write only for new files or complete rewrites",
+    ...(edit === "ours"
+      ? [
+          "When the user says something broke or asks to undo, use checkpoint_diff and restore_checkpoint first: every turn's file changes are kept, so never rebuild a file from memory",
+        ]
+      : []),
     ...(edit === "ours"
       ? [
           ...EDIT_GUIDELINES,
@@ -54,7 +67,7 @@ function toolGuidelinesPrompt(edit: EditTool): string {
 
 /** A main session's base: who the agent is, then how it uses its tools. */
 export function basePrompt(edit: EditTool): string {
-  return `${identityPrompt()}\n\n${toolGuidelinesPrompt(edit)}`;
+  return `${identityPrompt()}\n${APP_QUESTIONS_PROMPT}\n\n${toolGuidelinesPrompt(edit)}`;
 }
 
 /** A sub-agent's base; the guidelines only where it has file tools. */

@@ -41,6 +41,7 @@ export type ToolHost = Pick<
   | "takeChatAppMessages"
   | "homeAssistant"
   | "paidFeature"
+  | "botHelp"
   | "ok"
   | "err"
 >;

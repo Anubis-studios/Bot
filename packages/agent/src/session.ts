@@ -31,8 +31,15 @@ import { basePrompt } from "./base-prompt.js";
  * the user decides; edit diffs are computed from the on-disk "before".
  */
 import { timezonePrompt } from "./bot/bot-time-tool.js";
+import {
+  checkpointSessionId,
+  checkpointsDirFor,
+  CheckpointStore,
+  CheckpointTracker,
+} from "./checkpoint-store.js";
 import { anchorCompactions } from "./compaction-anchor.js";
 import {
+  abacusBotDir,
   agentDir,
   applyStoredApiKeys,
   defaultModelFor,
@@ -60,6 +67,7 @@ import astTools from "./extensions/ast-tools.js";
 import background from "./extensions/background.js";
 import batchReadTool from "./extensions/batch-read-tool.js";
 import budgets, { budgetStopReason } from "./extensions/budgets.js";
+import { checkpoints } from "./extensions/checkpoints.js";
 import compactionPruner from "./extensions/compaction-pruner.js";
 import editTool from "./extensions/edit-tool.js";
 import emailFormat from "./extensions/email-format.js";
@@ -68,11 +76,11 @@ import knowledge from "./extensions/knowledge.js";
 import orientation from "./extensions/orientation.js";
 import outputRepair from "./extensions/output-repair.js";
 import spill from "./extensions/spill.js";
-import syntaxCheck from "./extensions/syntax-check.js";
+import { syntaxCheck } from "./extensions/syntax-check.js";
 import testRunner from "./extensions/test-runner.js";
 import toolCallRepair from "./extensions/tool-call-repair.js";
 import toolTimeouts from "./extensions/tool-timeouts.js";
-import verifyLoop from "./extensions/verify-loop.js";
+import { verifyLoop } from "./extensions/verify-loop.js";
 import { githubPrompt } from "./github-prompt.js";
 import { refreshGithubToken } from "./github-token.js";
 import { HostServiceClient } from "./host-services.js";
@@ -716,6 +724,12 @@ export class AbacusBotSession {
    * Services only the desktop can perform. Long-lived: tools rebuilt on reset
    * would otherwise each capture a client with its own pending map.
    */
+  /** This session's turn checkpoints, the undo for every file change. */
+  private readonly checkpoints = new CheckpointTracker(
+    new CheckpointStore(checkpointsDirFor(abacusBotDir())),
+    checkpointSessionId()
+  );
+
   private readonly hostServices = new HostServiceClient(
     (requestId, service, payload) => {
       this.options.emit({
@@ -868,6 +882,11 @@ export class AbacusBotSession {
     this.mcp.onStatusChange = () => this.emitMcpServers();
     this.mcp.onToolsAdded = () => this.mcpTools.changed();
 
+    // Housekeeping, throttled inside; a failure only delays it.
+    void this.checkpoints.store
+      .collectGarbage(this.checkpoints.sessionId)
+      .catch(() => {});
+
     const hostServices = this.options.hostServices !== false;
     // The budgets extension asks for a fresh balance while billed credits run.
     setCreditRefresher(
@@ -985,6 +1004,12 @@ export class AbacusBotSession {
               name: "abacusai-bot-tool-timeouts",
               factory: toolTimeouts as unknown as (pi: ExtensionAPI) => void,
             },
+            // Before the guardrails and every extension that reads a turn's
+            // changes: it keeps the files a call can reach before the call runs.
+            {
+              name: "abacusai-bot-checkpoints",
+              factory: checkpoints(this.checkpoints),
+            },
             {
               name: "abacusai-bot-guardrails",
               factory: guardrails as unknown as (pi: ExtensionAPI) => void,
@@ -1035,7 +1060,7 @@ export class AbacusBotSession {
             },
             {
               name: "abacusai-bot-syntax-check",
-              factory: syntaxCheck as unknown as (pi: ExtensionAPI) => void,
+              factory: syntaxCheck(this.checkpoints),
             },
             // Before output-repair: a text tool call this recovers into a real
             // one leaves nothing for the nudge to complain about.
@@ -1053,7 +1078,7 @@ export class AbacusBotSession {
             },
             {
               name: "abacusai-bot-verify-loop",
-              factory: verifyLoop as unknown as (pi: ExtensionAPI) => void,
+              factory: verifyLoop(this.checkpoints),
             },
             {
               name: "abacusai-bot-budgets",
@@ -1330,6 +1355,8 @@ export class AbacusBotSession {
     // it. Nothing is awaited between here and the prompt.
     await session.waitForIdle();
 
+    // What this turn changes is its own checkpoint, named by the message that asked.
+    this.checkpoints.beginTurn(turn?.messageId);
     // Per turn: the same provider failing next turn is news again.
     this.retriedCalls = 0;
     this.interrupted = false;
@@ -1470,7 +1497,7 @@ export class AbacusBotSession {
             ? this.router.failureContext(
                 registry,
                 this.openLlmActive,
-                this.session?.model?.provider
+                this.session?.model
               )
             : {
                 routed: this.openLlmActive,

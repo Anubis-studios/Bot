@@ -562,6 +562,7 @@
       "browser_snapshot": "Sayfayı etkileşimli öğeler listesi olarak oku.",
       "browser_tabs": "Tarayıcı sekmelerini listele, aralarında geçiş yap ve kapat.",
       "browser_task": "Bütün bir web görevini bir tarayıcı alt ajanına devret ve yanıtı al.",
+      "checkpoint_diff": "Önceki turların diskte neyi değiştirdiğini kontrol noktalarından göster.",
       "code_map": "Bir dosya veya klasördeki fonksiyonları ve sınıfları dizinle.",
       "connect_connector": "Kullanıcıdan Gmail veya Slack gibi bir hizmeti eklemesini iste, böylece araçları kullanılabilir hale gelsin.",
       "cronjob": "Zamanlanmış görevleri oluştur, listele, duraklat veya çalıştır.",
@@ -606,6 +607,7 @@
       "read_telegram_messages": "İstek üzerine son Telegram mesajlarını oku.",
       "read_whatsapp_messages": "İstek üzerine son WhatsApp mesajlarını oku.",
       "run_tests": "Projenin testlerini çalıştır ve nelerin geçip nelerin kaldığını bildir.",
+      "restore_checkpoint": "Dosyaları önceki bir turun değiştirmesinden önceki hâline geri koy.",
       "send_discord_message": "Discord'da mesaj gönder.",
       "send_telegram_message": "Telegram'da mesaj gönder.",
       "send_to_whatsapp": "AbacusAI Bot'un numarasından kendi WhatsApp'ına mesaj veya ekran görüntüsü gönder.",
@@ -2701,7 +2703,9 @@
       "providerConnectHint": "Ücretsiz olanlar dahil modellerini kullanmak için bağla.",
       "retryAttachment": "Eki yeniden dene",
       "folderItems_one": "{{count}} öğe",
-      "folderItems_other": "{{count}} öğe"
+      "folderItems_other": "{{count}} öğe",
+      "includedIn": "{{plan}} planına dahil",
+      "includedInPaid": "Ücretli planlara dahil"
     },
     "day": {
       "today": "Bugün",
@@ -3050,6 +3054,9 @@
       "agentTitle": "{{feature}} web'de Abacus AI Agent'ta",
       "agentBody": "Planınız, web'de Abacus AI Agent'ta görsel ve video oluşturmayı ve düzenlemeyi, ayrıca ses oluşturmayı içerir. İsteğiniz orada hazır; düzenlemek istediğiniz görseli orada ekleyin.",
       "openAgent": "Abacus AI Agent'ta aç"
+    },
+    "botHelp": {
+      "open": "Aç"
     }
   },
   "notch": {
@@ -3734,6 +3741,30 @@
     "showLess": "Daha az göster",
     "showMore": "+{{count}} daha"
   },
+  "checkpoints": {
+    "summary_one": "{{count}} dosya değişti",
+    "summary_other": "{{count}} dosya değişti",
+    "restore": "Bu turdan önceki hâline döndür",
+    "restoreFile": "Bu dosyayı geri yükle",
+    "undoRestore": "Geri yüklemeyi geri al",
+    "busy": "Ajanın bu turu bitirmesini bekle",
+    "binary": "ikili",
+    "noCopy": "kopya tutulmadı",
+    "partial": "Bazı klasörler tamamen saklanamayacak kadar büyüktü; sınırı aşan dosyalar kapsanmıyor.",
+    "failed": "Geri yüklenemedi. Ajan bitirdikten sonra yeniden dene.",
+    "restored_one": "{{count}} dosya geri yüklendi.",
+    "restored_other": "{{count}} dosya geri yüklendi.",
+    "unrestorable_one": "{{count}} dosya kopyası tutulamayacak kadar büyüktü.",
+    "unrestorable_other": "{{count}} dosya kopyası tutulamayacak kadar büyüktü.",
+    "conflicts_one": "{{count}} dosya bu turdan sonra değişti ve olduğu gibi bırakıldı.",
+    "conflicts_other": "{{count}} dosya bu turdan sonra değişti ve olduğu gibi bırakıldı.",
+    "force": "Yine de geri yükle",
+    "kind": {
+      "modified": "Düzenlendi",
+      "created": "Eklendi",
+      "deleted": "Silindi"
+    }
+  },
   "devicePanel": {
     "axPermissionNeeded": "Simülatörü penceresini göstermeden yansıtmak için Erişilebilirlik izni gerekiyor.",
     "boot": "Başlat",
@@ -4268,6 +4299,10 @@
       "link": "Buradan yükselt: {{link}}",
       "repeat": "Hâlâ duraklatıldı: {{link}}",
       "paidOut": "Bu ayın kredileri bittiği için durakladım. Devam etmek için kredi ekle: {{link}}",
+      "unavailable": "{{model}} artık kullanılamıyor, bu yüzden bunu bitiremedim. Mesajın saklandı: devam etmek için uygulamanın model seçicisinde RouteLLM - Open'a geç.",
+      "unavailableDown": "{{model}} şu anda kullanılamıyor: sağlayıcısı hata vermeye devam ediyor. Mesajın saklandı: devam etmek için uygulamanın model seçicisinde RouteLLM - Open'a geç.",
+      "unavailablePlan": "{{model}} planına dahil değil. Devam etmek için uygulamanın model seçicisinde RouteLLM - Open'a geç ya da kullanmak için planını yükselt.",
+      "unavailableOut": "{{model}} kullanılamıyor ve Abacus kredilerin bitti.",
       "ownKeyCredit": "{{provider}} anahtarının bakiyesi bitti.",
       "ownKeyRateLimit": "{{provider}} anahtarın kullanım sınırına ulaştı.",
       "ownKeyDown": "{{provider}} şu anda yanıt vermiyor.",
@@ -4281,6 +4316,28 @@
       "contactFailed": "Az önce {{name}} kişisine yanıt veremedim.",
       "contactFailedGeneric": "Az önce {{name}} kişisine yanıt veremedim: benim tarafımda bir sorun oldu.",
       "someone": "birisi"
+    },
+    "unavailable": {
+      "title": {
+        "retired": "{{model}} artık kullanılamıyor",
+        "down": "{{model}} şu anda kullanılamıyor",
+        "plan": "{{model}} planına dahil değil"
+      },
+      "why": {
+        "retired": "Kullanabildiğin modellerden kaldırıldı.",
+        "down": "Sağlayıcısı yeniden denemelere rağmen hata vermeye devam ediyor."
+      },
+      "kept": "Mesajın saklandı.",
+      "switch": "RouteLLM - Open'a geç",
+      "pickModel": "Başka bir model seç",
+      "creditsLeft": "{{credits}} Abacus kredisi kaldı",
+      "creditsOut": "Ücretsiz Abacus kredilerini de kullandın.",
+      "offer": "{{plan}} sana şunları sunar:",
+      "upgradeIntro": "Yükselt · ilk ay {{price}}",
+      "upgradeMonthly": "Yükselt · {{price}}/ay",
+      "seePlans": "Planları gör",
+      "planBody": "Şimdi ücretsiz bir modelle devam et ya da kullanmak için {{plan}} planına yükselt.",
+      "planBodyAny": "Şimdi ücretsiz bir modelle devam et ya da kullanmak için planını yükselt."
     }
   }
 }

@@ -29,6 +29,7 @@ import {
   resolveConnector,
   type Connector,
 } from "@abacus-ai/connectors/registry";
+import { type BotHelpBot, botHelpRequest } from "@abacus-ai/contract/bot-help";
 import {
   HOME_CHANNEL_NAMES,
   HOME_CHANNELS,
@@ -45,7 +46,10 @@ import {
   type MessagingPlatformId,
   describePlatformForAgent,
 } from "@abacus-ai/contract/messaging";
-import type { AbacusPlanTier } from "@abacus-ai/contract/models";
+import type {
+  AbacusPlanTier,
+  ModelAvailability,
+} from "@abacus-ai/contract/models";
 import type {
   Routine,
   RoutineCreateInput,
@@ -103,6 +107,7 @@ import {
   htmlPagesIn,
 } from "../agent-tools/static-server";
 import { renderTodos, readTodos, setTodos } from "../agent-tools/todo-store";
+import { hasCredential } from "../config/settings";
 import type { BotNumberOutcome } from "../messaging/bot-number";
 import { MAX_ATTACHMENT_BYTES } from "../messaging/connector";
 import {
@@ -119,6 +124,7 @@ import type { SkillsService } from "../workspace/skills-service";
 import { McpHttpServer, type McpToolListing } from "./mcp-http-server";
 import { agentTool, AGENT_TOOL_NAMES, AGENT_TOOLS } from "./tools";
 import { withUpgradeNudge } from "./tools/billing";
+import { botHelpResult, modelProviders } from "./tools/bot-help";
 import type {
   ConnectOutcome,
   DisconnectOutcome,
@@ -246,6 +252,12 @@ export interface McpAgentToolsServerOptions {
   enabledToolsets: () => Set<string>;
   /** The account's plan as last read; absent or unknown, no plan-locked capability is offered. */
   planTier?: () => AbacusPlanTier;
+  /** The plan's name as last read, for bot_help; null before the first read. */
+  planName?: () => string | null;
+  /** The model catalog with what runs now, for bot_help. */
+  models?: () => Promise<ModelAvailability[]>;
+  /** The user's bots, for bot_help. */
+  bots?: () => BotHelpBot[];
   workspacePath: () => string | null;
   workspaceId?: () => string | null;
   /** `trigger` lets the run log tell "Run now" from the first fire at creation. */
@@ -2948,6 +2960,66 @@ export class McpAgentToolsServer extends McpHttpServer {
         this.options.isAppBotChat?.(callerSession) === true
       );
     return chatApp ? "chat" : "card";
+  }
+
+  // ── The app itself ───────────────────────────────────────────────────────
+
+  /**
+   * `bot_help`: the app's state for the asked topic, read now. A part that
+   * cannot be read is said as unreadable, never left for the model to guess.
+   */
+  async botHelp(
+    args: Record<string, unknown>,
+    callerSession?: string
+  ): Promise<ToolResult> {
+    const { topic, name } = botHelpRequest(args.topic, args.name);
+    const needs = (wanted: string): boolean =>
+      topic == null || topic === wanted;
+    const phone = this.isPhoneCaller(callerSession);
+    const card =
+      !phone &&
+      (!this.isBotCaller(callerSession) ||
+        (callerSession != null &&
+          this.options.isAppBotChat?.(callerSession) === true));
+    const routines = this.options.routines;
+    const hostedRunner =
+      routines?.hostedOnly?.() === true ||
+      routines?.defaultRunner() === "hosted";
+    const connectorsNeeded = needs("connectors") || needs("chat_apps");
+    const [connectors, models] = await Promise.all([
+      connectorsNeeded
+        ? this.connectConnectorOutcome({}, callerSession, { card: false })
+            .then((outcome) =>
+              outcome.code === "list" ? outcome.entries : null
+            )
+            .catch(() => null)
+        : Promise.resolve(null),
+      needs("models") && this.options.models != null
+        ? this.options.models().catch(() => null)
+        : Promise.resolve(null),
+    ]);
+    return botHelpResult(this, {
+      topic,
+      name,
+      hosted: import.meta.env.ABACUS_WEB_HOST === true,
+      tier: this.planTier(),
+      card,
+      phone,
+      planName: this.options.planName?.() ?? null,
+      runner: hostedRunner ? "hosted" : "local",
+      routines: needs("routines")
+        ? {
+            local: listJobs().length,
+            hosted: routines?.hosted.list().length ?? 0,
+          }
+        : null,
+      connectors,
+      models,
+      providers: modelProviders(hasCredential),
+      bots: this.options.bots?.() ?? [],
+      enabledToolsets: this.options.enabledToolsets(),
+      withheldFeatures: this.hostCapabilities().withheldFeatures,
+    });
   }
 
   // ── Integrations ─────────────────────────────────────────────────────────

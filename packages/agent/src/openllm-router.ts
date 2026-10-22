@@ -174,10 +174,17 @@ export class OpenLlmRouter {
   failureContext(
     registry: ModelRegistry,
     routed: boolean,
-    provider: string | undefined
+    model: { provider: string; id: string; name?: string } | undefined
   ): FailureContext {
+    const provider = model?.provider;
     return {
       routed,
+      ...(model != null && {
+        model: {
+          model: `${model.provider}/${model.id}`,
+          label: model.name ?? model.id,
+        },
+      }),
       freeLaneProviders: this.freeLaneProviders(registry),
       onFreeLane: routed && this.onFreeLane(provider),
       abacusFreeModels: listModels(registry)

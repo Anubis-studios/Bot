@@ -22,13 +22,15 @@ import { AGENT_TOOL_NAMES, AGENT_TOOLS, agentTool } from "./index";
  * conversations; it grants nothing and there is nothing for a user to switch.
  * `billing_plan` reads the user's own plan and prices; it grants nothing
  * either, and nor does `paid_feature`, which says where a plan has a capability. `offer_session` draws a card that opens a session; it does nothing
- * until the user clicks it.
+ * until the user clicks it. `bot_help` reads the app's own state to answer
+ * questions about the app; switching it off would leave those to memory.
  */
 const NOT_IN_REGISTRY = new Set([
   "my_activity",
   "billing_plan",
   "paid_feature",
   "offer_session",
+  "bot_help",
 ]);
 
 const registryTools = new Map<string, { toolset: string; agent: boolean }>();
