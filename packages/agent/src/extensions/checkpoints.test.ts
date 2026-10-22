@@ -18,7 +18,12 @@ import {
   lineCounts,
   pathKey,
 } from "../checkpoint-store.js";
-import { bashTargets, callTargets, checkpoints } from "./checkpoints.js";
+import {
+  bashTargets,
+  callTargets,
+  checkpoints,
+  unmentionedChanges,
+} from "./checkpoints.js";
 import { syntaxCheck } from "./syntax-check.js";
 
 let base: string;
@@ -500,5 +505,246 @@ describe("which calls are covered", () => {
       added: 2,
       removed: 1,
     });
+  });
+});
+
+describe("the scope check after a turn", () => {
+  /** A user turn: the prompt, the run's calls, a normal end, the settle. */
+  async function userTurn(
+    text: string,
+    work: () => Promise<unknown>,
+    stopReason = "stop"
+  ): Promise<void> {
+    tracker.beginTurn();
+    await pi.fire("input", { type: "input", text, source: "rpc" }, ctx());
+    await work();
+    await endAndSettle(stopReason);
+  }
+
+  async function endAndSettle(stopReason = "stop"): Promise<void> {
+    await pi.fire(
+      "agent_end",
+      { messages: [{ role: "assistant", content: [], stopReason }] },
+      ctx()
+    );
+    await settle();
+  }
+
+  const write = (rel: string, content: string) =>
+    call("write", { path: rel, content }, () => {
+      fs.mkdirSync(path.dirname(at(rel)), { recursive: true });
+      fs.writeFileSync(at(rel), content);
+    });
+
+  beforeEach(() => {
+    fs.mkdirSync(at("src"), { recursive: true });
+    fs.writeFileSync(at("src", "auth.ts"), "export const a = 1;\n");
+    fs.writeFileSync(at("README.md"), "# readme\n");
+    fs.writeFileSync(at("src", "theme.css"), "body {}\n");
+  });
+
+  it("sends exactly one note naming the files the user never mentioned", async () => {
+    await userTurn("Fix the bug in auth.ts please", async () => {
+      await write("src/auth.ts", "export const a = 2;\n");
+      await write("README.md", "# changed\n");
+      await write("src/theme.css", "body { color: red }\n");
+    });
+
+    expect(pi.userMessages).toHaveLength(1);
+    const [note] = pi.userMessages;
+    expect(note!.options).toEqual({ deliverAs: "followUp" });
+    expect(note!.text).toContain("README.md, src/theme.css");
+    expect(note!.text).not.toContain("auth.ts");
+    expect(note!.text).toContain("restore_checkpoint({ turn: 1");
+  });
+
+  it("stays quiet when every change was asked for", async () => {
+    await userTurn(
+      "Fix the login check in src/auth.ts and the readme",
+      async () => {
+        await write("src/auth.ts", "export const a = 3;\n");
+        await write("README.md", "# fixed\n");
+      }
+    );
+    // A folder the user named covers what is inside it.
+    await userTurn("Restyle everything under src/ for dark mode", () =>
+      write("src/theme.css", "body { color: white }\n")
+    );
+
+    expect(pi.userMessages).toEqual([]);
+  });
+
+  it("never runs a second time in a turn, so its own follow-up cannot loop", async () => {
+    await userTurn("Fix the bug in auth.ts please", () =>
+      write("README.md", "# changed\n")
+    );
+    expect(pi.userMessages).toHaveLength(1);
+
+    // The agent answers the note: pi delivers it as an extension prompt.
+    await pi.fire(
+      "input",
+      { type: "input", text: pi.userMessages[0]!.text, source: "extension" },
+      ctx()
+    );
+    await call(
+      "restore_checkpoint",
+      { turn: 1, paths: ["README.md"] },
+      () => undefined
+    );
+    await pi.tools
+      .get("restore_checkpoint")!
+      .execute(
+        "r",
+        { turn: 1, paths: ["README.md"] },
+        undefined,
+        undefined,
+        ctx()
+      );
+    // And it touches another file while at it: still no second note.
+    await write("src/theme.css", "body { margin: 0 }\n");
+    await endAndSettle();
+
+    expect(pi.userMessages).toHaveLength(1);
+    expect(fs.readFileSync(at("README.md"), "utf8")).toBe("# readme\n");
+    expect((await turn(1)).files.map((f) => path.basename(f.path))).toEqual([
+      "theme.css",
+    ]);
+  });
+
+  it("starts fresh on the next turn", async () => {
+    await userTurn("Fix the bug in auth.ts please", () =>
+      write("README.md", "# one\n")
+    );
+    await userTurn("Now tidy auth.ts", () =>
+      write("src/theme.css", "body { padding: 0 }\n")
+    );
+
+    expect(pi.userMessages).toHaveLength(2);
+    expect(pi.userMessages[1]!.text).toContain("src/theme.css");
+    expect(pi.userMessages[1]!.text).toContain("turn: 2");
+    // README.md was this chat's earlier work, so turn 2 does not ask again.
+    expect(pi.userMessages[1]!.text).not.toContain("README.md");
+  });
+
+  it("never blocks or alters a tool call, even an unmentioned one", async () => {
+    tracker.beginTurn();
+    await pi.fire(
+      "input",
+      { type: "input", text: "Fix the bug in auth.ts please", source: "rpc" },
+      ctx()
+    );
+    const { blocked, result } = await write("src/theme.css", "a {}\n");
+
+    expect(blocked).toBeUndefined();
+    // The result goes back exactly as the tool made it.
+    expect(result).toBeUndefined();
+    expect(fs.readFileSync(at("src", "theme.css"), "utf8")).toBe("a {}\n");
+  });
+
+  it("says nothing after a stopped or failed run", async () => {
+    await userTurn(
+      "Fix the bug in auth.ts please",
+      () => write("README.md", "# half\n"),
+      "aborted"
+    );
+    await userTurn(
+      "Fix the bug in auth.ts please",
+      () => write("README.md", "# half again\n"),
+      "error"
+    );
+
+    expect(pi.userMessages).toEqual([]);
+  });
+
+  it("counts a steer sent mid-turn as the user's words", async () => {
+    tracker.beginTurn();
+    await pi.fire(
+      "input",
+      { type: "input", text: "Fix the bug in auth.ts please", source: "rpc" },
+      ctx()
+    );
+    await pi.fire(
+      "message_start",
+      {
+        message: {
+          role: "user",
+          content: [{ type: "text", text: "also update the readme" }],
+        },
+      },
+      ctx()
+    );
+    await write("README.md", "# steered\n");
+    await endAndSettle();
+
+    expect(pi.userMessages).toEqual([]);
+  });
+
+  it("leaves out build output, lockfiles, the app's own files and asked-for new files", () => {
+    const changed = (rel: string, kind: "created" | "modified" = "modified") =>
+      ({
+        path: path.isAbsolute(rel) ? rel : at(rel),
+        kind,
+        before: null,
+        after: null,
+        binary: false,
+        added: 1,
+        removed: 0,
+      }) as const;
+    const scope = (text: string) => ({
+      texts: [text],
+      cwd,
+      appHome: path.join(base, "app"),
+      home,
+      temp: path.join(base, "temp"),
+    });
+    const noise = [
+      changed("package-lock.json"),
+      changed("pnpm-lock.yaml"),
+      changed("Cargo.lock"),
+      changed("dist/app.js"),
+      changed("node_modules/x/index.js"),
+      changed("src/__pycache__/auth.cpython-312.pyc"),
+      changed(path.join(base, "app", "memory", "notes.md")),
+    ];
+
+    expect(unmentionedChanges(noise, scope("Fix the bug in auth.ts"))).toEqual(
+      []
+    );
+    // A new file is the deliverable when one was asked for, not otherwise.
+    const created = [changed("src/auth.test.ts", "created")];
+    expect(
+      unmentionedChanges(created, scope("Write a test for the auth check"))
+    ).toEqual([]);
+    expect(
+      unmentionedChanges(created, scope("Fix the off-by-one in the parser"))
+    ).toHaveLength(1);
+    // The workspace as a whole, or its folder by name, covers all of it.
+    const readme = [changed("README.md")];
+    expect(
+      unmentionedChanges(readme, scope("Clean up this repo for release"))
+    ).toEqual([]);
+    expect(
+      unmentionedChanges(readme, scope("Fix the parser in the code"))
+    ).toHaveLength(1);
+    // A name described in words counts; a file's folder named only inside its path does not.
+    expect(
+      unmentionedChanges(
+        [changed("lib/paginate.js"), changed("src/UserProfile.tsx")],
+        scope("The pagination helper skips a row on the user profile page")
+      )
+    ).toEqual([]);
+    expect(
+      unmentionedChanges(
+        [changed("src/api.js")],
+        scope("In src/users.js rename getUsr to getUser")
+      )
+    ).toHaveLength(1);
+    // The app's `<system_reminder>` envelopes are not the user's words.
+    expect(
+      unmentionedChanges(
+        readme,
+        scope("Fix the parser\n\n<system_reminder>README.md</system_reminder>")
+      )
+    ).toHaveLength(1);
   });
 });

@@ -784,8 +784,8 @@ export class CheckpointTracker {
   readonly store: CheckpointStore;
   readonly sessionId: string;
   private readonly platform: NodeJS.Platform;
-  private readonly home: string;
-  private readonly temp: string;
+  readonly home: string;
+  readonly temp: string;
 
   private turn: { messageId?: string; startedAt: number; seq: number | null } =
     {
