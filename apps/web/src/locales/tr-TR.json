@@ -4526,7 +4526,8 @@
       "contactNeutral": "Üzgünüm, şu anda yanıt veremiyorum. En kısa sürede döneceğim.",
       "contactEmpty": "{{name}} kişisine yanıt vermedim: hiçbir yanıt gelmedi. Yanıtlamak için uygulamayı aç veya ne söylememi istediğini bana yaz.",
       "undelivered": "{{name}} kişisine gönderilen bir mesaj iletilemedi.",
-      "appClosed": "Ben yanıt veremeden uygulama kapatıldı. Kaldığı yerden devam etmek için tekrar gönder."
+      "appClosed": "Ben yanıt veremeden uygulama kapatıldı. Kaldığı yerden devam etmek için tekrar gönder.",
+      "stillWorking": "Hâlâ üzerinde çalışıyorum (şu ana kadar {{minutes}} dk). Bitince buradan yanıt vereceğim."
     },
     "unavailable": {
       "title": {

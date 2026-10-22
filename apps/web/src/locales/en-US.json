@@ -4526,7 +4526,8 @@
       "contactNeutral": "Sorry, I can't reply right now. I'll get back to you soon.",
       "contactEmpty": "I didn't reply to {{name}}: no answer came back. Open the app to answer them, or tell me what to say.",
       "undelivered": "A message to {{name}} could not be delivered.",
-      "appClosed": "The app closed before I could reply. Send it again to pick it back up."
+      "appClosed": "The app closed before I could reply. Send it again to pick it back up.",
+      "stillWorking": "Still working on it ({{minutes}} min so far). I'll reply here when it's done."
     },
     "unavailable": {
       "title": {

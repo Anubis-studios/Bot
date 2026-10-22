@@ -83,7 +83,9 @@ describe("repeating a call that samples live state", () => {
  * The turn cap. A run that reached it used to be aborted on its next model
  * call with nothing said: the abort surfaced as a provider error with a
  * retry notice, and it landed on runs that had just handed the work over. Now the model is told to wrap up and present at 100 short, told
- * again at 50 short, and the stop carries a message written for the user.
+ * again at 50 short, and at the cap (or after an hour) it closes out: told to
+ * write its closing message, its tools refused, and stopped with a message
+ * written for the user only if it still has not finished.
  */
 describe("connector calls", () => {
   const steers = (pi: ReturnType<typeof fakePi>) =>
@@ -210,8 +212,30 @@ describe("a run that runs long", () => {
     expect(steers).toHaveLength(2);
   });
 
-  it("stops past the cap with a message written for the user, not the provider", async () => {
-    const { aborts } = await run(250, 251);
+  it("closes out past the cap instead of cutting the run mid-step", async () => {
+    const { pi, aborts } = await run(250, 251);
+
+    // Told, unseen, to stop and write its closing message; no tool runs now.
+    expect(aborts).toEqual([]);
+    expect(
+      pi.messages.filter((m) => m.customType === "abacusai-bot-close-out")
+    ).toEqual([
+      expect.objectContaining({
+        display: false,
+        content: expect.stringContaining("closing message"),
+      }),
+    ]);
+    const blocked = await pi.fire("tool_call", {
+      toolName: "bash",
+      toolCallId: "c",
+      input: { command: "ls" },
+    });
+    expect(blocked).toMatchObject({ block: true });
+    expect(budgetStopReason()).toBeNull();
+  });
+
+  it("stops a run that has not closed out a few calls later, with a message written for the user, not the provider", async () => {
+    const { aborts } = await run(250, 254);
 
     expect(aborts).toHaveLength(1);
     const reason = budgetStopReason() ?? "";
@@ -229,8 +253,99 @@ describe("a run that runs long", () => {
     expect(steers[0]).toContain("Final warning");
   });
 
+  it("closes out after an hour of running, however few calls it made", async () => {
+    vi.useFakeTimers();
+    try {
+      const pi = withBudgets();
+      const ctx = {
+        cwd: process.cwd(),
+        hasUI: false,
+        ui: { notify() {} },
+        abort() {},
+      };
+      await pi.fire("agent_start", {});
+      await pi.fire("turn_start", {}, ctx);
+      vi.advanceTimersByTime(59 * 60_000);
+      await pi.fire("turn_start", {}, ctx);
+      expect(
+        pi.messages.filter((m) => m.customType === "abacusai-bot-close-out")
+      ).toEqual([]);
+
+      vi.advanceTimersByTime(60_000);
+      await pi.fire("turn_start", {}, ctx);
+      expect(
+        pi.messages.filter((m) => m.customType === "abacusai-bot-close-out")
+      ).toEqual([
+        expect.objectContaining({
+          content: expect.stringContaining("60 minutes"),
+        }),
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the hour and the close-out across a hidden continuation of the same turn", async () => {
+    vi.useFakeTimers();
+    try {
+      const pi = withBudgets();
+      const aborts: number[] = [];
+      const ctx = {
+        cwd: process.cwd(),
+        hasUI: false,
+        ui: { notify() {} },
+        abort() {
+          aborts.push(1);
+        },
+      };
+      const closeOuts = () =>
+        pi.messages.filter((m) => m.customType === "abacusai-bot-close-out");
+      await pi.fire("input", { text: "build it", source: "interactive" });
+      await pi.fire("agent_start", {});
+      await pi.fire("turn_start", {}, ctx);
+      vi.advanceTimersByTime(40 * 60_000);
+      // A stall's re-ask: a run of its own, the same turn.
+      await pi.fire("agent_start", {});
+      await pi.fire("turn_start", {}, ctx);
+      vi.advanceTimersByTime(20 * 60_000);
+      await pi.fire("turn_start", {}, ctx);
+      expect(closeOuts()).toHaveLength(1);
+
+      // An empty closing message's ask: still closing, its tools still refused.
+      await pi.fire("agent_start", {});
+      expect(
+        await pi.fire("tool_call", {
+          toolName: "bash",
+          toolCallId: "c",
+          input: { command: "ls" },
+        })
+      ).toMatchObject({ block: true });
+      // Its two calls to close out, then the stop on the third.
+      await pi.fire("turn_start", {}, ctx);
+      await pi.fire("turn_start", {}, ctx);
+      expect(aborts).toEqual([]);
+      await pi.fire("turn_start", {}, ctx);
+      expect(aborts).toHaveLength(1);
+
+      // The user's next message is a new turn: a new hour.
+      await pi.fire("input", { text: "go on", source: "interactive" });
+      await pi.fire("agent_start", {});
+      await pi.fire("turn_start", {}, ctx);
+      expect(closeOuts()).toHaveLength(1);
+      expect(
+        await pi.fire("tool_call", {
+          toolName: "bash",
+          toolCallId: "d",
+          input: { command: "ls" },
+        })
+      ).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("forgets the stop when the next run starts", async () => {
-    const { pi } = await run(250, 251);
+    const { pi } = await run(250, 254);
     expect(budgetStopReason()).not.toBeNull();
 
     await pi.fire("agent_start", {});

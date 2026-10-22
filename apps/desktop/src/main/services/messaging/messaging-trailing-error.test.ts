@@ -913,6 +913,76 @@ describe("a turn the app closed under, found on the next start", () => {
   });
 });
 
+describe("a long turn", () => {
+  it("tells the user's own chat it is still working, every ten minutes, and stops once it answers", async () => {
+    vi.useFakeTimers();
+    try {
+      const h = harness({ self: true });
+      await h.inbound("build the whole site");
+      await vi.advanceTimersByTimeAsync(9 * 60_000);
+      expect(h.sent()).toEqual([]);
+
+      await vi.advanceTimersByTimeAsync(60_000);
+      await vi.advanceTimersByTimeAsync(10 * 60_000);
+      expect(h.sent()).toEqual([
+        "Still working on it (10 min so far). I'll reply here when it's done.",
+        "Still working on it (20 min so far). I'll reply here when it's done.",
+      ]);
+
+      h.say("Done: the site is up.");
+      h.idle();
+      await vi.advanceTimersByTimeAsync(30 * 60_000);
+      expect(h.sent().at(-1)).toBe("Done: the site is up.");
+      expect(h.sent()).toHaveLength(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("never sends a progress note into a contact's chat", async () => {
+    vi.useFakeTimers();
+    try {
+      const h = harness();
+      await h.inbound("can you send me the file?");
+      await vi.advanceTimersByTimeAsync(25 * 60_000);
+      expect(h.log).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a note that fails to send is dropped, never kept to retry", async () => {
+    vi.useFakeTimers();
+    try {
+      const h = harness({ self: true });
+      const connector = (
+        h.gateway as unknown as {
+          connectors: Map<string, { sendText: unknown }>;
+        }
+      ).connectors.get("discord")!;
+      const send = connector.sendText as (
+        c: string,
+        t: string
+      ) => Promise<void>;
+      let down = true;
+      connector.sendText = async (chatId: string, text: string) => {
+        if (down) throw new Error("offline");
+        return send(chatId, text);
+      };
+      await h.inbound("build the whole site");
+      await vi.advanceTimersByTimeAsync(10 * 60_000 + 1_000);
+      down = false;
+      h.say("Done.");
+      h.idle();
+      await vi.advanceTimersByTimeAsync(60 * 60_000);
+
+      expect(h.sent()).toEqual(["Done."]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe("an error that arrives after the turn ended", () => {
   it("does not send the raw provider text as its own message", async () => {
     const h = harness({ self: true });

@@ -335,6 +335,8 @@ const MESSAGE_LOG_SAVE_DELAY_MS = 1_000;
 
 /** After a start, the connectors get this long to come up before a retry. */
 const OUTBOX_STARTUP_DELAY_MS = 60_000;
+/** How often the user's own chat hears that a long turn is still going. */
+const PROGRESS_NOTE_EVERY_MS = 10 * 60_000;
 
 /** A conversation in flight: which session it owns and what it's waiting on. */
 type Route = {
@@ -395,6 +397,8 @@ type Route = {
    * these has said nothing, and the chat hears why (chatFailureOf).
    */
   delivered: boolean;
+  /** The user's own chat hears, now and then, that a long turn is still going. */
+  progressTimer: ReturnType<typeof setInterval> | null;
 };
 
 /** How long a login probe may take before the last known state is used. */
@@ -528,6 +532,7 @@ export class MessagingGatewayService {
 
   async dispose(): Promise<void> {
     this.outbox.dispose();
+    for (const route of this.routes.values()) this.stopWatchingProgress(route);
     for (const timer of this.releasedLogins.values()) clearTimeout(timer);
     this.releasedLogins.clear();
     if (this.logSaveTimer != null) {
@@ -1087,6 +1092,7 @@ export class MessagingGatewayService {
             : null,
         failureReply: null,
         delivered: false,
+        progressTimer: null,
       };
 
       if (existing != null) this.routesBySession.delete(existing.sessionId);
@@ -1185,6 +1191,7 @@ export class MessagingGatewayService {
       pendingIntro: null,
       failureReply: null,
       delivered: false,
+      progressTimer: null,
     };
 
     if (existing != null) {
@@ -1264,6 +1271,7 @@ export class MessagingGatewayService {
       owner: route.owner,
       userName: route.userName,
     });
+    this.watchProgress(route);
     this.options.sendMessage(
       route.workspaceId,
       route.sessionId,
@@ -1363,6 +1371,7 @@ export class MessagingGatewayService {
       `[messaging] ${route.platform}:${route.chatId} turn joined from the app; the rest of it stays there`
     );
     route.busy = false;
+    this.stopWatchingProgress(route);
     route.buffer = "";
     route.bufferMessageId = null;
     route.taggedReply = null;
@@ -1601,6 +1610,65 @@ export class MessagingGatewayService {
     this.finishTurn(route);
   }
 
+  /**
+   * A long turn in the user's own chat: every PROGRESS_NOTE_EVERY_MS while it
+   * is still going, the chat hears that it is still working. Never in a
+   * contact's chat, which only ever hears the reply. A note is said once, as
+   * it is due: it is not the reply, never kept to retry, and never counts as
+   * the turn having answered.
+   */
+  private watchProgress(route: Route): void {
+    this.stopWatchingProgress(route);
+    if (!route.owner) return;
+    const startedAt = route.busySince;
+    route.progressTimer = setInterval(() => {
+      if (!route.busy || this.routesBySession.get(route.sessionId) !== route) {
+        this.stopWatchingProgress(route);
+        return;
+      }
+      const minutes = Math.round((Date.now() - startedAt) / 60_000);
+      void this.sayProgress(route, minutes);
+    }, PROGRESS_NOTE_EVERY_MS);
+    route.progressTimer.unref?.();
+  }
+
+  private stopWatchingProgress(route: Route): void {
+    if (route.progressTimer != null) clearInterval(route.progressTimer);
+    route.progressTimer = null;
+  }
+
+  private async sayProgress(route: Route, minutes: number): Promise<void> {
+    const words = await channelWords(
+      channelLocale(
+        readUserLanguage()?.name ?? null,
+        this.options.appLanguage?.() ?? null
+      )
+    );
+    const connector = this.connectors.get(route.platform);
+    if (!route.busy || connector == null) return;
+    const text = forChat(
+      words.t("outcome.channel.stillWorking", { minutes }),
+      route.platform
+    );
+    try {
+      await connector.sendText(route.chatId, text, route.replyContext);
+      this.appendLog({
+        platform: route.platform,
+        chatId: route.chatId,
+        userId: "me",
+        userName: null,
+        text,
+        direction: "out",
+        at: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error(
+        `[messaging] ${route.platform}:${route.chatId} progress note failed:`,
+        error
+      );
+    }
+  }
+
   /** Free the route once any failure line has gone; start what queued. */
   private finishTurn(route: Route): void {
     if (!route.busy) return;
@@ -1612,6 +1680,7 @@ export class MessagingGatewayService {
     }
 
     route.busy = false;
+    this.stopWatchingProgress(route);
     this.chatTurnEndedAt.set(
       route.sessionId,
       this.options.now?.() ?? Date.now()
