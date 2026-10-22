@@ -7,6 +7,7 @@
 import fs from "fs";
 import path from "path";
 
+import { connectorById } from "@abacus-ai/connectors/registry";
 import type { UserTextTags } from "@abacus-ai/contract/agent-types";
 import {
   type Bot,
@@ -124,6 +125,29 @@ const homeChannelLines = (bot: Bot): string[] => {
   return ["", `**Your main connector to use is ${app}.**`];
 };
 
+/** What the bot's mission works through, by name: its home app first. */
+const neededConnectorNames = (bot: Bot): string[] => [
+  ...new Set([
+    ...(bot.homeChannel != null ? [HOME_CHANNEL_NAMES[bot.homeChannel]] : []),
+    ...(
+      BOT_TEMPLATES.find((row) => row.id === bot.templateId)?.needs ?? []
+    ).flatMap((id) => connectorById(id)?.name ?? []),
+  ]),
+];
+
+/** Static per bot, so the cached prompt holds; the live state is in the reminder. */
+const neededConnectorLines = (bot: Bot): string[] => {
+  const names = neededConnectorNames(bot);
+  if (names.length === 0) return [];
+  return [
+    "",
+    `**Connectors your mission needs:** ${names.join(", ")}.`,
+    "On your first turn, call connect_connector for each of these that the",
+    "system reminder does not list as connected, before or with your greeting,",
+    "then start on what works without them.",
+  ];
+};
+
 /**
  * Which chat apps' own chats this bot answers, and for the others who does:
  * the user asking a bot to chat on an app should hear where it goes now.
@@ -173,6 +197,7 @@ const renderPersona = (
       ? [`**Your voice (how you speak, in every message):** ${bot.persona}`]
       : []),
     ...homeChannelLines(bot),
+    ...neededConnectorLines(bot),
     ...homeBotLines(bot, homes),
     "",
     `You are ${bot.name}, a persistent named agent. This conversation is your`,
@@ -214,8 +239,10 @@ const renderPersona = (
     "client on Telegram), working inside the tools that are attached, running",
     "on a schedule so a job happens without being asked, and reading, editing",
     "and running things in the workspace folder. Check which connectors are",
-    "actually attached before naming one, and offer to connect what is missing",
-    "rather than assuming it.",
+    "actually attached before naming one. When a task needs one that is",
+    "missing, call connect_connector for it right away; do not ask or offer",
+    "first. Never say a Connect card, link or QR code is waiting unless you",
+    "called connect_connector for it in this turn.",
     "",
     "Your persona shapes tone and focus only. Approvals and the permission",
     "mode still decide what may actually run.",
@@ -244,10 +271,23 @@ const changeNotice = (notice: BotChangeNotice): string => {
 };
 
 /** Visible first message of a fresh bot chat, so the bot speaks first. */
-const KICKSTART_MESSAGE =
-  "[first run] Introduce yourself once, then get started on your mission. " +
-  "Everything after a tool result is the same reply continuing. No second " +
-  "greeting, no restating the mission.";
+const kickstartMessage = (bot: Bot): string => {
+  const names = neededConnectorNames(bot);
+  const connect =
+    names.length === 0
+      ? ""
+      : names.length === 1
+        ? `First, if the system reminder does not list ${names[0]} as ` +
+          "connected, call connect_connector for it now. "
+        : "First, call connect_connector now for each of " +
+          `${names.slice(0, -1).join(", ")} and ${names.at(-1)} that the ` +
+          "system reminder does not list as connected. ";
+  return (
+    `[first run] ${connect}Introduce yourself once, then get started on your ` +
+    "mission. Everything after a tool result is the same reply continuing. " +
+    "No second greeting, no restating the mission."
+  );
+};
 
 /**
  * The rules of a sender conversation, delivered as a preamble on the first
@@ -633,7 +673,7 @@ export class BotService {
           this.callbacks.sendMessage(
             workspaceId,
             bot.sessionId,
-            KICKSTART_MESSAGE,
+            kickstartMessage(bot),
             { operator: { kind: "kickstart" } }
           );
           markBotKickstarted(botId);
@@ -660,9 +700,12 @@ export class BotService {
     // is the same conversation to the user, and would introduce itself again.
     const started = await this.callbacks.startSession(workspaceId, session.id);
     if (started.success && bot.sessionId == null) {
-      this.callbacks.sendMessage(workspaceId, session.id, KICKSTART_MESSAGE, {
-        operator: { kind: "kickstart" },
-      });
+      this.callbacks.sendMessage(
+        workspaceId,
+        session.id,
+        kickstartMessage(bot),
+        { operator: { kind: "kickstart" } }
+      );
       markBotKickstarted(botId);
     }
 

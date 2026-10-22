@@ -8,6 +8,7 @@
  *
  * Ported from the old renderer's bot-templates.test.ts (spec 03 P31, P32).
  */
+import { connectorById } from "@abacus-ai/connectors/registry";
 import { describe, expect, it } from "vitest";
 
 import enUS from "#locales/en-US.json";
@@ -135,6 +136,17 @@ describe("the templates behind the tabs", () => {
   it("uses no id twice", () => {
     const ids = BOT_TEMPLATES.map(({ id }) => id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("names only real connectors a mission needs, the home app left implied", () => {
+    for (const template of BOT_TEMPLATES)
+      for (const id of template.needs ?? []) {
+        expect(connectorById(id), `${template.id}: ${id}`).toBeDefined();
+        expect(id, template.id).not.toBe(`messaging-${template.homeChannel}`);
+      }
+    expect(BOT_TEMPLATES.find((t) => t.id === "email-drafting")?.needs).toEqual(
+      ["abacus-gmailuser", "abacus-googledriveuser"]
+    );
   });
 
   it("gives each chat-app agent its home app, and no other template one", () => {
