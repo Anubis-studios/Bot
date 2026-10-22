@@ -147,7 +147,8 @@ export class TurnLedger {
         kind: "failed",
         cause: turn.error.cause ?? turn.error.code ?? "error",
       };
-    return { kind: turn.spoke ? "reply" : "empty" };
+    // Nothing said and nothing reported: the empty-reply failure's cause.
+    return turn.spoke ? { kind: "reply" } : { kind: "failed", cause: "empty" };
   }
 
   private close(

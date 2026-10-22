@@ -1153,11 +1153,15 @@ describe("what a closed turn owes its chat", () => {
 
   it("the empty line for a turn that reached it with nothing", () => {
     expect(chatFailureOf({ kind: "reply" }, false)).toEqual({ cause: "empty" });
-    expect(chatFailureOf({ kind: "empty" }, false)).toEqual({ cause: "empty" });
+    expect(
+      chatFailureOf(
+        { kind: "failed", cause: "empty", error: { cause: "empty" } },
+        false
+      )
+    ).toEqual({ cause: "empty" });
   });
 
   it("no empty line once the agent's own send has answered the chat", () => {
-    expect(chatFailureOf({ kind: "empty" }, true)).toBeNull();
     expect(
       chatFailureOf(
         { kind: "failed", cause: "empty", error: { cause: "empty" } },

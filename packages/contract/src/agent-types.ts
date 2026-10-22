@@ -152,8 +152,11 @@ export interface ToolDisplayData {
 
 /** How a turn ended, as the agent that ran it saw it. */
 export interface TurnOutcome {
-  /** `empty`: the last call answered with no text and no tool call. */
-  kind: "reply" | "failed" | "empty" | "stopped";
+  /**
+   * A turn whose last call answered with no text and no tool call is
+   * `failed` with the empty-reply cause (`empty`), like the error it reported.
+   */
+  kind: "reply" | "failed" | "stopped";
   /** For `failed`: the reported error's cause (turn-outcome.ts) or code. */
   cause?: string;
 }

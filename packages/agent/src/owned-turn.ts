@@ -45,7 +45,8 @@ export class OwnedTurn {
   outcome(interrupted: boolean): TurnOutcome {
     if (interrupted) return { kind: "stopped" };
     if (this.failure != null) return { kind: "failed", cause: this.failure };
-    if (this.endedEmpty) return { kind: "empty" };
+    // The empty-reply failure's own cause (turn-outcome.ts), reported or not.
+    if (this.endedEmpty) return { kind: "failed", cause: "empty" };
     return { kind: "reply" };
   }
 }

@@ -77,7 +77,7 @@ const ABACUS_BILLING_URL = "https://apps.abacus.ai/chatllm/admin/profile";
 
 const NETWORK_UNREACHABLE_CODE = "network_unreachable";
 
-/** The cause a turn that answered with nothing is reported under (turn-outcome.ts). */
+/** The empty-reply failure's cause (the agent's turn-outcome.ts): one, whoever saw it. */
 const EMPTY_CAUSE = "empty";
 
 /**
@@ -93,7 +93,6 @@ export const chatFailureOf = (
 ): TurnFailure | null => {
   switch (record.kind) {
     case "reply":
-    case "empty":
       return delivered ? null : { cause: EMPTY_CAUSE };
     case "failed": {
       const error = record.error;

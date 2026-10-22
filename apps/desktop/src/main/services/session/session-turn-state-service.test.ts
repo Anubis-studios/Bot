@@ -483,7 +483,10 @@ describe("every turn closes once, with how it ended", () => {
     feed(event({ type: "text_delta", content: "Hello" }));
     feed(statusChange(AgentStatus.Idle));
 
-    expect(records.map((record) => record.kind)).toEqual(["empty", "reply"]);
+    expect(records).toEqual([
+      expect.objectContaining({ kind: "failed", cause: "empty" }),
+      expect.objectContaining({ kind: "reply" }),
+    ]);
   });
 
   it("closes a watchdog's turn as timed out, naming what ran, and only once", () => {

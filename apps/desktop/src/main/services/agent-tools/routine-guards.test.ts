@@ -135,7 +135,6 @@ describe("a run the network let down", () => {
       runOutcomeOf({ kind: "failed", error: { code: "turn_failed" } })
     ).toBe("failed");
     expect(runOutcomeOf({ kind: "reply" })).toBe("completed");
-    expect(runOutcomeOf({ kind: "empty" })).toBe("failed");
     expect(runOutcomeOf({ kind: "timed_out" })).toBe("failed");
   });
 
