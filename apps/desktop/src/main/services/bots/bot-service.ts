@@ -358,6 +358,7 @@ export class BotService {
       avatarColor: template.avatarColor,
       avatarShape: template.avatarShape,
       homeChannel: template.homeChannel ?? null,
+      templateId: template.id,
     });
     void this.openChat(bot.id).catch((error: unknown) => {
       console.error(`[bots] ${bot.name} failed to open its chat:`, error);

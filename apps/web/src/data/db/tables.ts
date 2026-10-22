@@ -133,6 +133,7 @@ export const sessionsCollectionOptions = (
 const BOT_CREATE_FIELDS = [
   "sponsoredFirstRun",
   "homeChannel",
+  "templateId",
   "name",
   "title",
   "description",

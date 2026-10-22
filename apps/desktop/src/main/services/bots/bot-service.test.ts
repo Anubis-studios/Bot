@@ -96,6 +96,20 @@ describe("creating a bot", () => {
     expect(persona).toContain("**Your main connector to use is Telegram.**");
   });
 
+  it("remembers the template it was made from, and a written bot none", () => {
+    const service = new BotService(makeCallbacks());
+
+    const made = service.create({
+      name: "Email Drafting",
+      description: "Draft replies.",
+      templateId: "email-drafting",
+    });
+    const written = service.create({ name: "Scout", description: "Watch." });
+
+    expect(getBot(made.id)?.templateId).toBe("email-drafting");
+    expect(getBot(written.id)?.templateId).toBeUndefined();
+  });
+
   it("gives a bot with no home app no home line", () => {
     const service = new BotService(makeCallbacks());
 

@@ -269,6 +269,7 @@ export const createBotFromTemplate = async (
     ...(template.homeChannel != null
       ? { homeChannel: template.homeChannel }
       : {}),
+    templateId: template.id,
     sessionId: null,
     workspaceId: null,
     createdAt: now,
