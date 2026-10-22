@@ -1,7 +1,8 @@
 /**
  * What routine runs have sent, per fire and recipient, so one fire reaches
  * a person once: a second run for the same fire, or the same text again
- * from one run, is refused at the send tool rather than left to the model.
+ * from one run, is skipped at the send tool (and said so), rather than left
+ * to the model.
  */
 
 interface Sent {
@@ -25,8 +26,11 @@ export class RoutineSendLedger {
     return [fire, platform, normalize(to)].join("\u0000");
   }
 
-  /** Why this send would repeat one already made for `fire`, or null. */
-  refusal(
+  /**
+   * The note for a send that would repeat one already made for `fire` (it
+   * is skipped, not failed), or null when it is new.
+   */
+  repeat(
     fire: string,
     platform: string,
     to: string,
@@ -36,9 +40,9 @@ export class RoutineSendLedger {
     const entry = this.sent.get(this.key(fire, platform, to));
     if (entry == null) return null;
     if (entry.sessionId !== sessionId)
-      return `Not sent: another run of this routine already messaged ${to} for this same scheduled moment. Do not send it again; say in your reply that it was already sent.`;
+      return `Skipped: ${to} already got a message from this routine for this same scheduled moment, so it was not sent twice. Say in your reply that it was already sent.`;
     if (entry.messages.has(normalize(message)))
-      return `Not sent: this exact message already went to ${to} in this run. Do not send it again.`;
+      return `Skipped: this exact message already went to ${to} in this run, so it was not sent twice.`;
     return null;
   }
 

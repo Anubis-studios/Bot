@@ -495,26 +495,29 @@ describe("a one-time routine", () => {
     expect(listJobs()[0]?.runAt).toBe(new Date(2026, 9, 21, 8, 20).getTime());
   });
 
-  it("refuses a moment that has passed, or one without a time", async () => {
-    const instance = server();
-    expect(
-      await call(
-        instance,
-        { action: "create", run_at: "2026-10-20T09:00", prompt: "x" },
-        "bot-session"
-      )
-    ).toContain("already passed");
-    expect(
-      await call(
-        instance,
-        { action: "create", run_at: "2026-10-21", prompt: "x" },
-        "bot-session"
-      )
-    ).toContain("is not a moment");
-    expect(listJobs()).toEqual([]);
+  it("runs a moment that has passed once now, and reads a date alone as the morning", async () => {
+    const runner = { runCronJob: vi.fn(async () => "started" as const) };
+    const instance = server([], runner);
+    const past = await call(
+      instance,
+      { action: "create", run_at: "2026-10-20T09:00", prompt: "x" },
+      "bot-session"
+    );
+    expect(past).toContain("Created.");
+    expect(past).toContain("runs once now");
+    expect(listJobs()[0]?.runAt).toBe(new Date(2026, 9, 20, 13, 35).getTime());
+    const dateOnly = await call(
+      instance,
+      { action: "create", run_at: "2026-10-21", prompt: "y" },
+      "bot-session"
+    );
+    expect(dateOnly).toContain("has no time");
+    expect(listJobs().map((job) => job.runAt)).toContain(
+      new Date(2026, 9, 21, 9).getTime()
+    );
   });
 
-  it("refuses an every-minute schedule, and points to in_minutes", async () => {
+  it("keeps an every-minute schedule, and warns, pointing to in_minutes", async () => {
     const text = await call(
       server(),
       {
@@ -526,8 +529,10 @@ describe("a one-time routine", () => {
       "bot-session"
     );
 
+    expect(text).toContain("Created.");
+    expect(text).toContain("fires every minute");
     expect(text).toContain("in_minutes");
-    expect(listJobs()).toEqual([]);
+    expect(listJobs()[0]?.schedule).toBe("* * * * *");
   });
 
   it("keeps a yearly routine pinned to one date", async () => {
@@ -540,7 +545,7 @@ describe("a one-time routine", () => {
     expect(listJobs()[0]?.schedule).toBe("0 9 14 2 *");
   });
 
-  it("refuses run_at and in_minutes together rather than picking one", async () => {
+  it("uses run_at when in_minutes is given too, and says in_minutes was left out", async () => {
     const text = await call(
       server(),
       {
@@ -552,8 +557,8 @@ describe("a one-time routine", () => {
       "bot-session"
     );
 
-    expect(text).toContain("not both");
-    expect(listJobs()).toEqual([]);
+    expect(text).toContain("run_at was used");
+    expect(listJobs()[0]?.runAt).toBe(new Date(2026, 9, 21, 8, 20).getTime());
   });
 
   it("leaves a repeating routine's fire on creation as it is", async () => {
@@ -603,38 +608,39 @@ describe("a run the agent asks for", () => {
     return text.match(/(job-[\w-]+)/)![1]!;
   };
 
-  it("is filed as the agent's, and refused again within ten minutes", async () => {
+  it("is filed as the agent's, and started again within ten minutes with a warning", async () => {
     const runner = recording();
     const instance = server([], runner);
     const id = await make(instance);
 
-    expect(
-      await call(instance, { action: "run", id }, "bot-session")
-    ).toContain("Started");
+    const first = await call(instance, { action: "run", id }, "bot-session");
+    expect(first).toContain("Started");
+    expect(first).not.toContain("Note:");
     expect(runner.runCronJob).toHaveBeenLastCalledWith(id, "agent");
     vi.setSystemTime(new Date(2026, 9, 13, 8, 5));
     const again = await call(instance, { action: "run", id }, "bot-session");
 
-    expect(again).toContain("Not started");
-    expect(runner.runCronJob).toHaveBeenCalledTimes(1);
+    expect(again).toContain("Started");
+    expect(again).toContain("already ran 5 minutes ago");
+    expect(again).toContain("unless the user asked");
+    expect(runner.runCronJob).toHaveBeenCalledTimes(2);
   });
 
-  it("stops at a few a day and leaves more to the user", async () => {
+  it("still starts past a few a day, saying how many", async () => {
     const runner = recording();
     const instance = server([], runner);
     const id = await make(instance);
 
     for (const hour of [8, 9, 10]) {
       vi.setSystemTime(new Date(2026, 9, 13, hour, 0));
-      expect(
-        await call(instance, { action: "run", id }, "bot-session")
-      ).toContain("Started");
+      await call(instance, { action: "run", id }, "bot-session");
     }
     vi.setSystemTime(new Date(2026, 9, 13, 11, 0));
     const fourth = await call(instance, { action: "run", id }, "bot-session");
 
-    expect(fourth).toContain("Run now");
-    expect(runner.runCronJob).toHaveBeenCalledTimes(3);
+    expect(fourth).toContain("Started");
+    expect(fourth).toMatch(/you have run it 3 times today/i);
+    expect(runner.runCronJob).toHaveBeenCalledTimes(4);
   });
 
   it("says what really happened when the run did not start", async () => {

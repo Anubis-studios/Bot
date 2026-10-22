@@ -166,16 +166,18 @@ describe("a routine run's messages to someone", () => {
     expect(await send("run-a", "Sam", "Good morning")).toContain("Sent");
     const second = await send("run-b", "sam ", "Good morning, again");
 
-    expect(second).toContain("Not sent");
+    // Skipped and said so, not an error: Sam already has this moment's message.
+    expect(second).toContain("Skipped");
+    expect(second).toContain("already got a message");
     expect(sent).toHaveLength(1);
   });
 
-  it("refuse the same text twice from one run, but let it go on in parts", async () => {
+  it("skip the same text twice from one run, but let it go on in parts", async () => {
     const { sent, send } = routineHarness();
 
     await send("run-a", "Sam", "Part one");
     expect(await send("run-a", "Sam", "Part two")).toContain("Sent");
-    expect(await send("run-a", "Sam", "Part one")).toContain("Not sent");
+    expect(await send("run-a", "Sam", "Part one")).toContain("Skipped");
     expect(await send("run-a", "Alex", "Part one")).toContain("Sent");
     expect(sent.map((entry) => entry.text)).toEqual([
       "Part one",

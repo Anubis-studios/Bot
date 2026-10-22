@@ -122,50 +122,46 @@ export const ranOutOfAbacusCredits = (error: {
 }): boolean =>
   error.actions?.some((action) => action.type === "upgrade-abacus") === true;
 
-/** Between two runs of one routine when the agent asks for another. */
+/** Between two runs of one routine, below which another agent run is flagged. */
 const AGENT_RUN_MIN_GAP_MS = 10 * 60_000;
 
-/** Runs of one routine the agent may start in a day; more are the user's call. */
+/** Agent runs of one routine in a day, past which another is flagged. */
 const AGENT_RUNS_PER_DAY = 3;
 
 const DAY_MS = 24 * 60 * 60_000;
 
 /**
- * Why the agent may not run this routine now, or null when it may: a run
- * shortly before (the scheduled one for this slot included), or its day's
- * share of agent runs used up. `runs` newest first, as the store keeps them.
+ * What the agent is told when it runs a routine soon after another run, or
+ * past a few agent runs in a day: the run still starts, and the note says
+ * what running it again costs. Null when the run is unremarkable. `runs`
+ * newest first, as the store keeps them.
  */
-export const agentRunRefusal = (
+export const agentRunWarning = (
   runs: readonly RoutineRun[],
   now: number
 ): string | null => {
   const started = runs.filter((run) => run.kind === "started");
   const last = started[0];
-  if (last != null && now - last.at < AGENT_RUN_MIN_GAP_MS) {
-    const when = new Date(last.at).toLocaleTimeString();
-    return last.trigger === "schedule" || last.trigger === "catch-up"
-      ? `Not started: it already ran this slot, at ${when}. Its result is under Routines; do not run it again for the same moment.`
-      : `Not started: it last ran at ${when}, under ${Math.ceil(AGENT_RUN_MIN_GAP_MS / 60_000)} minutes ago. Tell the user it ran, and that they can press Run now on the routine for another.`;
-  }
+  const minutesAgo =
+    last != null && now - last.at < AGENT_RUN_MIN_GAP_MS
+      ? Math.max(0, Math.round((now - last.at) / 60_000))
+      : null;
   const today = started.filter(
     (run) => run.trigger === "agent" && now - run.at < DAY_MS
   ).length;
-  if (today >= AGENT_RUNS_PER_DAY)
-    return `Not started: you already ran it ${today} times today. More runs are the user's call: ask them to press Run now on the routine under Routines.`;
-  return null;
-};
-
-/**
- * Why a schedule is refused, or null: one that fires every minute is a full
- * agent run each minute, and a one-time reminder made of it repeats forever.
- */
-export const everyMinuteSchedule = (schedule: string): string | null => {
-  const fields = schedule.trim().split(/\s+/);
-  const everyMinute =
-    fields.length === 5 &&
-    (fields[0] === "*" || fields[0] === "*/1") &&
-    fields.slice(1).every((field) => field === "*");
-  return everyMinute
-    ? `"${schedule.trim()}" fires every minute, for as long as it exists. For a one-time reminder or alert, give in_minutes or run_at instead of a schedule: it fires once and is then done. For a repeating check, pick every 5 minutes or slower.`
-    : null;
+  if (minutesAgo == null && today < AGENT_RUNS_PER_DAY) return null;
+  const parts = [
+    ...(minutesAgo != null
+      ? [
+          minutesAgo === 0
+            ? "this routine already ran under a minute ago"
+            : `this routine already ran ${minutesAgo} minute${minutesAgo === 1 ? "" : "s"} ago`,
+        ]
+      : []),
+    ...(today > 0
+      ? [`you have run it ${today} time${today === 1 ? "" : "s"} today`]
+      : []),
+  ];
+  const said = parts.join(", and ");
+  return `${said.charAt(0).toUpperCase()}${said.slice(1)}. Running it again repeats what it sends and spends credits: do not run it again unless the user asked.`;
 };

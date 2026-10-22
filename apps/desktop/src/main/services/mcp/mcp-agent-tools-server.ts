@@ -101,11 +101,12 @@ import {
 } from "../agent-tools/memory-store";
 import { analyze } from "../agent-tools/model-analysis";
 import { reprintPdf } from "../agent-tools/pdf-agent";
-import {
-  agentRunRefusal,
-  everyMinuteSchedule,
-} from "../agent-tools/routine-guards";
+import { agentRunWarning } from "../agent-tools/routine-guards";
 import { RoutineSendLedger } from "../agent-tools/routine-send-ledger";
+import {
+  readRoutineTiming,
+  type RoutineTiming,
+} from "../agent-tools/routine-timing";
 import {
   listServed,
   serveDirectory,
@@ -511,85 +512,36 @@ export interface McpAgentToolsServerOptions {
   };
 }
 
-type Moment = { ok: true; at: number | null } | { ok: false; error: string };
+/** A tool result with notes after it: what was read differently from how it was asked. */
+const withNotes = (result: ToolResult, notes: readonly string[]): ToolResult =>
+  notes.length === 0 || result.isError === true
+    ? result
+    : {
+        ...result,
+        content: [
+          ...result.content,
+          {
+            type: "text",
+            text: notes.map((note) => `Note: ${note}`).join("\n"),
+          },
+        ],
+      };
 
-/** The furthest ahead a one-time routine may be set. */
-const ONE_TIME_HORIZON_MS = 366 * 24 * 60 * 60_000;
-
-/** `in_minutes` as a moment from `now`; null when not given. */
-const minutesFromNow = (value: unknown, now: number): Moment => {
-  if (value == null || value === "") return { ok: true, at: null };
-  const minutes = Number(value);
-  if (!Number.isFinite(minutes) || minutes <= 0)
-    return {
-      ok: false,
-      error: "in_minutes must be a number of minutes above 0.",
-    };
-  if (minutes * 60_000 > ONE_TIME_HORIZON_MS)
-    return { ok: false, error: "in_minutes is more than a year away." };
-  return { ok: true, at: now + Math.round(minutes * 60_000) };
-};
-
-/**
- * The one-time moment a local create or update asks for: `in_minutes` from
- * now, or `run_at` (ISO 8601; without an offset, this computer's local time).
- */
-const requestedMoment = (
+/** The ask's args with its timing as read: run_at exact, no in_minutes. */
+const timedArgs = (
   args: Record<string, unknown>,
-  now: number
-): Moment => {
-  if (bothMoments(args)) return { ok: false, error: BOTH_MOMENTS };
-  const soon = minutesFromNow(args.in_minutes, now);
-  if (soon.ok === false || soon.at != null) return soon;
-  const text = typeof args.run_at === "string" ? args.run_at.trim() : "";
-  if (text.length === 0) return { ok: true, at: null };
-  // A date alone would be read as midnight UTC, not a moment the user named.
-  const at = /\d{1,2}:\d{2}/.test(text) ? Date.parse(text) : NaN;
-  if (!Number.isFinite(at))
-    return {
-      ok: false,
-      error: `run_at "${text}" is not a moment: give a date and time like 2026-10-20T08:20 (this computer's local time) or with an offset.`,
-    };
-  // A minute of slack: "now" said a moment ago is still now.
-  if (at < now - 60_000)
-    return {
-      ok: false,
-      error: `run_at ${new Date(at).toLocaleString()} has already passed; it is ${new Date(now).toLocaleString()} now.`,
-    };
-  if (at - now > ONE_TIME_HORIZON_MS)
-    return { ok: false, error: "run_at is more than a year away." };
-  return { ok: true, at };
-};
-
-const given = (value: unknown): boolean =>
-  value != null && !(typeof value === "string" && value.trim() === "");
-
-/** Both ways of naming a one-time moment: refused on every runner, never one picked. */
-const bothMoments = (args: Record<string, unknown>): boolean =>
-  given(args.run_at) && given(args.in_minutes);
-
-const BOTH_MOMENTS =
-  "Give run_at or in_minutes for a one-time routine, not both.";
-
-/**
- * A hosted routine's args with `in_minutes` turned into an exact `run_at`:
- * the server reads run_at in the user's zone, and has no minutes field.
- */
-const withMinutesAsRunAt = (
-  args: Record<string, unknown>,
-  now: number
-):
-  | { ok: true; args: Record<string, unknown> }
-  | { ok: false; error: string } => {
-  if (bothMoments(args)) return { ok: false, error: BOTH_MOMENTS };
-  const soon = minutesFromNow(args.in_minutes, now);
-  if (soon.ok === false) return soon;
+  timing: RoutineTiming
+): Record<string, unknown> => {
+  const {
+    in_minutes: _minutes,
+    run_at: _runAt,
+    schedule: _schedule,
+    ...rest
+  } = args;
   return {
-    ok: true,
-    args:
-      soon.at != null
-        ? { ...args, run_at: new Date(soon.at).toISOString() }
-        : args,
+    ...rest,
+    ...(timing.schedule != null ? { schedule: timing.schedule } : {}),
+    ...(timing.runAtText != null ? { run_at: timing.runAtText } : {}),
   };
 };
 
@@ -999,16 +951,31 @@ export class McpAgentToolsServer extends McpHttpServer {
         "Routines are set up by the user, not from a chat with someone else."
       );
 
-    // The same rules for a local routine and a hosted one.
+    // One reading of when it fires, for a local routine and a hosted one:
+    // never refused, and what was read differently is said with the result.
     if (action === "create" || action === "update") {
-      if (bothMoments(args)) return this.err(BOTH_MOMENTS);
-      const everyMinute =
-        typeof args.schedule === "string"
-          ? everyMinuteSchedule(args.schedule)
-          : null;
-      if (everyMinute != null) return this.err(everyMinute);
+      const timing = readRoutineTiming(args, Date.now());
+      return withNotes(
+        await this.cronjobAction(
+          action,
+          id,
+          timedArgs(args, timing),
+          timing,
+          callerSession
+        ),
+        timing.warnings
+      );
     }
+    return this.cronjobAction(action, id, args, null, callerSession);
+  }
 
+  private async cronjobAction(
+    action: string,
+    id: string,
+    args: Record<string, unknown>,
+    timing: RoutineTiming | null,
+    callerSession?: string
+  ): Promise<ToolResult> {
     try {
       if (action === "list") {
         const jobs = listJobs();
@@ -1058,23 +1025,14 @@ export class McpAgentToolsServer extends McpHttpServer {
           (runner === "hosted" ||
             this.options.routines?.hostedOnly?.() === true) &&
           this.options.routines != null
-        ) {
-          const hosted = withMinutesAsRunAt(args, Date.now());
-          if (hosted.ok === false) return this.err(hosted.error);
-          return await this.createHostedRoutine(hosted.args, callerSession);
-        }
+        )
+          return await this.createHostedRoutine(args, callerSession);
 
         const schedule = typeof args.schedule === "string" ? args.schedule : "";
         const prompt = typeof args.prompt === "string" ? args.prompt : "";
         const webhook = args.webhook === true;
-        const moment = requestedMoment(args, Date.now());
-        if (moment.ok === false) return this.err(moment.error);
-        const runAt = moment.at;
+        const runAt = timing?.runAt ?? null;
 
-        if (schedule.trim().length > 0 && runAt != null)
-          return this.err(
-            "Give a schedule for a repeating routine, or run_at / in_minutes for a one-time one, not both."
-          );
         if (schedule.trim().length === 0 && !webhook && runAt == null)
           return this.err(
             "A schedule, a one-time run_at or in_minutes, or webhook: true is required."
@@ -1238,13 +1196,7 @@ export class McpAgentToolsServer extends McpHttpServer {
           enabled?: boolean;
           name?: string;
         } = {};
-        const moment = requestedMoment(args, Date.now());
-        if (moment.ok === false) return this.err(moment.error);
-        if (moment.at != null) changes.runAt = moment.at;
-        if (moment.at != null && typeof args.schedule === "string")
-          return this.err(
-            "Give a schedule for a repeating routine, or run_at / in_minutes for a one-time one, not both."
-          );
+        if (timing?.runAt != null) changes.runAt = timing.runAt;
 
         if (
           typeof args.schedule === "string" &&
@@ -1280,20 +1232,25 @@ export class McpAgentToolsServer extends McpHttpServer {
             "Nothing is attached that can start a scheduled run."
           );
 
-        const refusal = agentRunRefusal(job.runs, Date.now());
-        if (refusal != null) return this.err(refusal);
+        // Never refused: a run soon after another, or past a few a day,
+        // starts with a note on what running it again costs.
+        const warning = agentRunWarning(job.runs, Date.now());
         const start =
           (await this.options.runCronJob(job.id, "agent")) ?? "started";
-        // What happened, never "started" for a run that did not.
+        // What happened, never "started" for a run that did not (one still
+        // going is a status, not a failure).
         if (start !== "started")
-          return this.err(
-            `Not started (${getJob(job.id)?.runs[0]?.result ?? start}).`
+          return this.ok(
+            `Not started: ${getJob(job.id)?.runs[0]?.result ?? start}.`
           );
 
-        return this.ok(
-          job.botId != null
-            ? `Started ${id} now in a fresh run, listed under Routines and written in your voice.`
-            : `Started ${id} now in a fresh run, listed under Routines.`
+        return withNotes(
+          this.ok(
+            job.botId != null
+              ? `Started ${id} now in a fresh run, listed under Routines and written in your voice.`
+              : `Started ${id} now in a fresh run, listed under Routines.`
+          ),
+          warning != null ? [warning] : []
         );
       }
 
@@ -1398,10 +1355,8 @@ export class McpAgentToolsServer extends McpHttpServer {
         );
       }
       if (action === "update") {
-        const moment = withMinutesAsRunAt(args, Date.now());
-        if (moment.ok === false) return this.err(moment.error);
-        // The user's words for a moment go as written.
-        const when = moment.args.run_at;
+        // The user's words for a moment go as written (args are already read).
+        const when = args.run_at;
         const runAt =
           typeof when === "string" && when.trim().length > 0
             ? when.trim()
@@ -2264,14 +2219,15 @@ export class McpAgentToolsServer extends McpHttpServer {
         : null;
     const sent = `${attachmentPath}\u0000${message}`;
     if (guard != null) {
-      const refusal = this.routineSends.refusal(
+      const repeat = this.routineSends.repeat(
         guard.fire,
         platform,
         to,
         guard.session,
         sent
       );
-      if (refusal != null) return this.err(refusal);
+      // Skipped, not failed: the person already has this one.
+      if (repeat != null) return this.ok(repeat);
     }
     const noteSent = (): void => {
       if (guard != null)
