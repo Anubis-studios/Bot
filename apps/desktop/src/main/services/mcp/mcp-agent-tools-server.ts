@@ -16,12 +16,13 @@ import {
 import { modelPath } from "@abacus-ai/agent/model-path";
 import { isWithin, resolveSecretPaths } from "@abacus-ai/agent/secret-paths";
 import {
-  DOCUMENT_MAX_BYTES,
+  type ChatFileLimits,
   MEDIA_MAX_BYTES,
   mediaLine,
   parseSendMedia,
   type ResolvedMedia,
   takesDocument,
+  WHATSAPP_FILE_LIMITS,
 } from "@abacus-ai/agent/send-media";
 import { UNATTENDED_TOOLS } from "@abacus-ai/agent/tool-policy";
 import {
@@ -116,7 +117,11 @@ import {
 import { renderTodos, readTodos, setTodos } from "../agent-tools/todo-store";
 import { hasCredential } from "../config/settings";
 import type { BotNumberOutcome } from "../messaging/bot-number";
-import { MAX_ATTACHMENT_BYTES } from "../messaging/connector";
+import {
+  type ChatTurn,
+  MAX_ATTACHMENT_BYTES,
+  withStagedFile,
+} from "../messaging/connector";
 import {
   resolveSender,
   type SenderCandidate,
@@ -216,21 +221,81 @@ const IMAGE_FILE = /\.(png|jpe?g|webp)$/i;
 /** A file the chat cannot carry at all (its type, or past the size limit), not one that needs fixing first. */
 type KeptFile = { id: string } | { reason: string; unfit?: true };
 
+/** A file's checked bytes under its name, or why it cannot go. */
+type SendableFile =
+  | { data: Buffer; name: string }
+  | { reason: string; unfit?: true };
+
+/** Where present_deliverable's files go: the chat app, what it takes, and whether a served page also goes as its file. */
+type ChatTarget = { app: string; limits: ChatFileLimits; withPage: boolean };
+
+/** The phone lane: AbacusAI Bot's WhatsApp number. */
+const WHATSAPP_TARGET: ChatTarget = {
+  app: "WhatsApp",
+  limits: WHATSAPP_FILE_LIMITS,
+  withPage: false,
+};
+
 /**
  * What the session hears once for files the chat cannot carry. Repackaging
  * cannot get them through, so it says what can: the content in a form the
  * chat takes, and the file itself where it lives.
  */
-function unfitNote(labels: string[]): string {
+function unfitNote(labels: string[], target: ChatTarget): string {
   const where =
     import.meta.env.ABACUS_WEB_HOST === true
       ? "The file itself reaches them in the AbacusAI Bot desktop app (bot.abacus.ai on a computer), where you can make it again for them."
-      : "The file itself is saved on their computer: tell them where it is.";
+      : target === WHATSAPP_TARGET
+        ? "The file itself is saved on their computer: tell them where it is."
+        : "The file itself is in the AbacusAI Bot app on their computer: say so, never its path.";
   return (
-    `WhatsApp cannot carry ${labels.join(", ")}, and a zip or renamed copy is refused too, so do not try. ` +
+    `${target.app} cannot carry ${labels.join(", ")}, and a zip or renamed copy is refused too, so do not try. ` +
     "Tell the user once, in their language, and give them what fits this chat instead: the readable " +
     `content as a txt, md or PDF document, a short summary, or a \`page\`. ${where}`
   );
+}
+
+/**
+ * present_deliverable's answer for a chat turn whose chat takes no files:
+ * someone else's chat (files never go to other people), or the user's own on
+ * an app that cannot carry them. The files stay listed for the app's card.
+ */
+function noFilesToChat(
+  valid: Array<{ label: string; target: string }>,
+  turn: ChatTurn
+): string {
+  const labels = valid.map((item) => oneLine(item.label)).join(", ");
+  return [
+    turn.owner
+      ? `${turn.app} cannot take files from this app right now, so nothing was sent. Tell the user in one short line, ` +
+        `in their language, that ${labels} ${valid.length === 1 ? "is" : "are"} in the AbacusAI Bot app on their computer. ` +
+        "Never give a file path, a file link or a localhost link."
+      : `This turn answers someone else's ${turn.app} chat, and files never go to other people, so nothing was sent. ` +
+        "Do not mention the files, a path or a link in your reply.",
+    "",
+    ...valid.map((item) => artifactPathLine(oneLine(item.target))),
+  ].join("\n");
+}
+
+/**
+ * The one HTML file behind a served loopback URL, when the served folder holds
+ * nothing else (a page with its styles and scripts inline): it opens as is on
+ * a phone. Null for any page that needs other files.
+ */
+async function singleFilePage(url: string): Promise<string | null> {
+  const origin = loopbackOrigin(url);
+  const served = listServed().find(
+    (entry) => loopbackOrigin(entry.url) === origin
+  );
+  if (origin == null || served == null) return null;
+  const entries = await fs.promises
+    .readdir(served.directory, { withFileTypes: true })
+    .catch(() => []);
+  const visible = entries.filter((entry) => !entry.name.startsWith("."));
+  const only = visible.length === 1 ? visible[0]! : null;
+  return only != null && only.isFile() && /\.html?$/i.test(only.name)
+    ? path.join(served.directory, only.name)
+    : null;
 }
 
 /** A tool as some caller sees it: the app's definition, or the phone's own. */
@@ -311,12 +376,18 @@ export interface McpAgentToolsServerOptions {
    * Where `present_deliverable` puts what goes to a chat that takes media,
    * under the session's id; null where no chat does.
    */
+  /**
+   * The chat app a session's running turn answers (WhatsApp, Telegram), or
+   * null for a turn in the app: present_deliverable sends files there.
+   */
+  chatTurn?: (sessionId: string) => ChatTurn | null;
   chatMedia?: () => {
-    /** A file, as an image or a document, by its bytes and name. */
+    /** A file, as an image or a document the chat takes, by its bytes and name. */
     keep: (
       sessionId: string,
       data: Buffer,
-      filename: string
+      filename: string,
+      limits?: ChatFileLimits
     ) => { id: string } | { reason: string };
     /** A screenshot of a page served at `origin`, with secret fields hidden. */
     screenshot: (
@@ -1702,15 +1773,16 @@ export class McpAgentToolsServer extends McpHttpServer {
               : null;
 
         const channel = this.channelFor(callerSession);
+        const turn = this.chatTurnOf(callerSession);
         return this.ok(
           [
             `Serving ${modelPath(served.directory)} at ${served.url}`,
             "",
-            ...(channel.pane
+            ...(channel.pane && turn == null
               ? []
               : [
-                  "This URL opens on this computer only: the user cannot open it from their phone." +
-                    (channel.media
+                  "This URL opens on this computer only: the user cannot open it from their phone, so never give it to them." +
+                    (channel.media || turn?.files != null
                       ? " present_deliverable sends them a screenshot of the page instead."
                       : ""),
                   "",
@@ -1784,6 +1856,16 @@ export class McpAgentToolsServer extends McpHttpServer {
 
     const channel = this.channelFor(callerSession);
     const chatMedia = this.options.chatMedia?.() ?? null;
+    // A turn answering a chat app sends its files there, not to a card.
+    const turn = this.chatTurnOf(callerSession);
+    if (turn != null && callerSession != null)
+      return turn.files != null && chatMedia != null
+        ? this.sendToChat(valid, missing, args, chatMedia, callerSession, {
+            app: turn.app,
+            limits: turn.files,
+            withPage: true,
+          })
+        : this.ok(noFilesToChat(valid, turn));
     if (
       (channel.media || channel.documents) &&
       chatMedia != null &&
@@ -1842,7 +1924,8 @@ export class McpAgentToolsServer extends McpHttpServer {
     missing: string[],
     args: Record<string, unknown>,
     chatMedia: ChatMedia,
-    sessionId: string
+    sessionId: string,
+    target: ChatTarget = WHATSAPP_TARGET
   ): Promise<ToolResult> {
     const going: Array<{ line: string; id: string; target: string }> = [];
     const refused: string[] = [];
@@ -1851,7 +1934,7 @@ export class McpAgentToolsServer extends McpHttpServer {
       const label = oneLine(item.label);
       const kept: KeptFile = item.isUrl
         ? await this.screenshotServed(item.target, sessionId, chatMedia)
-        : await this.keepFile(item.target, sessionId, chatMedia);
+        : await this.keepFile(item.target, sessionId, chatMedia, target.limits);
       if ("reason" in kept) {
         refused.push(`${label}: ${oneLine(kept.reason)}`);
         if (kept.unfit === true) unfit.push(label);
@@ -1864,6 +1947,24 @@ export class McpAgentToolsServer extends McpHttpServer {
           ? `- ${label}: a screenshot of the page (a live preview cannot be opened from the phone)`
           : `- ${label}`,
       });
+      // A page that is one file goes as that file too: it opens on a phone.
+      const page =
+        item.isUrl && target.withPage
+          ? await singleFilePage(item.target)
+          : null;
+      if (page == null) continue;
+      const file = await this.keepFile(
+        page,
+        sessionId,
+        chatMedia,
+        target.limits
+      );
+      if ("id" in file)
+        going.push({
+          id: file.id,
+          target: page,
+          line: `- ${label}: the page itself, as ${path.basename(page)}`,
+        });
     }
 
     const notFound =
@@ -1874,7 +1975,7 @@ export class McpAgentToolsServer extends McpHttpServer {
             ),
           ]
         : [];
-    const unfitLines = unfit.length > 0 ? ["", unfitNote(unfit)] : [];
+    const unfitLines = unfit.length > 0 ? ["", unfitNote(unfit, target)] : [];
     if (going.length === 0)
       return this.err(
         [
@@ -1889,10 +1990,12 @@ export class McpAgentToolsServer extends McpHttpServer {
     const summary = oneLine(String(args.summary ?? ""));
     const lines = [
       ...(summary.length > 0 ? [summary, ""] : []),
-      `Sending ${going.length === 1 ? "1 item" : `${going.length} items`} to this chat with your answer:`,
+      `Sending ${going.length === 1 ? "1 item" : `${going.length} items`} to this ${target === WHATSAPP_TARGET ? "" : `${target.app} `}chat with your answer:`,
       ...going.map((item) => item.line),
       "",
-      "The first text of your answer goes with the first item as its caption. Do not paste paths or links to them.",
+      target === WHATSAPP_TARGET
+        ? "The first text of your answer goes with the first item as its caption. Do not paste paths or links to them."
+        : "They arrive right after your answer's words. Do not paste paths or links to them, or point to a card.",
       ...(refused.length > 0
         ? ["", "Not sent:", ...refused.map((line) => `- ${line}`)]
         : []),
@@ -1935,8 +2038,30 @@ export class McpAgentToolsServer extends McpHttpServer {
   private async keepFile(
     filePath: string,
     sessionId: string,
-    chatMedia: ChatMedia
+    chatMedia: ChatMedia,
+    limits: ChatFileLimits = WHATSAPP_FILE_LIMITS
   ): Promise<KeptFile> {
+    const file = await this.readSendable(filePath, limits.documentMaxBytes);
+    if ("reason" in file) return file;
+    const kept = chatMedia.keep(sessionId, file.data, file.name, limits);
+    // Refused for its type: no copy of it can go either.
+    return "reason" in kept &&
+      !IMAGE_FILE.test(file.name) &&
+      !takesDocument(file.name, limits)
+      ? { ...kept, unfit: true }
+      : kept;
+  }
+
+  /**
+   * A file on disk that may leave this computer, as its bytes. Only a regular
+   * file whose real path is under the workspace or the app's own output and
+   * temp folders, outside every credential store; read no further than
+   * `maxBytes`, and the file read is the file checked.
+   */
+  private async readSendable(
+    filePath: string,
+    maxBytes: number
+  ): Promise<SendableFile> {
     let handle: fs.promises.FileHandle | null = null;
     try {
       const real = await fs.promises.realpath(filePath);
@@ -1976,7 +2101,7 @@ export class McpAgentToolsServer extends McpHttpServer {
             "it is an image larger than 5 MB, the most a picture may be; save a smaller copy (or a PDF) and send that.",
         };
       // Read no further than the limit, whatever the size said.
-      const buffer = Buffer.alloc(DOCUMENT_MAX_BYTES + 1);
+      const buffer = Buffer.alloc(maxBytes + 1);
       let length = 0;
       while (length < buffer.length) {
         const { bytesRead } = await handle.read(
@@ -1988,21 +2113,15 @@ export class McpAgentToolsServer extends McpHttpServer {
         if (bytesRead === 0) break;
         length += bytesRead;
       }
-      if (length > DOCUMENT_MAX_BYTES)
+      if (length > maxBytes)
         return {
-          reason: "it is larger than 16 MB, the most the chat takes.",
+          reason: `it is larger than ${Math.round(maxBytes / 1024 / 1024)} MB, the most the chat takes.`,
           unfit: true,
         };
-      const name = path.basename(real);
-      const kept = chatMedia.keep(
-        sessionId,
-        Buffer.from(buffer.subarray(0, length)),
-        name
-      );
-      // Refused for its type: no copy of it can go either.
-      return "reason" in kept && !IMAGE_FILE.test(name) && !takesDocument(name)
-        ? { ...kept, unfit: true }
-        : kept;
+      return {
+        data: Buffer.from(buffer.subarray(0, length)),
+        name: path.basename(real),
+      };
     } catch (error) {
       console.error(
         `[agent-tools] could not read a deliverable: ${error instanceof Error ? error.message : String(error)}`
@@ -2011,6 +2130,12 @@ export class McpAgentToolsServer extends McpHttpServer {
     } finally {
       await handle?.close().catch(() => undefined);
     }
+  }
+
+  /** The chat app the caller's running turn answers; null for an app turn. */
+  private chatTurnOf(callerSession?: string): ChatTurn | null {
+    if (callerSession == null) return null;
+    return this.options.chatTurn?.(callerSession) ?? null;
   }
 
   async deckExportPdf(args: Record<string, unknown>): Promise<ToolResult> {
@@ -2247,11 +2372,21 @@ export class McpAgentToolsServer extends McpHttpServer {
         return this.err(
           `That file is ${Math.round(size / 1024 / 1024)}MB; the limit is ${Math.round(MAX_ATTACHMENT_BYTES / 1024 / 1024)}MB.`
         );
-      await messaging.sendFile(
-        platform,
-        to,
+      // The same fence as present_deliverable: what leaves is a checked file
+      // from the workspace, sent from a copy of exactly those bytes.
+      const file = await this.readSendable(
         attachmentPath,
-        message.trim().length > 0 ? message : undefined
+        MAX_ATTACHMENT_BYTES
+      );
+      if ("reason" in file) return this.err(`Not sent: ${file.reason}`);
+      const sendFile = messaging.sendFile;
+      await withStagedFile(file.data, file.name, (staged) =>
+        sendFile(
+          platform,
+          to,
+          staged,
+          message.trim().length > 0 ? message : undefined
+        )
       );
       noteSent();
 

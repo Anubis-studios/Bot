@@ -4515,7 +4515,9 @@
       "generic": "Un problème est survenu de mon côté, je n'ai donc pas pu terminer. Réessayez dans un instant.",
       "contactFailed": "Je n'ai pas pu répondre à {{name}} tout à l'heure.",
       "contactFailedGeneric": "Je n'ai pas pu répondre à {{name}} tout à l'heure : un problème est survenu de mon côté.",
-      "someone": "quelqu'un"
+      "someone": "quelqu'un",
+      "fileNotSent_one": "Impossible d'envoyer {{files}} ici. Le fichier est dans l'app AbacusAI Bot sur ton ordinateur.",
+      "fileNotSent_other": "Impossible d'envoyer {{files}} ici. Les fichiers sont dans l'app AbacusAI Bot sur ton ordinateur."
     },
     "unavailable": {
       "title": {

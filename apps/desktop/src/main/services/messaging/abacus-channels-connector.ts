@@ -1,3 +1,11 @@
+import fs from "fs";
+import path from "path";
+
+import {
+  checkedImage,
+  mediaFields,
+  type ChatFileLimits,
+} from "@abacus-ai/agent/send-media";
 import type {
   MessagingPlatformId,
   SharedChannelLink,
@@ -69,7 +77,15 @@ type StatusResponse = {
   discord_app_name?: string;
   telegram_bot_name?: string | null;
   telegram_bot_username?: string | null;
+  /** What a reply may carry on each bot; absent on a server that sends none. */
+  reply_media?: Record<
+    string,
+    { image?: number; document?: number; document_types?: string[] }
+  >;
 };
+
+/** A document of up to 16 MB goes up in the call. */
+const FILE_CALL_TIMEOUT_MS = 90_000;
 
 type PairResponse = {
   status?: string;
@@ -142,6 +158,7 @@ export class AbacusChannelsConnector implements MessagingConnector {
   private linked = false;
   private link: SharedChannelLink = { status: "unlinked" };
   private botName: string | null = null;
+  private files: ChatFileLimits | null = null;
   private pairTimer: NodeJS.Timeout | null = null;
   private abort: AbortController | null = null;
   private linkWindow: BrowserWindow | null = null;
@@ -213,6 +230,52 @@ export class AbacusChannelsConnector implements MessagingConnector {
           result.error ?? `${this.channel} did not accept the message`
         );
     }
+  }
+
+  fileLimits(): ChatFileLimits | null {
+    return this.linked ? this.files : null;
+  }
+
+  /**
+   * A file as the answer to a message, its caption the text: an image when
+   * its bytes are a PNG or JPEG, else a document under its name. The server
+   * checks type and size again and says why when it refuses.
+   */
+  async sendFile(
+    chatId: string,
+    filePath: string,
+    caption?: string,
+    replyContext?: Record<string, string>
+  ): Promise<void> {
+    const messageId = replyContext?.message_id;
+    if (chatId !== SELF_CHAT_ID || messageId == null)
+      throw new Error(
+        "The Abacus AI bot sends a file only as the answer to your message."
+      );
+    const data = await fs.promises.readFile(filePath);
+    const image = checkedImage(data);
+    const media =
+      image.ok === true
+        ? image
+        : {
+            ok: true as const,
+            kind: "document" as const,
+            data,
+            filename: path.basename(filePath),
+          };
+    const result = await this.call<{ ok?: boolean; error?: string }>(
+      {
+        action: "reply",
+        message_id: messageId,
+        ...mediaFields(media),
+        ...(caption != null && caption.length > 0 ? { text: caption } : {}),
+      },
+      FILE_CALL_TIMEOUT_MS
+    );
+    if (result.ok !== true)
+      throw new Error(
+        result.error ?? `${this.channel} did not accept the file`
+      );
   }
 
   // ── Pairing ───────────────────────────────────────────────────────────────
@@ -386,6 +449,14 @@ export class AbacusChannelsConnector implements MessagingConnector {
         : (status.telegram_bot_name ?? status.telegram_bot_username);
     if (typeof botName === "string" && botName.length > 0)
       this.botName = botName;
+    const media = status.reply_media?.[this.channel];
+    this.files =
+      media?.document != null && Array.isArray(media.document_types)
+        ? {
+            documentTypes: media.document_types,
+            documentMaxBytes: media.document,
+          }
+        : null;
     const channel = status.channels?.[this.channel];
     if (channel?.status === "linked") {
       this.markLinked(channel.display_name ?? null);

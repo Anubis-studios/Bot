@@ -4515,7 +4515,9 @@
       "generic": "Benim tarafımda bir sorun oldu, bu yüzden bunu bitiremedim. Lütfen birazdan tekrar dene.",
       "contactFailed": "Az önce {{name}} kişisine yanıt veremedim.",
       "contactFailedGeneric": "Az önce {{name}} kişisine yanıt veremedim: benim tarafımda bir sorun oldu.",
-      "someone": "birisi"
+      "someone": "birisi",
+      "fileNotSent_one": "{{files}} buraya gönderilemedi. Bilgisayarındaki AbacusAI Bot uygulamasında.",
+      "fileNotSent_other": "{{files}} buraya gönderilemedi. Bilgisayarındaki AbacusAI Bot uygulamasındalar."
     },
     "unavailable": {
       "title": {

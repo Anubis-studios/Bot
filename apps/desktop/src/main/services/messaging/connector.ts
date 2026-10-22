@@ -1,6 +1,8 @@
 import fs from "fs";
+import os from "os";
 import path from "path";
 
+import type { ChatFileLimits } from "@abacus-ai/agent/send-media";
 import type {
   MessagingPlatformId,
   MessagingPlatformState,
@@ -121,11 +123,55 @@ export interface MessagingConnector {
     Array<{ chatId: string; name: string; snippet: string; when: string }>
   >;
   /**
-   * Send a file with an optional caption. Optional: a platform without it
-   * answers the tool with a clear "not supported here".
+   * Send a file with an optional caption, threaded like a text reply when
+   * `replyContext` says what to. Optional: a platform without it answers the
+   * tool with a clear "not supported here".
    */
-  sendFile?(chatId: string, filePath: string, caption?: string): Promise<void>;
+  sendFile?(
+    chatId: string,
+    filePath: string,
+    caption?: string,
+    replyContext?: Record<string, string>
+  ): Promise<void>;
+  /**
+   * The files the user's own chat here takes with a turn's answer, or null
+   * when it takes none right now. Absent: the platform sends none.
+   */
+  fileLimits?(): ChatFileLimits | null;
 }
+
+/**
+ * The chat a relayed turn answers, as that turn's tools see it: the app the
+ * answer lands in, whether it is the user's own chat, and what files it
+ * takes. Files never go to someone else's chat, so theirs takes none.
+ */
+export type ChatTurn = {
+  app: string;
+  owner: boolean;
+  files: ChatFileLimits | null;
+};
+
+/**
+ * Write `data` under its own name in a fresh temp folder, run `send` on that
+ * path and remove it: what a connector that uploads from disk sends, so it
+ * reads exactly the bytes that were checked and nothing swapped in since.
+ */
+export const withStagedFile = async <T>(
+  data: Buffer,
+  filename: string,
+  send: (filePath: string) => Promise<T>
+): Promise<T> => {
+  const dir = await fs.promises.mkdtemp(
+    path.join(os.tmpdir(), "abacusai-bot-send-")
+  );
+  try {
+    const file = path.join(dir, path.basename(filename) || "file");
+    await fs.promises.writeFile(file, data, { mode: 0o600 });
+    return await send(file);
+  } finally {
+    await fs.promises.rm(dir, { recursive: true, force: true });
+  }
+};
 
 /** Files larger than this are refused rather than half-uploaded. */
 export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;

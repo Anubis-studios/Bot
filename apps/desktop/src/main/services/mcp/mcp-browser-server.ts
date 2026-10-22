@@ -674,6 +674,8 @@ export interface McpBrowserServerOptions {
   conversationKeyForSession?: (sessionId: string) => ConversationKey | null;
   /** Where screenshots are kept for `send_media`; without one they get no media id. */
   media?: () => MediaStore | null;
+  /** Where a served page's screenshot for a chat turn is kept; falls back to `media`. */
+  chatMedia?: () => MediaStore | null;
   /**
    * The user's vault: its tools are served here, beside the page they read
    * origins from. Read per call; null (or absent) where there is none, and
@@ -924,7 +926,8 @@ export class McpBrowserServer extends McpHttpServer {
     };
     const failed = { reason: "the page could not be captured." };
     const source = this.options.target?.() ?? null;
-    if (source == null || this.options.media?.() == null) return unavailable;
+    const store = this.options.chatMedia?.() ?? this.options.media?.() ?? null;
+    if (source == null || store == null) return unavailable;
     const owner = `${sessionId}${CHAT_SCREENSHOT_OWNER}`;
     let tabId: number | null = null;
     try {
@@ -942,8 +945,10 @@ export class McpBrowserServer extends McpHttpServer {
       if (live !== origin || this.isAbacus(live)) return failed;
       const image = await this.captureImage(wc);
       if (image == null) return failed;
-      const id = this.keepAsMedia(image, sessionId);
-      return id != null ? { id } : { reason: "the screenshot is too large." };
+      const kept = store.put(sessionId, Buffer.from(image.data, "base64"));
+      return "id" in kept
+        ? { id: kept.id }
+        : { reason: "the screenshot is too large." };
     } catch (error) {
       console.error(
         `[mcp-browser] chat screenshot failed: ${error instanceof Error ? error.message : String(error)}`

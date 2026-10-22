@@ -4515,7 +4515,9 @@
       "generic": "Algo deu errado do meu lado, então não consegui terminar. Tente de novo daqui a pouco.",
       "contactFailed": "Não consegui responder a {{name}} agora há pouco.",
       "contactFailedGeneric": "Não consegui responder a {{name}} agora há pouco: algo deu errado do meu lado.",
-      "someone": "alguém"
+      "someone": "alguém",
+      "fileNotSent_one": "Não foi possível enviar {{files}} aqui. O arquivo está no app AbacusAI Bot no seu computador.",
+      "fileNotSent_other": "Não foi possível enviar {{files}} aqui. Os arquivos estão no app AbacusAI Bot no seu computador."
     },
     "unavailable": {
       "title": {
