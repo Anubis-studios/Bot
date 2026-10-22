@@ -193,11 +193,6 @@ export type GhRunner = (
 
 let resolvedBinary: string | null | undefined;
 
-/** Forget the resolved binary: after an install, or when it vanished. */
-export const forgetGhBinary = (): void => {
-  resolvedBinary = undefined;
-};
-
 /** Runs `gh`; any failure rejects with a sorted `GhError`. */
 export const runGh: GhRunner = (args, options = {}) => {
   resolvedBinary ??= resolveGhBinary();
