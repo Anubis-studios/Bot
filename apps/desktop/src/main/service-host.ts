@@ -2076,6 +2076,8 @@ export class ServiceHost {
     releaseMedia: (ref, sessionId) => {
       this.mediaStore.unpin(ref, sessionId);
     },
+    attachNamedFile: (sessionId, filePath, limits) =>
+      this.mcpAgentToolsServer.keepNamedFile(filePath, sessionId, limits),
     emitChanged: () => {
       this.emitEvent({
         type: "messaging-updated",

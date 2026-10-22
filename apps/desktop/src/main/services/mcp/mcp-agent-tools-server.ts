@@ -2132,6 +2132,21 @@ export class McpAgentToolsServer extends McpHttpServer {
     }
   }
 
+  /**
+   * A file a chat turn's reply named by its path, kept for that chat under
+   * present_deliverable's checks: its media id, or null when it may not go.
+   */
+  async keepNamedFile(
+    filePath: string,
+    sessionId: string,
+    limits: ChatFileLimits
+  ): Promise<string | null> {
+    const chatMedia = this.options.chatMedia?.() ?? null;
+    if (chatMedia == null || !path.isAbsolute(filePath)) return null;
+    const kept = await this.keepFile(filePath, sessionId, chatMedia, limits);
+    return "id" in kept ? kept.id : null;
+  }
+
   /** The chat app the caller's running turn answers; null for an app turn. */
   private chatTurnOf(callerSession?: string): ChatTurn | null {
     if (callerSession == null) return null;

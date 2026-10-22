@@ -145,6 +145,7 @@ const fileHarness = (owner: boolean) => {
   const sent: string[] = [];
   const files: Array<{ name: string; bytes: string; reply?: string }> = [];
   const released: string[] = [];
+  const attached: string[] = [];
   let failSend = false;
   const pdf = {
     ok: true as const,
@@ -166,6 +167,12 @@ const fileHarness = (owner: boolean) => {
         : { ok: false, reason: "unknown" },
     releaseMedia: (ref: string) => {
       released.push(ref);
+    },
+    attachNamedFile: async (_session: string, filePath: string) => {
+      attached.push(filePath);
+      return filePath.endsWith("report.pdf")
+        ? "media-0123456789abcdef0123"
+        : null;
     },
   } as never);
   (gateway as unknown as { connectors: Map<string, unknown> }).connectors.set(
@@ -208,6 +215,7 @@ const fileHarness = (owner: boolean) => {
     sent,
     files,
     released,
+    attached,
     failNextSends: () => {
       failSend = true;
     },
@@ -286,5 +294,43 @@ describe("files a turn hands to its chat", () => {
     await settle();
     expect(h.files).toEqual([]);
     expect(h.released).toEqual(["media-0123456789abcdef0123"]);
+  });
+
+  it("send a file the words named by its path, and give the phone its name instead", async () => {
+    const h = fileHarness(true);
+    await h.inbound();
+    h.say(
+      "<reply>Done: /home/me/work/report.pdf, preview at http://localhost:5173</reply>"
+    );
+    h.idle();
+    await vi.waitFor(() => expect(h.files).toHaveLength(1));
+    expect(h.sent).toEqual(["Done: report.pdf, preview at 💻"]);
+    expect(h.attached).toEqual(["/home/me/work/report.pdf"]);
+    expect(h.files).toEqual([
+      { name: "report.pdf", bytes: "%PDF", reply: "e1" },
+    ]);
+  });
+
+  it("send a file only once when it was handed over and named too", async () => {
+    const h = fileHarness(true);
+    await h.inbound();
+    h.present();
+    h.say("<reply>It is at /home/me/work/report.pdf</reply>");
+    h.idle();
+    await vi.waitFor(() => expect(h.files).toHaveLength(1));
+    await settle();
+    expect(h.attached).toEqual([]);
+    expect(h.files).toHaveLength(1);
+  });
+
+  it("rewrite paths for someone else's chat, and attach nothing", async () => {
+    const h = fileHarness(false);
+    await h.inbound();
+    h.say("Saved to /home/me/work/report.pdf");
+    h.idle();
+    await settle();
+    expect(h.sent).toEqual(["Saved to report.pdf"]);
+    expect(h.attached).toEqual([]);
+    expect(h.files).toEqual([]);
   });
 });

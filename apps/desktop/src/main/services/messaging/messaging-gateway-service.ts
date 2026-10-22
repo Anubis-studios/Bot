@@ -1,5 +1,11 @@
+import os from "os";
+
 import { modelPath } from "@abacus-ai/agent/model-path";
-import { declaredMedia, type ResolvedMedia } from "@abacus-ai/agent/send-media";
+import {
+  type ChatFileLimits,
+  declaredMedia,
+  type ResolvedMedia,
+} from "@abacus-ai/agent/send-media";
 import { readUserLanguage } from "@abacus-ai/agent/user-language";
 import type { UserTextTags } from "@abacus-ai/contract/agent-types";
 import { AgentMode, AgentStatus } from "@abacus-ai/contract/agent-types";
@@ -49,7 +55,7 @@ import {
   type AccountKind,
   type TurnFailure,
 } from "./chat-failure-reply";
-import { forChat } from "./chat-markdown";
+import { forChat, phoneSafeReply } from "./chat-markdown";
 import {
   backoffDelayMs,
   looksLikeBotOutput,
@@ -222,6 +228,15 @@ type GatewayOptions = {
   resolveMedia?: (ref: string, sessionId: string) => ResolvedMedia;
   /** The media went (or will not): it may be evicted again. */
   releaseMedia?: (ref: string, sessionId: string) => void;
+  /**
+   * A file a reply named by its path, kept as the session's media under the
+   * same checks present_deliverable applies; null when it may not go.
+   */
+  attachNamedFile?: (
+    sessionId: string,
+    filePath: string,
+    limits: ChatFileLimits
+  ) => Promise<string | null>;
   /** The failure-reply throttle's clock; tests pass a fake one. */
   now?: () => number;
   /** The app's language (a BCP 47 tag), for lines the bot itself words. */
@@ -396,6 +411,8 @@ const PROBE_LIVE_TIMEOUT_MS = 3000;
 export class MessagingGatewayService {
   /** Media ids each route's running turn handed to its chat; they go after its words. */
   private readonly turnMedia = new WeakMap<Route, string[]>();
+  /** Local paths each route's running turn named in its words to the user's own chat. */
+  private readonly namedPaths = new WeakMap<Route, string[]>();
   private readonly connectors = new Map<
     MessagingPlatformId,
     MessagingConnector
@@ -1430,6 +1447,7 @@ export class MessagingGatewayService {
     for (const ref of this.turnMedia.get(route) ?? [])
       this.options.releaseMedia?.(ref, route.sessionId);
     this.turnMedia.delete(route);
+    this.namedPaths.delete(route);
   }
 
   /**
@@ -1442,11 +1460,35 @@ export class MessagingGatewayService {
     after: Promise<void>
   ): Promise<void> {
     const refs = this.turnMedia.get(route) ?? [];
+    const named = [...new Set(this.namedPaths.get(route) ?? [])];
     this.turnMedia.delete(route);
-    if (refs.length === 0) return;
+    this.namedPaths.delete(route);
+    if (refs.length === 0 && named.length === 0) return;
     // The route is reused by the next turn; these files answer this one.
     const target = { ...route };
     await after;
+    // A file the words named by its path goes too, unless it already does.
+    const limits = this.connectors.get(target.platform)?.fileLimits?.() ?? null;
+    const going = new Set(
+      refs.map((ref) => {
+        const held = this.options.resolveMedia?.(ref, target.sessionId);
+        return held?.ok === true && held.kind === "document"
+          ? held.filename
+          : ref;
+      })
+    );
+    for (const filePath of limits == null ? [] : named) {
+      const leaf = filePath.split(/[\\/]/).pop() ?? filePath;
+      if (going.has(leaf)) continue;
+      const ref = await this.options.attachNamedFile?.(
+        target.sessionId,
+        filePath,
+        limits!
+      );
+      if (ref == null) continue;
+      going.add(leaf);
+      refs.push(ref);
+    }
     const failed: string[] = [];
     for (const ref of refs) {
       const media = this.options.resolveMedia?.(ref, target.sessionId);
@@ -1571,7 +1613,20 @@ export class MessagingGatewayService {
    * text is withheld (see relayingSession) precisely so this stands alone.
    */
   private deliver(route: Route, text: string): Promise<void> {
-    const words = forChat(text, route.platform);
+    // A phone opens no local path or localhost link: they go as the file's
+    // name (the file itself, in the user's own chat) and 💻.
+    const safe = phoneSafeReply(text, os.homedir());
+    if (safe.text !== text) {
+      console.log(
+        `[messaging] ${route.platform}:${route.chatId} reply named ${safe.paths.length} local path(s) or a loopback link; rewritten for the phone`
+      );
+      if (route.owner)
+        this.namedPaths.set(route, [
+          ...(this.namedPaths.get(route) ?? []),
+          ...safe.paths,
+        ]);
+    }
+    const words = forChat(safe.text, route.platform);
     const sent = this.safeSend(
       route.platform,
       route.chatId,

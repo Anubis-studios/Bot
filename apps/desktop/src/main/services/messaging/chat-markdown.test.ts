@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { forChat } from "./chat-markdown";
+import { forChat, phoneSafeReply } from "./chat-markdown";
 
 describe("forChat", () => {
   it("gives WhatsApp its own single-asterisk bold and bullet glyph", () => {
@@ -59,5 +59,54 @@ describe("forChat", () => {
 
   it("leaves a platform with no markup of its own untouched", () => {
     expect(forChat("**bold**", "abacus_channels" as never)).toBe("**bold**");
+  });
+});
+
+describe("phoneSafeReply", () => {
+  const safe = (text: string) => phoneSafeReply(text, "/home/me");
+
+  it("turns a loopback preview into 💻, port, path and all", () => {
+    expect(
+      safe("Your store is live at http://127.0.0.1:5173/index.html.").text
+    ).toBe("Your store is live at 💻.");
+    expect(
+      safe("Open http://localhost:3000 or [::1]:8080 to preview").text
+    ).toBe("Open 💻 or 💻 to preview");
+  });
+
+  it("names a local file by its name, and reports where it is", () => {
+    expect(
+      safe(
+        "Saved to C:\\Users\\Jo Ann\\Desktop\\app.py. And `~/Docs/report.docx`"
+      )
+    ).toEqual({
+      text: "Saved to app.py. And `report.docx`",
+      paths: [
+        "C:\\Users\\Jo Ann\\Desktop\\app.py",
+        "/home/me/Docs/report.docx",
+      ],
+    });
+    expect(
+      safe("See file:///Users/ann/notes.md and /tmp/out.pdf, done")
+    ).toEqual({
+      text: "See notes.md and out.pdf, done",
+      paths: ["/Users/ann/notes.md", "/tmp/out.pdf"],
+    });
+    expect(safe("see C:\\temp\\a.txt and C:\\temp\\b.txt").paths).toEqual([
+      "C:\\temp\\a.txt",
+      "C:\\temp\\b.txt",
+    ]);
+  });
+
+  it("leaves code blocks, web links and plain words alone", () => {
+    const code =
+      "```python\napp.run(host='127.0.0.1')\n# C:\\Users\\x\\a.py\n```";
+    expect(safe(code)).toEqual({ text: code, paths: [] });
+    for (const text of [
+      "Docs at https://example.com/home/guide",
+      "Meet at 10:30, see you",
+      "and/or the user's home/office",
+    ])
+      expect(safe(text)).toEqual({ text, paths: [] });
   });
 });
