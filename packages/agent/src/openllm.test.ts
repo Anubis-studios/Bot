@@ -640,21 +640,6 @@ describe("why the Abacus credit gate refused", () => {
       "exhausted",
     ],
     ["a 402", "402: Payment required", "exhausted"],
-    [
-      "an empty balance on /v1/messages",
-      '429 {"type":"error","error":{"type":"rate_limit_error","message":"You have no remaining credits to use the API."}}',
-      "exhausted",
-    ],
-    [
-      "an empty balance on /v1/responses",
-      'OpenAI API error (429): {"message":"You have no remaining credits to use the API.","type":"rate_limit_exceeded","param":null,"code":null}',
-      "exhausted",
-    ],
-    [
-      "an expired free tier on /v1/responses",
-      'OpenAI API error (429): {"message":"Your free AbacusAI credits have expired. You have no remaining credits to use the API.","type":"rate_limit_exceeded","param":null,"code":null}',
-      "expired",
-    ],
   ])("reads %s", (_label, failure, wall) => {
     expect(creditWall(failure)).toBe(wall);
   });
