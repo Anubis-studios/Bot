@@ -536,7 +536,7 @@ describe("one cause per turn, read from the whole chain of calls", () => {
     [
       "abacus",
       'OpenAI API error (403): {"message":"Model \'gpt-6-luna\' is not available on the free tier.","type":"permission_denied","param":null,"code":null}',
-      "model_unavailable",
+      "not_in_plan",
     ],
     [
       "abacus",
@@ -546,7 +546,7 @@ describe("one cause per turn, read from the whole chain of calls", () => {
     [
       "abacus",
       '403 {"type":"error","error":{"type":"permission_error","message":"Model \'claude-sonnet-5-5\' is not available on the free tier."}}',
-      "model_unavailable",
+      "not_in_plan",
     ],
   ] as const)("%s: %s → %s", (provider, raw, cause) => {
     expect(classifyAttempt(raw, provider)).toBe(cause);
