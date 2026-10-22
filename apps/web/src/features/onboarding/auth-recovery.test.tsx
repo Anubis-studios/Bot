@@ -232,9 +232,9 @@ it.each(paymentScreens)(
     expect(
       screen.queryByRole("button", { name: "Sign up for free" })
     ).toBeNull();
-    // Only a plan whose payment did not confirm points subscribers to support.
+    // Only a plan whose payment did not confirm offers subscribers a report.
     expect(
-      screen.queryByRole("button", { name: "support@abacus.ai" }) != null
+      screen.queryByRole("button", { name: "Report an issue" }) != null
     ).toBe(reason === "unconfirmed");
     expect(authStart).toHaveBeenCalledOnce();
   }

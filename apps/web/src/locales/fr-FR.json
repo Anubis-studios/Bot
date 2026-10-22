@@ -4080,7 +4080,8 @@
   "paymentRequired": {
     "unconfirmedTitle": "Choisissez une offre pour continuer à utiliser AbacusAI Bot",
     "unconfirmedBody": "Vous êtes connecté, mais votre compte a besoin d'une offre pour qu'AbacusAI Bot fonctionne.",
-    "alreadySubscribed": "Déjà abonné ? Contactez {{email}}",
+    "alreadySubscribed": "Déjà abonné ? {{link}}",
+    "reportIssue": "Signaler un problème",
     "trialEndedTitle": "Votre essai gratuit est terminé",
     "trialEndedBody": "Passez à une offre supérieure pour continuer à utiliser AbacusAI Bot avec ce compte.",
     "lapsedTitle": "Votre abonnement est terminé",

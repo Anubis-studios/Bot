@@ -4080,7 +4080,8 @@
   "paymentRequired": {
     "unconfirmedTitle": "Wähle einen Plan, um AbacusAI Bot weiter zu nutzen",
     "unconfirmedBody": "Du bist angemeldet, aber dein Konto braucht einen Plan, damit AbacusAI Bot funktioniert.",
-    "alreadySubscribed": "Schon abonniert? Schreib an {{email}}",
+    "alreadySubscribed": "Schon abonniert? {{link}}",
+    "reportIssue": "Problem melden",
     "trialEndedTitle": "Deine kostenlose Testphase ist abgelaufen",
     "trialEndedBody": "Führe ein Upgrade durch, um AbacusAI Bot mit diesem Konto weiter zu nutzen.",
     "lapsedTitle": "Dein Abonnement ist abgelaufen",

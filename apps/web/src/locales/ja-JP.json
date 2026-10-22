@@ -4080,7 +4080,8 @@
   "paymentRequired": {
     "unconfirmedTitle": "AbacusAI Bot を引き続き使うにはプランを選んでください",
     "unconfirmedBody": "サインイン済みですが、AbacusAI Bot を使うにはアカウントにプランが必要です。",
-    "alreadySubscribed": "すでにご契約中の場合は {{email}} までご連絡ください",
+    "alreadySubscribed": "すでにご契約中ですか？{{link}}",
+    "reportIssue": "問題を報告",
     "trialEndedTitle": "無料トライアルが終了しました",
     "trialEndedBody": "このアカウントで AbacusAI Bot を引き続き使うにはアップグレードしてください。",
     "lapsedTitle": "サブスクリプションが終了しました",

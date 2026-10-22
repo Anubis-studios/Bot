@@ -22,8 +22,9 @@ import { useAppContext } from "#renderer/lib/use-app-context";
 import { Button } from "#renderer/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "#renderer/ui/dialog";
 
-/** Where a subscriber whose payment did not confirm goes instead of paying twice. */
-const SUPPORT_EMAIL = "support@abacus.ai";
+/** Where a subscriber whose payment did not confirm reports it instead of paying twice. */
+const REPORT_ISSUE_URL =
+  "https://github.com/abacusai/abacusai-bot/issues/new?template=bug_report.yml";
 
 /** How often the account is asked again while checkout is open. */
 const CHECKOUT_POLL_MS = 5_000;
@@ -82,6 +83,7 @@ export const PaymentRequiredPanel = ({
   const { transport } = useAppContext();
   const queryClient = useQueryClient();
   const copy = paymentCopy(payment);
+  const reportText = t("paymentRequired.reportIssue");
   const lapsed = payment?.reason === "lapsed";
   const [billing, setBilling] = useState<BillingPlan | null>(null);
   const [checkoutAt, setCheckoutAt] = useState<number | null>(null);
@@ -156,26 +158,26 @@ export const PaymentRequiredPanel = ({
         {copy === COPY.unconfirmed && (
           <p
             className="text-muted-foreground text-xs"
-            data-slot="payment-support"
+            data-slot="payment-report"
           >
-            {/* Split on the address so each locale keeps its own word order. */}
-            {t("paymentRequired.alreadySubscribed", { email: SUPPORT_EMAIL })
-              .split(SUPPORT_EMAIL)
+            {/* Split on the link text so each locale keeps its own word order. */}
+            {t("paymentRequired.alreadySubscribed", { link: reportText })
+              .split(reportText)
               .flatMap((part, index) =>
                 index === 0
                   ? [part]
                   : [
                       <Button
-                        key="email"
+                        key="report"
                         variant="link"
                         className="text-muted-foreground h-auto p-0 text-xs underline"
                         onClick={() =>
                           void platformSystem(transport.client).openExternal({
-                            url: `mailto:${SUPPORT_EMAIL}`,
+                            url: REPORT_ISSUE_URL,
                           })
                         }
                       >
-                        {SUPPORT_EMAIL}
+                        {reportText}
                       </Button>,
                       part,
                     ]
