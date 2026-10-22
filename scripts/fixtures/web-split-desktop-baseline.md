@@ -8,7 +8,27 @@ renderer, a chunk split by a stray import), not against features. A feature
 that needs more is measured, reviewed and recorded here as a new baseline,
 in a commit of its own that says by how much it grew.
 
-## Current: `e38c6a995` (turn checkpoints, #500)
+## Current: `49eb0f84` (GitHub PR review, #517)
+
+**417 / 7841483 / 2632579.** Records the renderer with the session's pull
+request tab (the PR's conversation, checks, files and review composer) and
+its chip in the context tray. Against `e38c6a995`: +12 chunks (+2.96%),
++117944 bytes (+1.53%), +42198 gzip bytes (+1.63%). Main at `64dddfe0` stood
+at 406 / 7744214 / 2597595 (+0.27% bytes, under the 1% allowance); the PR
+tab adds +11 chunks, +97269 bytes (+1.26%) and +34984 gzip bytes (+1.35%) on
+top of it. Two chunks are the tab itself (`pr-tab`, `pr-presentation`); the
+other nine are modules the lazy PR tab now shares with other lazy chunks
+(the diff view, markdown, a few icons and UI primitives), split out of the
+chunks that used to hold them alone. The 1% allowance is unchanged.
+
+Measured from a frozen-lockfile build of `49eb0f84` and of main at
+`64dddfe0` (macOS arm64), summed the same way as
+`check-desktop-parity.mjs`. This baseline-only change touches no renderer
+code.
+
+## History
+
+### `e38c6a995` (turn checkpoints, #500)
 
 **405 / 7723539 / 2590381.** Records the renderer with the turn checkpoint
 card (a turn's changed files, their diffs and restore). Against `1096c705`:
@@ -21,8 +41,6 @@ Measured with `regenerate-web-split-desktop-baseline.sh e38c6a995 e38c6a995
 7dc9b5d46877f308e5b869cf1e29aafd08d2fbf9dbbb25a87c6a84dc0eccb750` (isolated
 archives, frozen-lockfile install, Linux x64), and main the same way at
 `7b091dc0f`. This baseline-only change touches no renderer code.
-
-## History
 
 ### `1096c705` (the app in Turkish)
 
@@ -142,7 +160,6 @@ chunks rather than growing it. The 1% allowance is unchanged.
 
 Measured from a clean worktree build of `85fc8927` (frozen-lockfile install,
 Linux x64, Node 24); the branch that records it adds no chunks.
-
 
 ### `0c83c457` (merged renderer features)
 
