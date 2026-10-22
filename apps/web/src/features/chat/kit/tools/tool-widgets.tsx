@@ -9,6 +9,7 @@ import type { ToolProps } from "@tanstack/ai-react/ui";
 import { useEffect, type ComponentType } from "react";
 
 import {
+  isBotHelpTool,
   isPaidFeatureTool,
   isSessionOfferTool,
 } from "#renderer/lib/bot-turns/turns";
@@ -17,6 +18,7 @@ import { descriptorFor, useThreadStore } from "../../store/selectors";
 import { toolKey } from "../../store/thread-store";
 import { useChatView, useSubagentScope } from "../context";
 import { PermissionCard } from "../permissions/permission-card";
+import { BotHelpToolCard } from "./bot-help";
 import { PaidFeatureToolCard } from "./paid-feature";
 import { SessionOfferCard } from "./session-offer";
 import { expanderFor, ToolLine } from "./tool-line";
@@ -59,7 +61,9 @@ export const sessionToolWidgets = new Proxy(KNOWN_TOOL_WIDGETS, {
       ? undefined
       : isPaidFeatureTool(name)
         ? PaidFeatureToolCard
-        : (known[name] ?? GenericLine),
+        : isBotHelpTool(name)
+          ? BotHelpToolCard
+          : (known[name] ?? GenericLine),
 }) as Record<string, Widget>;
 
 /** Bots: the inline approval card of the canvas BotApproval board. */
@@ -86,5 +90,7 @@ export const botToolWidgets = new Proxy({} as Record<string, Widget>, {
         ? SessionOfferCard
         : isPaidFeatureTool(name)
           ? PaidFeatureToolCard
-          : BotToolSlot,
+          : isBotHelpTool(name)
+            ? BotHelpToolCard
+            : BotToolSlot,
 }) as Record<string, Widget>;

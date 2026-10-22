@@ -453,6 +453,7 @@ import {
   clearBackendProbeCache,
   resolveBackend,
 } from "./services/providers/exec-backend-service";
+import { listAvailableModels } from "./services/providers/models";
 import { resolveSessionModel } from "./services/providers/session-model";
 import { SandboxProbeService } from "./services/sandbox/sandbox-probe-service";
 import { agentTurnBusy } from "./services/session/agent-busy";
@@ -1087,6 +1088,10 @@ export class ServiceHost {
       return new Set(Object.keys(states).filter((id) => states[id]));
     },
     planTier: () => abacusPlanTier(cachedAbacusAccount()),
+    planName: () => cachedAbacusAccount()?.plan ?? null,
+    models: () => listAvailableModels(),
+    bots: () =>
+      this.botService.list().map((bot) => ({ id: bot.id, name: bot.name })),
     workspacePath: () => {
       const workspace = this.workspaceService.getActiveWorkspace();
       return workspace?.isRemote === true ? null : (workspace?.path ?? null);

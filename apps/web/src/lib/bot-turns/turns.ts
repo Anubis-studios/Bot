@@ -3,13 +3,14 @@
  * user messages are one turn. What the bot skin shows of a turn is exactly
  * the old `spokenItems`: text with content, notices (`notification`,
  * `feature_limit`) and sub-agent parts, plus `offer_session`'s and
- * `paid_feature`'s cards. A turn with none of those and no deliverables
+ * `paid_feature`'s and `bot_help`'s cards. A turn with none of those and no deliverables
  * renders nothing; other tool calls never make it visible.
  *
  * `botThreadView` derives, once per messages array, what each message shows:
  * hidden or not, a gap stamp before it, the reaction badge on a user
  * message, and the turn's deliverables after its last shown message.
  */
+import { BOT_HELP_TOOL } from "@abacus-ai/contract/bot-help";
 import { PAID_FEATURE_TOOL } from "@abacus-ai/contract/toolsets";
 import type { UIMessage } from "@tanstack/ai-client";
 
@@ -59,7 +60,8 @@ export type SpokenPart =
   | { kind: "notice" }
   | { kind: "subagent" }
   | { kind: "session-offer" }
-  | { kind: "paid-feature" };
+  | { kind: "paid-feature" }
+  | { kind: "bot-help" };
 
 /** Prefixed with its MCP server's name (`agent-tools_offer_session`): matched by suffix. */
 export const isSessionOfferTool = (name: string): boolean =>
@@ -68,6 +70,10 @@ export const isSessionOfferTool = (name: string): boolean =>
 /** `paid_feature`, under its MCP server's prefix or bare. */
 export const isPaidFeatureTool = (name: string): boolean =>
   name === PAID_FEATURE_TOOL || name.endsWith(`_${PAID_FEATURE_TOOL}`);
+
+/** `bot_help`, under its MCP server's prefix or bare. */
+export const isBotHelpTool = (name: string): boolean =>
+  name === BOT_HELP_TOOL || name.endsWith(`_${BOT_HELP_TOOL}`);
 
 const indexes = new WeakMap<readonly UIMessage[], Map<string, number>>();
 
@@ -106,6 +112,11 @@ export function spokenParts(message: UIMessage): SpokenPart[] {
     // The upgrade the reply points at.
     if (part.type === "tool-call" && isPaidFeatureTool(part.name)) {
       out.push({ kind: "paid-feature" });
+      continue;
+    }
+    // The place in the app the reply names.
+    if (part.type === "tool-call" && isBotHelpTool(part.name)) {
+      out.push({ kind: "bot-help" });
       continue;
     }
     if (part.type !== "text") continue;

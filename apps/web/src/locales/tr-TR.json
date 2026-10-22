@@ -3050,6 +3050,9 @@
       "agentTitle": "{{feature}} web'de Abacus AI Agent'ta",
       "agentBody": "Planınız, web'de Abacus AI Agent'ta görsel ve video oluşturmayı ve düzenlemeyi, ayrıca ses oluşturmayı içerir. İsteğiniz orada hazır; düzenlemek istediğiniz görseli orada ekleyin.",
       "openAgent": "Abacus AI Agent'ta aç"
+    },
+    "botHelp": {
+      "open": "Aç"
     }
   },
   "notch": {

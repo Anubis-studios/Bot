@@ -3050,6 +3050,9 @@
       "agentTitle": "{{feature}} est dans Abacus AI Agent sur le web",
       "agentBody": "Votre forfait inclut la création et la retouche d'images et de vidéos, ainsi que la création d'audio, sur le web dans Abacus AI Agent. Votre demande y est déjà saisie ; joignez-y toute image à retoucher.",
       "openAgent": "Ouvrir dans Abacus AI Agent"
+    },
+    "botHelp": {
+      "open": "Ouvrir"
     }
   },
   "notch": {

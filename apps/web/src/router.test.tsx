@@ -1,11 +1,21 @@
+import { CONNECTORS } from "@abacus-ai/connectors/registry";
 /**
  * R1-T1: the route tree, redirects, masks and pop-up identity, on a real
  * router over memory history with the app's own components.
  */
+import {
+  BOT_HELP_ROUTES,
+  BOT_HELP_TOPICS,
+  botHelpPlace,
+  type BotHelpPlace,
+} from "@abacus-ai/contract/bot-help";
+import { PROVIDER_KEY_FIELDS } from "@abacus-ai/contract/settings";
+import { TOOLSETS_FOR_DISPLAY } from "@abacus-ai/contract/toolsets";
 import { createMemoryHistory } from "@tanstack/react-router";
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
+import enUS from "#locales/en-US.json";
 import { PANE_BOUNDARIES } from "#renderer/lib/navigation/pane-key";
 import { routeMasks } from "#renderer/router";
 
@@ -25,7 +35,16 @@ afterEach(async () => {
 type AnyRouteNode = {
   id: string;
   fullPath: string;
-  options: { staticData?: { area?: string; sidebar?: string } };
+  options: {
+    staticData?: { area?: string; sidebar?: string };
+    validateSearch?: {
+      "~standard": {
+        validate: (
+          value: unknown
+        ) => { value: Record<string, unknown> } | Promise<unknown>;
+      };
+    };
+  };
   children?: Record<string, AnyRouteNode> | AnyRouteNode[];
   parentRoute?: AnyRouteNode;
 };
@@ -86,6 +105,88 @@ describe("the route tree", () => {
     const ids = new Set(all.map((node) => node.id));
     for (const id of Object.keys(PANE_BOUNDARIES))
       expect(ids.has(id), id).toBe(true);
+  });
+});
+
+/**
+ * `bot_help`'s places name routes, search params and labels the model and
+ * the card both use. A page renamed or moved fails here, not in a user's
+ * chat: every place the contract can build, for every topic and every name
+ * a registry holds, opens a real route with a search it keeps, and every
+ * label it says in English is the app's own en-US text.
+ */
+describe("bot_help's places", () => {
+  const normal = (fullPath: string): string =>
+    fullPath.length > 1 ? fullPath.replace(/\/$/, "") : fullPath;
+  const routeFor = (to: string): AnyRouteNode | undefined =>
+    all.find((node) => normal(node.fullPath) === to);
+  const lookup = (key: string): unknown =>
+    key
+      .split(".")
+      .reduce<unknown>(
+        (at, part) =>
+          at != null && typeof at === "object"
+            ? (at as Record<string, unknown>)[part]
+            : undefined,
+        enUS
+      );
+  const names = [
+    "",
+    "no such thing",
+    ...PROVIDER_KEY_FIELDS.flatMap((field) => [field.provider, field.label]),
+    ...CONNECTORS.flatMap((connector) => [connector.id, connector.name]),
+    ...TOOLSETS_FOR_DISPLAY.map((set) => set.id),
+    "Price Watch",
+  ];
+  const places: BotHelpPlace[] = BOT_HELP_TOPICS.flatMap((topic) =>
+    names.map((name) =>
+      botHelpPlace(topic, name, [{ id: "bot-1", name: "Price Watch" }])
+    )
+  );
+
+  it("opens only routes the router has", () => {
+    for (const to of BOT_HELP_ROUTES) expect(routeFor(to), to).toBeDefined();
+  });
+
+  it("keeps every search param it sets, as the route validates it", () => {
+    for (const place of places) {
+      if (place.search == null) continue;
+      const route = routeFor(place.to)!;
+      const kept: Record<string, unknown> = {};
+      for (const node of ancestors(route)) {
+        const schema = node.options.validateSearch;
+        if (schema == null) continue;
+        const result = schema["~standard"].validate(place.search) as {
+          value?: Record<string, unknown>;
+        };
+        Object.assign(kept, result.value ?? {});
+      }
+      for (const [key, value] of Object.entries(place.search))
+        expect(kept[key], `${place.to}?${key}=${value}`).toBe(value);
+    }
+  });
+
+  it("says each label as the English app shows it", () => {
+    for (const place of places)
+      for (const label of place.path) {
+        if (label.key == null) continue;
+        const text = lookup(label.key);
+        expect(typeof text, label.key).toBe("string");
+        if (!label.key.startsWith("capabilities.toolsets."))
+          expect(text, label.key).toBe(label.text);
+      }
+  });
+
+  it('takes "can I use Gemini" to the Gemini key row of the Models page', () => {
+    expect(botHelpPlace("models", "gemini")).toEqual({
+      path: [
+        { key: "shell.rail.settings", text: "Settings" },
+        { key: "settings.pages.models", text: "Models" },
+        { text: "Google Gemini (AI Studio)" },
+      ],
+      to: "/settings/models",
+      search: { provider: "gemini" },
+    });
   });
 });
 
