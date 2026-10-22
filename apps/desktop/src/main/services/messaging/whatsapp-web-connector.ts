@@ -1,5 +1,5 @@
 import type { MessagingPlatformId } from "@abacus-ai/contract/messaging";
-import { BrowserWindow } from "electron";
+import { BrowserWindow, net, powerMonitor } from "electron";
 
 import {
   bringToFront,
@@ -8,7 +8,9 @@ import {
   presentAsDialog,
 } from "../../bring-to-front";
 import {
+  backoffDelayMs,
   BOT_SIGNATURE,
+  boundedWait,
   chunkMessage,
   looksLikeBotOutput,
   isEphemeralPreview,
@@ -16,6 +18,10 @@ import {
   normalizeScrapedText,
   type ConnectorCallbacks,
   type MessagingConnector,
+  PageLock,
+  type PageLockOptions,
+  PageStalledError,
+  PollScheduler,
   setFileInput,
 } from "./connector";
 import {
@@ -63,6 +69,28 @@ const LOGIN_POLL_MS = 1500;
 const INBOUND_POLL_MS = 5000;
 /** How long a name waits for the chat list after a link before saying WhatsApp is still syncing. */
 const CHAT_SYNC_WAIT_MS = 60_000;
+/** A user's read, queue wait included. Covers one sweep ahead of it plus a
+ * chat-list read (15s each at worst), well inside the agent's tool budget. */
+const USER_CALL_DEADLINE_MS = 30_000;
+/** A page script past its own waits (30s at most) is a page that stopped answering. */
+const SCRIPT_STALL_MS = 60_000;
+/** How long a (re)loaded page gets to show the chat list or the QR. */
+const PAGE_BOOT_WAIT_MS = 45_000;
+/** The same, for a page that was up already (after a wake or a stall). */
+const PAGE_SETTLE_MS = 10_000;
+const RELOADED = "after WhatsApp Web reloaded";
+/** In-place re-attaches before a page that once had the bridge settles for the page driver. */
+const RELINK_ATTACH_TRIES = 3;
+/** How often the page driver tries the bridge again. */
+const BRIDGE_RETRY_MS = 10 * 60_000;
+
+/**
+ * Whether the page can be used right now. `reconnecting`: the bridge or the
+ * page was lost (sleep, reload, a stall) and one relink is under way;
+ * `needs_relink`: the phone unlinked this device; `offline`: no network.
+ */
+type LinkState = "connected" | "reconnecting" | "needs_relink" | "offline";
+type RelinkOutcome = "connected" | "retry" | "needs_relink" | "offline";
 
 type LoginState = { loggedIn: boolean; loginVisible?: boolean };
 
@@ -81,8 +109,16 @@ export class WhatsAppWebConnector implements MessagingConnector {
   private selfLookupDone = false;
   /** Whether this link has told the gateway which chat is the user's own. */
   private selfLinkedAnnounced = false;
-  private loginTimer: NodeJS.Timeout | null = null;
-  private inboundTimer: NodeJS.Timeout | null = null;
+  private readonly loginPoll = new PollScheduler(
+    () => this.checkLogin(),
+    LOGIN_POLL_MS,
+    (error) => this.logFailure("login check", error)
+  );
+  private readonly inboundPoll = new PollScheduler(
+    () => this.sweepInbound(),
+    INBOUND_POLL_MS,
+    (error) => this.logFailure("inbound sweep", error)
+  );
   private contacts: Array<{ chatId: string; name: string; isGroup?: boolean }> =
     [];
   /** The account's own number ("+digits"): what "me" resolves to. */
@@ -126,32 +162,34 @@ export class WhatsAppWebConnector implements MessagingConnector {
     if (ring.length > 5) ring.shift();
     this.lastSentTexts.set(chatId, ring);
   }
-  /**
-   * One thing drives the page at a time: the sweep's search typing replaces
-   * the conversation a concurrent send just opened. Only the outermost call
-   * takes the lock; a nested claim would wait on its own caller.
-   */
-  private queue: Promise<unknown> = Promise.resolve();
-  /** Serialized tasks currently holding the page. See checkLogin. */
-  private driving = 0;
+  /** See PageLock. Only the outermost call takes it. */
+  private readonly lock = new PageLock();
 
-  private serialize<T>(task: () => Promise<T>): Promise<T> {
-    const wrapped = async (): Promise<T> => {
-      this.driving += 1;
-      try {
-        return await task();
-      } finally {
-        this.driving -= 1;
-      }
-    };
-    const run = this.queue.then(wrapped, wrapped);
-    // Failures belong to the caller, not to whoever is next in line.
-    this.queue = run.then(
-      () => undefined,
-      () => undefined
-    );
-    return run;
+  private serialize<T>(
+    task: () => Promise<T>,
+    options?: PageLockOptions
+  ): Promise<T> {
+    return this.lock.run(task, options);
   }
+
+  // The connection lifecycle: relink() is the one way back from a lost page
+  // or bridge; every call and sweep reads `link`.
+  private link: LinkState = "connected";
+  /** Why the link is down, for the error a call gets ("after …"). */
+  private linkCause = "";
+  /** The pane was told the link is down; it hears when it is back. */
+  private linkReported = false;
+  /** The relink attempt in flight, single-flight. */
+  private relinking: Promise<void> | null = null;
+  private relinkTimer: NodeJS.Timeout | null = null;
+  private relinkAttempts = 0;
+  /** The bridge attached on this link and has not been given up on. */
+  private bridgeExpected = false;
+  private lastAttachTry = 0;
+  private asleep = false;
+  private stopPowerWatch: (() => void) | null = null;
+  /** See USER_CALL_DEADLINE_MS; a field so a test can shorten it. */
+  private userDeadlineMs = USER_CALL_DEADLINE_MS;
 
   private firstInboundSweep = true;
   /** The pane-structure diagnostic runs once per connect. */
@@ -185,6 +223,7 @@ export class WhatsAppWebConnector implements MessagingConnector {
     }
 
     if (!this.running) return;
+    this.watchPower();
     this.pollLogin();
     void this.checkLogin();
   }
@@ -194,10 +233,12 @@ export class WhatsAppWebConnector implements MessagingConnector {
     this.loggedIn = false;
     this.bridgeReady = false;
     this.bridge = null;
-    if (this.loginTimer != null) clearInterval(this.loginTimer);
-    if (this.inboundTimer != null) clearInterval(this.inboundTimer);
-    this.loginTimer = null;
-    this.inboundTimer = null;
+    this.loginPoll.stop();
+    this.inboundPoll.stop();
+    this.stopPowerWatch?.();
+    this.stopPowerWatch = null;
+    if (this.relinkTimer != null) clearTimeout(this.relinkTimer);
+    this.relinkTimer = null;
     const win = this.window;
     this.window = null;
     if (win != null && !win.isDestroyed()) win.destroy();
@@ -205,7 +246,196 @@ export class WhatsAppWebConnector implements MessagingConnector {
   }
 
   async sendText(chatId: string, text: string): Promise<void> {
-    return this.serialize(() => this.sendTextNow(chatId, text));
+    return this.userCall(() => this.sendTextNow(chatId, text), "send");
+  }
+
+  // ── Connection lifecycle ───────────────────────────────────────────────
+
+  /** Sleep pauses the polls; waking checks the page and bridge once. */
+  private watchPower(): void {
+    const onSuspend = (): void => {
+      this.asleep = true;
+      this.loginPoll.pause();
+      this.inboundPoll.pause();
+      if (this.relinkTimer != null) clearTimeout(this.relinkTimer);
+      this.relinkTimer = null;
+    };
+    const onWake = (): void => {
+      if (!this.running) return;
+      this.asleep = false;
+      this.loginPoll.resume();
+      if (!this.loggedIn) return;
+      this.linkCause = "after the computer woke up";
+      this.relink(this.linkCause);
+    };
+    powerMonitor.on("suspend", onSuspend);
+    powerMonitor.on("resume", onWake);
+    powerMonitor.on("unlock-screen", onWake);
+    this.stopPowerWatch = () => {
+      powerMonitor.removeListener("suspend", onSuspend);
+      powerMonitor.removeListener("resume", onWake);
+      powerMonitor.removeListener("unlock-screen", onWake);
+    };
+  }
+
+  /**
+   * Get the page and bridge back: one attempt at a time, the next on a
+   * bounded backoff, the polls paused meanwhile. Never per sweep.
+   */
+  private relink(cause: string): void {
+    if (!this.running || !this.loggedIn || this.link === "needs_relink") return;
+    if (this.link === "connected") {
+      this.link = "reconnecting";
+      this.linkCause = cause;
+      this.relinkAttempts = 0;
+      this.inboundPoll.pause();
+      this.callbacks.onLog(`whatsapp-web: reconnecting ${cause}`);
+    }
+    if (this.relinking != null || this.asleep) return;
+    if (this.relinkTimer != null) clearTimeout(this.relinkTimer);
+    this.relinkTimer = null;
+    this.relinking = this.serialize(() => this.relinkOnce(), { user: true })
+      .catch((error: unknown): RelinkOutcome => {
+        this.logFailure("reconnect", error);
+        return "retry";
+      })
+      .then((outcome) => {
+        this.relinking = null;
+        this.settleRelink(outcome);
+      });
+  }
+
+  /** One try: wait out a booting page, reload one that stays blank or lost
+   * the bridge again, then attach. */
+  private async relinkOnce(): Promise<RelinkOutcome> {
+    if (!this.running || !this.loggedIn) return "connected";
+    this.relinkAttempts += 1;
+    if (!net.isOnline()) return "offline";
+    let page = await this.waitForPage(
+      this.linkCause === RELOADED ? PAGE_BOOT_WAIT_MS : PAGE_SETTLE_MS
+    );
+    if (page === "blank" || (this.relinkAttempts > 1 && this.bridgeExpected)) {
+      await this.reloadPage();
+      page = await this.waitForPage(PAGE_BOOT_WAIT_MS);
+    }
+    if (page === "login") return "needs_relink";
+    if (page === "blank") return "retry";
+    if (!this.bridgeExpected) return "connected";
+    if (await this.ensureBridge()) return "connected";
+    if (this.relinkAttempts < RELINK_ATTACH_TRIES) return "retry";
+    // The page itself is fine: the page driver carries on, as on a build
+    // the library never fit.
+    this.bridgeExpected = false;
+    this.callbacks.onLog(
+      "whatsapp-web: the bridge did not come back; using the page driver"
+    );
+    return "connected";
+  }
+
+  private settleRelink(outcome: RelinkOutcome): void {
+    if (!this.running || !this.loggedIn || this.link === "connected") return;
+    if (outcome === "connected") {
+      this.link = "connected";
+      this.relinkAttempts = 0;
+      this.callbacks.onLog("whatsapp-web: reconnected");
+      if (this.linkReported) this.callbacks.onState("connected");
+      this.linkReported = false;
+      if (!this.asleep) this.inboundPoll.resume();
+      return;
+    }
+    if (outcome === "needs_relink") {
+      this.unlinked();
+      return;
+    }
+    this.link = outcome === "offline" ? "offline" : "reconnecting";
+    this.linkReported = true;
+    this.callbacks.onState("connecting", this.linkMessage());
+    if (this.asleep) return;
+    this.relinkTimer = setTimeout(() => {
+      this.relinkTimer = null;
+      this.relink(this.linkCause);
+    }, backoffDelayMs(this.relinkAttempts));
+  }
+
+  /** What the page settles on: the chat list, the QR, or still nothing. */
+  private async waitForPage(ms: number): Promise<"linked" | "login" | "blank"> {
+    const deadline = Date.now() + ms;
+    let qr = 0;
+    while (Date.now() < deadline) {
+      const state = await this.run<LoginState>(LOGIN_STATE_SCRIPT, {});
+      if (state?.loggedIn === true) return "linked";
+      qr = state?.loginVisible === true ? qr + 1 : 0;
+      if (qr >= 3) return "login";
+      await delay(1000);
+    }
+    return "blank";
+  }
+
+  /** In place, never a new window: see sendTextNow. */
+  private async reloadPage(): Promise<void> {
+    const win = this.ensureWindow();
+    if (win == null || win.isDestroyed()) return;
+    this.callbacks.onLog("whatsapp-web: reloading WhatsApp Web to reconnect");
+    this.lastNumberOpened = null;
+    await boundedWait(
+      win.loadURL(WHATSAPP_WEB_URL, { userAgent: userAgent() }),
+      PAGE_BOOT_WAIT_MS
+    ).catch(() => {});
+  }
+
+  /** The error a call gets while the link is down: what, and what to do. */
+  private linkMessage(): string {
+    if (this.link === "needs_relink")
+      return "WhatsApp needs to be linked again: open Library → Messaging and scan the QR code with the phone.";
+    if (this.link === "offline")
+      return "This computer is offline, so WhatsApp cannot be reached. It reconnects by itself once the network is back.";
+    return `WhatsApp is reconnecting ${this.linkCause}. Try again in a moment; nothing needs to be done.`;
+  }
+
+  /**
+   * A user's call: waits for a relink already under way, else fails at once
+   * on a link that is down, then goes ahead of background sweeps. A read is
+   * cut short at the deadline, which also ends its page calls; a send never
+   * is, since one stopped halfway can still land.
+   */
+  private async userCall<T>(
+    work: () => Promise<T>,
+    kind: "read" | "send" = "read"
+  ): Promise<T> {
+    const deadline = Date.now() + this.userDeadlineMs;
+    if (this.relinking != null)
+      await boundedWait(this.relinking, this.userDeadlineMs).catch(() => {});
+    if (this.link !== "connected") throw new Error(this.linkMessage());
+    if (kind === "send") return this.serialize(work, { user: true });
+    return this.serialize(work, {
+      user: true,
+      deadlineMs: Math.max(0, deadline - Date.now()),
+      interruptible: true,
+      timeoutError: () =>
+        new Error(
+          this.link !== "connected"
+            ? this.linkMessage()
+            : !this.contactsReady()
+              ? "WhatsApp is still syncing your chats after linking. Try again in a minute."
+              : `WhatsApp did not answer within ${this.userDeadlineMs / 1000}s. Try again in a moment.`
+        ),
+    });
+  }
+
+  /** The bridge for this call, if the lifecycle has it: one cheap liveness
+   * check, never an attach wait. A bridge found gone starts a relink. */
+  private async useBridge(): Promise<boolean> {
+    if (this.bridge == null || !this.bridgeReady) return false;
+    if (await this.bridge.isLive()) return true;
+    this.bridgeReady = false;
+    this.relink("after the store bridge detached");
+    throw new Error(this.linkMessage());
+  }
+
+  private logFailure(what: string, error: unknown): void {
+    this.callbacks.onLog(
+      `whatsapp-web: ${what} failed: ${String((error as Error)?.message ?? error)}`
+    );
   }
 
   private async sendTextNow(chatId: string, text: string): Promise<void> {
@@ -224,7 +454,7 @@ export class WhatsAppWebConnector implements MessagingConnector {
       toSelf ? `${chunk}${BOT_SIGNATURE}` : chunk
     );
 
-    if (await this.ensureBridge()) {
+    if (await this.useBridge()) {
       for (const chunk of chunks) {
         this.rememberSent(chatId, chunk);
         await this.sendViaBridge(chatId, chunk);
@@ -285,10 +515,11 @@ export class WhatsAppWebConnector implements MessagingConnector {
     }
   }
 
-  /** Is the bridge usable right now? A page reload drops it; re-attaches. */
+  /** Attach the bridge, waiting for it: on a link and in a relink only. */
   private async ensureBridge(): Promise<boolean> {
     if (this.bridge == null) return false;
     const ready = await this.bridge.ensure();
+    if (ready) this.bridgeExpected = true;
     if (ready && !this.bridgeReady) {
       this.bridgeReady = true;
       // Identity before the chat list: on a fresh link the list is minutes
@@ -620,7 +851,10 @@ export class WhatsAppWebConnector implements MessagingConnector {
     filePath: string,
     caption?: string
   ): Promise<void> {
-    return this.serialize(() => this.sendFileNow(chatId, filePath, caption));
+    return this.userCall(
+      () => this.sendFileNow(chatId, filePath, caption),
+      "send"
+    );
   }
 
   private async sendFileNow(
@@ -812,7 +1046,7 @@ export class WhatsAppWebConnector implements MessagingConnector {
       at: string;
     }>
   > {
-    return this.serialize(() => this.readChatNow(chatId, limit));
+    return this.userCall(() => this.readChatNow(chatId, limit));
   }
 
   /** Chats with messages waiting. Bridge only: unread badges off the chat
@@ -820,9 +1054,9 @@ export class WhatsAppWebConnector implements MessagingConnector {
   async unreadChats(): Promise<
     Array<{ chatId: string; name: string; unreadCount: number }>
   > {
-    return this.serialize(async () => {
+    return this.userCall(async () => {
       if (!this.loggedIn) throw new Error("WhatsApp is not linked right now.");
-      if (this.bridge == null || !(await this.ensureBridge()))
+      if (this.bridge == null || !(await this.useBridge()))
         throw new Error(
           "WhatsApp's unread counts are out of reach: the store bridge is not attached to this session."
         );
@@ -853,7 +1087,7 @@ export class WhatsAppWebConnector implements MessagingConnector {
     }>
   > {
     if (!this.loggedIn) return [];
-    if (this.bridge != null && (await this.ensureBridge())) {
+    if (this.bridge != null && (await this.useBridge())) {
       const jid = await this.toJid(chatId);
       const read: BridgeRead = await this.bridge.readChat(jid, limit);
       if (read.ok === true) {
@@ -900,7 +1134,7 @@ export class WhatsAppWebConnector implements MessagingConnector {
   ): Promise<
     Array<{ chatId: string; name: string; snippet: string; when: string }>
   > {
-    return this.serialize(() => this.searchMessagesNow(query, limit));
+    return this.userCall(() => this.searchMessagesNow(query, limit));
   }
 
   private async searchMessagesNow(
@@ -921,8 +1155,7 @@ export class WhatsAppWebConnector implements MessagingConnector {
   // ── Login ──────────────────────────────────────────────────────────────
 
   private pollLogin(): void {
-    if (this.loginTimer != null) clearInterval(this.loginTimer);
-    this.loginTimer = setInterval(() => void this.checkLogin(), LOGIN_POLL_MS);
+    this.loginPoll.start();
   }
 
   /** See MessagingConnector.probeLive: one login check, now, then the answer. */
@@ -940,7 +1173,7 @@ export class WhatsAppWebConnector implements MessagingConnector {
     if (!this.running) return;
     // Never judge a page the connector is driving: a send's search takes the
     // chat list, the probe's evidence, off the DOM and reads as a logout.
-    if (this.driving > 0) {
+    if (this.lock.busy) {
       this.signedOutTicks = 0;
       return;
     }
@@ -951,6 +1184,8 @@ export class WhatsAppWebConnector implements MessagingConnector {
 
     if (state.loggedIn && !this.loggedIn) {
       this.loggedIn = true;
+      this.link = "connected";
+      this.linkReported = false;
       const win = this.window;
       if (win != null && !win.isDestroyed() && win.isVisible()) {
         win.hide();
@@ -991,29 +1226,43 @@ export class WhatsAppWebConnector implements MessagingConnector {
       // A QR is a real logout, believed after a few polls. A page with neither
       // QR nor chat list is WhatsApp booting (every /send?phone= reloads the
       // SPA) and must stay blank a full minute, or a slow boot wipes the link
-      // and flaps forever.
+      // and flaps forever. Blank past that is a dead page, not a logout.
       this.signedOutTicks += 1;
       if (this.signedOutTicks < (state.loginVisible === true ? 4 : 40)) return;
       this.signedOutTicks = 0;
-      // Report the link as broken, not "connecting": whoever this was, it is
-      // not that account any more.
-      this.loggedIn = false;
-      this.self = null;
-      this.selfJid = null;
-      this.ownChatJid = null;
-      this.ownChatVerdicts.clear();
-      this.selfDisplayName = null;
-      this.lastNumberOpened = null;
-      this.bridgeReady = false;
-      // A different phone may be on the other end of the next link.
-      this.selfLookupDone = false;
-      this.selfLinkedAnnounced = false;
-      this.callbacks.onState(
-        "needs_login",
-        "WhatsApp is no longer linked. The phone unlinked this device or the session expired. Reconnect and scan the QR again."
-      );
-      this.pollLogin();
+      if (state.loginVisible !== true) {
+        this.relink("after WhatsApp Web went blank");
+        return;
+      }
+      this.unlinked();
     }
+  }
+
+  /** The phone unlinked this device: say so, and wait for a new link. */
+  private unlinked(): void {
+    if (this.relinkTimer != null) clearTimeout(this.relinkTimer);
+    this.relinkTimer = null;
+    this.link = "needs_relink";
+    this.linkReported = false;
+    // Report the link as broken, not "connecting": whoever this was, it is
+    // not that account any more.
+    this.loggedIn = false;
+    this.self = null;
+    this.selfJid = null;
+    this.ownChatJid = null;
+    this.ownChatVerdicts.clear();
+    this.selfDisplayName = null;
+    this.lastNumberOpened = null;
+    this.bridgeReady = false;
+    this.bridgeExpected = false;
+    // A different phone may be on the other end of the next link.
+    this.selfLookupDone = false;
+    this.selfLinkedAnnounced = false;
+    this.callbacks.onState(
+      "needs_login",
+      "WhatsApp is no longer linked. The phone unlinked this device or the session expired. Reconnect and scan the QR again."
+    );
+    this.pollLogin();
   }
 
   /** Bring the login window back to the front (re-scan, or first login). */
@@ -1038,24 +1287,25 @@ export class WhatsAppWebConnector implements MessagingConnector {
   // ── Inbound + contacts ─────────────────────────────────────────────────
 
   private startInboundPolling(): void {
-    if (this.inboundTimer != null) clearInterval(this.inboundTimer);
     this.firstInboundSweep = true;
-    this.inboundTimer = setInterval(
-      () => void this.sweepInbound(),
-      INBOUND_POLL_MS
-    );
+    this.inboundPoll.start();
   }
 
   private async sweepInbound(): Promise<void> {
-    if (!this.running || !this.loggedIn) return;
+    if (!this.running || !this.loggedIn || this.link !== "connected") return;
     return this.serialize(() => this.sweepInboundNow());
   }
 
   private async sweepInboundNow(): Promise<void> {
-    if (!this.running || !this.loggedIn) return;
-    if (await this.ensureBridge()) {
+    if (!this.running || !this.loggedIn || this.link !== "connected") return;
+    if (await this.useBridge()) {
       await this.sweepBridgeInbound();
       return;
+    }
+    // The page driver retries the bridge now and then, never every sweep.
+    if (Date.now() - this.lastAttachTry > BRIDGE_RETRY_MS) {
+      this.lastAttachTry = Date.now();
+      if (await this.ensureBridge()) return;
     }
     await this.refreshContacts();
     const rows = await this.run<
@@ -1312,10 +1562,12 @@ export class WhatsAppWebConnector implements MessagingConnector {
     win.on("closed", () => {
       this.window = null;
     });
-    // Every load is a fresh page; whatever the bridge injected is gone.
+    // Every load is a fresh page; whatever the bridge injected is gone, and
+    // the relink puts it back.
     win.webContents.on("did-finish-load", () => {
       this.bridge?.reset();
       this.bridgeReady = false;
+      if (this.bridgeExpected) this.relink(RELOADED);
     });
     return win;
   }
@@ -1332,20 +1584,30 @@ export class WhatsAppWebConnector implements MessagingConnector {
   }
 
   /** Run one driver script in the page (an async IIFE, for top-level await)
-   * and return its JSON value. A throw resolves to null: not ready yet. */
+   * and return its JSON value. A throw resolves to null: not ready yet. A
+   * call cut short throws; a page that stops answering starts a relink. */
   private async run<T>(
     script: string,
     args: Record<string, unknown>
   ): Promise<T | null> {
+    const signal = this.lock.signal;
+    signal?.throwIfAborted();
     const win = this.ensureWindow();
     if (win == null || win.isDestroyed()) return null;
     try {
-      const value = (await win.webContents.executeJavaScript(
-        `(async function(args){ ${script} })(${JSON.stringify(args)})`,
-        true
+      const value = (await boundedWait(
+        win.webContents.executeJavaScript(
+          `(async function(args){ ${script} })(${JSON.stringify(args)})`,
+          true
+        ),
+        SCRIPT_STALL_MS,
+        signal
       )) as T;
       return value ?? null;
     } catch (error) {
+      if (signal?.aborted === true) throw signal.reason;
+      if (error instanceof PageStalledError)
+        this.relink("after the page stopped answering");
       this.callbacks.onLog(
         `whatsapp-web: script failed: ${String((error as Error)?.message ?? error)}`
       );

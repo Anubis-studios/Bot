@@ -18,6 +18,7 @@ import {
   normalizeScrapedText,
   type ConnectorCallbacks,
   type MessagingConnector,
+  PollScheduler,
 } from "./connector";
 
 /**
@@ -78,8 +79,16 @@ export class TelegramWebConnector implements MessagingConnector {
   private loggedIn = false;
   /** Consecutive signed-out polls after a login. See checkLogin. */
   private signedOutTicks = 0;
-  private loginTimer: NodeJS.Timeout | null = null;
-  private inboundTimer: NodeJS.Timeout | null = null;
+  private readonly loginPoll = new PollScheduler(
+    () => this.checkLogin(),
+    LOGIN_POLL_MS,
+    (error) => this.logFailure("login check", error)
+  );
+  private readonly inboundPoll = new PollScheduler(
+    () => this.sweepInbound(),
+    INBOUND_POLL_MS,
+    (error) => this.logFailure("inbound sweep", error)
+  );
   private contacts: Array<{ chatId: string; name: string }> = [];
   /** Chat id -> the last inbound message id we already reported, for dedupe. */
   private lastSeen = new Map<string, string>();
@@ -161,10 +170,8 @@ export class TelegramWebConnector implements MessagingConnector {
   async stop(): Promise<void> {
     this.running = false;
     this.loggedIn = false;
-    if (this.loginTimer != null) clearInterval(this.loginTimer);
-    if (this.inboundTimer != null) clearInterval(this.inboundTimer);
-    this.loginTimer = null;
-    this.inboundTimer = null;
+    this.loginPoll.stop();
+    this.inboundPoll.stop();
     const win = this.window;
     this.window = null;
     if (win != null && !win.isDestroyed()) win.destroy();
@@ -256,8 +263,13 @@ export class TelegramWebConnector implements MessagingConnector {
   // ── Login ──────────────────────────────────────────────────────────────
 
   private pollLogin(): void {
-    if (this.loginTimer != null) clearInterval(this.loginTimer);
-    this.loginTimer = setInterval(() => void this.checkLogin(), LOGIN_POLL_MS);
+    this.loginPoll.start();
+  }
+
+  private logFailure(what: string, error: unknown): void {
+    this.callbacks.onLog(
+      `telegram-web: ${what} failed: ${String((error as Error)?.message ?? error)}`
+    );
   }
 
   /** Consecutive login polls the page failed to answer. See checkLogin. */
@@ -381,12 +393,8 @@ export class TelegramWebConnector implements MessagingConnector {
   // ── Inbound + contacts ─────────────────────────────────────────────────
 
   private startInboundPolling(): void {
-    if (this.inboundTimer != null) clearInterval(this.inboundTimer);
     this.firstInboundSweep = true;
-    this.inboundTimer = setInterval(
-      () => void this.sweepInbound(),
-      INBOUND_POLL_MS
-    );
+    this.inboundPoll.start();
   }
 
   private async sweepInbound(): Promise<void> {

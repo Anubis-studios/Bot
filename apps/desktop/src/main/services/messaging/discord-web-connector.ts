@@ -14,6 +14,7 @@ import {
   normalizeScrapedText,
   type ConnectorCallbacks,
   type MessagingConnector,
+  PollScheduler,
   setFileInput,
 } from "./connector";
 
@@ -114,8 +115,16 @@ export class DiscordWebConnector implements MessagingConnector {
   private signedOutTicks = 0;
   /** Consecutive polls stuck between login form and app. See checkLogin. */
   private bootStuckTicks = 0;
-  private loginTimer: NodeJS.Timeout | null = null;
-  private inboundTimer: NodeJS.Timeout | null = null;
+  private readonly loginPoll = new PollScheduler(
+    () => this.checkLogin(),
+    LOGIN_POLL_MS,
+    (error) => this.logFailure("login check", error)
+  );
+  private readonly inboundPoll = new PollScheduler(
+    () => this.pollInbound(),
+    INBOUND_POLL_MS,
+    (error) => this.logFailure("inbound sweep", error)
+  );
   /** DMs, off the home page's private-channels rail. */
   private contacts: Array<{ chatId: string; name: string }> = [];
   /** Rail reads since login. The rail renders after `connected`: one empty
@@ -207,10 +216,8 @@ export class DiscordWebConnector implements MessagingConnector {
     this.loggedIn = false;
     this.railReads = 0;
     this.contactsRead = false;
-    if (this.loginTimer != null) clearInterval(this.loginTimer);
-    if (this.inboundTimer != null) clearInterval(this.inboundTimer);
-    this.loginTimer = null;
-    this.inboundTimer = null;
+    this.loginPoll.stop();
+    this.inboundPoll.stop();
     const win = this.window;
     this.window = null;
     if (win != null && !win.isDestroyed()) win.destroy();
@@ -725,8 +732,13 @@ export class DiscordWebConnector implements MessagingConnector {
   // ── Login ──────────────────────────────────────────────────────────────
 
   private pollLogin(): void {
-    if (this.loginTimer != null) clearInterval(this.loginTimer);
-    this.loginTimer = setInterval(() => void this.checkLogin(), LOGIN_POLL_MS);
+    this.loginPoll.start();
+  }
+
+  private logFailure(what: string, error: unknown): void {
+    this.callbacks.onLog(
+      `discord-web: ${what} failed: ${String((error as Error)?.message ?? error)}`
+    );
   }
 
   /** See MessagingConnector.probeLive: one login check, now, then the answer. */
@@ -837,13 +849,14 @@ export class DiscordWebConnector implements MessagingConnector {
   // ── Inbound + contacts ─────────────────────────────────────────────────
 
   private startInboundPolling(): void {
-    if (this.inboundTimer != null) clearInterval(this.inboundTimer);
     this.firstInboundSweep = true;
-    this.inboundTimer = setInterval(() => {
-      // Sweeps queued behind a send/read/crawl would all run back to back.
-      if (this.driving > 0) return;
-      void this.serialize(() => this.sweepInbound());
-    }, INBOUND_POLL_MS);
+    this.inboundPoll.start();
+  }
+
+  private async pollInbound(): Promise<void> {
+    // Sweeps queued behind a send/read/crawl would all run back to back.
+    if (this.driving > 0) return;
+    await this.serialize(() => this.sweepInbound());
   }
 
   private async sweepInbound(): Promise<void> {

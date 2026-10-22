@@ -169,6 +169,188 @@ export const backoffDelayMs = (attempt: number): number => {
 };
 
 /**
+ * A page poll that never piles up: the next run is armed only once the last
+ * one settled, and none runs while paused. A page that answers slowly (after
+ * a sleep, say) gets polled less often, never queued behind itself.
+ */
+export class PollScheduler {
+  private timer: ReturnType<typeof setTimeout> | null = null;
+  private inFlight = false;
+  private active = false;
+  private paused = false;
+
+  constructor(
+    private readonly task: () => Promise<void>,
+    private readonly everyMs: number,
+    private readonly onError: (error: unknown) => void
+  ) {}
+
+  /** (Re)start: the first run comes one interval from now. */
+  start(): void {
+    this.active = true;
+    this.paused = false;
+    this.arm(this.everyMs);
+  }
+
+  stop(): void {
+    this.active = false;
+    this.disarm();
+  }
+
+  pause(): void {
+    this.paused = true;
+    this.disarm();
+  }
+
+  /** Run again now, unless one is still in flight (it re-arms when done). */
+  resume(): void {
+    if (!this.active || !this.paused) return;
+    this.paused = false;
+    if (!this.inFlight) this.arm(0);
+  }
+
+  private disarm(): void {
+    if (this.timer != null) clearTimeout(this.timer);
+    this.timer = null;
+  }
+
+  private arm(ms: number): void {
+    this.disarm();
+    if (!this.active || this.paused) return;
+    this.timer = setTimeout(() => void this.tick(), ms);
+  }
+
+  private async tick(): Promise<void> {
+    this.timer = null;
+    if (this.inFlight || !this.active || this.paused) return;
+    this.inFlight = true;
+    try {
+      await this.task();
+    } catch (error) {
+      this.onError(error);
+    } finally {
+      this.inFlight = false;
+      this.arm(this.everyMs);
+    }
+  }
+}
+
+/** What `boundedWait` rejects with when the page took longer than allowed. */
+export class PageStalledError extends Error {}
+
+/** `work`, but given up on after `ms` or once `signal` aborts. The work itself
+ * keeps running; only the wait for it ends. */
+export const boundedWait = <T>(
+  work: Promise<T>,
+  ms: number,
+  signal?: AbortSignal
+): Promise<T> =>
+  new Promise<T>((resolve, reject) => {
+    const onAbort = (): void => finish(() => reject(signal?.reason));
+    const timer = setTimeout(
+      () =>
+        finish(() =>
+          reject(new PageStalledError(`no answer within ${ms / 1000}s`))
+        ),
+      ms
+    );
+    const finish = (settle: () => void): void => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+      settle();
+    };
+    if (signal?.aborted === true) return finish(() => reject(signal.reason));
+    signal?.addEventListener("abort", onAbort, { once: true });
+    work.then(
+      (value) => finish(() => resolve(value)),
+      (error: unknown) => finish(() => reject(error))
+    );
+  });
+
+export type PageLockOptions = {
+  /** A user's call: goes ahead of queued background work. */
+  user?: boolean;
+  /** Given up after this long. Before its turn the call just leaves the queue. */
+  deadlineMs?: number;
+  /** Also cut short once running: its signal aborts and the caller is answered. */
+  interruptible?: boolean;
+  /** What the caller gets at the deadline. */
+  timeoutError?: () => Error;
+};
+
+type PageLockWaiter = { user: boolean; start: () => void };
+
+/**
+ * One thing drives a page at a time: a sweep's search typing replaces the
+ * conversation a send just opened. User calls go ahead of background work,
+ * and a call with a deadline gives up its place when the deadline passes.
+ * Never claimed from inside a task: a nested claim waits on its own caller.
+ */
+export class PageLock {
+  private holder: AbortController | null = null;
+  private readonly waiting: PageLockWaiter[] = [];
+
+  /** Something holds the page or waits for it. */
+  get busy(): boolean {
+    return this.holder != null || this.waiting.length > 0;
+  }
+
+  /** The running task's signal: page calls made inside it end when it is cut short. */
+  get signal(): AbortSignal | undefined {
+    return this.holder?.signal;
+  }
+
+  run<T>(
+    task: (signal: AbortSignal) => Promise<T>,
+    options: PageLockOptions = {}
+  ): Promise<T> {
+    const controller = new AbortController();
+    return new Promise<T>((resolve, reject) => {
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      let done = false;
+      const settle = (answer: () => void): void => {
+        if (done) return;
+        done = true;
+        if (timer != null) clearTimeout(timer);
+        answer();
+      };
+      const waiter: PageLockWaiter = {
+        user: options.user === true,
+        start: () => {
+          this.holder = controller;
+          void (async () => {
+            try {
+              const value = await task(controller.signal);
+              settle(() => resolve(value));
+            } catch (error) {
+              settle(() => reject(error));
+            } finally {
+              this.holder = null;
+              this.waiting.shift()?.start();
+            }
+          })();
+        },
+      };
+      if (options.deadlineMs != null)
+        timer = setTimeout(() => {
+          const queued = this.waiting.indexOf(waiter);
+          if (queued >= 0) this.waiting.splice(queued, 1);
+          else if (options.interruptible !== true) return;
+          const error =
+            options.timeoutError?.() ?? new Error("The page did not answer.");
+          controller.abort(error);
+          settle(() => reject(error));
+        }, options.deadlineMs);
+      // Behind earlier user calls, ahead of any queued background work.
+      const at = waiter.user ? this.waiting.findIndex((w) => !w.user) : -1;
+      if (at < 0) this.waiting.push(waiter);
+      else this.waiting.splice(at, 0, waiter);
+      if (this.holder == null) this.waiting.shift()?.start();
+    });
+  }
+}
+
+/**
  * Split a reply to fit a platform's message cap, preferring paragraph then line
  * boundaries so a long agent answer doesn't get cut mid-word.
  */

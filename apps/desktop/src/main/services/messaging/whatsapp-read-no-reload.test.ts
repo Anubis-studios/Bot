@@ -25,8 +25,8 @@ describe("reading a chat the store has not loaded", () => {
     const internals = connector as unknown as {
       loggedIn: boolean;
       bridge: unknown;
+      bridgeReady: boolean;
       bridgeChats: unknown[];
-      ensureBridge: () => Promise<boolean>;
       openChat: () => Promise<unknown>;
       readChatNow: (chatId: string, limit: number) => Promise<unknown[]>;
     };
@@ -34,8 +34,9 @@ describe("reading a chat the store has not loaded", () => {
     internals.bridgeChats = [
       { jid: "919111111111@c.us", name: "Ma", isGroup: false, isMe: false },
     ];
-    internals.ensureBridge = async () => true;
+    internals.bridgeReady = true;
     internals.bridge = {
+      isLive: async () => true,
       readChat: async () => ({
         ok: false,
         reason: "Chat not found for 919111111111@c.us",

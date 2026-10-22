@@ -109,6 +109,17 @@ export class WhatsAppBridge {
     return this.attached;
   }
 
+  /** Whether the library is still hooked into WhatsApp, without injecting or
+   * waiting: the per-call check. Re-attaching is the connector's relink. */
+  async isLive(): Promise<boolean> {
+    const present = await this.host.run<{ ready: boolean }>(
+      PRESENCE_SCRIPT,
+      {}
+    );
+    this.attached = present?.ready === true;
+    return this.attached;
+  }
+
   /** Inject the library if needed and wait for it to find WhatsApp's modules.
    * False (vendored file missing, or cannot attach) means use the DOM. */
   async ensure(): Promise<boolean> {
