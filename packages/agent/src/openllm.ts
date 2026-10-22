@@ -59,12 +59,14 @@ export interface FailureScope {
 }
 
 /**
- * The HTTP status a failure carries: up front (`429: …`), else inside a bare
- * JSON body (`{"error":{"code":429}}`) or named in prose (`HTTP 429`).
+ * The HTTP status a failure carries: up front (`429: …`), in pi's provider
+ * prefix (`OpenAI API error (429): …`), else inside a bare JSON body
+ * (`{"error":{"code":429}}`) or named in prose (`HTTP 429`).
  */
 export function failureStatus(raw: string): string | undefined {
   return (
     raw.match(/^\s*(\d{3})\b/)?.[1] ??
+    raw.match(/^[\w .-]*\bAPI error \((\d{3})\)/)?.[1] ??
     raw.match(/^\s*[[{][\s\S]*?"(?:code|status)"\s*:\s*"?(\d{3})\b/)?.[1] ??
     raw.match(/\b(?:HTTP|status(?: code)?)\s*:?\s*(\d{3})\b/i)?.[1]
   );
