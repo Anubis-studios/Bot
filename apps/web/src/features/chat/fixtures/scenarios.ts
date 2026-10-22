@@ -308,6 +308,88 @@ const sessionFailedRateLimit = (): RelayEvent[] =>
     }),
   ]);
 
+/**
+ * How a turn ends when an account, not the request, said no: the user's own
+ * key out of quota (with Abacus credits left, and with them used up too),
+ * Abacus's credit wall (spent, expired) and its billing gate (a payment not
+ * confirmed, a subscription that lapsed). The errors as presentFailure
+ * (packages/agent turn-outcome.ts) words them.
+ */
+const OWN_KEY_DETAIL =
+  "429: You exceeded your current quota, please check your plan and billing details.";
+const OWN_KEY_LINE =
+  "Your Google Gemini key hit its quota. Switch to a different model, or check the key's plan.";
+const OUTCOME_ERRORS: Record<
+  string,
+  {
+    message: string;
+    cause: string;
+    detail: string;
+    actions: Array<Record<string, unknown>>;
+  }
+> = {
+  "own-key-quota": {
+    message: OWN_KEY_LINE,
+    cause: "own_key_quota",
+    detail: OWN_KEY_DETAIL,
+    actions: [
+      { type: "fix-key", provider: "gemini" },
+      { type: "switch-to-abacus" },
+    ],
+  },
+  "own-key-quota-abacus-out": {
+    message: OWN_KEY_LINE,
+    cause: "own_key_quota",
+    detail: OWN_KEY_DETAIL,
+    actions: [
+      { type: "fix-key", provider: "gemini" },
+      { type: "upgrade-abacus", cause: "exhausted" },
+    ],
+  },
+  "credits-exhausted": {
+    message:
+      "You're out of credits (429). Upgrade your plan to keep going, or switch to a model with its own key.",
+    cause: "credits_exhausted",
+    detail: "429: You have no remaining credits to use the LLM apis.",
+    actions: [{ type: "upgrade-abacus", cause: "exhausted" }],
+  },
+  "credits-expired": {
+    message:
+      "Your free credits have expired (429). Upgrade your plan to keep going.",
+    cause: "credits_expired",
+    detail:
+      "429: Your free AbacusAI credits have expired. You have no remaining credits to use the LLM apis.",
+    actions: [{ type: "upgrade-abacus", cause: "expired" }],
+  },
+  "payment-unconfirmed": {
+    message:
+      "We couldn't confirm your last payment. If your subscription is active, contact support@abacus.ai. Please don't purchase again.",
+    cause: "payment_required",
+    detail:
+      '402 "We could not confirm the last payment on this subscription. If your subscription is active, please contact support@abacus.ai - do not purchase again."',
+    actions: [
+      { type: "payment-required", cause: "unconfirmed" },
+      { type: "switch-model" },
+    ],
+  },
+  "payment-lapsed": {
+    message: "Your Abacus.AI subscription has ended. Renew it to keep going.",
+    cause: "payment_required",
+    detail: '402 "Your subscription has ended. Please renew it to continue."',
+    actions: [
+      { type: "payment-required", cause: "lapsed" },
+      { type: "switch-model" },
+    ],
+  },
+};
+
+const sessionOutcome = (kind: string) => (): RelayEvent[] =>
+  seqd([
+    ...b.sessionReady("inc-1", "DEFAULT"),
+    ...userTurn("r1", "u1", "Summarize the open pull requests.", at(1)),
+    b.runError("r1", { code: "turn_failed", ...OUTCOME_ERRORS[kind]! }),
+  ]);
+
 const sessionSubagents = (): RelayEvent[] =>
   seqd([
     ...b.sessionReady("inc-1", "YOLO"),
@@ -678,6 +760,13 @@ export const SCENARIOS: Scenario[] = [
     events: sessionFailedRateLimit,
     view: { model: "Claude Sonnet" },
   },
+  ...Object.keys(OUTCOME_ERRORS).map((kind) => ({
+    id: `session-outcome-${kind}`,
+    canvas: [],
+    skin: "session" as const,
+    events: sessionOutcome(kind),
+    view: { model: kind.startsWith("own-key") ? "Gemini" : "Abacus.AI" },
+  })),
   {
     id: "session-sandbox-refused",
     canvas: ["SessionBrowser"],
