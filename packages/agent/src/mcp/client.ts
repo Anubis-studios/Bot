@@ -44,8 +44,9 @@ const PROTOCOL_VERSION = "2024-11-05";
 const CLIENT_INFO = { name: "abacusai-bot", version: "1.0.0" };
 /**
  * A server that cannot answer `initialize` or `tools/list` in a minute is
- * broken. A `tools/call` is arbitrary work (the pdf and deck tools run several
- * generation passes behind one call), so it gets its own, far longer ceiling.
+ * broken. A `tools/call` is arbitrary work, so its ceiling here is far longer:
+ * the model's calls are held to their own budgets by the caller's signal
+ * (withCallBudget), and this only bounds a call nothing else does.
  */
 const REQUEST_TIMEOUT_MS = 60_000;
 const TOOL_CALL_TIMEOUT_MS = 15 * 60_000;

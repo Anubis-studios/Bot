@@ -44,6 +44,9 @@ const BUDGETS: Record<string, Budget> = {
   vision_analyze: { seconds: 360, stopped: true },
   video_analyze: { seconds: 360, stopped: true },
   bfl_flux3_get_result: { seconds: 240, stopped: true },
+  // Its `wait` action may ask for two minutes; the browser server bounds
+  // one call at 150s.
+  browser_interact: { seconds: 150, stopped: true },
   ast_edit: { seconds: 60 },
   // code_map bounds itself at 20s; the watchdog only catches a genuine hang.
   code_map: { seconds: 30 },
@@ -167,7 +170,11 @@ export function withCallBudget(
           { once: true }
         );
       });
-      const timer = setTimeout(() => deadline.abort(), seconds * 1_000);
+      const timer = setTimeout(
+        () =>
+          deadline.abort(new Error(`the call's ${seconds}s budget ran out`)),
+        seconds * 1_000
+      );
       const callSignal =
         signal != null
           ? AbortSignal.any([signal, deadline.signal])
