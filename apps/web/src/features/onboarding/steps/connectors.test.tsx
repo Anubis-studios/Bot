@@ -25,6 +25,7 @@ const ctx = (overrides: Partial<StepContext["props"]> = {}): StepContext => {
     cancelSignIn: vi.fn(async () => {}),
     complete: vi.fn(async () => {}),
     createFirstBot: vi.fn(),
+    choose: vi.fn(async () => {}),
     connect: vi.fn(async () => {}),
     ...overrides,
   } as StepContext["props"];

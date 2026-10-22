@@ -8,7 +8,10 @@ import { usePrefs } from "#renderer/data/db/prefs";
 import { StartComposer } from "#renderer/features/chat/composer/start-composer";
 import { useSessionComposerModel } from "#renderer/features/sessions/data/composer-model";
 import { restoreSessionDraft } from "#renderer/features/sessions/start/session-drafts";
-import { SessionStartPage } from "#renderer/features/sessions/start/session-start-page";
+import {
+  QueuedPrompt,
+  SessionStartPage,
+} from "#renderer/features/sessions/start/session-start-page";
 import { SessionStartResources } from "#renderer/features/sessions/start/start-resources";
 import {
   newStartDraft,
@@ -107,6 +110,17 @@ const SessionsNewRoute = () => {
           prefill={(id, text) => updateDraft(id, (d) => ({ ...d, text }))}
           renderComposer={(binding) => (
             <>
+              <QueuedPrompt
+                threadId={binding.threadId}
+                ready={!binding.blocked && model.blocked == null}
+                forwardedProps={{
+                  ...(prefs.defaultMode != null
+                    ? { mode: prefs.defaultMode }
+                    : {}),
+                  model: model.model?.value ?? null,
+                }}
+                submit={binding.submit}
+              />
               <StartComposer
                 key={binding.threadId}
                 threadId={binding.threadId}

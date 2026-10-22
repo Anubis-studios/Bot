@@ -36,6 +36,7 @@ const ctx = () => {
     cancelSignIn: vi.fn(async () => {}),
     complete: vi.fn(async () => {}),
     createFirstBot: vi.fn(),
+    choose: vi.fn(async () => {}),
   } as StepContext["props"];
   const context: StepContext = {
     props,
@@ -49,42 +50,218 @@ const ctx = () => {
   };
   return { context, funnelStep };
 };
-const ready = (checkInRoutineId: string | null) =>
-  ({
-    state: "ready",
-    result: { bot, checkInRoutineId, preview: true },
-  }) as const;
+const ready = {
+  state: "ready",
+  result: { bot, checkInRoutineId: null },
+} as const;
+const cards = () =>
+  [...document.querySelectorAll("[data-first-choice]")].map((card) =>
+    card.getAttribute("data-first-choice")
+  );
 
-describe("FirstBotStep", () => {
-  it("shows the bot row with its check-in and routes each action", async () => {
+describe("FirstBotStep: what to do first", () => {
+  it("leads with Build, every card starts its own work, and the free text becomes the goal", async () => {
     await initI18n();
     const { context, funnelStep } = ctx();
     render(
       <FirstBotStep
         ctx={context}
-        first={ready("routine")}
-        bot={bot}
-        present={true}
+        first={{ state: "choose" }}
+        bot={null}
+        present={false}
         heading={createRef()}
+        inbox={{ state: "reading" }}
+        chatApp={null}
       />
     );
     expect(screen.getByRole("heading").textContent).toBe(
-      "We made your first bot for you"
+      "What do you want to do first?"
     );
-    expect(screen.getByText(bot.name)).toBeTruthy();
     expect(
-      screen.getByText("Checks in weekdays at 8:00 · Gmail, Calendar")
+      screen.getByText(
+        "Pick one. Your bot starts on it right away. Nothing to connect."
+      )
+    ).toBeTruthy();
+    expect(cards()).toEqual(["build", "chat-app", "research", "images"]);
+    expect(
+      document
+        .querySelector('[data-first-choice="build"]')
+        ?.getAttribute("data-primary")
+    ).toBe("true");
+    expect(screen.queryByText(/Chief of Staff/)).toBeNull();
+    expect(screen.queryByText("We made your first bot for you")).toBeNull();
+    // The price is the plan's own, from the upgrade copy.
+    expect(
+      screen.getByText(
+        `Logos, product photos, posts and clips. ${fixedT()("upgradeDialog.price")} first month.`
+      )
     ).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Say hello" }));
+    fireEvent.click(screen.getByRole("button", { name: "Portfolio site" }));
     await vi.waitFor(() =>
-      expect(context.props.complete).toHaveBeenCalledWith({
-        to: "bot",
+      expect(context.props.choose).toHaveBeenCalledWith({
+        kind: "build",
+        prompt: expect.stringContaining("portfolio website"),
+      })
+    );
+    expect(funnelStep).toHaveBeenCalledWith({
+      step: "first_choice_build",
+      detail: "portfolio_site",
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Start building" }));
+    await vi.waitFor(() =>
+      expect(context.props.choose).toHaveBeenCalledWith({
+        kind: "build",
+        prompt: null,
+      })
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Set up" }));
+    await vi.waitFor(() =>
+      expect(context.props.choose).toHaveBeenCalledWith({
+        kind: "chat-app",
+        app: "whatsapp",
+      })
+    );
+    expect(funnelStep).toHaveBeenCalledWith({
+      step: "first_choice_whatsapp",
+      detail: "whatsapp",
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Start" }));
+    await vi.waitFor(() =>
+      expect(context.props.choose).toHaveBeenCalledWith({ kind: "research" })
+    );
+    fireEvent.click(screen.getByRole("button", { name: "See Basic" }));
+    await vi.waitFor(() =>
+      expect(context.props.choose).toHaveBeenCalledWith({ kind: "images" })
+    );
+    expect(funnelStep).toHaveBeenCalledWith({
+      step: "first_choice_images",
+      detail: "free",
+    });
+
+    const box = screen.getByRole("textbox", { name: "What you need" });
+    expect(box.getAttribute("placeholder")).toBe(
+      "Or just tell me what you need…"
+    );
+    fireEvent.change(box, { target: { value: "  Kaggle notebooks " } });
+    fireEvent.submit(box.closest("form")!);
+    await vi.waitFor(() =>
+      expect(context.props.choose).toHaveBeenCalledWith({
+        kind: "goal",
+        goal: "Kaggle notebooks",
+      })
+    );
+    expect(funnelStep).toHaveBeenCalledWith({ step: "first_choice_freetext" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Take the tour" }));
+    await vi.waitFor(() =>
+      expect(context.props.complete).toHaveBeenCalledWith(
+        { to: "new-session" },
+        { tour: true }
+      )
+    );
+  });
+
+  it("puts a chat app linked in onboarding on top, named for that app", async () => {
+    await initI18n();
+    const { context } = ctx();
+    render(
+      <FirstBotStep
+        ctx={context}
+        first={{ state: "choose" }}
+        bot={null}
+        present={false}
+        heading={createRef()}
+        inbox={{ state: "reading" }}
+        chatApp="telegram"
+      />
+    );
+    expect(cards()).toEqual(["chat-app", "build", "research", "images"]);
+    expect(screen.getByText("Answer me on Telegram")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+    await vi.waitFor(() =>
+      expect(context.props.choose).toHaveBeenCalledWith({
+        kind: "chat-app",
+        app: "telegram",
+      })
+    );
+  });
+
+  it("continues once the bot was removed", async () => {
+    await initI18n();
+    const { context } = ctx();
+    render(
+      <FirstBotStep
+        ctx={context}
+        first={{ state: "removed" }}
+        bot={null}
+        present={false}
+        heading={createRef()}
+        inbox={{ state: "reading" }}
+        chatApp={null}
+      />
+    );
+    expect(screen.getByText("This bot was removed")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(context.props.complete).toHaveBeenCalledWith({ to: "new-bot" });
+  });
+});
+
+describe("FirstBotStep: after a Gmail sign-in", () => {
+  const renderInbox = (
+    inbox: Parameters<typeof FirstBotStep>[0]["inbox"],
+    context: StepContext
+  ) =>
+    render(
+      <FirstBotStep
+        ctx={context}
+        first={ready}
+        bot={bot}
+        present={true}
+        heading={createRef()}
+        inbox={inbox}
+        chatApp={null}
+      />
+    );
+
+  it("works on the inbox, then shows what needs the user with drafts to review", async () => {
+    await initI18n();
+    const { context } = ctx();
+    const view = renderInbox({ state: "reading" }, context);
+    expect(screen.getByRole("heading").textContent).toBe(
+      "Reading your last 3 days of email…"
+    );
+    expect(screen.getByRole("button", { name: "Watch it work" })).toBeTruthy();
+    view.rerender(
+      <FirstBotStep
+        ctx={context}
+        first={ready}
+        bot={bot}
+        present={true}
+        heading={createRef()}
+        inbox={{ state: "done", drafts: 3 }}
+        chatApp={null}
+      />
+    );
+    expect(screen.getByRole("heading").textContent).toBe(
+      "Your inbox, already sorted"
+    );
+    expect(
+      screen.getByText(`${bot.name} read your last 3 days of email.`)
+    ).toBeTruthy();
+    expect(screen.getByText("3 emails need you today")).toBeTruthy();
+    expect(
+      screen.getByText("Drafts ready for each. Nothing is sent without you.")
+    ).toBeTruthy();
+    expect(cards()).toEqual(["inbox", "build"]);
+    expect(screen.getByText("Or build something")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Review drafts" }));
+    await vi.waitFor(() =>
+      expect(context.props.choose).toHaveBeenCalledWith({
+        kind: "bot",
         botId: bot.id,
       })
     );
-    expect(funnelStep).toHaveBeenCalledWith({ step: "first_bot_kept" });
-
     fireEvent.click(screen.getByRole("button", { name: "Take the tour" }));
     await vi.waitFor(() =>
       expect(context.props.complete).toHaveBeenCalledWith({
@@ -92,53 +269,45 @@ describe("FirstBotStep", () => {
         botId: bot.id,
       })
     );
-
-    fireEvent.click(screen.getByRole("button", { name: `Edit ${bot.name}` }));
-    await vi.waitFor(() =>
-      expect(context.props.complete).toHaveBeenCalledWith({
-        to: "bot",
-        botId: bot.id,
-        edit: true,
-      })
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Start building" }));
-    await vi.waitFor(() =>
-      expect(context.props.complete).toHaveBeenCalledWith(
-        { to: "new-session" },
-        { keepFirstBot: true }
-      )
-    );
-    expect(funnelStep).toHaveBeenCalledWith({ step: "first_build_chosen" });
-    expect(
-      screen.queryByRole("button", { name: "Start from scratch" })
-    ).toBeNull();
   });
 
-  it("reads No check-ins when the routine was not created, and continues once removed", async () => {
+  it("leads with Build when nothing needs the user, the inbox kept second", async () => {
     await initI18n();
     const { context } = ctx();
-    const view = render(
-      <FirstBotStep
-        ctx={context}
-        first={ready(null)}
-        bot={bot}
-        present={true}
-        heading={createRef()}
-      />
+    renderInbox({ state: "done", drafts: 0 }, context);
+    expect(screen.getByRole("heading").textContent).toBe(
+      "Nothing needs you today"
     );
-    expect(screen.getByText("No check-ins")).toBeTruthy();
-    view.rerender(
-      <FirstBotStep
-        ctx={context}
-        first={{ state: "removed" }}
-        bot={null}
-        present={false}
-        heading={createRef()}
-      />
+    expect(cards()).toEqual(["build", "inbox"]);
+    expect(
+      document
+        .querySelector('[data-first-choice="build"]')
+        ?.getAttribute("data-primary")
+    ).toBe("true");
+    expect(screen.getByText("Keep watching my inbox")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Keep watching" }));
+    await vi.waitFor(() =>
+      expect(context.props.choose).toHaveBeenCalledWith({
+        kind: "bot",
+        botId: bot.id,
+      })
     );
-    expect(screen.getByText("This bot was removed")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    expect(context.props.complete).toHaveBeenCalledWith({ to: "new-bot" });
+  });
+
+  it("sends a pass that stopped to its chat", async () => {
+    await initI18n();
+    const { context } = ctx();
+    renderInbox({ state: "stopped" }, context);
+    expect(screen.getByRole("heading").textContent).toBe(
+      `${bot.name} stopped before finishing`
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Open chat" }));
+    await vi.waitFor(() =>
+      expect(context.props.choose).toHaveBeenCalledWith({
+        kind: "bot",
+        botId: bot.id,
+      })
+    );
   });
 });
 

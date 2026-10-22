@@ -24,6 +24,7 @@ const ctx = (signedIn: boolean) => {
     cancelSignIn: vi.fn(async () => {}),
     complete: vi.fn(async () => {}),
     createFirstBot: vi.fn(),
+    choose: vi.fn(async () => {}),
   } as StepContext["props"];
   const context: StepContext = {
     props,

@@ -1177,15 +1177,10 @@
     "pages.models.openrouter": "OpenRouter",
     "pages.models.gemini": "Google Gemini",
     "pages.connectors.body": "Connect your email or message your bot from the apps you use. You can add more tools later.",
-    "pages.first-bot.title": "We made your first bot for you",
-    "pages.first-bot.body": "{{name}} helps with email, meetings and daily tasks. Make it your own.",
     "pages.done.title": "You’re set",
     "pages.done.body": "Say hello, or start a session in a folder.",
     "pages.deferred": "Finish after setup",
     "pages.removed": "This bot was removed",
-    "pages.checkIn": "Checks in weekdays at 8:00 · Gmail, Calendar",
-    "pages.noCheckIn": "No check-ins",
-    "pages.hello": "Say hello",
     "pages.message": "Message {{name}}",
     "pages.addKey": "Add API key",
     "pages.pairing": "Finish connecting {{platform}}",
@@ -1257,10 +1252,58 @@
     "connectedPromiseWork": "across your tools and services",
     "connectedPromiseLocalLead": "Runs locally.",
     "connectedPromiseLocal": "Chat with it wherever you work.",
-    "pages.buildTitle": "Code and build right away",
-    "pages.buildBody": "Write code, build apps, work in your folders",
-    "pages.buildCta": "Start building",
-    "pages.editBot": "Edit {{name}}"
+    "firstRun": {
+      "title": "What do you want to do first?",
+      "subtitle": "Pick one. Your bot starts on it right away. Nothing to connect.",
+      "build": {
+        "title": "Build something",
+        "body": "A website, app or game. Describe it and watch it appear.",
+        "cta": "Start building"
+      },
+      "chatApp": {
+        "title": "Answer me on {{app}}",
+        "body": "Message your bot from your phone anytime.",
+        "setUp": "Set up",
+        "open": "Open"
+      },
+      "research": {
+        "title": "Research or write",
+        "body": "A report, a deck, a document from your files.",
+        "cta": "Start",
+        "botName": "Research Assistant"
+      },
+      "images": {
+        "title": "Make images and video",
+        "plan": "Basic",
+        "body": "Logos, product photos, posts and clips. {{price}} first month.",
+        "cta": "See Basic"
+      },
+      "goal": {
+        "placeholder": "Or just tell me what you need…",
+        "label": "What you need",
+        "send": "Send",
+        "botName": "My Assistant"
+      },
+      "inbox": {
+        "readingTitle": "Reading your last 3 days of email…",
+        "readingBody": "Drafting a reply to each email that needs you. Nothing is sent without you.",
+        "watch": "Watch it work",
+        "title": "Your inbox, already sorted",
+        "subtitle": "{{name}} read your last 3 days of email.",
+        "count_one": "{{count}} email needs you today",
+        "count_other": "{{count}} emails need you today",
+        "countBody": "Drafts ready for each. Nothing is sent without you.",
+        "review": "Review drafts",
+        "emptyTitle": "Nothing needs you today",
+        "keepTitle": "Keep watching my inbox",
+        "keepBody": "{{name}} checks every morning and drafts replies for you.",
+        "keepCta": "Keep watching",
+        "stoppedTitle": "{{name}} stopped before finishing",
+        "stoppedBody": "Its chat shows what it found and what it needs.",
+        "open": "Open chat",
+        "buildTitle": "Or build something"
+      }
+    }
   },
   "referralCard": {
     "cta": "Invite friends",
@@ -1630,7 +1673,24 @@
           "detail": "Check changes for bugs and missing tests."
         }
       },
-      "recent": "Pick up where you left off in {{workspace}}"
+      "recent": "Pick up where you left off in {{workspace}}",
+      "build": {
+        "portfolio-site": {
+          "name": "Portfolio site",
+          "detail": "A one-page site for your work.",
+          "prompt": "Build me a one-page portfolio website: a hero with my name and a one-line intro, a grid of three sample projects, an about section and a contact section. Use placeholder text and images I can swap later, make it clean and modern, and make sure it looks right on a phone. Show me the page when it is ready."
+        },
+        "shop-page": {
+          "name": "Shop page for my business",
+          "detail": "Products, prices and a cart.",
+          "prompt": "Build a one-page shop for my small business: a header with the shop name, six sample products with photos, names, prices and an Add to cart button, a simple cart, and a contact section. Use placeholder products I can swap later, and make sure it looks right on a phone. Show me the page when it is ready."
+        },
+        "simple-game": {
+          "name": "A simple game",
+          "detail": "Playable in your browser.",
+          "prompt": "Build a simple game I can play in the browser right away: a snake game with arrow-key and swipe controls, a score, a best score and a restart button. Keep it to one page and show it to me when it is ready."
+        }
+      }
     },
     "model": {
       "choose": "Choose a model",

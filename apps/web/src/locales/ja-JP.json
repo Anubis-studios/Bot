@@ -1177,15 +1177,10 @@
     "pages.models.openrouter": "OpenRouter",
     "pages.models.gemini": "Google Gemini",
     "pages.connectors.body": "使うツールを選びましょう。後から追加できます。",
-    "pages.first-bot.title": "最初のボットを用意しました",
-    "pages.first-bot.body": "{{name}} は Gmail、カレンダー、Slack で一日の仕事をまとめます。名前や見た目を変えても、ゼロから作り直してもかまいません。",
     "pages.done.title": "準備完了",
     "pages.done.body": "あいさつするか、フォルダーでセッションを始めましょう。",
     "pages.deferred": "設定後に完了する",
     "pages.removed": "このボットは削除されました",
-    "pages.checkIn": "平日 8:00 にチェックイン · Gmail、カレンダー",
-    "pages.noCheckIn": "チェックインなし",
-    "pages.hello": "挨拶する",
     "pages.message": "{{name}}にメッセージ",
     "pages.addKey": "API キーを追加",
     "pages.pairing": "{{platform}} の接続を完了",
@@ -1257,10 +1252,58 @@
     "connectedPromiseWork": "Gets your work done, and connects to all your services",
     "connectedPromiseLocalLead": "Runs locally.",
     "connectedPromiseLocal": "Chat with it wherever you work.",
-    "pages.buildTitle": "すぐにコーディングと開発を始める",
-    "pages.buildBody": "コードを書く、アプリを作る、フォルダで作業する",
-    "pages.buildCta": "作り始める",
-    "pages.editBot": "{{name}} を編集"
+    "firstRun": {
+      "title": "最初に何をしますか？",
+      "subtitle": "ひとつ選んでください。ボットがすぐに取りかかります。接続は不要です。",
+      "build": {
+        "title": "何かを作る",
+        "body": "Web サイト、アプリ、ゲーム。説明すると目の前で形になります。",
+        "cta": "作り始める"
+      },
+      "chatApp": {
+        "title": "{{app}} で返事して",
+        "body": "スマホからいつでもボットにメッセージできます。",
+        "setUp": "設定する",
+        "open": "開く"
+      },
+      "research": {
+        "title": "調べもの・文章作成",
+        "body": "レポート、スライド、手元のファイルからの資料。",
+        "cta": "始める",
+        "botName": "リサーチアシスタント"
+      },
+      "images": {
+        "title": "画像と動画を作る",
+        "plan": "Basic",
+        "body": "ロゴ、商品写真、投稿、動画クリップ。初月 {{price}}。",
+        "cta": "Basic を見る"
+      },
+      "goal": {
+        "placeholder": "または、必要なことをそのまま入力…",
+        "label": "必要なこと",
+        "send": "送信",
+        "botName": "マイアシスタント"
+      },
+      "inbox": {
+        "readingTitle": "直近 3 日間のメールを読んでいます…",
+        "readingBody": "対応が必要なメールごとに返信の下書きを作っています。あなたの確認なしに送信されることはありません。",
+        "watch": "作業を見る",
+        "title": "受信トレイ、整理済みです",
+        "subtitle": "{{name}} が直近 3 日間のメールを読みました。",
+        "count_one": "今日対応が必要なメールは {{count}} 件",
+        "count_other": "今日対応が必要なメールは {{count}} 件",
+        "countBody": "それぞれに下書きを用意しました。あなたの確認なしに送信されることはありません。",
+        "review": "下書きを確認",
+        "emptyTitle": "今日対応が必要なものはありません",
+        "keepTitle": "受信トレイを見守り続ける",
+        "keepBody": "{{name}} が毎朝確認し、返信の下書きを用意します。",
+        "keepCta": "見守りを続ける",
+        "stoppedTitle": "{{name}} は途中で止まりました",
+        "stoppedBody": "見つけたことと必要なことはチャットで確認できます。",
+        "open": "チャットを開く",
+        "buildTitle": "または、何かを作る"
+      }
+    }
   },
   "referralCard": {
     "cta": "Invite friends",
@@ -1630,7 +1673,24 @@
           "detail": "変更内容のバグや不足しているテストを確認します。"
         }
       },
-      "recent": "Pick up where you left off in {{workspace}}"
+      "recent": "Pick up where you left off in {{workspace}}",
+      "build": {
+        "portfolio-site": {
+          "name": "ポートフォリオサイト",
+          "detail": "作品を紹介する 1 ページのサイト。",
+          "prompt": "1 ページのポートフォリオサイトを作ってください。名前と一行の自己紹介を載せたヒーロー、サンプルプロジェクト 3 件のグリッド、自己紹介セクション、連絡先セクションを入れてください。あとで差し替えられる仮のテキストと画像を使い、すっきりとモダンなデザインにして、スマホでもきれいに表示されるようにしてください。できたらページを見せてください。"
+        },
+        "shop-page": {
+          "name": "お店のショップページ",
+          "detail": "商品、価格、カート。",
+          "prompt": "小さなお店のための 1 ページのショップを作ってください。店名入りのヘッダー、写真・商品名・価格・「カートに入れる」ボタン付きのサンプル商品 6 点、シンプルなカート、連絡先セクションを入れてください。あとで差し替えられる仮の商品を使い、スマホでもきれいに表示されるようにしてください。できたらページを見せてください。"
+        },
+        "simple-game": {
+          "name": "かんたんなゲーム",
+          "detail": "ブラウザですぐ遊べます。",
+          "prompt": "ブラウザですぐ遊べるかんたんなゲームを作ってください。矢印キーとスワイプで操作するスネークゲームで、スコア、ベストスコア、リスタートボタン付きにしてください。1 ページにまとめて、できたら見せてください。"
+        }
+      }
     },
     "model": {
       "choose": "Choose a model",

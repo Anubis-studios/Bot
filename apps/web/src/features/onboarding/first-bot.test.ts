@@ -1,15 +1,33 @@
+import type { RunFinishedNotice } from "@abacus-ai/contract/contract/ai";
+import type { UIMessage } from "@tanstack/ai-client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { fixtureBots } from "#renderer/data/fixture-db/rows";
 
 import {
+  chatAppTemplateId,
+  countDraftReplies,
   ensureFirstBot,
   firstBotStore,
-  firstBotTemplateId,
+  inboxPassStore,
   noteConnectedChatApp,
-  previewFirstBot,
+  watchInboxPass,
 } from "./first-bot";
 import { onboardingStore } from "./store";
+
+const listeners = vi.hoisted(
+  () => new Set<(notice: RunFinishedNotice) => void>()
+);
+vi.mock("#renderer/lib/run-finished", () => ({
+  subscribeRunFinished: (
+    _transport: unknown,
+    listener: (notice: RunFinishedNotice) => void
+  ) => {
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+  },
+}));
+
 const deferred = <T>() => {
   let resolve!: (value: T) => void;
   let reject!: (error: Error) => void;
@@ -21,7 +39,9 @@ const deferred = <T>() => {
 };
 const result = { bot: fixtureBots()[0]!, checkInRoutineId: "routine" };
 beforeEach(() => {
+  listeners.clear();
   firstBotStore.setState(() => ({ state: "idle" }));
+  inboxPassStore.setState(() => ({ state: "reading" }));
   onboardingStore.setState(() => ({ signIn: null, createdBotId: null }));
 });
 describe("R6-T9 first-bot persistence", () => {
@@ -47,50 +67,117 @@ describe("R6-T9 first-bot persistence", () => {
     });
     expect(create).not.toHaveBeenCalled();
   });
+  it("shows the choices when nothing was made (no Gmail)", async () => {
+    ensureFirstBot(false, async () => null);
+    await vi.waitFor(() =>
+      expect(firstBotStore.state).toEqual({ state: "choose" })
+    );
+  });
 });
 
-describe("which bot onboarding starts with", () => {
-  it("is the agent of the chat app connected during onboarding", () => {
-    expect(firstBotTemplateId("telegram")).toBe("telegram-agent");
-    expect(firstBotTemplateId("whatsapp")).toBe("whatsapp-agent");
-    expect(firstBotTemplateId("discord")).toBe("discord-agent");
-  });
-
-  it("is the Chief of Staff when no chat app was connected", () => {
-    expect(firstBotTemplateId(null)).toBe("chief-of-staff");
-    expect(firstBotTemplateId(undefined)).toBe("chief-of-staff");
+describe("the chat app card", () => {
+  it("opens the agent of the chat app connected during onboarding", () => {
+    expect(chatAppTemplateId("telegram")).toBe("telegram-agent");
+    expect(chatAppTemplateId("whatsapp")).toBe("whatsapp-agent");
+    expect(chatAppTemplateId("discord")).toBe("discord-agent");
   });
 
   it("follows the chat app connected last", () => {
     noteConnectedChatApp("whatsapp");
     noteConnectedChatApp("telegram");
 
-    expect(firstBotTemplateId(onboardingStore.state.chatApp)).toBe(
-      "telegram-agent"
-    );
+    expect(onboardingStore.state.chatApp).toBe("telegram");
+  });
+});
+
+const call = (
+  id: string,
+  action: string,
+  complete = true
+): UIMessage["parts"] => [
+  {
+    type: "tool-call",
+    id,
+    name: "abacus-connectors__Gmail_Tool",
+    arguments: JSON.stringify({ action, thread_id: id }),
+    state: complete ? "input-complete" : "input-streaming",
+  } as never,
+  ...(complete
+    ? [
+        {
+          type: "tool-result",
+          toolCallId: id,
+          content: "Draft saved.",
+          state: "complete",
+        } as never,
+      ]
+    : []),
+];
+const assistant = (parts: UIMessage["parts"]): UIMessage =>
+  ({ id: crypto.randomUUID(), role: "assistant", parts }) as UIMessage;
+
+describe("the inbox pass", () => {
+  it("counts the reply drafts the pass saved, not reads or unfinished calls", () => {
+    expect(
+      countDraftReplies([
+        assistant([
+          ...call("a", "search_emails"),
+          ...call("b", "create_draft_reply"),
+          ...call("c", "create_draft_reply"),
+          ...call("d", "create_draft_reply", false),
+        ]),
+        assistant([...call("e", "create_draft_email")]),
+      ])
+    ).toBe(3);
   });
 
-  it("previews the template's own role and mission, its home app with it", () => {
-    const { bot } = previewFirstBot(
-      "bot-x",
-      "Telegram Agent",
-      "telegram-agent"
-    );
-
-    expect(bot.title).toBe("Your agent in Telegram - message it anytime");
-    expect(bot.description).toContain("Live in my Telegram.");
-    expect(bot.description).not.toContain("Gmail");
-    expect(bot.homeChannel).toBe("telegram");
-  });
-
-  it("drops a preview made before the chat app was connected", () => {
-    firstBotStore.setState(() => ({
-      state: "ready",
-      result: previewFirstBot("bot-x", "Chief of Staff"),
+  it("updates in place once the chat's first run ends, even one that ends before the chat opens", async () => {
+    const hydrate = vi.fn(async () => ({
+      messages: [assistant([...call("a", "create_draft_reply")])],
     }));
+    const transport = { client: { ai: { hydrate } } } as never;
+    const chat = deferred<{ sessionId: string }>();
+    watchInboxPass(transport, chat.promise);
+    expect(inboxPassStore.state).toEqual({ state: "reading" });
+    for (const listener of listeners)
+      listener({
+        threadId: "s1",
+        runId: "r1",
+        outcome: "success",
+        hasVisibleAssistantText: true,
+        owner: null,
+        routineId: null,
+        at: 1,
+      });
+    chat.resolve({ sessionId: "s1" });
+    await vi.waitFor(() =>
+      expect(inboxPassStore.state).toEqual({ state: "done", drafts: 1 })
+    );
+    expect(hydrate).toHaveBeenCalledWith({ threadId: "s1" });
+    expect(listeners.size).toBe(0);
+  });
 
-    noteConnectedChatApp("discord");
-
-    expect(firstBotStore.state).toEqual({ state: "idle" });
+  it("stops on a run that failed, and ignores other chats", async () => {
+    const transport = { client: { ai: { hydrate: vi.fn() } } } as never;
+    watchInboxPass(transport, Promise.resolve({ sessionId: "s1" }));
+    await Promise.resolve();
+    const notice = (threadId: string, outcome: "success" | "error") => {
+      for (const listener of listeners)
+        listener({
+          threadId,
+          runId: threadId,
+          outcome,
+          hasVisibleAssistantText: false,
+          owner: null,
+          routineId: null,
+          at: 1,
+        });
+    };
+    notice("other", "success");
+    expect(inboxPassStore.state).toEqual({ state: "reading" });
+    notice("s1", "error");
+    await vi.waitFor(() =>
+      expect(inboxPassStore.state).toEqual({ state: "stopped" })
+    );
   });
 });

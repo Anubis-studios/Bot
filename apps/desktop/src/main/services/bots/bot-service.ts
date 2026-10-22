@@ -20,6 +20,7 @@ import {
   HOME_CHANNELS,
   SPONSORED_RUN_MARKER,
 } from "@abacus-ai/contract/bots";
+import { goalOfMission } from "@abacus-ai/contract/bots/check-in";
 import {
   BOT_TEMPLATES,
   type BotTemplate,
@@ -109,6 +110,8 @@ export interface BotServiceCallbacks {
   homeBots?: () => Partial<Record<HomeChannel, string>>;
   /** Persist a chat app's home bot. Only setHomeBot calls it. */
   saveHomeBot?: (app: HomeChannel, botId: string) => void;
+  /** The app's language tag (en-US, pt-BR); a first run writes in it. */
+  appLanguage?: () => string;
 }
 
 /** The app's agent template (Telegram Agent and the like). */
@@ -178,6 +181,21 @@ const homeBotLines = (
   });
 
 /**
+ * A template's role kept after the user rewrote its mission: a bot told to
+ * build sites must not still introduce itself as a Chief of Staff.
+ */
+const isStaleTemplateRole = (bot: Bot): boolean => {
+  const template =
+    BOT_TEMPLATES.find((row) => row.id === bot.templateId) ??
+    BOT_TEMPLATES.find((row) => row.title === bot.title);
+  return (
+    template != null &&
+    bot.title === template.title &&
+    bot.description !== template.mission
+  );
+};
+
+/**
  * The bot's standing prompt, framed like custom instructions and explicit
  * that the persona does not widen permissions.
  */
@@ -190,7 +208,7 @@ const renderPersona = (
   return [
     `# ${bot.name}`,
     "",
-    `**Role:** ${role}`,
+    ...(isStaleTemplateRole(bot) ? [] : [`**Role:** ${role}`]),
     `**Your mission, yours alone:** ${bot.description}`,
     // Its own line so the model reads the voice as manner, not more mission.
     ...(bot.persona.length > 0
@@ -270,8 +288,18 @@ const changeNotice = (notice: BotChangeNotice): string => {
   );
 };
 
+/** "Brazilian Portuguese", "Turkish": the language a tag names, in English. */
+const languageName = (tag: string): string => {
+  try {
+    const name = new Intl.DisplayNames(["en"], { type: "language" }).of(tag);
+    return (name ?? tag).replace(/\s*\(.*\)$/, "");
+  } catch {
+    return tag;
+  }
+};
+
 /** Visible first message of a fresh bot chat, so the bot speaks first. */
-const kickstartMessage = (bot: Bot): string => {
+const kickstartMessage = (bot: Bot, language: string | null): string => {
   const names = neededConnectorNames(bot);
   const connect =
     names.length === 0
@@ -282,10 +310,20 @@ const kickstartMessage = (bot: Bot): string => {
         : "First, call connect_connector now for each of " +
           `${names.slice(0, -1).join(", ")} and ${names.at(-1)} that the ` +
           "system reminder does not list as connected. ";
+  const goal = goalOfMission(bot.description);
+  const start =
+    goal == null
+      ? "get started on your mission"
+      : `take the first step toward what the user asked for: "${goal}"`;
+  const write =
+    language == null
+      ? ""
+      : ` Write in ${languageName(language)}, the user's app language, ` +
+        "unless they write to you in another.";
   return (
-    `[first run] ${connect}Introduce yourself once, then get started on your ` +
-    "mission. Everything after a tool result is the same reply continuing. " +
-    "No second greeting, no restating the mission."
+    `[first run] ${connect}Introduce yourself once, then ${start}. ` +
+    "Everything after a tool result is the same reply continuing. " +
+    `No second greeting, no restating the mission.${write}`
   );
 };
 
@@ -329,16 +367,21 @@ const senderChatIntro = (senderName: string, platform: string): string =>
     "pane. Their first message follows.",
   ].join(" ");
 
-/** Set while the platform serves the bot's runs on the house; every request of those runs carries it as a header. */
-const sponsoredRunEnv = (bot: Bot): Record<string, string> =>
-  bot.sponsoredUntil != null && Date.now() < bot.sponsoredUntil
+/** Set while the platform serves a first run on the house; every request of the run carries it as a header. */
+export const sponsoredRunEnvUntil = (
+  sponsoredUntil: number | null | undefined
+): Record<string, string> =>
+  sponsoredUntil != null && Date.now() < sponsoredUntil
     ? {
         ABACUSAI_BOT_SPONSORED_RUN: SPONSORED_RUN_MARKER,
         // The deadline too: a process outlives the window, and must stop
         // sending the marker when it passes rather than when it exits.
-        ABACUSAI_BOT_SPONSORED_UNTIL: String(bot.sponsoredUntil),
+        ABACUSAI_BOT_SPONSORED_UNTIL: String(sponsoredUntil),
       }
     : {};
+
+const sponsoredRunEnv = (bot: Bot): Record<string, string> =>
+  sponsoredRunEnvUntil(bot.sponsoredUntil);
 
 export class BotService {
   constructor(private readonly callbacks: BotServiceCallbacks) {}
@@ -673,7 +716,7 @@ export class BotService {
           this.callbacks.sendMessage(
             workspaceId,
             bot.sessionId,
-            kickstartMessage(bot),
+            this.kickstart(bot),
             { operator: { kind: "kickstart" } }
           );
           markBotKickstarted(botId);
@@ -700,12 +743,9 @@ export class BotService {
     // is the same conversation to the user, and would introduce itself again.
     const started = await this.callbacks.startSession(workspaceId, session.id);
     if (started.success && bot.sessionId == null) {
-      this.callbacks.sendMessage(
-        workspaceId,
-        session.id,
-        kickstartMessage(bot),
-        { operator: { kind: "kickstart" } }
-      );
+      this.callbacks.sendMessage(workspaceId, session.id, this.kickstart(bot), {
+        operator: { kind: "kickstart" },
+      });
       markBotKickstarted(botId);
     }
 
@@ -834,6 +874,10 @@ export class BotService {
       ABACUSAI_BOT_BOT_DIR: botDir(bot.id),
       ...sponsoredRunEnv(bot),
     };
+  }
+
+  private kickstart(bot: Bot): string {
+    return kickstartMessage(bot, this.callbacks.appLanguage?.() ?? null);
   }
 
   /** The sponsored-run marker for a routine session, which is the bot's work too; empty once the window has passed. */

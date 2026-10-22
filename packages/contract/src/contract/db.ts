@@ -346,6 +346,7 @@ export const db = {
         workspaceId: WorkspaceId,
         model: v.optional(v.nullable(v.pipe(v.string(), v.nonEmpty()))),
         mode: v.optional(v.nullable(AgentModeSchema)),
+        sponsoredFirstRun: v.optional(v.boolean()),
       })
     ),
     /** Only `label` and `model` are writable; any other field is `FORBIDDEN`. */

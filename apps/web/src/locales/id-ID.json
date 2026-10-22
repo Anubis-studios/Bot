@@ -1177,15 +1177,10 @@
     "pages.models.openrouter": "OpenRouter",
     "pages.models.gemini": "Google Gemini",
     "pages.connectors.body": "Pilih alat Anda. Anda dapat menambahkan lagi nanti.",
-    "pages.first-bot.title": "Kami sudah membuat bot pertama untuk Anda",
-    "pages.first-bot.body": "{{name}} mengatur hari kerja Anda di Gmail, Kalender, dan Slack. Ganti nama, ubah tampilannya, atau mulai dari awal.",
     "pages.done.title": "Semua siap",
     "pages.done.body": "Sapa dia, atau mulai sesi di sebuah folder.",
     "pages.deferred": "Selesaikan setelah penyiapan",
     "pages.removed": "Bot ini telah dihapus",
-    "pages.checkIn": "Lapor tiap hari kerja pukul 8:00 · Gmail, Kalender",
-    "pages.noCheckIn": "Tidak ada laporan terjadwal",
-    "pages.hello": "Sapa bot",
     "pages.message": "Kirim pesan ke {{name}}",
     "pages.addKey": "Tambahkan kunci API",
     "pages.pairing": "Selesaikan koneksi {{platform}}",
@@ -1257,10 +1252,58 @@
     "connectedPromiseWork": "Gets your work done, and connects to all your services",
     "connectedPromiseLocalLead": "Runs locally.",
     "connectedPromiseLocal": "Chat with it wherever you work.",
-    "pages.buildTitle": "Langsung coding dan membangun",
-    "pages.buildBody": "Tulis kode, buat aplikasi, kerjakan di folder Anda",
-    "pages.buildCta": "Mulai membangun",
-    "pages.editBot": "Edit {{name}}"
+    "firstRun": {
+      "title": "Apa yang ingin Anda lakukan dulu?",
+      "subtitle": "Pilih satu. Bot Anda langsung mengerjakannya. Tidak ada yang perlu dihubungkan.",
+      "build": {
+        "title": "Buat sesuatu",
+        "body": "Situs web, aplikasi, atau game. Jelaskan dan lihat hasilnya muncul.",
+        "cta": "Mulai membuat"
+      },
+      "chatApp": {
+        "title": "Balas saya di {{app}}",
+        "body": "Kirim pesan ke bot Anda dari ponsel kapan saja.",
+        "setUp": "Siapkan",
+        "open": "Buka"
+      },
+      "research": {
+        "title": "Riset atau menulis",
+        "body": "Laporan, presentasi, atau dokumen dari file Anda.",
+        "cta": "Mulai",
+        "botName": "Asisten Riset"
+      },
+      "images": {
+        "title": "Buat gambar dan video",
+        "plan": "Basic",
+        "body": "Logo, foto produk, postingan, dan klip. {{price}} untuk bulan pertama.",
+        "cta": "Lihat Basic"
+      },
+      "goal": {
+        "placeholder": "Atau langsung beri tahu apa yang Anda butuhkan…",
+        "label": "Yang Anda butuhkan",
+        "send": "Kirim",
+        "botName": "Asisten Saya"
+      },
+      "inbox": {
+        "readingTitle": "Membaca email Anda dari 3 hari terakhir…",
+        "readingBody": "Menyiapkan draf balasan untuk setiap email yang perlu Anda tangani. Tidak ada yang dikirim tanpa Anda.",
+        "watch": "Lihat prosesnya",
+        "title": "Kotak masuk Anda, sudah dirapikan",
+        "subtitle": "{{name}} sudah membaca email Anda dari 3 hari terakhir.",
+        "count_one": "{{count}} email perlu Anda tangani hari ini",
+        "count_other": "{{count}} email perlu Anda tangani hari ini",
+        "countBody": "Draf sudah siap untuk masing-masing. Tidak ada yang dikirim tanpa Anda.",
+        "review": "Tinjau draf",
+        "emptyTitle": "Tidak ada yang perlu Anda tangani hari ini",
+        "keepTitle": "Terus pantau kotak masuk saya",
+        "keepBody": "{{name}} memeriksa setiap pagi dan menyiapkan draf balasan untuk Anda.",
+        "keepCta": "Terus pantau",
+        "stoppedTitle": "{{name}} berhenti sebelum selesai",
+        "stoppedBody": "Chat-nya menunjukkan apa yang ditemukan dan apa yang dibutuhkan.",
+        "open": "Buka chat",
+        "buildTitle": "Atau buat sesuatu"
+      }
+    }
   },
   "referralCard": {
     "cta": "Invite friends",
@@ -1630,7 +1673,24 @@
           "detail": "Periksa perubahan untuk menemukan bug dan pengujian yang belum ada."
         }
       },
-      "recent": "Pick up where you left off in {{workspace}}"
+      "recent": "Pick up where you left off in {{workspace}}",
+      "build": {
+        "portfolio-site": {
+          "name": "Situs portofolio",
+          "detail": "Situs satu halaman untuk karya Anda.",
+          "prompt": "Buatkan saya situs web portofolio satu halaman: bagian atas dengan nama saya dan satu kalimat perkenalan, grid berisi tiga contoh proyek, bagian tentang saya, dan bagian kontak. Gunakan teks dan gambar contoh yang bisa saya ganti nanti, buat tampilannya bersih dan modern, dan pastikan tampil baik di ponsel. Tunjukkan halamannya kalau sudah siap."
+        },
+        "shop-page": {
+          "name": "Halaman toko untuk usaha saya",
+          "detail": "Produk, harga, dan keranjang.",
+          "prompt": "Buat toko satu halaman untuk usaha kecil saya: header dengan nama toko, enam contoh produk dengan foto, nama, harga, dan tombol Tambah ke keranjang, keranjang sederhana, dan bagian kontak. Gunakan produk contoh yang bisa saya ganti nanti, dan pastikan tampil baik di ponsel. Tunjukkan halamannya kalau sudah siap."
+        },
+        "simple-game": {
+          "name": "Game sederhana",
+          "detail": "Bisa dimainkan di browser.",
+          "prompt": "Buat game sederhana yang bisa langsung saya mainkan di browser: game ular dengan kontrol tombol panah dan geser, skor, skor terbaik, dan tombol mulai ulang. Cukup satu halaman, dan tunjukkan kalau sudah siap."
+        }
+      }
     },
     "model": {
       "choose": "Choose a model",

@@ -4,6 +4,7 @@
  * calls, then re-diffs the table at once and returns the position of the
  * batch that carries its echo (or the current one, when nothing changed).
  */
+import { SPONSORED_FIRST_RUN_WINDOW_MS } from "@abacus-ai/contract/bots";
 import type {
   PreconditionReason,
   RoutineRefusal,
@@ -158,7 +159,13 @@ export const dbRouter = impl.db.router({
         null,
         null,
         input.id,
-        { model: input.model ?? null, mode: input.mode ?? null }
+        {
+          model: input.model ?? null,
+          mode: input.mode ?? null,
+          ...(input.sponsoredFirstRun === true
+            ? { sponsoredUntil: Date.now() + SPONSORED_FIRST_RUN_WINDOW_MS }
+            : {}),
+        }
       );
       return echo(context.deps.tables.sessions, session.id);
     }),

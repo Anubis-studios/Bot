@@ -1177,15 +1177,10 @@
     "pages.models.openrouter": "OpenRouter",
     "pages.models.gemini": "Google Gemini",
     "pages.connectors.body": "Wähle deine Tools. Weitere kannst du später hinzufügen.",
-    "pages.first-bot.title": "Wir haben deinen ersten Bot für dich erstellt",
-    "pages.first-bot.body": "{{name}} organisiert deinen Arbeitstag über Gmail, Kalender und Slack. Benenne ihn um, gestalte ihn neu oder fange von vorn an.",
     "pages.done.title": "Alles bereit",
     "pages.done.body": "Sag Hallo oder starte eine Sitzung in einem Ordner.",
     "pages.deferred": "Nach der Einrichtung abschließen",
     "pages.removed": "Dieser Bot wurde entfernt",
-    "pages.checkIn": "Meldet sich werktags um 8:00 · Gmail, Kalender",
-    "pages.noCheckIn": "Keine Check-ins",
-    "pages.hello": "Sag Hallo",
     "pages.message": "Nachricht an {{name}}",
     "pages.addKey": "API-Schlüssel hinzufügen",
     "pages.pairing": "Verbindung mit {{platform}} abschließen",
@@ -1257,10 +1252,58 @@
     "connectedPromiseWork": "Gets your work done, and connects to all your services",
     "connectedPromiseLocalLead": "Runs locally.",
     "connectedPromiseLocal": "Chat with it wherever you work.",
-    "pages.buildTitle": "Sofort programmieren und bauen",
-    "pages.buildBody": "Code schreiben, Apps bauen, in deinen Ordnern arbeiten",
-    "pages.buildCta": "Loslegen",
-    "pages.editBot": "{{name}} bearbeiten"
+    "firstRun": {
+      "title": "Womit möchtest du anfangen?",
+      "subtitle": "Wähl eins aus. Dein Bot legt sofort los. Nichts zu verbinden.",
+      "build": {
+        "title": "Etwas bauen",
+        "body": "Eine Website, eine App oder ein Spiel. Beschreib es und sieh zu, wie es entsteht.",
+        "cta": "Loslegen"
+      },
+      "chatApp": {
+        "title": "Antworte mir auf {{app}}",
+        "body": "Schreib deinem Bot jederzeit vom Handy aus.",
+        "setUp": "Einrichten",
+        "open": "Öffnen"
+      },
+      "research": {
+        "title": "Recherchieren oder schreiben",
+        "body": "Ein Bericht, eine Präsentation, ein Dokument aus deinen Dateien.",
+        "cta": "Starten",
+        "botName": "Recherche-Assistent"
+      },
+      "images": {
+        "title": "Bilder und Videos erstellen",
+        "plan": "Basic",
+        "body": "Logos, Produktfotos, Posts und Clips. {{price}} im ersten Monat.",
+        "cta": "Basic ansehen"
+      },
+      "goal": {
+        "placeholder": "Oder sag mir einfach, was du brauchst…",
+        "label": "Was du brauchst",
+        "send": "Senden",
+        "botName": "Mein Assistent"
+      },
+      "inbox": {
+        "readingTitle": "Deine E-Mails der letzten 3 Tage werden gelesen…",
+        "readingBody": "Für jede E-Mail, die dich braucht, entsteht ein Antwortentwurf. Nichts wird ohne dich gesendet.",
+        "watch": "Zuschauen",
+        "title": "Dein Posteingang, schon sortiert",
+        "subtitle": "{{name}} hat deine E-Mails der letzten 3 Tage gelesen.",
+        "count_one": "{{count}} E-Mail braucht dich heute",
+        "count_other": "{{count}} E-Mails brauchen dich heute",
+        "countBody": "Für jede liegt ein Entwurf bereit. Nichts wird ohne dich gesendet.",
+        "review": "Entwürfe ansehen",
+        "emptyTitle": "Heute braucht dich nichts",
+        "keepTitle": "Meinen Posteingang im Blick behalten",
+        "keepBody": "{{name}} schaut jeden Morgen nach und entwirft Antworten für dich.",
+        "keepCta": "Im Blick behalten",
+        "stoppedTitle": "{{name}} hat vor dem Ende aufgehört",
+        "stoppedBody": "Im Chat steht, was gefunden wurde und was noch fehlt.",
+        "open": "Chat öffnen",
+        "buildTitle": "Oder etwas bauen"
+      }
+    }
   },
   "referralCard": {
     "cta": "Invite friends",
@@ -1630,7 +1673,24 @@
           "detail": "Prüfe Änderungen auf Fehler und fehlende Tests."
         }
       },
-      "recent": "Pick up where you left off in {{workspace}}"
+      "recent": "Pick up where you left off in {{workspace}}",
+      "build": {
+        "portfolio-site": {
+          "name": "Portfolio-Website",
+          "detail": "Eine einseitige Website für deine Arbeit.",
+          "prompt": "Bau mir eine einseitige Portfolio-Website: oben mein Name mit einem Satz zur Vorstellung, ein Raster mit drei Beispielprojekten, ein Abschnitt über mich und ein Kontaktbereich. Nimm Platzhaltertexte und -bilder, die ich später austauschen kann, gestalte sie klar und modern und sorge dafür, dass sie auf dem Handy gut aussieht. Zeig mir die Seite, wenn sie fertig ist."
+        },
+        "shop-page": {
+          "name": "Shopseite für mein Geschäft",
+          "detail": "Produkte, Preise und ein Warenkorb.",
+          "prompt": "Bau eine einseitige Shopseite für mein kleines Geschäft: oben der Name des Shops, sechs Beispielprodukte mit Fotos, Namen, Preisen und einem Button „In den Warenkorb“, ein einfacher Warenkorb und ein Kontaktbereich. Nimm Platzhalterprodukte, die ich später austauschen kann, und sorge dafür, dass sie auf dem Handy gut aussieht. Zeig mir die Seite, wenn sie fertig ist."
+        },
+        "simple-game": {
+          "name": "Ein einfaches Spiel",
+          "detail": "Direkt im Browser spielbar.",
+          "prompt": "Bau ein einfaches Spiel, das ich sofort im Browser spielen kann: ein Snake-Spiel mit Pfeiltasten- und Wischsteuerung, Punktestand, Bestwert und einem Neustart-Button. Alles auf einer Seite, und zeig es mir, wenn es fertig ist."
+        }
+      }
     },
     "model": {
       "choose": "Choose a model",

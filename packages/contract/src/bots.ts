@@ -58,7 +58,7 @@ export interface Bot {
   updatedAt: number;
 }
 
-/** How long a sponsored bot's runs stay on the house; the platform enforces its own window and spend cap too. */
+/** How long a sponsored first run (a bot's or a session's) stays on the house; the platform enforces its own window and spend cap too. */
 export const SPONSORED_FIRST_RUN_WINDOW_MS = 30 * 60 * 1000;
 /** The marker the app sends with a sponsored run's requests, as the platform expects it. */
 export const SPONSORED_RUN_MARKER = "cos-first-run";
@@ -88,7 +88,7 @@ export interface BotCreateInput {
   channel?: string | null;
   homeChannel?: HomeChannel | null;
   templateId?: string | null;
-  /** Make this bot's first runs free of charge for SPONSORED_FIRST_RUN_WINDOW_MS; onboarding's Chief of Staff only. */
+  /** Make this bot's first runs free of charge for SPONSORED_FIRST_RUN_WINDOW_MS; onboarding's first bot only. */
   sponsoredFirstRun?: boolean;
 }
 

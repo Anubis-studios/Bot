@@ -24,7 +24,10 @@ import {
 } from "#renderer/features/gallery/search";
 import { ConnectorsPage } from "#renderer/features/library/connectors";
 import { NotchGallery } from "#renderer/features/notch/gallery";
-import { OnboardingGallery } from "#renderer/features/onboarding/gallery";
+import {
+  FIRST_RUN_GALLERY_VARIANTS,
+  OnboardingGallery,
+} from "#renderer/features/onboarding/gallery";
 import {
   Phase5GalleryNav,
   phase5FixtureIds,
@@ -99,6 +102,9 @@ const extension = {
       </div>
       {[
         ...ONBOARDING_STEPS.map((step) => `onboarding-${step}`),
+        ...FIRST_RUN_GALLERY_VARIANTS.map(
+          (variant) => `onboarding-first-bot-${variant}`
+        ),
         "tour",
         "new-look",
         ...[
@@ -130,7 +136,14 @@ const extension = {
     step: number | undefined;
     play: boolean;
   }) =>
-    props.fixture.startsWith("onboarding-") ? (
+    props.fixture.startsWith("onboarding-first-bot-") ? (
+      <OnboardingGallery
+        step="first-bot"
+        variant={
+          props.fixture.slice(21) as (typeof FIRST_RUN_GALLERY_VARIANTS)[number]
+        }
+      />
+    ) : props.fixture.startsWith("onboarding-") ? (
       <OnboardingGallery step={props.fixture.slice(11) as OnboardingStepId} />
     ) : props.fixture.startsWith("notch-") ? (
       <NotchGallery state={props.fixture.slice(6)} />

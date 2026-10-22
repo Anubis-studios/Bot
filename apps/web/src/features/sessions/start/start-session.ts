@@ -36,6 +36,10 @@ export interface StartDraft {
   stage: "draft" | "created" | "checkout-ready" | "handed-off";
   envelope: SubmissionEnvelope | null;
   submittedAt?: number;
+  /** Onboarding's first session: its first runs are on the house. */
+  sponsored?: true;
+  /** Which suggestions the start page shows; onboarding's Build opens on its examples. */
+  starters?: "build";
 }
 export const newStartDraft = (): StartDraft => ({
   id: crypto.randomUUID(),
@@ -87,6 +91,28 @@ export const openStartDraft = (id?: string, workspaceId?: string): string => {
   return startDraftStore.state.id;
 };
 
+/** A prompt the start page sends once it can, for one draft: taken once. */
+let queuedPrompt: { threadId: string; text: string } | null = null;
+export const queueStartPrompt = (draftId: string, text: string): void => {
+  queuedPrompt = { threadId: `draft:${draftId}`, text };
+};
+export const takeStartPrompt = (threadId: string): string | null => {
+  if (queuedPrompt?.threadId !== threadId) return null;
+  const { text } = queuedPrompt;
+  queuedPrompt = null;
+  return text;
+};
+
+/** Onboarding's Build: a fresh draft on its examples, its first runs on the house. */
+export const startBuildDraft = (sponsored: boolean): string => {
+  startDraftStore.setState(() => ({
+    ...newStartDraft(),
+    starters: "build",
+    ...(sponsored ? { sponsored: true as const } : {}),
+  }));
+  return startDraftStore.state.id;
+};
+
 export const optimisticSession = (draft: StartDraft): SessionRow => {
   const now = new Date().toISOString();
   const picks = draft.envelope?.forwardedProps;
@@ -112,6 +138,7 @@ export const optimisticSession = (draft: StartDraft): SessionRow => {
     botOwned: false,
     owner: null,
     turn: null,
+    ...(draft.sponsored ? { sponsoredFirstRun: true } : {}),
   };
 };
 export interface StartSessionDeps {

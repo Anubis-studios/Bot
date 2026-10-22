@@ -122,7 +122,7 @@ macOS builds require macOS 13 or later.
 
 Download the latest macOS, Windows, or Linux build from [GitHub Releases](https://github.com/abacusai/abacusai-bot/releases/latest). Apple Silicon, Intel, x64, and ARM64 packages are available where the platform supports them.
 
-The current onboarding signs you in or creates a free account, offers messaging and work connectors, helps you choose a model, shows the main controls, and creates a Chief of Staff bot on a fresh install. The template contains a weekday check-in, so the bot can create that routine when its first chat starts. A routine created by a bot runs once immediately. See [Getting started](docs/getting-started.md).
+The current onboarding signs you in or creates a free account, offers messaging and work connectors, helps you choose a model, shows the main controls, and then asks what to do first: build something, answer you on a chat app, research or write, or anything you type. After a Gmail sign-in, a Chief of Staff bot drafts replies to the email that needs you instead, and the screen shows how many. See [Getting started](docs/getting-started.md).
 
 ## Repository scope
 

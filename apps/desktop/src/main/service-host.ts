@@ -315,7 +315,7 @@ import {
   listBotMemories,
   readBotMemoryText,
 } from "./services/bots/bot-memory-store";
-import { BotService } from "./services/bots/bot-service";
+import { BotService, sponsoredRunEnvUntil } from "./services/bots/bot-service";
 import {
   getBot,
   listSenderSessionEntries,
@@ -1985,13 +1985,7 @@ export class ServiceHost {
   /** Given callbacks, not this host, so it cannot reach further than needed. */
   private readonly messagingGatewayService = new MessagingGatewayService({
     platform: () => this.platform,
-    // The app's language, the OS's while the user has not picked one.
-    appLanguage: () => {
-      const picked = this.prefs?.().get().language;
-      return picked != null && picked !== "system"
-        ? picked
-        : Intl.DateTimeFormat().resolvedOptions().locale;
-    },
+    appLanguage: () => this.appLanguage(),
     resolveWorkspaceId: () => {
       const workspaces = this.workspaceService.getWorkspaces();
       const configured = readGatewaySettings().workspaceId;
@@ -2135,6 +2129,7 @@ export class ServiceHost {
         })
       );
     },
+    appLanguage: () => this.appLanguage(),
     saveHomeBot: (app, botId) => {
       saveGatewaySettings({ selfBotIds: { [SELF_LANE_FOR_APP[app]]: botId } });
       this.emitEvent({
@@ -3084,7 +3079,11 @@ export class ServiceHost {
     /** The caller's own id (an optimistic insert); a taken one is `ConflictError`. */
     id?: string,
     /** `db.sessions.insert`'s model and mode, persisted at creation. */
-    initial: { model?: string | null; mode?: AgentMode | null } = {}
+    initial: {
+      model?: string | null;
+      mode?: AgentMode | null;
+      sponsoredUntil?: number;
+    } = {}
   ): AgentSessionListItem {
     if (this.isWorkspaceDeleted(workspaceId)) {
       throw new Error(
@@ -5688,15 +5687,28 @@ export class ServiceHost {
       ...(sessionId != null ? this.laneEnv.get(sessionId) : undefined),
       // A run may use its own folder without the containment gate asking.
       ...this.routineFolderEnvForSession(sessionId),
-      ...this.sponsoredRunEnvForRoutineSession(sessionId),
+      ...this.sponsoredRunEnvForSession(sessionId),
     };
   }
 
-  /** A routine run is its bot's work: while the bot's runs are sponsored, so is the run. */
-  private sponsoredRunEnvForRoutineSession(
+  /** The app's language, the OS's while the user has not picked one. */
+  private appLanguage(): string {
+    const picked = this.prefs?.().get().language;
+    return picked != null && picked !== "system"
+      ? picked
+      : Intl.DateTimeFormat().resolvedOptions().locale;
+  }
+
+  /**
+   * A session onboarding opened on the house, or a routine run, which is its
+   * bot's work: sponsored while the bot's runs are.
+   */
+  private sponsoredRunEnvForSession(
     sessionId: string | undefined
   ): Record<string, string> {
     if (sessionId == null) return {};
+    const own = this.agentSessionManagerService.sponsoredUntil(sessionId);
+    if (own != null) return sponsoredRunEnvUntil(own);
     const routineId =
       this.agentSessionManagerService.get(sessionId)?.routineId ?? null;
     const botId = routineId != null ? (getJob(routineId)?.botId ?? null) : null;
