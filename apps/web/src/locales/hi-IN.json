@@ -4525,7 +4525,8 @@
       "empty": "I couldn't put a reply together for that. Please send it again.",
       "contactNeutral": "Sorry, I can't reply right now. I'll get back to you soon.",
       "contactEmpty": "I didn't reply to {{name}}: no answer came back. Open the app to answer them, or tell me what to say.",
-      "undelivered": "A message to {{name}} could not be delivered."
+      "undelivered": "A message to {{name}} could not be delivered.",
+      "appClosed": "The app closed before I could reply. Send it again to pick it back up."
     },
     "unavailable": {
       "title": {

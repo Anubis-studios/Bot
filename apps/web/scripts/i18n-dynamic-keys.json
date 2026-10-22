@@ -1633,7 +1633,8 @@
       "empty",
       "contactNeutral",
       "contactEmpty",
-      "undelivered"
+      "undelivered",
+      "appClosed"
     ],
     "sources": [
       "../../desktop/src/main/services/messaging/chat-failure-reply.ts",

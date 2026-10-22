@@ -4525,7 +4525,8 @@
       "empty": "Je n'ai pas pu préparer de réponse. Renvoie-le, s'il te plaît.",
       "contactNeutral": "Désolé, je ne peux pas répondre pour le moment. Je reviens vers toi bientôt.",
       "contactEmpty": "Je n'ai pas répondu à {{name}} : aucune réponse n'est revenue. Ouvre l'application pour lui répondre, ou dis-moi quoi lui écrire.",
-      "undelivered": "Un message pour {{name}} n'a pas pu être remis."
+      "undelivered": "Un message pour {{name}} n'a pas pu être remis.",
+      "appClosed": "L'application a été fermée avant que je puisse répondre. Renvoie-le pour reprendre."
     },
     "unavailable": {
       "title": {
