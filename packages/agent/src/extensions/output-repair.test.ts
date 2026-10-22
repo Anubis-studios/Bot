@@ -130,3 +130,30 @@ describe("a tool that exists and rejected the call", () => {
     expect(pi.messages).toHaveLength(0);
   });
 });
+
+describe("an empty reply", () => {
+  const empty = {
+    message: { role: "assistant", content: [], stopReason: "stop" },
+  };
+
+  it("is asked about at most twice per prompt", async () => {
+    const pi = withRepair();
+    await pi.fire("input", {});
+    for (let i = 0; i < 3; i += 1) await pi.fire("turn_end", empty);
+
+    expect(pi.messages).toHaveLength(2);
+  });
+
+  it("is still asked about once the session has spent its other nudges", async () => {
+    // A long chat used to run out after six: every later empty reply ended
+    // the turn in silence.
+    const pi = withRepair();
+    for (let prompt = 0; prompt < 5; prompt += 1) {
+      await pi.fire("input", {});
+      await pi.fire("turn_end", empty);
+      await pi.fire("turn_end", empty);
+    }
+
+    expect(pi.messages).toHaveLength(10);
+  });
+});

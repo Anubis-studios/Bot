@@ -182,6 +182,9 @@ const MALFORMED_TOOL_CALL_PATTERN = /malformed[ _]?(function|tool)[ _]?call/i;
 
 const MAX_MALFORMED_CONTINUATIONS = 1;
 
+/** Extra calls a turn may spend on getting an answer after an empty one. */
+const EMPTY_REPLY_RECOVERIES = 2;
+
 function approvalTimeoutMs(): number {
   const raw = Number(process.env.ABACUSAI_BOT_APPROVAL_TIMEOUT_MS);
 
@@ -324,6 +327,11 @@ export class ForeverEngine {
   /** A reply in the wrong language, to be asked for again (once per turn). */
   private pendingLanguageRepair: ReplyLanguageMismatch | null = null;
   private languageRepairsThisTurn = 0;
+  /** The turn's last call answered with nothing; see recoverEmptyReply. */
+  private pendingEmptyReply = false;
+  private emptyRepliesThisTurn = 0;
+  /** The run that ended the turn answered with no text and no tool call. */
+  private turnEndedEmpty = false;
   /** Whether a user turn is in flight: a refresh landing now is mid-turn. */
   private turnRunning = false;
   /** Tools a change deferred under this turn adds; continued into once. */
@@ -706,6 +714,9 @@ export class ForeverEngine {
     this.stallFailureReported = false;
     this.languageRepairsThisTurn = 0;
     this.pendingLanguageRepair = null;
+    this.pendingEmptyReply = false;
+    this.emptyRepliesThisTurn = 0;
+    this.turnEndedEmpty = false;
     this.mcpTools.atTurnStart();
     this.pendingToolArrival = null;
     this.toolArrivalsThisTurn = 0;
@@ -901,9 +912,11 @@ export class ForeverEngine {
       this.pendingToolArrival != null ||
       this.pendingStall != null ||
       this.pendingNetworkFailure != null ||
-      this.pendingBusyWait != null
+      this.pendingBusyWait != null ||
+      this.pendingEmptyReply
     ) {
       if (this.interrupted) {
+        this.pendingEmptyReply = false;
         this.pendingNetworkFailure = null;
         this.pendingBusyWait = null;
         this.continuingPastMalformedToolCall = false;
@@ -967,6 +980,13 @@ export class ForeverEngine {
         continue;
       }
 
+      if (this.pendingEmptyReply) {
+        this.pendingEmptyReply = false;
+        await this.recoverEmptyReply();
+
+        continue;
+      }
+
       if (this.pendingLanguageRepair != null) {
         const mismatch = this.pendingLanguageRepair;
         this.pendingLanguageRepair = null;
@@ -1017,8 +1037,10 @@ export class ForeverEngine {
       endedOnProviderError(messages) ??
       endedOnLeakedToolCall(messages) ??
       // Nothing at all after an earlier call failed: another model answers.
-      (this.router.chain.hadFailure && endedEmpty(messages)
-        ? EMPTY_REPLY_FAILURE
+      (this.router.chain.hadFailure &&
+      endedEmpty(messages) &&
+      this.emptyRepliesThisTurn < EMPTY_REPLY_RECOVERIES
+        ? this.spendEmptyReply()
         : null);
     const current = this.session?.model;
 
@@ -1369,8 +1391,65 @@ export class ForeverEngine {
       message.length > 0
     )
       this.router.chain.failed(message, this.session?.model?.provider);
+    // Still nothing after the recoveries: the turn ends on the empty-reply
+    // failure, never in silence.
+    else if (this.turnEndedEmpty)
+      this.router.chain.failed(
+        EMPTY_REPLY_FAILURE,
+        this.session?.model?.provider
+      );
 
     this.reportFailure();
+  }
+
+  /**
+   * The last call answered with no text and no tool call. First the same
+   * model is asked, out of sight, to answer; on the free pool the next model
+   * is the second try. A model the user picked is not swapped behind their
+   * back: after one ask, the turn ends on the empty-reply failure. At most
+   * two extra calls a turn (EMPTY_REPLY_RECOVERIES).
+   */
+  /** An empty reply's next model, counted against EMPTY_REPLY_RECOVERIES. */
+  private spendEmptyReply(): string {
+    this.emptyRepliesThisTurn += 1;
+    return EMPTY_REPLY_FAILURE;
+  }
+
+  private async recoverEmptyReply(): Promise<void> {
+    this.emptyRepliesThisTurn += 1;
+    const model = this.session?.model;
+    const name = model != null ? `${model.provider}/${model.id}` : "the model";
+    if (this.emptyRepliesThisTurn === 1 || !this.openLlmActive) {
+      if (this.emptyRepliesThisTurn > 1) {
+        this.finishTurn();
+
+        return;
+      }
+      process.stderr.write(
+        `[provider] ${name} returned an empty reply; asking it to answer.\n`
+      );
+      await this.session?.sendCustomMessage(
+        {
+          customType: this.profile.continuations.emptyReply.customType,
+          content: this.profile.continuations.emptyReply.content,
+          display: false,
+        },
+        { triggerTurn: true }
+      );
+
+      return;
+    }
+    this.router.chain.failed(EMPTY_REPLY_FAILURE, model?.provider);
+    const route = this.routeAfterFailure(EMPTY_REPLY_FAILURE);
+    if (route.rotation == null) {
+      this.finishTurn();
+
+      return;
+    }
+    process.stderr.write(
+      `[provider] ${name} returned an empty reply again; routing to the next model.\n`
+    );
+    this.pendingOpenLlmRotation = route.rotation;
   }
 
   /**
@@ -2067,6 +2146,22 @@ export class ForeverEngine {
             ? []
             : this.mcpTools.pendingArrivals();
         this.pendingToolArrival = arrivals.length > 0 ? arrivals : null;
+        // Nothing at all, with no other way on: asked for again rather than
+        // ending the turn on silence (recoverEmptyReply). A hidden
+        // housekeeping turn has no reader to answer.
+        this.turnEndedEmpty =
+          !this.hiddenTurn && !this.interrupted && endedEmpty(event.messages);
+        this.pendingEmptyReply =
+          !event.willRetry &&
+          this.turnEndedEmpty &&
+          this.emptyRepliesThisTurn < EMPTY_REPLY_RECOVERIES &&
+          !this.continuingPastMalformedToolCall &&
+          this.pendingContextCompaction == null &&
+          this.pendingOpenLlmRotation == null &&
+          this.pendingBusyWait == null &&
+          this.pendingLanguageRepair == null &&
+          this.pendingToolArrival == null &&
+          this.pendingStall == null;
         if (
           !event.willRetry &&
           !this.continuingPastMalformedToolCall &&
@@ -2075,7 +2170,8 @@ export class ForeverEngine {
           this.pendingBusyWait == null &&
           this.pendingLanguageRepair == null &&
           this.pendingToolArrival == null &&
-          this.pendingStall == null
+          this.pendingStall == null &&
+          !this.pendingEmptyReply
         ) {
           this.finishTurn();
         }

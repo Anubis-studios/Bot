@@ -826,6 +826,8 @@ export class AbacusBotSession {
    */
   private pendingLanguageRepair: ReplyLanguageMismatch | null = null;
   private languageRepairsThisTurn = 0;
+  /** The run that ended the turn answered with no text and no tool call. */
+  private turnEndedEmpty = false;
   /**
    * Set at `agent_end` when the turn died on a provider error the router can
    * route around: the error text, and the free model to move to. Like the
@@ -1381,6 +1383,7 @@ export class AbacusBotSession {
     this.networkFailureReported = false;
     this.languageRepairsThisTurn = 0;
     this.pendingLanguageRepair = null;
+    this.turnEndedEmpty = false;
     this.mcpTools.atTurnStart();
     this.pendingToolArrival = null;
     this.toolArrivalsThisTurn = 0;
@@ -1469,6 +1472,13 @@ export class AbacusBotSession {
       message.length > 0
     )
       this.router.chain.failed(message, this.session?.model?.provider);
+    // Still nothing after output repair's asks: the turn ends on the
+    // empty-reply card, never in silence.
+    else if (this.turnEndedEmpty)
+      this.router.chain.failed(
+        EMPTY_REPLY_FAILURE,
+        this.session?.model?.provider
+      );
 
     this.reportFailure();
   }
@@ -2908,6 +2918,9 @@ export class AbacusBotSession {
 
         // A call that answered ends any outage this turn was riding out.
         if (runMadeProgress(event.messages)) this.networkWait.reset();
+        // Output repair has already asked again (twice at most) by the time
+        // the run ends; still nothing is how the turn ended.
+        this.turnEndedEmpty = !this.interrupted && endedEmpty(event.messages);
         // The network's failure is checked (and waited out) before anything
         // reads it as the model's: no cooldown, no rotation, no compaction.
         this.pendingNetworkFailure =

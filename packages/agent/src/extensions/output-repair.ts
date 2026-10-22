@@ -57,9 +57,14 @@ export default function (pi: ExtensionAPI) {
   // whereas ctx.signal is cleared once the agent stops streaming.
   let turnSignal: AbortSignal | undefined;
 
-  const nudge = (text: string) => {
+  /**
+   * An empty reply is asked about on every prompt, whatever the session has
+   * spent: past the session cap a long chat's later turns ended in silence.
+   * The per-prompt cap still bounds it, and the turn then ends on an error.
+   */
+  const nudge = (text: string, everyPrompt = false) => {
     if (
-      nudges >= MAX_NUDGES_PER_SESSION ||
+      (!everyPrompt && nudges >= MAX_NUDGES_PER_SESSION) ||
       nudgesThisPrompt >= MAX_NUDGES_PER_PROMPT
     )
       return;
@@ -114,7 +119,8 @@ export default function (pi: ExtensionAPI) {
 
     if (text.length === 0) {
       nudge(
-        "Your last response was empty. Continue the task: either call a tool or state your final answer in plain text."
+        "Your last response was empty. Continue the task: either call a tool or state your final answer in plain text.",
+        true
       );
       return;
     }

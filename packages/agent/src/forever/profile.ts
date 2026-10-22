@@ -40,6 +40,8 @@ export interface ForeverContinuations {
   malformedToolCall: HiddenTurnPrompt;
   /** The custom type a reply-language repair is sent under. */
   languageRepairType: string;
+  /** After the model answered with nothing at all. */
+  emptyReply: HiddenTurnPrompt;
 }
 
 /** What the engine hands a profile's tools from the app behind it. */
