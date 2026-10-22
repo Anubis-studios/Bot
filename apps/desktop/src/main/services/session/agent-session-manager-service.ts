@@ -67,6 +67,8 @@ type SessionRecord = {
    * this declared reach. Stamped once at mint and never cleared.
    */
   unattended?: UnattendedPolicy;
+  /** Until when this session's runs are on the house (onboarding's first session). */
+  sponsoredUntil?: number;
 };
 
 // Persisted, so the old name stays. See workspace-store.ts.
@@ -169,7 +171,11 @@ export class AgentSessionManagerService {
     /** The caller's own id (an optimistic insert); a taken one is refused. */
     id?: string,
     /** The model and mode to start on (spec 04 §26.4 d), persisted now. */
-    initial: { model?: string | null; mode?: AgentMode | null } = {}
+    initial: {
+      model?: string | null;
+      mode?: AgentMode | null;
+      sponsoredUntil?: number;
+    } = {}
   ): AgentSessionListItem {
     if (
       id != null &&
@@ -199,6 +205,9 @@ export class AgentSessionManagerService {
       worktreeId: null,
       worktreePath: null,
       worktreeBranch: null,
+      ...(initial.sponsoredUntil != null
+        ? { sponsoredUntil: initial.sponsoredUntil }
+        : {}),
     };
     this.sessions.set(sessionId, record);
     const workspaceSessionIds = this.workspaceSessionIds.get(workspaceId) ?? [];
@@ -458,6 +467,10 @@ export class AgentSessionManagerService {
     this.workspaceSessionIds.delete(workspaceId);
     if (sessionIds.length > 0) this.persist();
     return sessionIds;
+  }
+
+  sponsoredUntil(sessionId: string): number | null {
+    return this.sessions.get(sessionId)?.sponsoredUntil ?? null;
   }
 
   get(sessionId: string): AgentSessionListItem | null {

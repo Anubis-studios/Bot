@@ -26,6 +26,27 @@ export const NAME_ONLY_MISSION = [
   "from then on.",
 ].join(" ");
 
+const GOAL_LEAD = 'The user created you for this, in their own words: "';
+const GOAL_TAIL = [
+  '". That is your whole mission; nothing else is implied. On your first',
+  "turn, take the first useful step toward it right away with the tools you",
+  "have (a plan, a draft, a first file, a first search). Ask at most one",
+  "question, and only if you cannot take any step without the answer. Do not",
+  "create routines unless the user's words name a time or rhythm. Ask for a",
+  "connector only when the step you are taking needs it, never for apps the",
+  "goal does not use.",
+].join(" ");
+
+/** The mission of a bot made from the user's own words; it has no template. */
+export const GOAL_MISSION = (goal: string): string =>
+  `${GOAL_LEAD}${goal.trim()}${GOAL_TAIL}`;
+
+/** The user's words inside a GOAL_MISSION, or null for any other mission. */
+export const goalOfMission = (mission: string): string | null =>
+  mission.startsWith(GOAL_LEAD) && mission.endsWith(GOAL_TAIL)
+    ? mission.slice(GOAL_LEAD.length, mission.length - GOAL_TAIL.length)
+    : null;
+
 /**
  * What a check-in routine asks the bot to do when it fires. Stored routines
  * are recognised by this exact text (isCheckInRoutine), so do not reword it.

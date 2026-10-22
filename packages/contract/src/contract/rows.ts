@@ -55,6 +55,8 @@ export type SessionRow = Omit<AgentSessionListItem, "worktreeOperationId"> & {
    * after a reload. Main always sets it (null when none); not writable.
    */
   worktreeOperationId?: string | null;
+  /** Create-only input: the session onboarding opens first runs on the house. */
+  sponsoredFirstRun?: boolean;
 };
 
 export type BotRow = Bot & {

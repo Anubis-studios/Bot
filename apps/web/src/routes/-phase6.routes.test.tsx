@@ -14,6 +14,8 @@ import {
   firstBotStore,
   noteConnectedChatApp,
 } from "#renderer/features/onboarding/first-bot";
+import { startDraftStore } from "#renderer/features/sessions/start/start-session";
+import { GOAL_MISSION } from "#renderer/lib/bots/check-in";
 import {
   renderApp,
   defaultSeed,
@@ -136,23 +138,29 @@ it.each([null, "telegram"] as const)(
     // What the connectors step's chat-app dialog notes once it links.
     if (chatApp != null) noteConnectedChatApp(chatApp);
     fireEvent.click(continueConnectors);
-    fireEvent.click(await screen.findByRole("button", { name: "Say hello" }));
+    if (chatApp == null) {
+      const box = await screen.findByRole("textbox", { name: "What you need" });
+      fireEvent.change(box, { target: { value: "Kaggle notebooks" } });
+      fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    } else fireEvent.click(await screen.findByRole("button", { name: "Open" }));
     await waitFor(() =>
       expect(harness!.router.state.location.pathname).toMatch(/^\/bots\/bot-/)
     );
     const ownBots = harness.collections.bots.toArray;
     expect(ownBots).toHaveLength(1);
     expect(harness.collections.routines.toArray).toHaveLength(0);
+    // The first thing made runs on the house, whichever it is.
+    expect(ownBots[0]).toMatchObject({ sponsoredFirstRun: true });
     if (chatApp == null) {
-      expect(ownBots[0]).toMatchObject({ sponsoredFirstRun: true });
-      expect(ownBots[0]!.description).toContain("create_draft_reply");
+      // The user's own words are the mission: no template, nothing to connect up front.
+      expect(ownBots[0]!.description).toBe(GOAL_MISSION("Kaggle notebooks"));
+      expect(ownBots[0]!.templateId).toBeUndefined();
     } else {
-      // The Telegram Agent's own mission, no inbox pass, nothing sponsored.
       expect(ownBots[0]).toMatchObject({
         name: "Telegram Agent",
         homeChannel: "telegram",
+        templateId: "telegram-agent",
       });
-      expect(ownBots[0]!.sponsoredFirstRun).toBeUndefined();
       expect(ownBots[0]!.description).toContain("Live in my Telegram.");
     }
     // Completion clears the exit only after the destination navigation settles.
@@ -175,7 +183,7 @@ it.each([null, "telegram"] as const)(
   },
   15000
 );
-it("Start building keeps the first bot and opens a new session", async () => {
+it("Start building opens a new session on the build examples and makes no bot", async () => {
   const seed = defaultSeed();
   seed.bots = [];
   seed.routines = [];
@@ -192,14 +200,21 @@ it("Start building keeps the first bot and opens a new session", async () => {
   await waitFor(() =>
     expect(harness!.router.state.location.pathname).toBe("/sessions/new")
   );
-  expect(harness.collections.bots.toArray).toHaveLength(1);
+  expect(harness.collections.bots.toArray).toHaveLength(0);
   expect(harness.collections.routines.toArray).toHaveLength(0);
+  expect(startDraftStore.state).toMatchObject({
+    starters: "build",
+    sponsored: true,
+  });
+  expect(
+    await screen.findByRole("button", { name: /Portfolio site/ })
+  ).toBeTruthy();
   expect(
     harness.calls.filter(([name]) => name === "account.skipOnboarding")
   ).toHaveLength(1);
 });
 
-it("a ready first bot waits for the pick: its chat, or building", async () => {
+it("the first-run choices wait for a pick, and a pick opens the bot it made", async () => {
   const seed = defaultSeed();
   seed.bots = [];
   seed.routines = [];
@@ -208,20 +223,25 @@ it("a ready first bot waits for the pick: its chat, or building", async () => {
     signedIn: true,
     seed,
   });
-  const hello = await screen.findByRole("button", { name: "Say hello" });
+  const research = await screen.findByRole("button", { name: "Start" });
   expect(screen.getByRole("button", { name: "Start building" })).toBeTruthy();
   expect(screen.queryByRole("progressbar")).toBeNull();
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 2500));
   });
   expect(harness.router.state.location.pathname).toBe("/onboarding/first-bot");
-  fireEvent.click(hello);
+  expect(harness.collections.bots.toArray).toHaveLength(0);
+  fireEvent.click(research);
   await waitFor(
     () =>
       expect(harness!.router.state.location.pathname).toMatch(/^\/bots\/bot-/),
     { timeout: 5000 }
   );
   expect(harness.collections.bots.toArray).toHaveLength(1);
+  expect(harness.collections.bots.toArray[0]).toMatchObject({
+    name: "Research Assistant",
+    sponsoredFirstRun: true,
+  });
   expect(
     harness.calls.filter(([name]) => name === "account.skipOnboarding")
   ).toHaveLength(1);
@@ -232,7 +252,49 @@ it("a ready first bot waits for the pick: its chat, or building", async () => {
   );
 });
 
-it("final setup retries a failed completion without duplicating its created Chief", async () => {
+it("after a Gmail sign-in the Chief of Staff starts on the inbox while the screen waits for it", async () => {
+  const seed = defaultSeed();
+  seed.bots = [];
+  seed.routines = [];
+  const os = implement(contract);
+  harness = await renderApp("/onboarding/first-bot", {
+    onboarded: false,
+    signedIn: true,
+    seed,
+    procedures: {
+      connectors: {
+        statuses: os.connectors.statuses.handler(
+          () => ({ "abacus-gmailuser": { state: "connected" } }) as never
+        ),
+      },
+    },
+  });
+  expect(
+    await screen.findByRole("heading", {
+      name: "Reading your last 3 days of email…",
+    })
+  ).toBeTruthy();
+  expect(harness.collections.bots.toArray).toHaveLength(1);
+  expect(harness.collections.bots.toArray[0]).toMatchObject({
+    templateId: "chief-of-staff",
+    sponsoredFirstRun: true,
+  });
+  await waitFor(() =>
+    expect(
+      harness!.calls.filter(([name]) => name === "bots.openChat")
+    ).toHaveLength(1)
+  );
+  expect(harness.router.state.location.pathname).toBe("/onboarding/first-bot");
+  fireEvent.click(screen.getByRole("button", { name: "Watch it work" }));
+  await waitFor(() =>
+    expect(harness!.router.state.location.pathname).toBe(
+      `/bots/${harness!.collections.bots.toArray[0]!.id}`
+    )
+  );
+  expect(harness.collections.bots.toArray).toHaveLength(1);
+});
+
+it("final setup retries a failed completion without duplicating the bot it made", async () => {
   const seed = defaultSeed();
   seed.bots = [];
   seed.routines = [];
@@ -259,7 +321,7 @@ it("final setup retries a failed completion without duplicating its created Chie
       },
     },
   });
-  const hello = await screen.findByRole("button", { name: "Say hello" });
+  const hello = await screen.findByRole("button", { name: "Start" });
   fireEvent.click(hello);
   await screen.findByRole("alert");
   expect(harness.router.state.location.pathname).toBe("/onboarding/first-bot");
@@ -274,7 +336,7 @@ it("final setup retries a failed completion without duplicating its created Chie
   expect(harness.collections.bots.toArray).toHaveLength(1);
 });
 
-it("a website signup is welcomed and set up like any sign-in, then offered its Chief", async () => {
+it("a website signup is welcomed and set up like any sign-in", async () => {
   const seed = defaultSeed();
   seed.bots = [];
   seed.routines = [];

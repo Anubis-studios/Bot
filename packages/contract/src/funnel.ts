@@ -29,6 +29,13 @@ export const FUNNEL_STEPS = [
   "first_bot_skipped",
   // The first-bot screen's other choice: straight to a session to build.
   "first_build_chosen",
+  // The first-run screen: the card picked, and the inbox result after a Gmail sign-in.
+  "first_choice_build",
+  "first_choice_whatsapp",
+  "first_choice_research",
+  "first_choice_images",
+  "first_choice_freetext",
+  "screen_b_shown",
   // A bot asked to build offers a session (offer_session's card).
   "session_offer_shown",
   "session_offer_opened",

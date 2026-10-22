@@ -1177,15 +1177,10 @@
     "pages.models.openrouter": "OpenRouter",
     "pages.models.gemini": "Google Gemini",
     "pages.connectors.body": "E-postanı bağla veya kullandığın uygulamalardan botuna mesaj at. Daha fazla aracı sonra ekleyebilirsin.",
-    "pages.first-bot.title": "İlk botunu senin için oluşturduk",
-    "pages.first-bot.body": "{{name}} e-posta, toplantılar ve günlük işlerde yardımcı olur. Onu kendine göre düzenle.",
     "pages.done.title": "Her şey hazır",
     "pages.done.body": "Merhaba de veya bir klasörde oturum başlat.",
     "pages.deferred": "Kurulumdan sonra tamamla",
     "pages.removed": "Bu bot kaldırıldı",
-    "pages.checkIn": "Hafta içi 8:00'de yoklar · Gmail, Takvim",
-    "pages.noCheckIn": "Yoklama yok",
-    "pages.hello": "Merhaba de",
     "pages.message": "{{name}} ile mesajlaş",
     "pages.addKey": "API anahtarı ekle",
     "pages.pairing": "{{platform}} bağlantısını tamamla",
@@ -1257,10 +1252,58 @@
     "connectedPromiseWork": "tüm araçların ve hizmetlerinde",
     "connectedPromiseLocalLead": "Yerelde çalışır.",
     "connectedPromiseLocal": "Nerede çalışıyorsan orada sohbet et.",
-    "pages.buildTitle": "Hemen kodla ve oluştur",
-    "pages.buildBody": "Kod yaz, uygulama oluştur, klasörlerinde çalış",
-    "pages.buildCta": "Oluşturmaya başla",
-    "pages.editBot": "Düzenle: {{name}}"
+    "firstRun": {
+      "title": "Önce ne yapmak istersin?",
+      "subtitle": "Birini seç. Botun hemen işe koyulur. Bağlanacak bir şey yok.",
+      "build": {
+        "title": "Bir şey oluştur",
+        "body": "Bir web sitesi, uygulama ya da oyun. Anlat, gözünün önünde ortaya çıksın.",
+        "cta": "Oluşturmaya başla"
+      },
+      "chatApp": {
+        "title": "Bana {{app}} üzerinden cevap ver",
+        "body": "Botuna istediğin zaman telefonundan yaz.",
+        "setUp": "Kur",
+        "open": "Aç"
+      },
+      "research": {
+        "title": "Araştır veya yaz",
+        "body": "Bir rapor, bir sunum, dosyalarından bir belge.",
+        "cta": "Başla",
+        "botName": "Araştırma Asistanı"
+      },
+      "images": {
+        "title": "Görsel ve video oluştur",
+        "plan": "Basic",
+        "body": "Logolar, ürün fotoğrafları, gönderiler ve klipler. İlk ay {{price}}.",
+        "cta": "Basic'e göz at"
+      },
+      "goal": {
+        "placeholder": "Ya da sadece neye ihtiyacın olduğunu söyle…",
+        "label": "Neye ihtiyacın var",
+        "send": "Gönder",
+        "botName": "Asistanım"
+      },
+      "inbox": {
+        "readingTitle": "Son 3 günün e-postaları okunuyor…",
+        "readingBody": "Seni bekleyen her e-postaya bir yanıt taslağı hazırlanıyor. Sen onaylamadan hiçbir şey gönderilmez.",
+        "watch": "Çalışırken izle",
+        "title": "Gelen kutun zaten düzenlendi",
+        "subtitle": "{{name}} son 3 günün e-postalarını okudu.",
+        "count_one": "Bugün seni bekleyen {{count}} e-posta var",
+        "count_other": "Bugün seni bekleyen {{count}} e-posta var",
+        "countBody": "Her biri için taslak hazır. Sen onaylamadan hiçbir şey gönderilmez.",
+        "review": "Taslakları incele",
+        "emptyTitle": "Bugün seni bekleyen bir şey yok",
+        "keepTitle": "Gelen kutumu izlemeye devam et",
+        "keepBody": "{{name}} her sabah kontrol eder ve senin için yanıt taslakları hazırlar.",
+        "keepCta": "İzlemeye devam et",
+        "stoppedTitle": "{{name}} bitirmeden durdu",
+        "stoppedBody": "Sohbetinde ne bulduğunu ve neye ihtiyacı olduğunu görebilirsin.",
+        "open": "Sohbeti aç",
+        "buildTitle": "Ya da bir şey oluştur"
+      }
+    }
   },
   "referralCard": {
     "cta": "Arkadaşlarını davet et",
@@ -1630,7 +1673,24 @@
           "detail": "Değişiklikleri hatalar ve eksik testler için kontrol et."
         }
       },
-      "recent": "{{workspace}} içinde kaldığın yerden devam et"
+      "recent": "{{workspace}} içinde kaldığın yerden devam et",
+      "build": {
+        "portfolio-site": {
+          "name": "Portfolyo sitesi",
+          "detail": "Çalışmaların için tek sayfalık bir site.",
+          "prompt": "Bana tek sayfalık bir portfolyo web sitesi yap: en üstte adım ve tek cümlelik bir tanıtım, üç örnek projeden oluşan bir ızgara, bir hakkımda bölümü ve bir iletişim bölümü. Sonradan değiştirebileceğim örnek metin ve görseller kullan, sade ve modern olsun ve telefonda da düzgün görünsün. Hazır olunca sayfayı bana göster."
+        },
+        "shop-page": {
+          "name": "İşletmem için mağaza sayfası",
+          "detail": "Ürünler, fiyatlar ve sepet.",
+          "prompt": "Küçük işletmem için tek sayfalık bir mağaza yap: mağaza adının olduğu bir üst kısım, fotoğraf, ad, fiyat ve Sepete ekle düğmesi olan altı örnek ürün, basit bir sepet ve bir iletişim bölümü. Sonradan değiştirebileceğim örnek ürünler kullan ve telefonda da düzgün görünsün. Hazır olunca sayfayı bana göster."
+        },
+        "simple-game": {
+          "name": "Basit bir oyun",
+          "detail": "Tarayıcında hemen oynanır.",
+          "prompt": "Tarayıcıda hemen oynayabileceğim basit bir oyun yap: ok tuşları ve kaydırmayla oynanan bir yılan oyunu; skor, en yüksek skor ve yeniden başlat düğmesi olsun. Tek sayfada olsun ve hazır olunca bana göster."
+        }
+      }
     },
     "model": {
       "choose": "Bir model seç",

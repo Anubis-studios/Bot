@@ -1177,15 +1177,10 @@
     "pages.models.openrouter": "OpenRouter",
     "pages.models.gemini": "Google Gemini",
     "pages.connectors.body": "도구를 선택하세요. 나중에 더 추가할 수 있어요.",
-    "pages.first-bot.title": "첫 번째 봇을 만들어 두었어요",
-    "pages.first-bot.body": "{{name}}이(가) Gmail, 캘린더, Slack에서 하루 업무를 챙깁니다. 이름이나 모습을 바꾸거나 처음부터 만들어도 됩니다.",
     "pages.done.title": "준비 완료",
     "pages.done.body": "인사를 건네거나, 폴더에서 세션을 시작하세요.",
     "pages.deferred": "설정 후 완료",
     "pages.removed": "이 봇은 삭제되었습니다",
-    "pages.checkIn": "평일 8:00에 체크인 · Gmail, 캘린더",
-    "pages.noCheckIn": "체크인 없음",
-    "pages.hello": "인사하기",
     "pages.message": "{{name}}에게 메시지",
     "pages.addKey": "API 키 추가",
     "pages.pairing": "{{platform}} 연결 완료",
@@ -1257,10 +1252,58 @@
     "connectedPromiseWork": "Gets your work done, and connects to all your services",
     "connectedPromiseLocalLead": "Runs locally.",
     "connectedPromiseLocal": "Chat with it wherever you work.",
-    "pages.buildTitle": "바로 코딩하고 만들기",
-    "pages.buildBody": "코드 작성, 앱 만들기, 내 폴더에서 작업",
-    "pages.buildCta": "만들기 시작",
-    "pages.editBot": "{{name}} 편집"
+    "firstRun": {
+      "title": "무엇부터 해 볼까요?",
+      "subtitle": "하나를 고르세요. 봇이 바로 시작합니다. 연결할 것은 없습니다.",
+      "build": {
+        "title": "무언가 만들기",
+        "body": "웹사이트, 앱, 게임. 설명하면 눈앞에서 만들어집니다.",
+        "cta": "만들기 시작"
+      },
+      "chatApp": {
+        "title": "{{app}}에서 답해 줘",
+        "body": "언제든 휴대폰에서 봇에게 메시지를 보내세요.",
+        "setUp": "설정",
+        "open": "열기"
+      },
+      "research": {
+        "title": "조사하거나 글쓰기",
+        "body": "보고서, 발표 자료, 내 파일로 만든 문서.",
+        "cta": "시작",
+        "botName": "리서치 도우미"
+      },
+      "images": {
+        "title": "이미지와 동영상 만들기",
+        "plan": "Basic",
+        "body": "로고, 제품 사진, 게시물, 클립. 첫 달 {{price}}.",
+        "cta": "Basic 보기"
+      },
+      "goal": {
+        "placeholder": "또는 필요한 걸 그냥 말해 주세요…",
+        "label": "필요한 것",
+        "send": "보내기",
+        "botName": "내 도우미"
+      },
+      "inbox": {
+        "readingTitle": "최근 3일간의 이메일을 읽는 중…",
+        "readingBody": "답장이 필요한 이메일마다 답장 초안을 쓰고 있어요. 확인 없이 보내는 것은 없습니다.",
+        "watch": "작업 보기",
+        "title": "받은편지함, 이미 정리했어요",
+        "subtitle": "{{name}}이(가) 최근 3일간의 이메일을 읽었습니다.",
+        "count_one": "오늘 확인이 필요한 이메일 {{count}}개",
+        "count_other": "오늘 확인이 필요한 이메일 {{count}}개",
+        "countBody": "모두 초안이 준비되어 있어요. 확인 없이 보내는 것은 없습니다.",
+        "review": "초안 검토",
+        "emptyTitle": "오늘 확인할 것이 없어요",
+        "keepTitle": "받은편지함 계속 지켜보기",
+        "keepBody": "{{name}}이(가) 매일 아침 확인하고 답장 초안을 준비합니다.",
+        "keepCta": "계속 지켜보기",
+        "stoppedTitle": "{{name}}이(가) 끝내기 전에 멈췄어요",
+        "stoppedBody": "찾은 내용과 필요한 것은 채팅에서 볼 수 있어요.",
+        "open": "채팅 열기",
+        "buildTitle": "또는 무언가 만들기"
+      }
+    }
   },
   "referralCard": {
     "cta": "Invite friends",
@@ -1630,7 +1673,24 @@
           "detail": "변경 사항에서 버그와 빠진 테스트를 확인하세요."
         }
       },
-      "recent": "Pick up where you left off in {{workspace}}"
+      "recent": "Pick up where you left off in {{workspace}}",
+      "build": {
+        "portfolio-site": {
+          "name": "포트폴리오 사이트",
+          "detail": "내 작업을 보여 주는 한 페이지 사이트.",
+          "prompt": "한 페이지짜리 포트폴리오 웹사이트를 만들어 줘. 내 이름과 한 줄 소개가 있는 히어로, 샘플 프로젝트 3개 그리드, 소개 섹션, 연락처 섹션을 넣어 줘. 나중에 바꿀 수 있는 임시 텍스트와 이미지를 쓰고, 깔끔하고 모던하게 만들고, 휴대폰에서도 잘 보이게 해 줘. 완성되면 페이지를 보여 줘."
+        },
+        "shop-page": {
+          "name": "내 가게 쇼핑 페이지",
+          "detail": "상품, 가격, 장바구니.",
+          "prompt": "내 작은 가게를 위한 한 페이지 쇼핑몰을 만들어 줘. 가게 이름이 있는 헤더, 사진·이름·가격·장바구니 담기 버튼이 있는 샘플 상품 6개, 간단한 장바구니, 연락처 섹션을 넣어 줘. 나중에 바꿀 수 있는 임시 상품을 쓰고, 휴대폰에서도 잘 보이게 해 줘. 완성되면 페이지를 보여 줘."
+        },
+        "simple-game": {
+          "name": "간단한 게임",
+          "detail": "브라우저에서 바로 플레이.",
+          "prompt": "브라우저에서 바로 할 수 있는 간단한 게임을 만들어 줘. 방향키와 스와이프로 조작하는 스네이크 게임으로, 점수, 최고 점수, 다시 시작 버튼을 넣어 줘. 한 페이지로 만들고 완성되면 보여 줘."
+        }
+      }
     },
     "model": {
       "choose": "Choose a model",

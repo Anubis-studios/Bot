@@ -31,10 +31,12 @@ On a fresh install, onboarding:
    is already available.
 4. Opens a guided tour of Bots, Connectors, Capabilities, Routines, Memory,
    Artifacts, Changes, and permissions.
-5. Creates a Chief of Staff bot when the install has no bots. You can edit or
-   delete it like any other bot. Its template contains a weekday-morning job.
-   When the bot's first chat starts, it may create that routine. A routine
-   created by a bot runs once immediately.
+5. Asks what you want to do first when the install has no bots: build a
+   website, app or game, answer you on a chat app, research or write, or
+   whatever you type. Each choice starts working at once and needs nothing
+   connected. If you connected Gmail during sign-in, a Chief of Staff bot
+   reads your last three days of email instead and the screen shows the
+   replies it drafted; nothing is sent without you.
 
 The app automatically uploads transcripts, logs, and diagnostics to Abacus.AI
 for product improvement and troubleshooting when an Abacus.AI key is saved.

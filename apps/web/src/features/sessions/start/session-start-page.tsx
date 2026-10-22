@@ -2,7 +2,9 @@ import { useLiveQuery } from "@tanstack/react-db";
 import { useQuery } from "@tanstack/react-query";
 import { useSelector } from "@tanstack/react-store";
 import {
+  Gamepad2,
   GitPullRequest,
+  Globe,
   PieChart,
   Plane,
   ShoppingBag,
@@ -26,6 +28,8 @@ import { useDb } from "#renderer/data/db";
 import { isListedSession } from "#renderer/data/db/filters";
 import { usePrefs } from "#renderer/data/db/prefs";
 import { defaultLook } from "#renderer/lib/bots/avatar";
+import { BUILD_STARTER_IDS } from "#renderer/lib/build-starters";
+import { updateDraft } from "#renderer/lib/continuity/composer-drafts";
 import { formatChatStamp } from "#renderer/lib/format/chat-stamp";
 import { AppLink } from "#renderer/lib/navigation/app-link";
 import { useAppNavigate } from "#renderer/lib/navigation/use-app-navigate";
@@ -38,6 +42,7 @@ import {
   startDraftStore,
   startSession,
   optimisticSession,
+  takeStartPrompt,
   type SubmissionEnvelope,
 } from "./start-session";
 /** Phone starter cards lead with an icon, the way native quick prompts do. */
@@ -48,6 +53,34 @@ const STARTER_ICONS: Record<string, LucideIcon> = {
   "process-a-spreadsheet": Table2,
   "restyle-a-repo": Wand2,
   "find-flights": Plane,
+  "portfolio-site": Globe,
+  "shop-page": ShoppingBag,
+  "simple-game": Gamepad2,
+};
+/** Sends a queued prompt as soon as the composer could; a failure leaves it in the box. */
+export const QueuedPrompt = ({
+  threadId,
+  ready,
+  forwardedProps,
+  submit,
+}: {
+  threadId: string;
+  ready: boolean;
+  forwardedProps: Record<string, unknown>;
+  submit(envelope: SubmissionEnvelope): Promise<void>;
+}) => {
+  useEffect(() => {
+    if (!ready) return;
+    const text = takeStartPrompt(threadId);
+    if (text == null) return;
+    void submit({
+      runId: crypto.randomUUID(),
+      messageId: crypto.randomUUID(),
+      parts: [{ type: "text", content: text }],
+      forwardedProps,
+    }).catch(() => updateDraft(threadId, (draft) => ({ ...draft, text })));
+  }, [ready, threadId, forwardedProps, submit]);
+  return null;
 };
 export interface StartComposerBinding {
   threadId: string;
@@ -133,7 +166,19 @@ export const SessionStartPage = ({
     if (resume) resumeStart();
   }, [resume]);
   const id = `draft:${draft.id}`;
-  const starters = SESSION_STARTERS;
+  const starters =
+    draft.starters === "build"
+      ? BUILD_STARTER_IDS.map((starterId) => ({
+          id: starterId,
+          name: t(`sessions.start.build.${starterId}.name`),
+          detail: t(`sessions.start.build.${starterId}.detail`),
+          prompt: t(`sessions.start.build.${starterId}.prompt`),
+        }))
+      : SESSION_STARTERS.map((starter) => ({
+          ...starter,
+          name: t(`sessions.start.starters.${starter.id}.name`),
+          detail: t(`sessions.start.starters.${starter.id}.detail`),
+        }));
   const context = draft.workspaceId ? (
     <SessionContextTray
       workspaceId={draft.workspaceId}
@@ -283,9 +328,9 @@ export const SessionStartPage = ({
                   );
                 })()}
                 <span className="flex flex-col gap-1">
-                  <span>{t(`sessions.start.starters.${starter.id}.name`)}</span>
+                  <span>{starter.name}</span>
                   <span className="text-foreground/75 phone:line-clamp-2 text-xs font-normal">
-                    {t(`sessions.start.starters.${starter.id}.detail`)}
+                    {starter.detail}
                   </span>
                 </span>
               </Button>

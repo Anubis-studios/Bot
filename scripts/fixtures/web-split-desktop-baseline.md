@@ -8,7 +8,26 @@ renderer, a chunk split by a stray import), not against features. A feature
 that needs more is measured, reviewed and recorded here as a new baseline,
 in a commit of its own that says by how much it grew.
 
-## Current: `49eb0f84` (GitHub PR review, #517)
+## Current: `0ba0d4315` (the first-run screen)
+
+**422 / 7896602 / 2650176.** Records the renderer with onboarding's first-run
+screen (what to do first, and the inbox pass after a Gmail sign-in). Against
+`49eb0f84`: +5 chunks (+1.20%), +55119 bytes (+0.70%), +17597 gzip bytes
+(+0.67%). Main at `fb0c2714a` stood at 417 / 7844523 / 2633149 (+0.04%
+bytes, under the 1% allowance); the screen adds +5 chunks, +52079 bytes
+(+0.66%) and +17027 gzip bytes (+0.65%) on top of it. The five chunks are
+small modules the onboarding route now shares with other lazy chunks (two
+icons, the build examples list, the tool-call reader and the attention cues),
+split out of the chunks that used to hold them alone. The 1% allowance is
+unchanged.
+
+Measured from a frozen-lockfile build of `0ba0d4315` and of main at
+`fb0c2714a` (Linux x64), summed the same way as `check-desktop-parity.mjs`.
+This baseline-only change touches no renderer code.
+
+## History
+
+### `49eb0f84` (GitHub PR review, #517)
 
 **417 / 7841483 / 2632579.** Records the renderer with the session's pull
 request tab (the PR's conversation, checks, files and review composer) and
@@ -25,8 +44,6 @@ Measured from a frozen-lockfile build of `49eb0f84` and of main at
 `64dddfe0` (macOS arm64), summed the same way as
 `check-desktop-parity.mjs`. This baseline-only change touches no renderer
 code.
-
-## History
 
 ### `e38c6a995` (turn checkpoints, #500)
 

@@ -116,6 +116,7 @@ export const sessionsCollectionOptions = (
       workspaceId: row.workspaceId,
       model: row.model,
       mode: row.mode,
+      ...(row.sponsoredFirstRun === true ? { sponsoredFirstRun: true } : {}),
     }),
     toUpdateInput: (id, changes) => ({
       id,

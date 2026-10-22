@@ -15,7 +15,12 @@ import { connectErrorText } from "#renderer/lib/connect-page";
 import type { OnboardingStepId } from "#renderer/lib/navigation/areas";
 
 import { ConnectFailed } from "./connect";
-import { ensureFirstBot, firstBotStore } from "./first-bot";
+import {
+  ensureFirstBot,
+  firstBotStore,
+  inboxPassStore,
+  type FirstBotState,
+} from "./first-bot";
 import { OnboardingNavigation } from "./frame";
 import { next, connectedProviders } from "./machine";
 import { ConnectStep } from "./steps/connect";
@@ -79,9 +84,17 @@ export const OnboardingStepPage = (props: OnboardingPageProps) => {
   const { t } = useTranslation();
   const db = useDb();
   const liveFirst = useSelector(firstBotStore, (s) => s);
-  const first = props.previewBot
-    ? { state: "ready" as const, result: props.previewBot }
-    : liveFirst;
+  const liveInbox = useSelector(inboxPassStore, (s) => s);
+  const liveChatApp = useSelector(onboardingStore, (s) => s.chatApp ?? null);
+  const preview = props.previewFirstRun;
+  const first: FirstBotState =
+    step === "first-bot" && preview != null && preview.inbox == null
+      ? { state: "choose" }
+      : props.previewBot
+        ? { state: "ready", result: props.previewBot }
+        : liveFirst;
+  const inbox = preview?.inbox ?? liveInbox;
+  const chatApp = preview != null ? (preview.chatApp ?? null) : liveChatApp;
   const attempt = useSelector(onboardingStore, (s) => s.signIn);
   const payment = usePaymentRequired(
     !props.preview && (step === "welcome" || step === "connect")
@@ -139,11 +152,14 @@ export const OnboardingStepPage = (props: OnboardingPageProps) => {
       shownBot.current = null;
       return;
     }
-    if (props.preview || liveFirst.state !== "ready") return;
-    const id = liveFirst.result.bot.id;
+    if (props.preview) return;
+    if (liveFirst.state !== "ready" && liveFirst.state !== "choose") return;
+    const id = liveFirst.state === "ready" ? liveFirst.result.bot.id : "choose";
     if (shownBot.current === id) return;
     shownBot.current = id;
     void transport.client.system.funnelStep({ step: "first_bot_shown" });
+    if (liveFirst.state === "ready")
+      void transport.client.system.funnelStep({ step: "screen_b_shown" });
   }, [step, liveFirst, transport, props.preview]);
   const performing = useRef(false);
   const perform = async (action: () => Promise<unknown>) => {
@@ -201,8 +217,11 @@ export const OnboardingStepPage = (props: OnboardingPageProps) => {
     () => {
       if (performing.current) return;
       void perform(async () => {
-        if (bot)
-          await transport.client.system.funnelStep({ step: "first_bot_kept" });
+        if (first.state === "skipped" && first.reason === "has_bots")
+          await transport.client.system.funnelStep({
+            step: "first_bot_skipped",
+            detail: "has_bots",
+          });
         const target = bot ?? existingBot;
         await props.complete(
           target ? { to: "bot", botId: target.id } : { to: "new-bot" }
@@ -230,15 +249,19 @@ export const OnboardingStepPage = (props: OnboardingPageProps) => {
         continueConnectors: () => go("next"),
         hello: bot
           ? () =>
-              void perform(async () => {
-                await transport.client.system.funnelStep({
-                  step: "first_bot_kept",
-                });
-                await props.complete({ to: "bot", botId: bot.id });
-              })
-          : first.state === "skipped" || first.state === "removed"
-            ? () => void perform(() => props.complete({ to: "new-bot" }))
-            : null,
+              void perform(() => props.choose({ kind: "bot", botId: bot.id }))
+          : first.state === "choose"
+            ? () =>
+                void perform(async () => {
+                  await transport.client.system.funnelStep({
+                    step: "first_choice_build",
+                    detail: "enter",
+                  });
+                  await props.choose({ kind: "build", prompt: null });
+                })
+            : first.state === "skipped" || first.state === "removed"
+              ? () => void perform(() => props.complete({ to: "new-bot" }))
+              : null,
         finish: () =>
           void perform(() =>
             props.complete(
@@ -334,6 +357,8 @@ export const OnboardingStepPage = (props: OnboardingPageProps) => {
           bot={bot}
           present={present}
           heading={heading}
+          inbox={inbox}
+          chatApp={chatApp}
         />
       )}
       {(step === "done" ||

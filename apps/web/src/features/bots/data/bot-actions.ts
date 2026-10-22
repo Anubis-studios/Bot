@@ -18,8 +18,8 @@ import { DeleteKeyNotFoundError } from "@tanstack/db";
 import type { Collections, Db } from "#renderer/data/db";
 import { isRpcError } from "#renderer/data/query-client";
 import type { Transport } from "#renderer/data/transport";
-import { resolveLook } from "#renderer/lib/bots/avatar";
-import { CHECK_IN_PROMPT } from "#renderer/lib/bots/check-in";
+import { defaultLook, resolveLook } from "#renderer/lib/bots/avatar";
+import { CHECK_IN_PROMPT, GOAL_MISSION } from "#renderer/lib/bots/check-in";
 import { BOT_TEMPLATES } from "#renderer/lib/bots/templates";
 
 import { forgetOpenChat } from "./open-chat";
@@ -306,4 +306,36 @@ export const createBotFromTemplate = async (
     }
   }
   return { bot: row, checkInRoutineId };
+};
+
+/** A bot made from the user's own words (GOAL_MISSION): no template, so no up-front connector list. */
+export const createGoalBot = async (
+  db: Db,
+  input: {
+    id?: string;
+    name: string;
+    goal: string;
+    sponsoredFirstRun?: boolean;
+  }
+): Promise<BotRow> => {
+  const look = defaultLook(input.name);
+  const now = Date.now();
+  const row: BotRow = {
+    id: input.id ?? newBotId(),
+    ...(input.sponsoredFirstRun ? { sponsoredFirstRun: true } : {}),
+    name: input.name,
+    title: "",
+    persona: "",
+    description: GOAL_MISSION(input.goal),
+    avatarShape: look.shape,
+    avatarColor: look.color,
+    model: null,
+    channel: null,
+    sessionId: null,
+    workspaceId: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+  await db.collections.bots.insert(row).isPersisted.promise;
+  return row;
 };

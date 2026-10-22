@@ -312,3 +312,8 @@
   .onboarding-stage[data-placement="flank"] [data-avatar-id="parade-bunny"] { left: -16px; top: -105px; }
   .onboarding-stage[data-placement="flank"] [data-avatar-id="first-bot"] { left: auto; right: -16px; top: -105px; }
 }
+
+/* The first-run card the screen leads with. */
+.onboarding-card-primary {
+  box-shadow: inset 0 0 0 1.5px color-mix(in oklch, var(--primary) 55%, transparent);
+}

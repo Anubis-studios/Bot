@@ -5,13 +5,18 @@ import {
 } from "@abacus-ai/contract/messaging";
 import { isPayingAbacusTier } from "@abacus-ai/contract/models";
 import { canSignOutOfAbacus } from "@abacus-ai/contract/settings";
+import { abacusAgentPromptUrl } from "@abacus-ai/contract/toolsets";
 import { isCancelledError } from "@tanstack/react-query";
 import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import * as v from "valibot";
 
-import { createBotFromTemplate } from "#renderer/features/bots/data/bot-actions";
+import {
+  createBotFromTemplate,
+  createGoalBot,
+} from "#renderer/features/bots/data/bot-actions";
+import { openChatOnce } from "#renderer/features/bots/data/open-chat";
 import { MessagingPlatformDialog } from "#renderer/features/library/messaging";
 import { OnboardingStepPage } from "#renderer/features/onboarding";
 import { completeOnboarding } from "#renderer/features/onboarding/actions";
@@ -24,9 +29,12 @@ import {
   connectOnboarding,
 } from "#renderer/features/onboarding/connect";
 import {
-  firstBotTemplateId,
+  chatAppTemplateId,
+  firstBotStore,
   noteConnectedChatApp,
-  previewFirstBot,
+  RESEARCH_GOAL,
+  watchInboxPass,
+  type FirstChoice,
 } from "#renderer/features/onboarding/first-bot";
 import {
   startFirstRunGmail,
@@ -42,6 +50,10 @@ import {
   startSignIn,
   cancelSignIn,
 } from "#renderer/features/onboarding/store";
+import {
+  queueStartPrompt,
+  startBuildDraft,
+} from "#renderer/features/sessions/start/start-session";
 import { startTour } from "#renderer/features/tour/store";
 import {
   ONBOARDING_STEPS,
@@ -49,6 +61,8 @@ import {
 } from "#renderer/lib/navigation/areas";
 import { useAppNavigate } from "#renderer/lib/navigation/use-app-navigate";
 import { IS_ELECTRON } from "#renderer/lib/platform";
+import { platformSystem } from "#renderer/lib/platform-system";
+import { openUpgrade } from "#renderer/lib/upgrade";
 const OnboardingRoute = () => {
   const { t } = useTranslation();
   const step = Route.useParams().step as OnboardingStepId;
@@ -122,7 +136,7 @@ const OnboardingRoute = () => {
     )
       void go("connect");
   };
-  const finish = (exit: OnboardingExit, createDefaultBot = false) =>
+  const finish = (exit: OnboardingExit, tour = false) =>
     completeOnboarding(
       {
         db,
@@ -141,58 +155,7 @@ const OnboardingRoute = () => {
                 resolve();
               });
             });
-        },
-        resolveExit: async (exit) => {
-          if (!createDefaultBot && exit.to !== "bot" && exit.to !== "bot-tour")
-            return exit;
-          try {
-            const snapshot = await transport.client.db.bots.snapshot({});
-            const existing = snapshot.rows[0];
-            if (existing) {
-              await transport.client.system.funnelStep({
-                step: "first_bot_skipped",
-                detail: "has_bots",
-              });
-              if (exit.to === "new-session") return exit;
-              return exit.to === "bot" || exit.to === "bot-tour"
-                ? {
-                    ...exit,
-                    botId: snapshot.rows.some((bot) => bot.id === exit.botId)
-                      ? exit.botId
-                      : existing.id,
-                  }
-                : { to: "bot", botId: existing.id };
-            }
-            // The bot the connected chat app makes obvious; main makes it
-            // that app's home bot once onboarding completes.
-            const templateId = firstBotTemplateId(
-              onboardingStore.state.chatApp
-            );
-            const { bot } = await createBotFromTemplate(db, templateId, {
-              name: t(`bots.templates.${templateId}.name`),
-              // The house pays for the Chief of Staff's first inbox pass.
-              ...(templateId === "chief-of-staff"
-                ? { sponsoredFirstRun: true }
-                : {}),
-            });
-            await transport.client.system.funnelStep({
-              step: "first_bot_shown",
-            });
-            await transport.client.system.funnelStep({
-              step: "first_bot_kept",
-            });
-            // Building straight away keeps the bot, and still opens the session.
-            if (exit.to === "new-session") return exit;
-            return exit.to === "bot" || exit.to === "bot-tour"
-              ? { ...exit, botId: bot.id }
-              : { to: "bot", botId: bot.id };
-          } catch (error) {
-            await transport.client.system.funnelStep({
-              step: "first_bot_skipped",
-              detail: "create_failed",
-            });
-            throw error;
-          }
+          if (tour) startTour({ onboarded: true });
         },
         startTour: () =>
           startTour({
@@ -201,13 +164,91 @@ const OnboardingRoute = () => {
       },
       exit
     );
+  // After a Gmail sign-in the Chief of Staff starts on the inbox at once, on
+  // the house, and the screen shows what it found; else the person picks.
   const create = async (id: string) => {
-    const templateId = firstBotTemplateId(onboardingStore.state.chatApp);
-    return previewFirstBot(
-      id,
-      t(`bots.templates.${templateId}.name`),
-      templateId
-    );
+    const statuses = await transport.client.connectors
+      .statuses({})
+      .catch(() => null);
+    if (statuses?.["abacus-gmailuser"]?.state !== "connected") return null;
+    try {
+      const { bot } = await createBotFromTemplate(db, "chief-of-staff", {
+        id,
+        name: t("bots.templates.chief-of-staff.name"),
+        sponsoredFirstRun: true,
+      });
+      watchInboxPass(
+        transport,
+        openChatOnce({ transport, sessions: db.collections.sessions }, bot)
+      );
+      return { bot, checkInRoutineId: null };
+    } catch (error) {
+      await transport.client.system.funnelStep({
+        step: "first_bot_skipped",
+        detail: "create_failed",
+      });
+      throw error;
+    }
+  };
+  /** The first thing a pick makes runs on the house; after a Chief of Staff it is already spent. */
+  const choose = async (choice: FirstChoice) => {
+    const sponsored = firstBotStore.state.state === "choose";
+    const open = async (botId: string) => {
+      await transport.client.system.funnelStep({ step: "first_bot_kept" });
+      await finish({ to: "bot", botId });
+    };
+    // One id per screen: a pick retried after a failed completion opens the
+    // bot it already made instead of making another.
+    const id = onboardingStore.state.createdBotId ?? undefined;
+    const made = id != null ? db.collections.bots.get(id) : undefined;
+    if (made != null && choice.kind !== "build" && choice.kind !== "images") {
+      await open(made.id);
+      return;
+    }
+    switch (choice.kind) {
+      case "build": {
+        const draftId = startBuildDraft(sponsored);
+        if (choice.prompt != null) queueStartPrompt(draftId, choice.prompt);
+        await finish({ to: "new-session" });
+        return;
+      }
+      case "chat-app": {
+        const templateId = chatAppTemplateId(choice.app);
+        const { bot } = await createBotFromTemplate(db, templateId, {
+          ...(id != null ? { id } : {}),
+          name: t(`bots.templates.${templateId}.name`),
+          ...(sponsored ? { sponsoredFirstRun: true } : {}),
+        });
+        await open(bot.id);
+        return;
+      }
+      case "research":
+      case "goal": {
+        const bot = await createGoalBot(db, {
+          ...(id != null ? { id } : {}),
+          name: t(
+            choice.kind === "research"
+              ? "onboarding.firstRun.research.botName"
+              : "onboarding.firstRun.goal.botName"
+          ),
+          goal: choice.kind === "research" ? RESEARCH_GOAL : choice.goal,
+          sponsoredFirstRun: sponsored,
+        });
+        await open(bot.id);
+        return;
+      }
+      case "images":
+        // The plan's page on a free account; Abacus AI Agent on a paid one, as the media card does.
+        if (facts.payingTier)
+          await platformSystem(transport.client).openExternal({
+            url: abacusAgentPromptUrl(),
+          });
+        else await openUpgrade(transport.client);
+        return;
+      case "bot":
+        await open(choice.botId);
+        return;
+    }
   };
   const automaticallySignIn = useEffectEvent(() => {
     if (onboardingStore.state.signIn?.status !== "pending") auth("signin");
@@ -237,10 +278,9 @@ const OnboardingRoute = () => {
         navigate={navigateStep}
         signIn={auth}
         cancelSignIn={() => cancelSignIn(transport)}
-        complete={(exit, options) =>
-          finish(exit, options?.keepFirstBot === true)
-        }
+        complete={(exit, options) => finish(exit, options?.tour === true)}
         createFirstBot={create}
+        choose={choose}
         connect={connect}
       />
       {pairing && step === "connectors" && (

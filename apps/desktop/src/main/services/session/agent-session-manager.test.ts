@@ -98,6 +98,19 @@ describe("the session list itself", () => {
     expect(service.get(created.id)).toMatchObject({ id: created.id });
   });
 
+  it("keeps a session's sponsored window across restarts, and gives others none", () => {
+    const sponsored = service.create(WORKSPACE, null, null, null, undefined, {
+      sponsoredUntil: 1_900_000_000_000,
+    });
+    const plain = service.create(WORKSPACE);
+
+    expect(service.sponsoredUntil(sponsored.id)).toBe(1_900_000_000_000);
+    expect(service.sponsoredUntil(plain.id)).toBeNull();
+    const loaded = new AgentSessionManagerService();
+    loaded.initialize([WORKSPACE]);
+    expect(loaded.sponsoredUntil(sponsored.id)).toBe(1_900_000_000_000);
+  });
+
   it("reports no log yet for a session whose agent has never started", () => {
     const session = service.create(WORKSPACE);
 

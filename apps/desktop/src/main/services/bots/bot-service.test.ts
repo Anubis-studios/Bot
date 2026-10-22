@@ -2,6 +2,8 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 
+import { GOAL_MISSION } from "@abacus-ai/contract/bots/check-in";
+import { BOT_TEMPLATES } from "@abacus-ai/contract/bots/templates";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BotService, type BotServiceCallbacks } from "./bot-service";
@@ -134,6 +136,39 @@ describe("creating a bot", () => {
     expect(getBot(written.id)?.templateId).toBeUndefined();
   });
 
+  it("drops a template's role once the user rewrote its mission, and keeps it while unchanged", () => {
+    const service = new BotService(makeCallbacks());
+    const chief = BOT_TEMPLATES.find((row) => row.id === "chief-of-staff")!;
+
+    const kept = service.create({
+      name: "Chief of Staff",
+      title: chief.title,
+      description: chief.mission,
+      templateId: chief.id,
+    });
+    const renamed = service.create({
+      name: "Site Pal",
+      title: chief.title,
+      description: "Build my portfolio site.",
+      templateId: chief.id,
+    });
+    // Made from the template before bots remembered it.
+    const older = service.create({
+      name: "Coder",
+      title: chief.title,
+      description: "Help me write Kaggle notebooks.",
+    });
+
+    expect(fs.readFileSync(personaPath(kept.id), "utf8")).toContain(
+      "**Role:** Chief of Staff"
+    );
+    for (const bot of [renamed, older]) {
+      const persona = fs.readFileSync(personaPath(bot.id), "utf8");
+      expect(persona).not.toContain("Chief of Staff");
+      expect(persona).not.toContain("**Role:**");
+    }
+  });
+
   it("gives a bot with no home app no home line", () => {
     const service = new BotService(makeCallbacks());
 
@@ -209,6 +244,43 @@ describe("opening the forever chat", () => {
     const persona = fs.readFileSync(personaPath(bot.id), "utf8");
     expect(persona).not.toContain("Connectors your mission needs");
     const [, , kickstart] = vi.mocked(callbacks.sendMessage).mock.calls[0]!;
+    expect(kickstart).not.toContain("connect_connector");
+  });
+
+  it("writes the first run in the app's language", async () => {
+    const callbacks = makeCallbacks({ appLanguage: () => "pt-BR" });
+    const service = new BotService(callbacks);
+    const bot = service.create({ name: "Scout", description: "Watch." });
+
+    await service.openChat(bot.id);
+
+    const [, , kickstart] = vi.mocked(callbacks.sendMessage).mock.calls[0]!;
+    expect(kickstart).toContain(
+      "Write in Brazilian Portuguese, the user's app language, unless they write to you in another."
+    );
+    expect(kickstart).toContain("get started on your mission");
+  });
+
+  it("starts a bot made from the user's words on those words, asking for nothing", async () => {
+    const callbacks = makeCallbacks({ appLanguage: () => "tr-TR" });
+    const service = new BotService(callbacks);
+    const bot = service.create({
+      name: "My Assistant",
+      description: GOAL_MISSION("Study Buddy for my exams"),
+    });
+
+    await service.openChat(bot.id);
+
+    const persona = fs.readFileSync(personaPath(bot.id), "utf8");
+    expect(persona).toContain(
+      '**Your mission, yours alone:** The user created you for this, in their own words: "Study Buddy for my exams".'
+    );
+    expect(persona).not.toContain("Connectors your mission needs");
+    const [, , kickstart] = vi.mocked(callbacks.sendMessage).mock.calls[0]!;
+    expect(kickstart).toContain(
+      'take the first step toward what the user asked for: "Study Buddy for my exams".'
+    );
+    expect(kickstart).toContain("Write in Turkish,");
     expect(kickstart).not.toContain("connect_connector");
   });
 
