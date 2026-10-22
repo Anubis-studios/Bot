@@ -248,7 +248,8 @@ describe("files a turn hands to its chat", () => {
     h.present();
     h.say("<reply>Here is your report.</reply>");
     h.idle();
-    await settle();
+    // Staged on disk and sent in order: slow file systems take their time.
+    await vi.waitFor(() => expect(h.files).toHaveLength(1));
     expect(h.sent).toEqual(["Here is your report."]);
     expect(h.files).toEqual([
       { name: "report.pdf", bytes: "%PDF", reply: "e1" },
@@ -264,7 +265,7 @@ describe("files a turn hands to its chat", () => {
     h.present();
     h.say("<reply>Here it is.</reply>");
     h.idle();
-    await settle();
+    await vi.waitFor(() => expect(h.sent).toHaveLength(2));
     expect(h.files).toEqual([]);
     expect(h.sent[0]).toBe("Here it is.");
     expect(h.sent[1]).toContain("report.pdf");
