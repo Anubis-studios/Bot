@@ -231,6 +231,56 @@ describe("visualizer blocks", () => {
   });
 });
 
+describe("untrusted text", () => {
+  const renderUntrusted = (content: string) => {
+    const links = { openFile: vi.fn(), openExternal: vi.fn() };
+    const view = render(
+      <MarkdownLinksProvider value={links}>
+        <Markdown content={content} role="user" untrusted />
+      </MarkdownLinksProvider>
+    );
+    return { ...view, links };
+  };
+
+  it("shows a visualizer fence as code, never a frame", () => {
+    const { container } = renderUntrusted(
+      "```visualizer\n<script>parent.postMessage({type:'link'})</script>\n```"
+    );
+    expect(container.querySelector("iframe")).toBeNull();
+    expect(container.querySelector("pre code")?.textContent).toContain(
+      "<script>parent.postMessage"
+    );
+  });
+
+  it("leaves math as text and code", () => {
+    const { container } = renderUntrusted(
+      "cost $x$ and\n\n```math\ny\n```\n\n`\u2062z`"
+    );
+    expect(container.querySelector(".chat-math")).toBeNull();
+    expect(container.querySelector(".chat-math-inline")).toBeNull();
+    expect(container.textContent).toContain("$x$");
+  });
+
+  it("opens only http(s) and mailto links, and no files", () => {
+    const { container, links } = renderUntrusted(
+      "[web](https://example.com) [mail](mailto:a@b.c) [file](#abacus-file=%2Fetc%2Fpasswd) [rel](docs/x.md)"
+    );
+    const anchor = (text: string) =>
+      [...container.querySelectorAll("a")].find((a) => a.textContent === text)!;
+    fireEvent.click(anchor("web"));
+    fireEvent.click(anchor("mail"));
+    fireEvent.click(anchor("file"));
+    fireEvent.click(anchor("rel"));
+    expect(links.openExternal.mock.calls).toEqual([
+      ["https://example.com"],
+      ["mailto:a@b.c"],
+    ]);
+    expect(links.openFile).not.toHaveBeenCalled();
+    expect(anchor("file").hasAttribute("href")).toBe(false);
+    expect(anchor("rel").hasAttribute("href")).toBe(false);
+  });
+});
+
 describe("prose filenames", () => {
   it("link to a session artifact registered for the thread", async () => {
     const { setKnownFiles } = await import("./known-files");

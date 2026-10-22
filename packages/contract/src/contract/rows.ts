@@ -162,6 +162,8 @@ export interface PrefsRow {
   freeLaneChosenAt?: number | null;
   browserHomepage: string | null;
   showLinkPreviews?: boolean;
+  /** Absent reads as on. */
+  githubIntegration?: boolean;
   onboardingStep: string | null;
   dismissals: {
     referralCardUntil: number | null;

@@ -13,11 +13,6 @@ import {
   CommandList,
   CommandItem,
 } from "#renderer/ui/command";
-import {
-  HoverCard,
-  HoverCardTrigger,
-  HoverCardContent,
-} from "#renderer/ui/hover-card";
 import { Input } from "#renderer/ui/input";
 import { Popover, PopoverTrigger, PopoverContent } from "#renderer/ui/popover";
 
@@ -26,7 +21,9 @@ import {
   usePickableWorkspaces,
   useCheckoutQueries,
   useWorkspace,
+  useGithubIntegration,
 } from "../data/queries";
+import { PrChip } from "../pr/pr-chip";
 import type { StartDraft } from "../start/start-session";
 export const SessionContextTray = ({
   workspaceId,
@@ -55,6 +52,7 @@ export const SessionContextTray = ({
   const checkout = { workspaceId, ...(sessionId ? { sessionId } : {}) };
   const options = useCheckoutQueries(checkout);
   const branch = useQuery(options.branch(checkout));
+  const github = useGithubIntegration();
   const pr = useQuery(options.pr(checkout));
   const exec = useQuery(options.exec());
   const trees = useQuery(options.worktrees(workspaceId));
@@ -195,50 +193,12 @@ export const SessionContextTray = ({
             </PopoverContent>
           </Popover>
         ) : null}
-        {sessionId && pr.data ? (
-          <HoverCard>
-            <HoverCardTrigger
-              render={
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() =>
-                    void platformSystem(transport.client).openExternal({
-                      url: pr.data!.url,
-                    })
-                  }
-                />
-              }
-            >
-              PR {pr.data.number}
-            </HoverCardTrigger>
-            <HoverCardContent>
-              <p className="font-medium">{pr.data.title}</p>
-              <p>{t(`sessions.pr.${pr.data.reviewState}`)}</p>
-              <p className="font-mono">
-                +{pr.data.additions} −{pr.data.deletions}
-              </p>
-              <ul>
-                {pr.data.checks.map((check) => (
-                  <li key={check.name}>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={!check.url}
-                      onClick={() =>
-                        check.url &&
-                        void platformSystem(transport.client).openExternal({
-                          url: check.url,
-                        })
-                      }
-                    >
-                      {check.name} · {t(`sessions.pr.${check.status}`)}
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            </HoverCardContent>
-          </HoverCard>
+        {sessionId && github && pr.data ? (
+          <PrChip
+            pr={pr.data}
+            workspaceId={workspaceId}
+            sessionId={sessionId}
+          />
         ) : null}
       </div>
       {exec.data &&

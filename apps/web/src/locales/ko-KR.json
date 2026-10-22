@@ -1659,7 +1659,8 @@
         "right": "Split right",
         "top": "Split above",
         "bottom": "Split below"
-      }
+      },
+      "pr": "풀 리퀘스트"
     },
     "browser": {
       "activate": "Click to use this browser",
@@ -1780,7 +1781,106 @@
       "merged": "병합됨",
       "closed": "닫힘",
       "success": "Passed",
-      "failure": "Failed"
+      "failure": "Failed",
+      "open": "열림",
+      "chip": "풀 리퀘스트 #{{number}}",
+      "openOnGithub": "GitHub에서 열기",
+      "openReview": "리뷰 열기",
+      "refs": "{{head}} → {{base}}",
+      "loading": "풀 리퀘스트를 불러오는 중…",
+      "description": "설명",
+      "noDescription": "설명이 없습니다.",
+      "labels": "라벨",
+      "ci": {
+        "success": "검사 통과",
+        "failure": "검사 실패",
+        "pending": "검사 실행 중"
+      },
+      "checks": {
+        "title": "검사",
+        "passed": "모든 검사 통과",
+        "failing": "{{total}}개 중 {{failing}}개 실패",
+        "running": "{{total}}개 중 {{pending}}개 실행 중",
+        "none": "검사 없음",
+        "details": "자세히",
+        "showAll": "{{total}}개 모두 보기",
+        "showLess": "간단히 보기",
+        "more": "+{{extra}}개 더"
+      },
+      "review": {
+        "approved": "승인됨 · {{approvals}}",
+        "required": "리뷰 필요 · {{requested}}명 요청됨"
+      },
+      "reviewers": {
+        "title": "리뷰어",
+        "awaiting": "리뷰 대기 중"
+      },
+      "verdict": {
+        "APPROVED": "승인됨",
+        "CHANGES_REQUESTED": "변경 요청됨",
+        "COMMENTED": "코멘트함",
+        "DISMISSED": "해제됨",
+        "PENDING": "대기 중"
+      },
+      "conversation": {
+        "title": "대화",
+        "empty": "아직 코멘트가 없습니다.",
+        "commented": "님이 코멘트함",
+        "APPROVED": "님이 승인함",
+        "CHANGES_REQUESTED": "님이 변경을 요청함",
+        "COMMENTED": "님이 리뷰함",
+        "DISMISSED": "리뷰 해제됨",
+        "PENDING": "리뷰 대기 중"
+      },
+      "files": {
+        "title": "변경된 파일",
+        "back": "모든 파일",
+        "loading": "diff를 불러오는 중…",
+        "failed": "diff를 불러오지 못했습니다.",
+        "truncated": "이 diff는 너무 커서 여기에 표시할 수 없습니다. GitHub에서 여세요.",
+        "empty": "이 파일에 표시할 변경 사항이 없습니다."
+      },
+      "composer": {
+        "label": "리뷰",
+        "placeholder": "리뷰 코멘트를 남기세요…",
+        "verdict": "리뷰 유형",
+        "comment": "코멘트",
+        "approve": "승인",
+        "request_changes": "변경 요청",
+        "submit": "리뷰 제출",
+        "sent": "리뷰를 제출했습니다"
+      },
+      "state": {
+        "retry": "다시 시도",
+        "settings": "설정 열기",
+        "install": "GitHub CLI 받기",
+        "disabled": {
+          "title": "GitHub 연동이 꺼져 있습니다",
+          "detail": "이 브랜치의 풀 리퀘스트, 검사, 리뷰를 보려면 설정에서 켜세요."
+        },
+        "none": {
+          "title": "{{branch}}에 대한 풀 리퀘스트가 아직 없습니다",
+          "detail": "GitHub에서 열거나 터미널에서 만드세요:",
+          "detached": "이 체크아웃에 대한 풀 리퀘스트가 없습니다",
+          "detachedDetail": "브랜치를 체크아웃하면 해당 풀 리퀘스트를 볼 수 있습니다."
+        },
+        "unsupported": {
+          "title": "GitHub 저장소가 아닙니다",
+          "detail": "이 체크아웃에는 GitHub 원격 저장소가 없어 풀 리퀘스트가 없습니다."
+        },
+        "missing": {
+          "title": "GitHub CLI가 설치되어 있지 않습니다",
+          "detail": "풀 리퀘스트는 GitHub CLI(gh)에서 가져옵니다. cli.github.com에서 설치한 다음(macOS: brew install gh) 로그인하세요:"
+        },
+        "unauthenticated": {
+          "title": "GitHub에 로그인되어 있지 않습니다",
+          "detail": "터미널에서 GitHub CLI에 로그인한 다음 다시 시도하세요:"
+        },
+        "error": {
+          "title": "GitHub에 연결할 수 없습니다",
+          "detail": "GitHub CLI가 응답하지 않았습니다. 다시 시도하세요."
+        }
+      }
     },
     "gallery": {
       "researchAgent": "Research · completed",
@@ -2411,7 +2511,8 @@
         "details": "Details",
         "agent": "Agent",
         "device": "Device",
-        "thread": "Thread"
+        "thread": "Thread",
+        "pr": "풀 리퀘스트"
       },
       "addTab": "Add a tab",
       "closeTab": "Close {{name}}",
@@ -2615,6 +2716,25 @@
       "detail": "Remove all local app data and restart with a fresh setup.",
       "confirmation": "This permanently deletes every local profile, API key, chat, routine, memory, installed skill, browser session, downloaded model, and files in the app’s default bot and session folders. This cannot be undone. Files outside the app data folder and your online Abacus.AI account are unchanged.",
       "confirm": "Delete all data and restart"
+    },
+    "github": {
+      "title": "GitHub",
+      "integration": "GitHub 연동",
+      "integrationDetail": "세션에 풀 리퀘스트 상태, CI 검사, 리뷰를 표시합니다. 세션이 실행되는 곳의 GitHub CLI(gh)를 사용합니다.",
+      "cli": "GitHub CLI",
+      "connectedAs": "{{host}}에 @{{account}}(으)로 로그인됨",
+      "missingDetail": "cli.github.com에서 gh를 설치한 다음(macOS: brew install gh) gh auth login을 실행하세요.",
+      "unauthenticatedDetail": "터미널에서 gh auth login을 실행한 다음 다시 확인하세요.",
+      "checking": "확인 중…",
+      "checkAgain": "다시 확인",
+      "install": "gh 받기",
+      "state": {
+        "ok": "연결됨",
+        "missing": "설치되지 않음",
+        "unauthenticated": "로그인 안 됨",
+        "disabled": "꺼짐",
+        "error": "사용할 수 없음"
+      }
     }
   },
   "onboardingFlow": {

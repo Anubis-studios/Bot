@@ -14,9 +14,13 @@
       "merged",
       "closed",
       "success",
-      "failure"
+      "failure",
+      "open"
     ],
-    "sources": ["features/sessions/context/context-tray.tsx"]
+    "sources": [
+      "features/sessions/context/context-tray.tsx",
+      "features/sessions/pr/pr-presentation.tsx"
+    ]
   },
   {
     "prefix": "sessions.changes.",
@@ -963,9 +967,14 @@
       "details",
       "agent",
       "device",
-      "thread"
+      "thread",
+      "pr"
     ],
-    "sources": ["features/shell/side-panel.tsx", "features/shell/top-bar.tsx"]
+    "sources": [
+      "features/shell/side-panel.tsx",
+      "features/shell/top-bar.tsx",
+      "components/tabs-rail/index.tsx"
+    ]
   },
   {
     "prefix": "shell.rail.",

@@ -18,6 +18,8 @@ const labelKeys: Record<string, string> = {
   notchShortcut: "settings.general.notch.shortcut",
   showInNotch: "settings.notifications.showInNotch.title",
   tour: "tour.replay",
+  githubIntegration: "settings.github.integration",
+  githubCli: "settings.github.cli",
   ...Object.fromEntries(
     EXEC_BACKENDS.map((backend) => [
       `backend-${backend.id}`,
@@ -118,6 +120,8 @@ const groups: Partial<Record<SettingsPageId, string[]>> = {
     ...["local", "docker", "singularity", "modal", "daytona", "ssh"].map(
       (x) => `backend-${x}`
     ),
+    "githubIntegration",
+    "githubCli",
   ],
   account: [
     "identity",

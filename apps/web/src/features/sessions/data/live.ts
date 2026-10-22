@@ -1,4 +1,5 @@
 import { checkoutKey } from "@abacus-ai/contract/contract/checkout";
+import type { PrResult } from "@abacus-ai/contract/contract/github";
 import type { QueryClient } from "@tanstack/react-query";
 
 import type { Collections } from "#renderer/data/db";
@@ -9,7 +10,7 @@ import { sessionsQueries } from "./queries";
 export const followSessionsSources = (
   transport: Transport,
   collections: Collections,
-  qc: Pick<QueryClient, "invalidateQueries">,
+  qc: Pick<QueryClient, "invalidateQueries" | "getQueriesData">,
   signal: AbortSignal
 ) => {
   const options = sessionsQueries(transport.orpc);
@@ -37,6 +38,41 @@ export const followSessionsSources = (
         ...(sessionId ? { sessionId } : {}),
       }));
   };
+  // The branch each checkout was on when its git state last changed.
+  const branches = new Map<string, string | null>();
+  /**
+   * The review tab's PR (a full `gh pr view`) follows the branch: most git
+   * changes (an edit, a stage) cannot change which PR it is, so it is only
+   * refetched when the branch moves; its poll covers pushes and new PRs.
+   */
+  const followBranch = (checkout: {
+    workspaceId: string;
+    sessionId?: string;
+  }) => {
+    const pullRequest = options.pullRequest(checkout);
+    const cached = qc.getQueriesData<PrResult>({
+      queryKey: pullRequest.queryKey,
+    });
+    if (!cached.length) return;
+    const key = JSON.stringify([checkout.workspaceId, checkout.sessionId]);
+    transport.client.git.currentBranch(checkout).then(
+      ({ currentBranch }) => {
+        // Before the first change, the branch the PR was looked up for.
+        const result = cached[0]![1];
+        const previous = branches.has(key)
+          ? branches.get(key)
+          : result?.kind === "none"
+            ? result.branch
+            : result?.kind === "ok"
+              ? result.pr.headRefName
+              : undefined;
+        branches.set(key, currentBranch);
+        if (previous !== undefined && previous !== currentBranch)
+          invalidate(pullRequest);
+      },
+      () => {}
+    );
+  };
   const git = collections.gitState.subscribeChanges((changes) => {
     for (const change of changes)
       for (const checkout of checkouts(change.value.checkoutKey)) {
@@ -48,6 +84,7 @@ export const followSessionsSources = (
           options.worktrees(checkout.workspaceId),
         ])
           invalidate(query);
+        followBranch(checkout);
       }
   });
   const invalidateCheckout = (checkout: {
@@ -60,6 +97,7 @@ export const followSessionsSources = (
       options.branches(checkout),
       options.branch(checkout),
       options.pr(checkout),
+      options.pullRequest(checkout),
     ])
       invalidate(query);
     for (const queryKey of [

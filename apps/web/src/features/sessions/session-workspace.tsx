@@ -37,6 +37,9 @@ const BrowserTab = lazy(() =>
 const ChangesTab = lazy(() =>
   import("./changes/changes-tab").then((m) => ({ default: m.ChangesTab }))
 );
+const PrTab = lazy(() =>
+  import("./pr/pr-tab").then((m) => ({ default: m.PrTab }))
+);
 const DeviceTab = lazy(() =>
   import("#platform/device-tab").then((m) => ({ default: m.DeviceTab }))
 );
@@ -57,6 +60,7 @@ export const SessionWorkspace = ({
   incarnation,
   renderAgent,
   renderSession,
+  renderMarkdown,
   registerHotkeys,
   dispatch,
   presenter,
@@ -67,6 +71,8 @@ export const SessionWorkspace = ({
   incarnation: string | null;
   renderAgent: (id: string | undefined) => ReactNode;
   renderSession: (id: string) => ReactNode;
+  /** The chat's Markdown, for text the tabs show (a PR's description). */
+  renderMarkdown: (text: string) => ReactNode;
   registerHotkeys: SessionDockProps["registerHotkeys"];
   dispatch: (id: TerminalAction) => void;
   presenter: ComponentProps<typeof BrowserSurface>["presenter"];
@@ -282,6 +288,8 @@ export const SessionWorkspace = ({
               if (tab.ref === "changes")
                 return <ChangesTab row={row} root={root} onDiff={openDiff} />;
               if (tab.ref === "agents") return renderAgent(search.agent);
+              if (tab.ref === "pr")
+                return <PrTab row={row} renderMarkdown={renderMarkdown} />;
               return <DeviceTab visible={visible} />;
             }}
           />

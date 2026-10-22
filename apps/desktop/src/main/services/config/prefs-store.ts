@@ -64,6 +64,7 @@ const DEFAULTS: PrefsValues = {
   freeLaneChosenAt: null,
   browserHomepage: null,
   showLinkPreviews: true,
+  githubIntegration: true,
   onboardingStep: null,
   dismissals: {
     referralCardUntil: null,

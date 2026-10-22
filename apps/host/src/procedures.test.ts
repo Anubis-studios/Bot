@@ -71,6 +71,14 @@ const expectedFailures: Record<string, { code: string; message: string }> = {
     code: "NOT_FOUND",
     message: "No workspace fixture",
   },
+  "github.prDiff": {
+    code: "NOT_FOUND",
+    message: "No workspace fixture",
+  },
+  "github.review": {
+    code: "NOT_FOUND",
+    message: "No workspace fixture",
+  },
   "files.rename": {
     code: "CONFLICT",
     message: "Path outside workspace",

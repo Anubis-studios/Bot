@@ -28,6 +28,7 @@ vi.mock("../data/queries", () => {
       },
     }),
     usePickableWorkspaces: () => [],
+    useGithubIntegration: () => true,
     useWorkspace: () => ({ label: "Workspace" }),
     useCheckoutQueries: () => ({
       branch: option("branch", null),

@@ -1659,7 +1659,8 @@
         "right": "Split right",
         "top": "Split above",
         "bottom": "Split below"
-      }
+      },
+      "pr": "Pull request"
     },
     "browser": {
       "activate": "Click to use this browser",
@@ -1780,7 +1781,106 @@
       "merged": "Digabungkan",
       "closed": "Ditutup",
       "success": "Passed",
-      "failure": "Failed"
+      "failure": "Failed",
+      "open": "Terbuka",
+      "chip": "Pull request #{{number}}",
+      "openOnGithub": "Buka di GitHub",
+      "openReview": "Buka ulasan",
+      "refs": "{{head}} ke {{base}}",
+      "loading": "Memuat pull request…",
+      "description": "Deskripsi",
+      "noDescription": "Tidak ada deskripsi.",
+      "labels": "Label",
+      "ci": {
+        "success": "Pemeriksaan lolos",
+        "failure": "Pemeriksaan gagal",
+        "pending": "Pemeriksaan berjalan"
+      },
+      "checks": {
+        "title": "Pemeriksaan",
+        "passed": "Semua pemeriksaan lolos",
+        "failing": "{{failing}} dari {{total}} gagal",
+        "running": "{{pending}} dari {{total}} berjalan",
+        "none": "Tidak ada pemeriksaan",
+        "details": "Detail",
+        "showAll": "Tampilkan semua {{total}}",
+        "showLess": "Tampilkan lebih sedikit",
+        "more": "+{{extra}} lainnya"
+      },
+      "review": {
+        "approved": "Disetujui · {{approvals}}",
+        "required": "Perlu ulasan · {{requested}} diminta"
+      },
+      "reviewers": {
+        "title": "Pengulas",
+        "awaiting": "Menunggu ulasan"
+      },
+      "verdict": {
+        "APPROVED": "Disetujui",
+        "CHANGES_REQUESTED": "Perubahan diminta",
+        "COMMENTED": "Berkomentar",
+        "DISMISSED": "Diabaikan",
+        "PENDING": "Tertunda"
+      },
+      "conversation": {
+        "title": "Percakapan",
+        "empty": "Belum ada komentar.",
+        "commented": "berkomentar",
+        "APPROVED": "menyetujui",
+        "CHANGES_REQUESTED": "meminta perubahan",
+        "COMMENTED": "mengulas",
+        "DISMISSED": "ulasan diabaikan",
+        "PENDING": "ulasan tertunda"
+      },
+      "files": {
+        "title": "File yang diubah",
+        "back": "Semua file",
+        "loading": "Memuat diff…",
+        "failed": "Tidak dapat memuat diff.",
+        "truncated": "Diff ini terlalu besar untuk ditampilkan di sini. Buka di GitHub.",
+        "empty": "Tidak ada perubahan untuk ditampilkan pada file ini."
+      },
+      "composer": {
+        "label": "Ulasan",
+        "placeholder": "Tulis komentar ulasan…",
+        "verdict": "Jenis ulasan",
+        "comment": "Komentar",
+        "approve": "Setujui",
+        "request_changes": "Minta perubahan",
+        "submit": "Kirim ulasan",
+        "sent": "Ulasan terkirim"
+      },
+      "state": {
+        "retry": "Coba lagi",
+        "settings": "Buka Pengaturan",
+        "install": "Dapatkan GitHub CLI",
+        "disabled": {
+          "title": "Integrasi GitHub nonaktif",
+          "detail": "Aktifkan di Pengaturan untuk melihat pull request, pemeriksaan, dan ulasan cabang ini."
+        },
+        "none": {
+          "title": "Belum ada pull request untuk {{branch}}",
+          "detail": "Buka di GitHub, atau buat dari terminal:",
+          "detached": "Tidak ada pull request untuk checkout ini",
+          "detachedDetail": "Checkout sebuah cabang untuk melihat pull request-nya."
+        },
+        "unsupported": {
+          "title": "Bukan repositori GitHub",
+          "detail": "Checkout ini tidak punya remote GitHub, jadi tidak punya pull request."
+        },
+        "missing": {
+          "title": "GitHub CLI belum terpasang",
+          "detail": "Pull request berasal dari GitHub CLI (gh). Pasang dari cli.github.com (macOS: brew install gh), lalu masuk:"
+        },
+        "unauthenticated": {
+          "title": "Belum masuk ke GitHub",
+          "detail": "Masuk ke GitHub CLI di terminal, lalu coba lagi:"
+        },
+        "error": {
+          "title": "Tidak dapat menjangkau GitHub",
+          "detail": "GitHub CLI tidak menjawab. Coba lagi."
+        }
+      }
     },
     "gallery": {
       "researchAgent": "Research · completed",
@@ -2411,7 +2511,8 @@
         "details": "Details",
         "agent": "Agent",
         "device": "Device",
-        "thread": "Thread"
+        "thread": "Thread",
+        "pr": "Pull request"
       },
       "addTab": "Add a tab",
       "closeTab": "Close {{name}}",
@@ -2615,6 +2716,25 @@
       "detail": "Remove all local app data and restart with a fresh setup.",
       "confirmation": "This permanently deletes every local profile, API key, chat, routine, memory, installed skill, browser session, downloaded model, and files in the app’s default bot and session folders. This cannot be undone. Files outside the app data folder and your online Abacus.AI account are unchanged.",
       "confirm": "Delete all data and restart"
+    },
+    "github": {
+      "title": "GitHub",
+      "integration": "Integrasi GitHub",
+      "integrationDetail": "Tampilkan status pull request, pemeriksaan CI, dan ulasan di sesi, menggunakan GitHub CLI (gh) di tempat sesi berjalan.",
+      "cli": "GitHub CLI",
+      "connectedAs": "Masuk sebagai @{{account}} di {{host}}",
+      "missingDetail": "Pasang gh dari cli.github.com (macOS: brew install gh), lalu jalankan gh auth login.",
+      "unauthenticatedDetail": "Jalankan gh auth login di terminal, lalu periksa lagi.",
+      "checking": "Memeriksa…",
+      "checkAgain": "Periksa lagi",
+      "install": "Dapatkan gh",
+      "state": {
+        "ok": "Terhubung",
+        "missing": "Belum terpasang",
+        "unauthenticated": "Belum masuk",
+        "disabled": "Nonaktif",
+        "error": "Tidak tersedia"
+      }
     }
   },
   "onboardingFlow": {

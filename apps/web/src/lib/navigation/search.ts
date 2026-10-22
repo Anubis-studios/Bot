@@ -28,12 +28,13 @@ export const SIDE_PANEL_TABS = [
   "device",
   "agent",
   "thread",
+  "pr",
 ] as const;
 const SidePanelTab = v.picklist(SIDE_PANEL_TABS);
 export type SidePanelTabId = v.InferOutput<typeof SidePanelTab>;
 
 export const SessionTabRef = v.union([
-  v.picklist(["chat", "changes", "files", "agents", "device"]),
+  v.picklist(["chat", "changes", "files", "agents", "device", "pr"]),
   v.pipe(
     v.string(),
     v.regex(/^(terminal|browser|preview):[A-Za-z0-9._-]{1,80}$/)

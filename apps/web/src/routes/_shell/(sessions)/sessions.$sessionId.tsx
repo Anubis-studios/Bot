@@ -31,6 +31,26 @@ import { openStartDraft } from "#renderer/features/sessions/start/start-session"
 import { updateDraft } from "#renderer/lib/continuity/composer-drafts";
 import { IS_ELECTRON } from "#renderer/lib/platform";
 import { platformSystem } from "#renderer/lib/platform-system";
+/**
+ * The chat's Markdown for text a dock tab shows (a PR's description and
+ * conversation). That text is anyone's, so it renders untrusted: no
+ * visualizers or math, and only http(s)/mailto links open, outside.
+ */
+const TabMarkdown = lazy(() =>
+  import("#renderer/features/chat/markdown/markdown").then((m) => ({
+    default: ({
+      text,
+      openExternal,
+    }: {
+      text: string;
+      openExternal(url: string): void;
+    }) => (
+      <m.MarkdownLinksProvider value={{ openFile: () => {}, openExternal }}>
+        <m.Markdown content={text} role="user" untrusted />
+      </m.MarkdownLinksProvider>
+    ),
+  }))
+);
 const SubagentDetail = lazy(() =>
   import("#renderer/features/chat/kit/subagents/detail").then((m) => ({
     default: m.SubagentDetail,
@@ -483,6 +503,14 @@ const SessionRoute = () => {
           />
         )}
         renderSession={(id) => <SessionBeside id={id} />}
+        renderMarkdown={(text) => (
+          <TabMarkdown
+            text={text}
+            openExternal={(url) =>
+              void platformSystem(transport.client).openExternal({ url })
+            }
+          />
+        )}
         renderAgent={(id) => (
           <SessionAgents
             runtime={runtime}

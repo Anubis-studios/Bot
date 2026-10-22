@@ -24,8 +24,11 @@ export const gitRouter = impl.git.router({
   currentBranch: impl.git.currentBranch.handler(({ input, context }) =>
     context.deps.serviceHost.getGitCurrentBranch(input)
   ),
+  // The chip's summary; off, `gh` is never run (`github.*` the same).
   prInfo: impl.git.prInfo.handler(({ input, context }) =>
-    context.deps.serviceHost.getPrInfo(input)
+    context.deps.tables.prefsStore.get().githubIntegration === false
+      ? null
+      : context.deps.serviceHost.getPrInfo(input)
   ),
   switchBranch: impl.git.switchBranch.handler(async ({ input, context }) => {
     const { currentBranch } = unwrapResult(
