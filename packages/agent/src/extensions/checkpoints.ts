@@ -217,7 +217,10 @@ export function checkpoints(
     // Per call: what it can reach, and anything that could not be kept for it.
     const calls = new Map<
       string,
-      { targets: CaptureTarget[]; missed: string[] }
+      {
+        targets: CaptureTarget[];
+        missed: Array<{ path: string; reason: string }>;
+      }
     >();
 
     pi.on("tool_call", async (event, ctx) => {
@@ -235,43 +238,23 @@ export function checkpoints(
         for (const file of record?.files ?? [])
           targets.push(...pathTargets(file.path));
       }
+      // Never refused or held for a checkpoint: what could not be kept is
+      // named on the result instead, so restore is known not to cover it.
       try {
         const { failed } = await tracker.capture(targets);
-        // A file tool's own target with no copy is refused, as an unbacked overwrite would be.
-        const named = FILE_TOOLS.has(event.toolName)
-          ? failed.filter((miss) =>
-              targets.some(
-                (t) =>
-                  t.kind === "file" && pathKey(t.path) === pathKey(miss.path)
-              )
-            )
-          : [];
-        if (named.length > 0 && event.toolName !== "restore_checkpoint") {
-          const miss = named[0]!;
-          return {
-            block: true,
-            reason:
-              `Could not keep a copy of ${modelPath(miss.path)} before changing it (${miss.reason}), ` +
-              "so the change could not be undone. Change it in smaller steps, or ask the user.",
-          };
-        }
         calls.set(event.toolCallId, {
           targets,
-          missed: failed.map((miss) => miss.path),
+          missed: failed,
         });
-      } catch (error) {
-        if (
-          FILE_TOOLS.has(event.toolName) &&
-          event.toolName !== "restore_checkpoint"
-        )
-          return {
-            block: true,
-            reason:
-              `Could not save a checkpoint before this change (${error instanceof Error ? error.message : String(error)}), ` +
-              "so it could not be undone. Try again, or ask the user.",
-          };
-        // The shell stays usable on a full disk; the result says what is not covered.
-        calls.set(event.toolCallId, { targets, missed: [ctx.cwd] });
+      } catch {
+        // The store itself failed (a full disk, a permission): nothing is covered.
+        calls.set(event.toolCallId, {
+          targets,
+          missed: targets.map((target) => ({
+            path: target.path,
+            reason: "the checkpoint store could not be written",
+          })),
+        });
       }
       return;
     });
@@ -285,13 +268,13 @@ export function checkpoints(
       } catch {
         // Only the per-call view is lost; the turn's record is built at settle.
       }
-      if (call.missed.length === 0 || event.toolName !== "bash") return;
+      if (call.missed.length === 0) return;
       return {
         content: [
           ...event.content,
           {
             type: "text" as const,
-            text: `Note: no checkpoint covers ${call.missed.map((p) => modelPath(p)).join(", ")}, so changes there cannot be undone with restore_checkpoint.`,
+            text: `Note: no checkpoint fully covers ${call.missed.map((miss) => `${modelPath(miss.path)} (${miss.reason})`).join(", ")}, so changes there may not be undone with restore_checkpoint; tell the user if it matters.`,
           },
         ],
       };

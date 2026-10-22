@@ -987,11 +987,12 @@ export class CheckpointTracker {
         continue;
       }
 
-      if (
-        this.coveredByRoot(abs) ||
-        isWalkRefused(abs, this.home, this.temp, this.platform)
-      )
+      if (this.coveredByRoot(abs)) continue;
+      if (isWalkRefused(abs, this.home, this.temp, this.platform)) {
+        // Home, a root or the temp folder: only files named there are kept.
+        outcome.failed.push({ path: abs, reason: "it is never walked whole" });
         continue;
+      }
       const stat = await fsp.stat(abs).catch(() => null);
       if (stat == null || !stat.isDirectory()) continue;
       const root: CheckpointRoot = { dir: abs, partial: false };
@@ -1016,6 +1017,11 @@ export class CheckpointTracker {
         window.pre.set(key, { path: file.path, state });
         this.known.set(key, { path: file.path, state });
       }
+      if (root.partial)
+        outcome.failed.push({
+          path: abs,
+          reason: "it is past the checkpoint's file or size cap",
+        });
     }
     return outcome;
   }

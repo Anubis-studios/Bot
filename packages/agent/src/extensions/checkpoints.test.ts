@@ -210,13 +210,38 @@ describe("the file tools", () => {
     expect(fs.readFileSync(notes, "utf8")).toBe("- one\n");
   });
 
-  it("refuse a write whose target is too big to copy", async () => {
+  it("never refuse a write whose target is too big to copy: the result names it", async () => {
     setup({ maxFileBytes: 4 });
     fs.writeFileSync(at("big.bin"), "0123456789");
     tracker.beginTurn();
-    const { blocked } = await call("write", { path: "big.bin", content: "x" });
-    expect(blocked).toMatchObject({ block: true });
-    expect((blocked as { reason: string }).reason).toContain("big.bin");
+    const { blocked, result } = await call(
+      "write",
+      { path: "big.bin", content: "x" },
+      () => fs.writeFileSync(at("big.bin"), "x")
+    );
+    expect(blocked).toBeUndefined();
+    expect(fs.readFileSync(at("big.bin"), "utf8")).toBe("x");
+    expect(resultText(result)).toContain("no checkpoint fully covers");
+    expect(resultText(result)).toContain("big.bin");
+  });
+
+  it("never refuse an edit when the store cannot be written: the result says so", async () => {
+    fs.writeFileSync(at("a.txt"), "1");
+    // The store's folder is a file: nothing can be kept, as on a full disk.
+    fs.mkdirSync(path.join(base, "app"), { recursive: true });
+    fs.writeFileSync(path.join(base, "app", "checkpoints"), "");
+    setup();
+    tracker.beginTurn();
+    const { blocked, result } = await call(
+      "edit",
+      { path: "a.txt", oldText: "1", newText: "2" },
+      () => fs.writeFileSync(at("a.txt"), "2")
+    );
+    expect(blocked).toBeUndefined();
+    expect(fs.readFileSync(at("a.txt"), "utf8")).toBe("2");
+    expect(resultText(result)).toContain("could not be written");
+    // The turn still settles without throwing into the run.
+    await settle();
   });
 
   it("merge a follow-up run of the same turn into one record", async () => {
@@ -346,9 +371,11 @@ describe("caps and retention", () => {
     setup({ maxBytesPerRoot: 4 });
     fs.writeFileSync(at("big.txt"), "0123456789");
     tracker.beginTurn();
-    await call("bash", { command: "./rewrite" }, () =>
+    const { result: shell } = await call("bash", { command: "./rewrite" }, () =>
       fs.writeFileSync(at("big.txt"), "x")
     );
+    // The command ran; its result says the folder is past the cap.
+    expect(resultText(shell)).toContain("file or size cap");
     await settle();
 
     const result = await store.restore("session-1", 1);
