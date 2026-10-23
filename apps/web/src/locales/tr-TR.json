@@ -869,7 +869,9 @@
     "paidWebApps": "Eksiksiz uygulamalar ve web siteleri oluştur ve yayınla",
     "paidWebResearch": "Derin araştırma, sunumlar ve belgeler",
     "paidWebMedia": "En iyi modellerle görseller ve videolar",
-    "paidWebCta": "Web'de AbacusAI Agent'a git"
+    "paidWebCta": "Web'de AbacusAI Agent'a git",
+    "lockedTitle": "Krediler kilitli — telefonunu doğrula",
+    "lockedBody": "Telefonunu doğruladığında ücretsiz kredilerin açılır."
   },
   "execBackends": {
     "daytona": {
@@ -4538,7 +4540,11 @@
       "title": "{{credits}} ücretsiz krediyi açmak için telefonunu doğrula",
       "titleNoCount": "Ücretsiz kredilerini açmak için telefonunu doğrula",
       "body": "Tarayıcında bir dakika sürer. Ardından mesajını yeniden gönder.",
-      "cta": "Telefonu doğrula"
+      "cta": "Telefonu doğrula",
+      "unlockedTitle": "{{credits}} ücretsiz kredi açıldı",
+      "unlockedTitleNoCount": "Ücretsiz krediler açıldı",
+      "unlockedBody": "Telefonun doğrulandı. Devam etmek için mesajını yeniden gönder.",
+      "sendAgain": "Yeniden gönder"
     }
   },
   "creditThreshold": {

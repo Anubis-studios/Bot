@@ -869,7 +869,9 @@
     "paidWebApps": "Build and deploy full apps and websites",
     "paidWebResearch": "Deep research, slides and docs",
     "paidWebMedia": "Images and videos with top models",
-    "paidWebCta": "Go to AbacusAI Agent on the web"
+    "paidWebCta": "Go to AbacusAI Agent on the web",
+    "lockedTitle": "Crediti bloccati: verifica il tuo telefono",
+    "lockedBody": "I tuoi crediti gratuiti si sbloccano appena verifichi il telefono."
   },
   "execBackends": {
     "daytona": {
@@ -4538,7 +4540,11 @@
       "title": "Verifica il tuo telefono per sbloccare {{credits}} crediti gratuiti",
       "titleNoCount": "Verifica il tuo telefono per sbloccare i tuoi crediti gratuiti",
       "body": "Ci vuole un minuto nel browser. Poi invia di nuovo il tuo messaggio.",
-      "cta": "Verifica telefono"
+      "cta": "Verifica telefono",
+      "unlockedTitle": "{{credits}} crediti gratuiti sbloccati",
+      "unlockedTitleNoCount": "Crediti gratuiti sbloccati",
+      "unlockedBody": "Il tuo telefono è verificato. Invia di nuovo il messaggio per continuare.",
+      "sendAgain": "Invia di nuovo"
     }
   },
   "creditThreshold": {

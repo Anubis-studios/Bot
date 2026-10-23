@@ -869,7 +869,9 @@
     "paidWebApps": "Build and deploy full apps and websites",
     "paidWebResearch": "Deep research, slides and docs",
     "paidWebMedia": "Images and videos with top models",
-    "paidWebCta": "Go to AbacusAI Agent on the web"
+    "paidWebCta": "Go to AbacusAI Agent on the web",
+    "lockedTitle": "Kredit terkunci — verifikasi ponsel Anda",
+    "lockedBody": "Kredit gratis Anda terbuka setelah Anda memverifikasi ponsel."
   },
   "execBackends": {
     "daytona": {
@@ -4538,7 +4540,11 @@
       "title": "Verifikasi ponsel Anda untuk membuka {{credits}} kredit gratis",
       "titleNoCount": "Verifikasi ponsel Anda untuk membuka kredit gratis Anda",
       "body": "Hanya butuh satu menit di browser. Lalu kirim ulang pesan Anda.",
-      "cta": "Verifikasi ponsel"
+      "cta": "Verifikasi ponsel",
+      "unlockedTitle": "{{credits}} kredit gratis terbuka",
+      "unlockedTitleNoCount": "Kredit gratis terbuka",
+      "unlockedBody": "Ponsel Anda sudah terverifikasi. Kirim ulang pesan Anda untuk melanjutkan.",
+      "sendAgain": "Kirim ulang"
     }
   },
   "creditThreshold": {

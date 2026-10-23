@@ -869,7 +869,9 @@
     "paidWebApps": "Build and deploy full apps and websites",
     "paidWebResearch": "Deep research, slides and docs",
     "paidWebMedia": "Images and videos with top models",
-    "paidWebCta": "Go to AbacusAI Agent on the web"
+    "paidWebCta": "Go to AbacusAI Agent on the web",
+    "lockedTitle": "크레딧 잠김 — 휴대폰을 인증하세요",
+    "lockedBody": "휴대폰을 인증하면 무료 크레딧을 사용할 수 있습니다."
   },
   "execBackends": {
     "daytona": {
@@ -4538,7 +4540,11 @@
       "title": "휴대폰을 인증하면 무료 크레딧 {{credits}}을 사용할 수 있습니다",
       "titleNoCount": "휴대폰을 인증하면 무료 크레딧을 사용할 수 있습니다",
       "body": "브라우저에서 1분이면 됩니다. 그런 다음 메시지를 다시 보내 주세요.",
-      "cta": "휴대폰 인증"
+      "cta": "휴대폰 인증",
+      "unlockedTitle": "무료 크레딧 {{credits}} 잠금 해제됨",
+      "unlockedTitleNoCount": "무료 크레딧 잠금 해제됨",
+      "unlockedBody": "휴대폰 인증이 완료되었습니다. 계속하려면 메시지를 다시 보내 주세요.",
+      "sendAgain": "다시 보내기"
     }
   },
   "creditThreshold": {

@@ -15,6 +15,10 @@ export const DESKTOP_DOWNLOAD_URL = "https://bot.abacus.ai";
 
 export const ABACUS_AGENT_URL = "https://apps.abacus.ai/chatllm";
 
+/** Where an account whose free credits are held verifies its phone. */
+export const ABACUS_VERIFY_PHONE_URL =
+  "https://apps.abacus.ai/bot/link/verify-phone";
+
 /** The account's billing page, where a payment is checked or a plan renewed. */
 export const ABACUS_BILLING_URL =
   "https://apps.abacus.ai/chatllm/admin/profile";

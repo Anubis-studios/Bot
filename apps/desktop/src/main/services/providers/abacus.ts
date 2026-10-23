@@ -630,6 +630,10 @@ export const requestAbacusAccount = async (
         credits_granted: body.credits_granted ?? null,
         web_signup: body.web_signup === true,
         google_sign_in: body.google_sign_in === true,
+        // Only a server that says so: an older one sends nothing.
+        ...(typeof body.free_credits_held === "boolean"
+          ? { free_credits_held: body.free_credits_held }
+          : {}),
         focus:
           ABACUS_ACCOUNT_FOCI.find((focus) => focus === body.focus) ?? null,
       },

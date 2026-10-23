@@ -1558,6 +1558,11 @@ export interface AbacusAccountInfo {
   web_signup?: boolean;
   /** The account signs in with Google: the app opens Google's consent after sign-in. */
   google_sign_in?: boolean;
+  /**
+   * The free credits are on hold until the account verifies a phone; the
+   * counters still read as the grant. Absent from older servers: never held.
+   */
+  free_credits_held?: boolean;
   /** Where the user mostly works, from the platform's nightly read of their turns. */
   focus?: AbacusAccountFocus | null;
 }
