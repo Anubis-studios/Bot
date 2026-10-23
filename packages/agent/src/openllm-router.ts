@@ -244,6 +244,10 @@ export class OpenLlmRouter {
     if (verdict.network === true) return { network: true };
 
     const cause = this.chain.failed(failure, current?.provider);
+    // Free credits held until the account verifies a phone: only the user
+    // lifts it, and no other model is the answer. The turn ends here and
+    // nothing sits out, so the first send after verifying runs as usual.
+    if (cause === "phone_verification") return null;
     if (cause === "credits_exhausted" || cause === "credits_expired") {
       noteCreditWall(this.now());
       this.lastWall = { cause, provider: current?.provider, raw: failure };

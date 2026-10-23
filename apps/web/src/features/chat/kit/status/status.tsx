@@ -72,6 +72,8 @@ interface ErrorAction {
   cause?: string;
   /** `continue-free`: the free lane's providers, in order. */
   providers?: string[];
+  /** `verify-phone`: the free credits verifying unlocks, as the server names them. */
+  credits?: string;
 }
 
 /** Why the turn did not finish, as the agent named it (turn-outcome.ts). */
@@ -469,6 +471,49 @@ const PaymentCard = ({ lapsed }: { lapsed: boolean }) => {
   );
 };
 
+/**
+ * Abacus holds the account's free credits until it verifies a phone: the
+ * verify page in the browser is the one way on. Nothing is held back in the
+ * app, so the next message after verifying simply runs.
+ */
+const VerifyPhoneCard = ({ action }: { action: ErrorAction }) => {
+  const { t } = useTranslation();
+  const { runtime } = useChatView();
+  return (
+    <div
+      role="group"
+      aria-label={t("chat.error.label")}
+      className="mx-auto w-full max-w-[calc(var(--composer-max-w)-var(--spacing)*8)]"
+      data-slot="error-card"
+      data-variant="verify-phone"
+    >
+      <GroupCard
+        title={
+          action.credits != null
+            ? t("outcome.verifyPhone.title", { credits: action.credits })
+            : t("outcome.verifyPhone.titleNoCount")
+        }
+      >
+        <p className="text-muted-foreground p-3 text-sm">
+          {t("outcome.verifyPhone.body")}
+        </p>
+        {/* The agent always names the page (the server's, else the default one). */}
+        {action.link != null && (
+          <div className="flex flex-wrap gap-2 p-3">
+            <Button
+              size="sm"
+              data-action="verify-phone"
+              onClick={() => void runtime.host.openExternal(action.link!)}
+            >
+              {t("outcome.verifyPhone.cta")}
+            </Button>
+          </div>
+        )}
+      </GroupCard>
+    </div>
+  );
+};
+
 /** What the turn a wall cut off handed over, up to the outcome's anchor. */
 const readyBefore = (
   messages: readonly UIMessage[],
@@ -537,6 +582,8 @@ export const ErrorCard = ({
         t("workspace.retryMessage")
       )
       .catch(() => {});
+  const verify = actions.find((action) => action.type === "verify-phone");
+  if (verify != null) return <VerifyPhoneCard action={verify} />;
   const payment = actions.find((action) => action.type === "payment-required");
   if (payment != null)
     return <PaymentCard lapsed={payment.cause === "lapsed"} />;

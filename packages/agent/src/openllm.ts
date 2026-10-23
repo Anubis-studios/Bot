@@ -113,19 +113,21 @@ export const isOutOfCredits = (raw: string): boolean => creditWall(raw) != null;
 
 /**
  * Why Abacus refused a call for its account rather than for the request:
- * the credits (`exhausted`, `expired`) or the billing (`payment`, a payment
- * not confirmed or a subscription that lapsed).
+ * the credits (`exhausted`, `expired`), the billing (`payment`, a payment
+ * not confirmed or a subscription that lapsed), or free credits held until
+ * the account verifies a phone (`unverified`).
  */
-export type AbacusRefusal = CreditWall | "payment";
+export type AbacusRefusal = CreditWall | "payment" | "unverified";
 
 /** The code the server puts on each such refusal, in the body and a header. */
 const ABACUS_REFUSAL_CODE =
-  /\babacus_(credits_exhausted|free_tier_expired|payment_required)\b/;
+  /\babacus_(credits_exhausted|free_tier_expired|payment_required|credits_not_activated)\b/;
 
 const REFUSAL_BY_CODE: Record<string, AbacusRefusal> = {
   credits_exhausted: "exhausted",
   free_tier_expired: "expired",
   payment_required: "payment",
+  credits_not_activated: "unverified",
 };
 
 /** The billing gate's 402 sentences, for a server that sends no code. */
@@ -157,6 +159,33 @@ export function abacusRefusal(
   if (PAYMENT_REFUSAL.test(raw)) return "payment";
   if (TRIAL_ENDED.test(raw)) return "expired";
   return creditWall(raw);
+}
+
+/** Where an account verifies its phone, when the refusal names no page of its own. */
+export const VERIFY_PHONE_URL = "https://apps.abacus.ai/bot/link/verify-phone";
+
+/**
+ * The phone-verification refusal's page and the free credits it unlocks, as
+ * the server's sentence names them ("Verify your phone to unlock 2,000 free
+ * credits: <link>"). Only an Abacus page is taken; anything else, or none,
+ * is the default page. The credits are null when the sentence names none.
+ */
+export function phoneVerification(raw: string): {
+  link: string;
+  credits: string | null;
+} {
+  const found = raw.match(/https:\/\/[^\s"'\\<>]+/)?.[0];
+  let link = VERIFY_PHONE_URL;
+  if (found != null) {
+    try {
+      const host = new URL(found).hostname;
+      if (host === "abacus.ai" || host.endsWith(".abacus.ai")) link = found;
+    } catch {
+      // Not a URL after all: the default page.
+    }
+  }
+  const credits = raw.match(/unlock ([\d.,]+) free credits/i)?.[1] ?? null;
+  return { link, credits };
 }
 
 /** A billing refusal's reason: a lapsed subscription, else an unconfirmed payment. */

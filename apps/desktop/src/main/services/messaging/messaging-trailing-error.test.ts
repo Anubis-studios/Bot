@@ -485,6 +485,30 @@ describe("the user's own chat, any plan", () => {
     expect(mocks.fetchUpgradeUrl).not.toHaveBeenCalled();
   });
 
+  it("free credits held for a phone check: the verify page, no plan, in one line", async () => {
+    mocks.fetchUpgradeUrl = vi.fn(async () => UPGRADE_URL);
+    const h = harness({ self: true });
+    await h.inbound("hi");
+    h.fail({
+      message: "Verify your phone to unlock 2,000 free credits.",
+      code: "turn_failed",
+      cause: "phone_verification",
+      actions: [
+        {
+          type: "verify-phone",
+          link: "https://apps.abacus.ai/bot/link/verify-phone",
+          credits: "2,000",
+        },
+      ],
+    });
+    await settle();
+
+    expect(h.sent()).toEqual([
+      "Verify your phone to unlock 2,000 free credits: https://apps.abacus.ai/bot/link/verify-phone",
+    ]);
+    expect(mocks.fetchUpgradeUrl).not.toHaveBeenCalled();
+  });
+
   it("a lapsed subscription is asked to renew", async () => {
     const h = harness({ self: true });
     await h.inbound("hi");

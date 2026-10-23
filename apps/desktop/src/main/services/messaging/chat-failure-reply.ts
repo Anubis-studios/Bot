@@ -38,6 +38,8 @@ export interface TurnFailure {
     cause?: string;
     model?: string;
     label?: string;
+    link?: string;
+    credits?: string;
   }>;
 }
 
@@ -51,6 +53,7 @@ export type FailureKind =
   | "own-key"
   | "key-rejected"
   | "payment"
+  | "verify-phone"
   | "free-pool-out"
   | "model-unavailable"
   | "connection"
@@ -124,6 +127,8 @@ export const failureKind = (error: TurnFailure): FailureKind => {
   // The picked model cannot serve the turn: its own line, credits or not.
   if (types.has("model-unavailable")) return "model-gone";
   if (types.has("upgrade-abacus")) return "upgrade-abacus";
+  // Free credits held for a phone check: the verify page, never a plan.
+  if (types.has("verify-phone")) return "verify-phone";
   // Abacus's billing gate: never the out-of-credits line, nor a purchase.
   if (types.has("payment-required")) return "payment";
   if (error.cause === "key_invalid" && types.has("fix-key"))
@@ -270,6 +275,17 @@ export const chatReplyForFailure = (
           : "outcome.channel.payment",
         { link: ABACUS_BILLING_URL }
       );
+    case "verify-phone": {
+      const verify = error.actions?.find(
+        (action) => action.type === "verify-phone"
+      );
+      // The agent always names the page (the server's, else its default).
+      const link = verify?.link;
+      if (link == null) return t("outcome.channel.generic");
+      return verify?.credits != null
+        ? t("outcome.channel.verifyPhone", { credits: verify.credits, link })
+        : t("outcome.channel.verifyPhoneNoCount", { link });
+    }
     case "key-rejected":
       return t("outcome.channel.ownKeyRejected", {
         provider: providerDisplayName(ownKeyAction(error)?.provider ?? ""),
@@ -372,6 +388,7 @@ export class FailureReplyThrottle {
       kind === "generic" ||
       kind === "connection" ||
       kind === "key-rejected" ||
+      kind === "verify-phone" ||
       kind === "timed-out" ||
       kind === "agent-exited" ||
       kind === "empty"

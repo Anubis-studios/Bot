@@ -552,6 +552,35 @@ describe("the turn's outcome card", () => {
     expect(screen.queryByRole("button", { name: /Upgrade to/ })).toBeNull();
   });
 
+  it("free credits held for a phone check: one card, Verify phone opens the page, no plan", async () => {
+    const openExternal = vi.fn(async () => {});
+    const openUpgrade = vi.fn(async () => {});
+    current = await renderRelay(
+      failed({
+        message: "Verify your phone to unlock 2,000 free credits.",
+        cause: "phone_verification",
+        actions: [
+          {
+            type: "verify-phone",
+            link: "https://apps.abacus.ai/bot/link/verify-phone",
+            credits: "2,000",
+          },
+        ],
+      }),
+      "session",
+      {},
+      {},
+      host("free", { openExternal, openUpgrade })
+    );
+    await screen.findByText("Verify your phone to unlock 2,000 free credits");
+    screen.getByRole("button", { name: "Verify phone" }).click();
+    expect(openExternal).toHaveBeenCalledWith(
+      "https://apps.abacus.ai/bot/link/verify-phone"
+    );
+    expect(openUpgrade).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: /Upgrade/ })).toBeNull();
+  });
+
   it("Abacus's billing gate is a payment card: support, the billing page, no purchase", async () => {
     const openExternal = vi.fn(async () => {});
     const openUpgrade = vi.fn(async () => {});

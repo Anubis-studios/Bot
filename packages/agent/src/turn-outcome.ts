@@ -20,6 +20,7 @@ import {
   isPlanRejection,
   namesEmptyBalance,
   paymentRefusalReason,
+  phoneVerification,
 } from "./openllm.js";
 import type { NotificationAction } from "./protocol.js";
 
@@ -35,6 +36,11 @@ export type FailureCause =
   | "credits_expired"
   /** Abacus's billing gate refused: a payment not confirmed, or lapsed. */
   | "payment_required"
+  /**
+   * Abacus holds the account's free credits until it verifies a phone. Only
+   * the user can lift it, so it ends the turn: no retry, no other model.
+   */
+  | "phone_verification"
   /** The request never reached a server, or its connection died. */
   | "connection"
   /** The transcript does not fit the model's window or size cap. */
@@ -103,6 +109,7 @@ export function classifyAttempt(
   // The credit and billing gates are Abacus's, decided by who refused:
   // another provider's balance sentence is the user's own key.
   const refusal = abacusRefusal(raw, provider);
+  if (refusal === "unverified") return "phone_verification";
   if (refusal === "payment") return "payment_required";
   if (refusal === "expired") return "credits_expired";
   if (refusal === "exhausted") return "credits_exhausted";
@@ -152,6 +159,7 @@ export function classifyAttempt(
  * comes first; "busy" only when nothing more specific happened.
  */
 const CAUSE_PRIORITY: readonly FailureCause[] = [
+  "phone_verification",
   "credits_exhausted",
   "credits_expired",
   "payment_required",
@@ -293,6 +301,10 @@ const routedMessage = (failure: TurnFailure): string => {
       const { summary, remedy } = paymentWords(failure.raw);
       return `${summary}. ${remedy}`;
     }
+    case "phone_verification": {
+      const { summary, remedy } = phoneWords(failure.raw);
+      return `${summary}. ${remedy}`;
+    }
     case "connection":
       return NETWORK_UNREACHABLE_MESSAGE;
     case "context_too_long":
@@ -313,6 +325,15 @@ const routedMessage = (failure: TurnFailure): string => {
     case "unknown":
       return "The free models couldn't finish this. Try again, or switch to a different model.";
   }
+};
+
+/** The phone-verification refusal in the app's words; the card shows its own. */
+const phoneWords = (raw: string): { summary: string; remedy: string } => {
+  const { link, credits } = phoneVerification(raw);
+  return {
+    summary: `Verify your phone to unlock ${credits ?? "your"} free credits`,
+    remedy: `Verify it once at ${link}, then send your message again.`,
+  };
 };
 
 /**
@@ -435,6 +456,13 @@ const failureActions = (
         { type: "payment-required", cause: paymentRefusalReason(failure.raw) },
         { type: "switch-model" },
       ];
+    case "phone_verification": {
+      // The one way on is the verify page: no plan, no other model.
+      const { link, credits } = phoneVerification(failure.raw);
+      return [
+        { type: "verify-phone", link, ...(credits != null ? { credits } : {}) },
+      ];
+    }
     case "connection":
       return [{ type: "retry" }];
     case "context_too_long":
@@ -507,6 +535,7 @@ export function presentFailure(
     failure.cause !== "connection" &&
     failure.cause !== "context_too_long" &&
     failure.cause !== "payment_required" &&
+    failure.cause !== "phone_verification" &&
     !isCredits(failure.cause);
   const actions = wallAgain
     ? failureActions({ ...failure, cause: "credits_exhausted" }, context)
@@ -521,7 +550,8 @@ export function presentFailure(
     connection ||
     ownKeyLine ||
     failure.cause === "empty" ||
-    failure.cause === "payment_required";
+    failure.cause === "payment_required" ||
+    failure.cause === "phone_verification";
   const unavailable = actions.find(
     (action) => action.type === "model-unavailable"
   );
@@ -727,6 +757,7 @@ export function classifyProviderFailure(
   // Before the rate-limit branch: an out-of-credits account answers 429 too,
   // and "try again in a moment" is exactly the wrong advice for it.
   const wall = abacusRefusal(raw, provider);
+  if (wall === "unverified") return phoneWords(raw);
   if (wall === "payment") return paymentWords(raw);
   if (wall === "expired") {
     return {
