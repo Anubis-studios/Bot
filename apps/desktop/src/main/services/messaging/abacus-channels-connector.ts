@@ -1,6 +1,9 @@
+import { randomBytes } from "node:crypto";
+
 import type {
   MessagingPlatformId,
   SharedChannelLink,
+  SharedLinkTarget,
 } from "@abacus-ai/contract/messaging";
 import { BrowserWindow } from "electron";
 import QRCode from "qrcode";
@@ -80,6 +83,43 @@ type PairResponse = {
   display_name?: string | null;
   /** What to encode as a QR when the link is meant for a phone. */
   qr_data?: string;
+  /** Discord's one-click consent, where the server has it provisioned. */
+  oauth_client_id?: string | null;
+  oauth_authorize_url?: string;
+  oauth_scopes?: string[];
+  oauth_extras?: string[];
+  oauth_redirect_uri?: string;
+};
+
+type ConsentParams = {
+  authorizeUrl: string;
+  clientId: string;
+  scopes: string[];
+  extras: string[];
+  redirectUri: string;
+};
+
+/** The consent parameters, when the server sent every one of them. */
+const consentParams = (result: PairResponse): ConsentParams | null => {
+  const {
+    oauth_authorize_url: authorizeUrl,
+    oauth_client_id: clientId,
+    oauth_scopes: scopes,
+    oauth_extras: extras,
+    oauth_redirect_uri: redirectUri,
+  } = result;
+  if (
+    authorizeUrl == null ||
+    !isWebUrl(authorizeUrl) ||
+    clientId == null ||
+    clientId.length === 0 ||
+    !Array.isArray(scopes) ||
+    !Array.isArray(extras) ||
+    redirectUri == null ||
+    !isWebUrl(redirectUri)
+  )
+    return null;
+  return { authorizeUrl, clientId, scopes, extras, redirectUri };
 };
 
 /** How a Telegram group message's sender reads when the server names no chat. */
@@ -145,6 +185,12 @@ export class AbacusChannelsConnector implements MessagingConnector {
   private pairTimer: NodeJS.Timeout | null = null;
   private abort: AbortController | null = null;
   private linkWindow: BrowserWindow | null = null;
+  /** Discord's consent parameters from the last pairing; null without them. */
+  private consent: ConsentParams | null = null;
+  /** The `state` of the consent page opened last; its callback must carry it. */
+  private consentState: string | null = null;
+  /** The bot's profile, where its chat is a click away; kept once linked. */
+  private botProfileUrl: string | undefined;
 
   constructor(
     private readonly callbacks: ConnectorCallbacks,
@@ -239,11 +285,18 @@ export class AbacusChannelsConnector implements MessagingConnector {
       this.channel === "discord" && result.deep_link != null
         ? /[?&]client_id=(\d+)/.exec(result.deep_link)?.[1]
         : undefined;
+    this.botProfileUrl =
+      clientId != null ? `https://discord.com/users/${clientId}` : undefined;
+    // A browser host has no Discord window to hold the consent page in.
+    this.consent =
+      this.channel === "discord" && this.platform !== "web-host"
+        ? consentParams(result)
+        : null;
     this.setLink({
       status: "pending",
       deepLink: result.deep_link,
-      botProfileUrl:
-        clientId != null ? `https://discord.com/users/${clientId}` : undefined,
+      botProfileUrl: this.botProfileUrl,
+      oneClick: this.consent != null,
       code: this.channel === "discord" ? result.code : undefined,
       instructions: result.instructions,
       expiresAt: result.expires_at,
@@ -264,15 +317,8 @@ export class AbacusChannelsConnector implements MessagingConnector {
    * discord.com link routes to the Discord desktop app, which takes over the
    * authorize flow. Shares the web connector's session so a sign-in carries.
    */
-  openLink(target: "install" | "dm" = "install"): void | string {
-    const url =
-      this.link.status === "pending"
-        ? target === "dm"
-          ? this.link.botProfileUrl
-          : this.link.deepLink
-        : undefined;
-    if (url == null || !isWebUrl(url))
-      throw new Error("There is no install link to open. Press Link first.");
+  openLink(target: SharedLinkTarget = "install"): void | string {
+    const url = this.linkUrl(target);
     if (this.platform === "web-host") return url;
     if (this.linkWindow != null && !this.linkWindow.isDestroyed()) {
       void this.linkWindow.loadURL(url);
@@ -301,6 +347,79 @@ export class AbacusChannelsConnector implements MessagingConnector {
     });
     this.linkWindow = win;
     void win.loadURL(url);
+  }
+
+  /**
+   * The page a card button opens. "authorize" is Discord's consent page, under
+   * a fresh `state` that completeAuthorize checks its callback against.
+   */
+  linkUrl(target: SharedLinkTarget): string {
+    const url =
+      target === "authorize"
+        ? this.consentUrl()
+        : target === "dm"
+          ? this.link.botProfileUrl
+          : this.link.status === "pending"
+            ? this.link.deepLink
+            : undefined;
+    if (url == null || !isWebUrl(url))
+      throw new Error("There is no install link to open. Press Link first.");
+    return url;
+  }
+
+  /** Where Discord sends the consent page's answer; null without consent. */
+  consentRedirectUri(): string | null {
+    return this.consent?.redirectUri ?? null;
+  }
+
+  private consentUrl(): string | undefined {
+    const consent = this.consent;
+    if (consent == null || this.link.status !== "pending") return undefined;
+    this.consentState = randomBytes(16).toString("hex");
+    const query = new URLSearchParams({
+      client_id: consent.clientId,
+      redirect_uri: consent.redirectUri,
+      scope: consent.scopes.join(" "),
+      state: this.consentState,
+    });
+    return [`${consent.authorizeUrl}?${query.toString()}`, ...consent.extras]
+      .filter((part) => part.length > 0)
+      .join("&");
+  }
+
+  /**
+   * The consent page's answer (the redirect it was refused at): its grant
+   * names the Discord account, and the server links it. A callback for
+   * another `state`, or one with no grant (the user declined), changes nothing.
+   */
+  async completeAuthorize(callbackUrl: string): Promise<void> {
+    const expected = this.consentState;
+    this.consentState = null;
+    const params = new URL(callbackUrl).searchParams;
+    if (expected == null || params.get("state") !== expected) return;
+    const code = params.get("code");
+    if (code == null || code.length === 0) {
+      this.callbacks.onLog(
+        `${this.channel}: the consent page closed without a grant`
+      );
+      return;
+    }
+    try {
+      const result = await this.call<PairResponse>({
+        action: "link_oauth",
+        channel: this.channel,
+        code,
+      });
+      if (result.status !== "linked")
+        throw new Error("Discord did not finish the link. Please try again.");
+      this.callbacks.onLog(`${this.channel}: linked from the consent page`);
+      this.markLinked(result.display_name ?? null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.callbacks.onLog(`${this.channel}: consent link failed: ${message}`);
+      if (this.link.status === "pending")
+        this.setLink({ ...this.link, error: message });
+    }
   }
 
   async unlink(): Promise<SharedChannelLink> {
@@ -406,7 +525,11 @@ export class AbacusChannelsConnector implements MessagingConnector {
     // Left open, the install window sits over the app saying nothing.
     if (!wasLinked && this.linkWindow != null && !this.linkWindow.isDestroyed())
       this.linkWindow.close();
-    this.setLink({ status: "linked", displayName });
+    this.setLink({
+      status: "linked",
+      displayName,
+      botProfileUrl: this.botProfileUrl,
+    });
     this.callbacks.onState("connected");
     if (!wasLinked) this.callbacks.onSelfLinked?.();
   }

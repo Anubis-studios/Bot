@@ -154,8 +154,17 @@ export type SharedChannelLink = {
   /** The deep link as a QR image (data: URL). */
   qrDataUrl?: string;
   botProfileUrl?: string;
+  /**
+   * Discord only: the bot links by one click on Discord's own consent page,
+   * opened in the app's Discord window. The code steps stay as the fallback.
+   */
+  oneClick?: boolean;
   error?: string;
 };
+
+/** What a shared-bot card opens: the consent page, the install link or the bot's chat. */
+export const SHARED_LINK_TARGETS = ["authorize", "install", "dm"] as const;
+export type SharedLinkTarget = (typeof SHARED_LINK_TARGETS)[number];
 
 export type MessagingPlatformInfo = {
   id: MessagingPlatformId;

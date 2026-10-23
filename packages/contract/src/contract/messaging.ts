@@ -3,6 +3,7 @@ import * as v from "valibot";
 
 import {
   MESSAGING_PLATFORM_IDS,
+  SHARED_LINK_TARGETS,
   type MessagingPlatformId,
   type MessagingSnapshot,
 } from "../messaging";
@@ -63,12 +64,12 @@ export const messaging = {
   /** Mint a pairing code for a shared-bot platform. */
   pairShared: mutation.input(PlatformInput).output(type<MessagingSnapshot>()),
   unlinkShared: mutation.input(PlatformInput).output(type<MessagingSnapshot>()),
-  /** In the app's own window, never the OS. */
+  /** In the app's own window, never the OS; the consent page in its Discord window. */
   openSharedLink: mutation
     .input(
       v.object({
         platformId: MessagingPlatformIdSchema,
-        target: v.optional(v.picklist(["install", "dm"])),
+        target: v.optional(v.picklist(SHARED_LINK_TARGETS)),
       })
     )
     .output(type<string | void>()),
