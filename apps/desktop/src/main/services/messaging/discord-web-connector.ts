@@ -166,6 +166,8 @@ export class DiscordWebConnector implements MessagingConnector {
   private queue: Promise<unknown> = Promise.resolve();
   /** Serialized tasks currently holding the page; checkLogin stands aside. */
   private driving = 0;
+  /** Ends the page `present` is showing; null when it shows none. */
+  private presentation: (() => void) | null = null;
 
   /** Tasks queued for the page, the running one included. */
   private pending = 0;
@@ -842,6 +844,68 @@ export class DiscordWebConnector implements MessagingConnector {
   hideLoginWindow(): void {
     const win = this.window;
     if (win != null && !win.isDestroyed() && win.isVisible()) win.hide();
+  }
+
+  /**
+   * Show `url` in this window for the user to finish there. The app keeps one
+   * Discord client per session: a second window on the same partition fought
+   * this one over the sign-in, and linking the bot in one signed the other
+   * out. Holds the page until it resolves: with the first navigation under
+   * `capturePrefix` (refused, never loaded), or null once the window is put
+   * away. Then the page goes back home.
+   */
+  present(url: string, capturePrefix?: string): Promise<string | null> {
+    return this.serialize(async () => {
+      const win = this.ensureWindow();
+      if (win == null) return null;
+      const captured = await new Promise<string | null>((resolve) => {
+        const contents = win.webContents;
+        const finish = (value: string | null): void => {
+          contents.off("will-navigate", onNavigate);
+          contents.off("will-redirect", onNavigate);
+          win.off("hide", onAway);
+          win.off("closed", onAway);
+          this.presentation = null;
+          resolve(value);
+        };
+        const onNavigate = (
+          event: { preventDefault: () => void },
+          target: string
+        ): void => {
+          if (capturePrefix != null && target.startsWith(capturePrefix)) {
+            event.preventDefault();
+            finish(target);
+            return;
+          }
+          // The authorize page hands off to `discord://` when it thinks the
+          // desktop app is there; the flow stays on its web fallback.
+          if (!/^https?:/i.test(target)) event.preventDefault();
+        };
+        const onAway = (): void => finish(null);
+        contents.on("will-navigate", onNavigate);
+        contents.on("will-redirect", onNavigate);
+        win.on("hide", onAway);
+        win.on("closed", onAway);
+        this.presentation = () => finish(null);
+        void win.loadURL(url, { userAgent: userAgent() }).catch(() => {});
+        presentAsDialog(win);
+      });
+      if (!win.isDestroyed()) {
+        if (win.isVisible()) {
+          win.hide();
+          bringToFront();
+        }
+        await win
+          .loadURL(DISCORD_WEB_URL, { userAgent: userAgent() })
+          .catch(() => {});
+      }
+      return captured;
+    });
+  }
+
+  /** Put away what `present` shows, e.g. once the link it was for landed. */
+  endPresentation(): void {
+    this.presentation?.();
   }
 
   /** True once the user has signed in; surfaced to the connect dialog. */

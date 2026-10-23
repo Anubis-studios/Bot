@@ -168,6 +168,7 @@ import {
   type MessagingPairingDecisionRequest,
   type MessagingPlatformId,
   type MessagingSnapshot,
+  type SharedLinkTarget,
   type UpdateMessagingPlatformRequest,
   type UpdateMessagingSettingsRequest,
 } from "@abacus-ai/contract/messaging";
@@ -3320,7 +3321,7 @@ export class ServiceHost {
 
   openSharedChannelLink(
     platformId: MessagingPlatformId,
-    target?: "install" | "dm"
+    target?: SharedLinkTarget
   ): Promise<void | string> {
     return this.messagingGatewayService.openSharedChannelLink(
       platformId,

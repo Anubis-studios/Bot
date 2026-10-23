@@ -24,6 +24,7 @@ import {
   type MessagingSnapshot,
   type SelfLanePlatform,
   type SharedChannelLink,
+  type SharedLinkTarget,
 } from "@abacus-ai/contract/messaging";
 import {
   outgoingWords,
@@ -710,6 +711,8 @@ export class MessagingGatewayService {
       },
       onSelfLinked: () => {
         if (!current()) return;
+        // The bot's chat or install page, still up for a link that just landed.
+        this.discordSessionFor(platformId)?.endPresentation();
         if (isSelfLane(platformId)) this.maybeBootstrapSelfLane(platformId);
       },
     };
@@ -1991,14 +1994,45 @@ export class MessagingGatewayService {
     return this.getSnapshot();
   }
 
-  /** Shared-bot platforms: open the install link in an app-owned window. */
+  /**
+   * Shared-bot platforms: open a link page in an app-owned window. Discord's
+   * open in the app's Discord window when there is one (see
+   * DiscordWebConnector.present), where the consent page's answer is caught
+   * and linked.
+   */
   async openSharedChannelLink(
     platformId: MessagingPlatformId,
-    target: "install" | "dm" = "install"
+    target: SharedLinkTarget = "install"
   ): Promise<void | string> {
     const connector = this.connectors.get(platformId);
-    if (connector instanceof AbacusChannelsConnector)
-      return connector.openLink(target);
+    if (!(connector instanceof AbacusChannelsConnector)) return;
+    const session = this.discordSessionFor(platformId);
+    if (session == null) return connector.openLink(target);
+    const url = connector.linkUrl(target);
+    const capture =
+      target === "authorize"
+        ? (connector.consentRedirectUri() ?? undefined)
+        : undefined;
+    // Not awaited: the page waits on the user, and the snapshot carries the link.
+    void session
+      .present(url, capture)
+      .then(async (callback) => {
+        if (callback == null) return;
+        await connector.completeAuthorize(callback);
+        this.options.emitChanged();
+      })
+      .catch((error: unknown) => {
+        console.error(`[messaging] ${platformId}: link page failed:`, error);
+      });
+  }
+
+  /** The app's Discord window, where the Discord bot's link pages open. */
+  private discordSessionFor(
+    platformId: MessagingPlatformId
+  ): DiscordWebConnector | null {
+    if (platformId !== "abacus_discord") return null;
+    const session = this.connectors.get("discord");
+    return session instanceof DiscordWebConnector ? session : null;
   }
 
   async unlinkSharedChannel(
@@ -2815,9 +2849,12 @@ export class MessagingGatewayService {
     platformId: MessagingPlatformId
   ): SharedChannelLink | undefined {
     const connector = this.connectors.get(platformId);
-    return connector instanceof AbacusChannelsConnector
-      ? connector.sharedLink()
-      : undefined;
+    if (!(connector instanceof AbacusChannelsConnector)) return undefined;
+    const link = connector.sharedLink();
+    // One click needs the Discord window to catch the consent page's answer.
+    return link.oneClick === true && this.discordSessionFor(platformId) == null
+      ? { ...link, oneClick: false }
+      : link;
   }
 
   private appendLog(entry: ChatLogEntry): void {

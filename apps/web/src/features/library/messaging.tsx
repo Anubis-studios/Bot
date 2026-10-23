@@ -6,6 +6,7 @@ import {
   type MessagingPlatformId,
   type MessagingPlatformInfo,
   type MessagingSnapshot,
+  type SharedLinkTarget,
   type UpdateMessagingSettingsRequest,
 } from "@abacus-ai/contract/messaging";
 import { useLiveQuery } from "@tanstack/react-db";
@@ -588,12 +589,13 @@ const SharedLinkSteps = ({
   const { t } = useTranslation();
   const { transport } = useAppContext();
   const [copied, setCopied] = useState(false);
+  const [withCode, setWithCode] = useState(false);
   const link = platform.sharedLink ?? { status: "unlinked" as const };
   const command = link.code ? `/link ${link.code}` : null;
   const title = t(
     required ? "messaging.sharedLink.stepLink" : "messaging.sharedLink.title"
   );
-  const open = (target: "install" | "dm") =>
+  const open = (target: SharedLinkTarget) =>
     void transport.client.messaging.openSharedLink({
       platformId: platform.id,
       target,
@@ -615,6 +617,18 @@ const SharedLinkSteps = ({
               })
             : t("messaging.sharedLink.linked", { app })}
         </ConnectNote>
+        {/* Discord hides an added app's chat until it is messaged. */}
+        {link.botProfileUrl && (
+          <Button
+            size="sm"
+            variant="secondary"
+            className={CONNECT_ACTION}
+            onClick={() => open("dm")}
+          >
+            <ExternalLinkIcon data-icon="inline-start" />
+            {t("messaging.sharedLink.openDm")}
+          </Button>
+        )}
       </Step>
     );
   if (link.status === "pending" && platform.id === "abacus_telegram")
@@ -635,6 +649,32 @@ const SharedLinkSteps = ({
             {t("messaging.sharedLink.waitingTelegram")}
           </ConnectWaiting>
         }
+      </Step>
+    );
+  if (link.status === "pending" && link.oneClick && !withCode)
+    return (
+      <Step index={first} title={t("messaging.sharedLink.authorizeStep")}>
+        <Button
+          size="sm"
+          variant="secondary"
+          className={CONNECT_ACTION}
+          onClick={() => open("authorize")}
+        >
+          <ExternalLinkIcon data-icon="inline-start" />
+          {t("messaging.sharedLink.authorize")}
+        </Button>
+        {link.error && <ConnectNote error>{link.error}</ConnectNote>}
+        <ConnectWaiting>
+          {t("messaging.sharedLink.waitingAuthorize")}
+        </ConnectWaiting>
+        <Button
+          size="sm"
+          variant="link"
+          className="self-start px-0"
+          onClick={() => setWithCode(true)}
+        >
+          {t("messaging.sharedLink.withCode")}
+        </Button>
       </Step>
     );
   if (link.status === "pending") {

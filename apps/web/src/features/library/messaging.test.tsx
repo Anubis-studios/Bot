@@ -401,6 +401,59 @@ it("a Telegram link walks its own steps, never Discord's", async () => {
   }
 });
 
+it("a Discord bot with one-click consent links from Discord's page, the code as the fallback", async () => {
+  const d = setup("discord");
+  const opened: string[] = [];
+  const consent = (): MessagingSnapshot => ({
+    ...d.snapshot(),
+    platforms: d.snapshot().platforms.map((p) =>
+      p.id === "discord"
+        ? { ...p, enabled: true, state: "connected" as const }
+        : {
+            ...p,
+            sharedLink: {
+              status: "pending" as const,
+              code: "abc",
+              oneClick: true,
+            },
+          }
+    ),
+  });
+  d.procedures.messaging.snapshot = os.messaging.snapshot.handler(consent);
+  d.procedures.messaging.updatePlatform =
+    os.messaging.updatePlatform.handler(consent);
+  const procedures = {
+    messaging: {
+      ...d.procedures.messaging,
+      openSharedLink: os.messaging.openSharedLink.handler(({ input }) => {
+        opened.push(`${input.platformId}:${input.target}`);
+      }),
+    },
+  };
+  const app = await renderApp("/library/messaging?platform=discord", {
+    procedures,
+  });
+  try {
+    const dialog = await screen.findByRole("dialog", { name: "Discord" });
+    fireEvent.click(
+      await within(dialog).findByRole("button", {
+        name: enUS.messaging.sharedLink.authorize,
+      })
+    );
+    await waitFor(() => expect(opened).toEqual(["abacus_discord:authorize"]));
+    expect(within(dialog).queryByText("/link abc")).toBeNull();
+    fireEvent.click(
+      within(dialog).getByRole("button", {
+        name: enUS.messaging.sharedLink.withCode,
+      })
+    );
+    expect(await within(dialog).findByText("/link abc")).not.toBeNull();
+  } finally {
+    app.view.unmount();
+    await app.cleanup();
+  }
+});
+
 it("a signed-in Discord without its bot linked is not finished", async () => {
   const d = setup("discord");
   const signedIn = (): MessagingSnapshot => ({
