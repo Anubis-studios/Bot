@@ -225,6 +225,7 @@ describe("the free grant's milestone card", () => {
         features: [
           "Unlimited chatting with the bot (20,000 credits a month)",
           "Top models including Model A, Model B, Model C, Model D and Model E",
+          "Build and deploy powerful apps on the web, including mobile apps: 3 projects a month",
         ],
         url: null,
       },
@@ -278,9 +279,9 @@ describe("the free grant's milestone card", () => {
       "20,000 credits a month (10x the free plan)",
       "Top models: Model A, Model B, Model C, Model D",
       "Image and video generation",
-      "Personal agents in Abacus AI Agent on the web that run 24/7: WhatsApp, Discord and Telegram auto-replies, all your routines, and everything your bot does",
+      "Personal agents in Abacus AI Agent on the web that run 24/7, even with your computer off: WhatsApp, Discord and Telegram auto-replies, all your routines, and everything your bot does",
       "100+ connectors: Gmail, Google Calendar, Slack, Drive, Notion and more",
-      "Build and publish web apps",
+      "Build and deploy powerful apps on the web, including mobile apps: 3 projects a month",
     ]);
     expect(
       screen.getByRole("button", { name: "Upgrade · $7 first month" })
@@ -509,9 +510,9 @@ describe("the free grant's milestone card", () => {
           "20,000 credits a month (10x the free plan)",
           "Top models: Model A, Model B, Model C, Model D",
           "Image and video generation",
-          "Personal agents in Abacus AI Agent on the web that run 24/7: WhatsApp, Discord and Telegram auto-replies, all your routines, and everything your bot does",
+          "Personal agents in Abacus AI Agent on the web that run 24/7, even with your computer off: WhatsApp, Discord and Telegram auto-replies, all your routines, and everything your bot does",
           "100+ connectors: Gmail, Google Calendar, Slack, Drive, Notion and more",
-          "Build and publish web apps",
+          "Build and deploy powerful apps on the web, including mobile apps: 3 projects a month",
         ].toSorted()
       )
     );

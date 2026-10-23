@@ -4440,9 +4440,11 @@
       "creditsOnly": "{{credits}} kredit setiap bulan",
       "models": "Model teratas: {{models}}",
       "media": "Pembuatan gambar dan video",
-      "agents": "Agen pribadi di Abacus AI Agent di web yang berjalan 24/7: balasan otomatis WhatsApp, Discord, dan Telegram, semua rutinitasmu, dan semua yang dilakukan bot-mu",
+      "agents": "Agen pribadi di Abacus AI Agent di web yang berjalan 24/7, bahkan saat komputermu mati: balasan otomatis WhatsApp, Discord, dan Telegram, semua rutinitasmu, dan semua yang dilakukan bot-mu",
       "connectors": "100+ konektor: Gmail, Google Kalender, Slack, Drive, Notion, dan lainnya",
-      "apps": "Buat dan terbitkan aplikasi web"
+      "apps": "Buat dan terbitkan aplikasi canggih di web, termasuk aplikasi seluler",
+      "appsProjects_one": "Buat dan terbitkan aplikasi canggih di web, termasuk aplikasi seluler: {{count}} proyek sebulan",
+      "appsProjects_other": "Buat dan terbitkan aplikasi canggih di web, termasuk aplikasi seluler: {{count}} proyek sebulan"
     },
     "freeChip": "Model gratis · {{provider}}",
     "freeChipAny": "penyedia lain",

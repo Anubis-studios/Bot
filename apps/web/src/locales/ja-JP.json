@@ -4440,9 +4440,11 @@
       "creditsOnly": "毎月 {{credits}} クレジット",
       "models": "トップモデル: {{models}}",
       "media": "画像と動画の生成",
-      "agents": "Web 版 Abacus AI Agent で 24 時間 365 日動くパーソナルエージェント: WhatsApp・Discord・Telegram の自動返信、すべてのルーティン、そしてボットがすること全部",
+      "agents": "Web 版 Abacus AI Agent で 24 時間 365 日、パソコンの電源が切れていても動くパーソナルエージェント: WhatsApp・Discord・Telegram の自動返信、すべてのルーティン、そしてボットがすること全部",
       "connectors": "100 以上のコネクタ：Gmail、Google カレンダー、Slack、Drive、Notion など",
-      "apps": "Web アプリを作成して公開"
+      "apps": "モバイルアプリも含め、本格的なアプリを Web で作成して公開",
+      "appsProjects_one": "モバイルアプリも含め、本格的なアプリを Web で作成して公開: 月 {{count}} プロジェクト",
+      "appsProjects_other": "モバイルアプリも含め、本格的なアプリを Web で作成して公開: 月 {{count}} プロジェクト"
     },
     "freeChip": "無料モデル · {{provider}}",
     "freeChipAny": "別のプロバイダー",

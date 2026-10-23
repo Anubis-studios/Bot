@@ -4440,9 +4440,11 @@
       "creditsOnly": "{{credits}} Credits jeden Monat",
       "models": "Top-Modelle: {{models}}",
       "media": "Bild- und Videogenerierung",
-      "agents": "Persönliche Agents in Abacus AI Agent im Web, die rund um die Uhr laufen: automatische Antworten in WhatsApp, Discord und Telegram, alle deine Routinen und alles, was dein Bot tut",
+      "agents": "Persönliche Agents in Abacus AI Agent im Web, die rund um die Uhr laufen, auch wenn dein Computer aus ist: automatische Antworten in WhatsApp, Discord und Telegram, alle deine Routinen und alles, was dein Bot tut",
       "connectors": "100+ Connectors: Gmail, Google Kalender, Slack, Drive, Notion und mehr",
-      "apps": "Web-Apps erstellen und veröffentlichen"
+      "apps": "Leistungsstarke Apps im Web erstellen und veröffentlichen, auch mobile Apps",
+      "appsProjects_one": "Leistungsstarke Apps im Web erstellen und veröffentlichen, auch mobile Apps: {{count}} Projekt im Monat",
+      "appsProjects_other": "Leistungsstarke Apps im Web erstellen und veröffentlichen, auch mobile Apps: {{count}} Projekte im Monat"
     },
     "freeChip": "Kostenloses Modell · {{provider}}",
     "freeChipAny": "anderer Anbieter",

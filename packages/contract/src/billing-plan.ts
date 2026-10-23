@@ -118,6 +118,23 @@ const planTopModels = (
   return null;
 };
 
+const APP_PROJECTS_FEATURE = " projects a month";
+
+/**
+ * How many app projects a month the plan's apps feature line names ("...: 3
+ * projects a month"); null without one. Plain string reads, as above.
+ */
+const planAppProjects = (features: readonly string[]): number | null => {
+  for (const feature of features) {
+    const line = feature.trim().toLowerCase();
+    if (!line.endsWith(APP_PROJECTS_FEATURE)) continue;
+    const words = line.slice(0, -APP_PROJECTS_FEATURE.length).split(/[\s:]+/);
+    const count = Number(words.at(-1));
+    return Number.isInteger(count) && count > 0 ? count : null;
+  }
+  return null;
+};
+
 /** The lines of a plan's pitch (locale keys `outcome.pitch.<line>`). */
 export type PitchLine =
   | "credits"
@@ -139,9 +156,10 @@ export const PITCH_LINES: readonly PitchLine[] = [
 /**
  * Every line of the offered plan's pitch, in the reader's language and in
  * `order`: its monthly credits against the current plan's, the leading models
- * its feature line names, and what it gives. Credits and models come from
- * billing_plan, so the app names no figure or model of its own; a line it
- * cannot read is left out rather than guessed.
+ * its feature line names, the app projects a month its apps line names, and
+ * what it gives. Credits, models and projects come from billing_plan, so the
+ * app names no figure or model of its own; a line it cannot read is left out
+ * rather than guessed, and the apps line drops only its count.
  */
 export function planPitch(
   t: PlanT,
@@ -164,6 +182,7 @@ export function planPitch(
       ? Math.round(monthly / free)
       : null;
   const models = offer != null ? planTopModels(offer.features, locale) : null;
+  const projects = offer != null ? planAppProjects(offer.features) : null;
   const line = (name: PitchLine): string | null => {
     switch (name) {
       case "credits":
@@ -177,6 +196,10 @@ export function planPitch(
             );
       case "models":
         return models != null ? t("outcome.pitch.models", { models }) : null;
+      case "apps":
+        return projects != null
+          ? t("outcome.pitch.appsProjects", { count: projects })
+          : t("outcome.pitch.apps");
       default:
         return t(`outcome.pitch.${name}`);
     }
