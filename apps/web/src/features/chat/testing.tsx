@@ -16,6 +16,10 @@ import { clearDraft } from "#renderer/lib/continuity/composer-drafts";
 import { i18n, initI18n } from "#renderer/lib/i18n";
 import { createHarness } from "#renderer/test-support/app-harness";
 
+type HarnessProcedures = NonNullable<
+  NonNullable<Parameters<typeof createHarness>[1]>["procedures"]
+>;
+
 import {
   fixtureRuntime,
   type FixtureRuntime,
@@ -36,12 +40,19 @@ export interface Rendered {
   cleanup(): Promise<void>;
 }
 
-export const renderWithDb = async (node: ReactNode): Promise<Rendered> => {
+export const renderWithDb = async (
+  node: ReactNode,
+  /** The host's procedures a test serves itself, such as the account. */
+  procedures: HarnessProcedures = {}
+): Promise<Rendered> => {
   await initI18n();
   await i18n.changeLanguage("en-US");
   const os = implement(contract);
   const harness = await createHarness("/", {
-    procedures: { links: { preview: os.links.preview.handler(() => null) } },
+    procedures: {
+      links: { preview: os.links.preview.handler(() => null) },
+      ...procedures,
+    },
   });
   const db = harness.appDb;
   const queryClient = harness.router.options.context.queryClient;
@@ -144,7 +155,8 @@ export const renderRelay = async (
   skin: "bot" | "session",
   composer: Partial<ComposerConfig> = {},
   viewOptions: { focused?: boolean; slots?: ChatViewSlots } = {},
-  host: ChatHostActions = inertHostActions
+  host: ChatHostActions = inertHostActions,
+  procedures: HarnessProcedures = {}
 ): Promise<Rendered & { runtime: ChatRuntime; remount(): Promise<void> }> => {
   const runtime = createChatRuntime(relay.ai, { host });
   await runtime.session(relay.threadId).load();
@@ -162,7 +174,7 @@ export const renderRelay = async (
       />
     </div>
   );
-  const rendered = await renderWithDb(tree());
+  const rendered = await renderWithDb(tree(), procedures);
   return {
     ...rendered,
     runtime,

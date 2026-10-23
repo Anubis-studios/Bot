@@ -14,6 +14,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createMemoryTransport } from "#renderer/data/transport/memory";
 import {
+  FREE_CREDITS_POLL_LIMIT_MS,
+  FREE_CREDITS_POLL_MS,
+  freeCreditsPolling,
+  resetFreeCreditsWatch,
+  startFreeCreditsWatch,
+} from "#renderer/lib/free-credits-watch";
+import {
   closeUpgradeDialog,
   upgradeDialogStore,
 } from "#renderer/lib/upgrade-dialog";
@@ -579,6 +586,123 @@ describe("the turn's outcome card", () => {
     );
     expect(openUpgrade).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: /Upgrade/ })).toBeNull();
+  });
+
+  describe("free credits held, then unlocked", () => {
+    const VERIFY = {
+      message: "Verify your phone to unlock 2,000 free credits.",
+      cause: "phone_verification",
+      actions: [
+        {
+          type: "verify-phone",
+          link: "https://apps.abacus.ai/bot/link/verify-phone",
+          credits: "2,000",
+        },
+      ],
+    };
+    const ACCOUNT = {
+      user_id: "u1",
+      organization_id: "o1",
+      name: null,
+      email: null,
+      picture: null,
+      organization: null,
+      org_user_count: null,
+      plan: "Free",
+      subscription_tier: "free",
+      credits_used: 0,
+      credits_granted: 2000,
+    };
+    const served = (state: { account: Record<string, unknown> }) => {
+      const os = implement(contract);
+      return {
+        account: {
+          abacus: os.account.abacus.handler(() => state.account as never),
+          payment: os.account.payment.handler(() => null),
+        },
+      };
+    };
+    afterEach(() => resetFreeCreditsWatch());
+
+    it("turns in place once the account says unlocked, and Send again sends the message again", async () => {
+      const openExternal = vi.fn(async () => {});
+      const state = { account: { ...ACCOUNT, free_credits_held: true } };
+      const relay = failed(VERIFY);
+      current = await renderRelay(
+        relay,
+        "session",
+        {},
+        {},
+        host("free", { openExternal }),
+        served(state)
+      );
+      await screen.findByText("Verify your phone to unlock 2,000 free credits");
+      fireEvent.click(screen.getByRole("button", { name: "Verify phone" }));
+      expect(openExternal).toHaveBeenCalledWith(
+        "https://apps.abacus.ai/bot/link/verify-phone"
+      );
+      // Still held: coming back to the window reads it again, and it still asks.
+      window.dispatchEvent(new Event("focus"));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(screen.getByRole("button", { name: "Verify phone" })).toBeTruthy();
+      state.account = { ...ACCOUNT, free_credits_held: false };
+      window.dispatchEvent(new Event("focus"));
+      expect(
+        await screen.findByText("2,000 free credits unlocked")
+      ).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Verify phone" })).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Send again" }));
+      await waitFor(() => expect(relay.stats.send).toHaveLength(1));
+      expect(relay.stats.send[0]!.messages.at(-1)).toMatchObject({
+        role: "user",
+        parts: [{ type: "text", content: "fix the bug" }],
+      });
+    });
+
+    it("shows the unlock on the first read when it happened elsewhere", async () => {
+      current = await renderRelay(
+        failed(VERIFY),
+        "session",
+        {},
+        {},
+        host("free"),
+        served({ account: { ...ACCOUNT, free_credits_held: false } })
+      );
+      expect(
+        await screen.findByText("2,000 free credits unlocked")
+      ).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Verify phone" })).toBeNull();
+    });
+
+    it("keeps asking on a server that does not say", async () => {
+      current = await renderRelay(
+        failed(VERIFY),
+        "session",
+        {},
+        {},
+        host("free"),
+        served({ account: ACCOUNT })
+      );
+      await screen.findByText("Verify your phone to unlock 2,000 free credits");
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(screen.queryByText(/free credits unlocked/)).toBeNull();
+      expect(screen.getByRole("button", { name: "Verify phone" })).toBeTruthy();
+    });
+
+    it("polls only while held, for ten minutes after Verify", () => {
+      const held = { ...ACCOUNT, free_credits_held: true };
+      expect(freeCreditsPolling(held, 0)).toBe(false);
+      startFreeCreditsWatch(0);
+      expect(FREE_CREDITS_POLL_MS).toBe(10_000);
+      expect(freeCreditsPolling(held, FREE_CREDITS_POLL_LIMIT_MS - 1)).toBe(
+        true
+      );
+      expect(freeCreditsPolling(held, FREE_CREDITS_POLL_LIMIT_MS)).toBe(false);
+      expect(
+        freeCreditsPolling({ ...ACCOUNT, free_credits_held: false }, 1)
+      ).toBe(false);
+      expect(freeCreditsPolling(ACCOUNT, 1)).toBe(false);
+    });
   });
 
   it("Abacus's billing gate is a payment card: support, the billing page, no purchase", async () => {

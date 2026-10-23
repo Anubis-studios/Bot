@@ -141,6 +141,26 @@ describe("fetchAbacusAccount", () => {
       organization_id: "org-9",
     });
   });
+
+  it("says the free credits are held only when the server does", async () => {
+    const read = async (body: Record<string, unknown>) => {
+      fetchMock.mockResolvedValueOnce(
+        new Response(JSON.stringify({ credits_granted: 2000, ...body }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        })
+      );
+      return fetchAbacusAccount(true);
+    };
+    expect((await read({ free_credits_held: true }))?.free_credits_held).toBe(
+      true
+    );
+    expect((await read({ free_credits_held: false }))?.free_credits_held).toBe(
+      false
+    );
+    // An older server sends nothing: neither held nor unlocked.
+    expect(await read({})).not.toHaveProperty("free_credits_held");
+  });
 });
 
 /**

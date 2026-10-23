@@ -869,7 +869,9 @@
     "paidWebApps": "Build and deploy full apps and websites",
     "paidWebResearch": "Deep research, slides and docs",
     "paidWebMedia": "Images and videos with top models",
-    "paidWebCta": "Go to AbacusAI Agent on the web"
+    "paidWebCta": "Go to AbacusAI Agent on the web",
+    "lockedTitle": "クレジットはロック中です。電話番号を認証してください",
+    "lockedBody": "電話番号を認証すると、無料クレジットが使えるようになります。"
   },
   "execBackends": {
     "daytona": {
@@ -4538,7 +4540,11 @@
       "title": "電話番号を認証すると、無料クレジット {{credits}} が使えるようになります",
       "titleNoCount": "電話番号を認証すると、無料クレジットが使えるようになります",
       "body": "ブラウザで1分ほどで終わります。その後、メッセージをもう一度送ってください。",
-      "cta": "電話番号を認証"
+      "cta": "電話番号を認証",
+      "unlockedTitle": "無料クレジット {{credits}} が使えるようになりました",
+      "unlockedTitleNoCount": "無料クレジットが使えるようになりました",
+      "unlockedBody": "電話番号の認証が完了しました。続けるには、メッセージをもう一度送ってください。",
+      "sendAgain": "もう一度送信"
     }
   },
   "creditThreshold": {

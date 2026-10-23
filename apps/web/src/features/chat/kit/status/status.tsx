@@ -21,6 +21,11 @@ import {
 import { latestPresented } from "#renderer/lib/bot-turns/deliverables";
 import { cn } from "#renderer/lib/cn";
 import { CREDITS_EXHAUSTED_TTL_MS } from "#renderer/lib/credits";
+import {
+  freeCreditsUnlocked,
+  startFreeCreditsWatch,
+  useFreeCreditsVerifySurface,
+} from "#renderer/lib/free-credits-watch";
 import { AppLink } from "#renderer/lib/navigation/app-link";
 import {
   ownKeyFailure,
@@ -32,6 +37,7 @@ import {
   lastUserText,
   requestUpgradeDialog,
 } from "#renderer/lib/upgrade-dialog";
+import { useAccount } from "#renderer/lib/use-account";
 import { useNow } from "#renderer/lib/use-now";
 import { Button } from "#renderer/ui/button";
 import {
@@ -473,12 +479,63 @@ const PaymentCard = ({ lapsed }: { lapsed: boolean }) => {
 
 /**
  * Abacus holds the account's free credits until it verifies a phone: the
- * verify page in the browser is the one way on. Nothing is held back in the
- * app, so the next message after verifying simply runs.
+ * verify page in the browser is the one way on. The card watches the account
+ * and, once the platform says the credits are unlocked, turns in place into
+ * the unlock with Send again (the same retry as Retry).
  */
-const VerifyPhoneCard = ({ action }: { action: ErrorAction }) => {
-  const { t } = useTranslation();
+const VerifyPhoneCard = ({
+  action,
+  onSendAgain,
+}: {
+  action: ErrorAction;
+  /** Offered when Retry would be: the latest outcome, a thread that can reply. */
+  onSendAgain?: () => void;
+}) => {
+  const { t, i18n } = useTranslation();
   const { runtime } = useChatView();
+  const account = useAccount();
+  const unlocked = freeCreditsUnlocked(account.data);
+  useFreeCreditsVerifySurface(!unlocked);
+  const granted = account.data?.credits_granted;
+  const credits =
+    action.credits ??
+    (granted != null && granted > 0
+      ? new Intl.NumberFormat(i18n.language).format(granted)
+      : null);
+  if (unlocked)
+    return (
+      <div
+        role="group"
+        aria-label={t("chat.error.label")}
+        className="mx-auto w-full max-w-[calc(var(--composer-max-w)-var(--spacing)*8)]"
+        data-slot="error-card"
+        data-variant="verify-phone"
+        data-state="unlocked"
+      >
+        <GroupCard>
+          {/* GroupCard's own title, with the check after it. */}
+          <h2 className="phone:px-4 phone:text-[15px] flex items-center gap-1.5 px-3 py-3 text-[13px] font-semibold">
+            {credits != null
+              ? t("outcome.verifyPhone.unlockedTitle", { credits })
+              : t("outcome.verifyPhone.unlockedTitleNoCount")}
+            <CheckCircle2
+              aria-hidden
+              className="text-primary size-4 shrink-0"
+            />
+          </h2>
+          <p className="text-muted-foreground p-3 text-sm">
+            {t("outcome.verifyPhone.unlockedBody")}
+          </p>
+          {onSendAgain != null && (
+            <div className="flex flex-wrap gap-2 p-3">
+              <Button size="sm" data-action="send-again" onClick={onSendAgain}>
+                {t("outcome.verifyPhone.sendAgain")}
+              </Button>
+            </div>
+          )}
+        </GroupCard>
+      </div>
+    );
   return (
     <div
       role="group"
@@ -486,6 +543,7 @@ const VerifyPhoneCard = ({ action }: { action: ErrorAction }) => {
       className="mx-auto w-full max-w-[calc(var(--composer-max-w)-var(--spacing)*8)]"
       data-slot="error-card"
       data-variant="verify-phone"
+      data-state="held"
     >
       <GroupCard
         title={
@@ -503,7 +561,10 @@ const VerifyPhoneCard = ({ action }: { action: ErrorAction }) => {
             <Button
               size="sm"
               data-action="verify-phone"
-              onClick={() => void runtime.host.openExternal(action.link!)}
+              onClick={() => {
+                startFreeCreditsWatch();
+                void runtime.host.openExternal(action.link!);
+              }}
             >
               {t("outcome.verifyPhone.cta")}
             </Button>
@@ -583,7 +644,13 @@ export const ErrorCard = ({
       )
       .catch(() => {});
   const verify = actions.find((action) => action.type === "verify-phone");
-  if (verify != null) return <VerifyPhoneCard action={verify} />;
+  if (verify != null)
+    return (
+      <VerifyPhoneCard
+        action={verify}
+        {...(latest && canReply ? { onSendAgain: retry } : {})}
+      />
+    );
   const payment = actions.find((action) => action.type === "payment-required");
   if (payment != null)
     return <PaymentCard lapsed={payment.cause === "lapsed"} />;

@@ -11,9 +11,17 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 
 import { usePrefs } from "#renderer/data/db/prefs";
-import { ABACUS_AGENT_URL } from "#renderer/lib/abacus-links";
+import {
+  ABACUS_AGENT_URL,
+  ABACUS_VERIFY_PHONE_URL,
+} from "#renderer/lib/abacus-links";
 import { useHasContextualUpsell } from "#renderer/lib/contextual-upsell";
 import { creditsTier } from "#renderer/lib/credits";
+import {
+  freeCreditsHeld,
+  startFreeCreditsWatch,
+  useFreeCreditsVerifySurface,
+} from "#renderer/lib/free-credits-watch";
 import {
   durations,
   easings,
@@ -44,8 +52,9 @@ const WEB_LINES = [
 
 /**
  * One portal, shown only inside the sidebar (pinned or peeked): a collapsed
- * sidebar hides it. A free account sees the upgrade card; a paid plan the
- * card that points at AbacusAI Agent on the web.
+ * sidebar hides it. A free account sees the upgrade card, or while its free
+ * credits are held, the way to unlock them; a paid plan the card that points
+ * at AbacusAI Agent on the web.
  */
 export const UpgradePromo = () => {
   const { transport } = useAppContext();
@@ -95,9 +104,14 @@ export const UpgradePromo = () => {
   const account = useCreditsAccount();
   const key = promoAccountKey(account.data);
   const contextualUpsell = useHasContextualUpsell();
-  const state = contextualUpsell
-    ? null
-    : promoState(account.data, prefs.creditsExhaustedAt, now);
+  // Held: the counters read as the whole grant, but none of it can be spent.
+  const held = freeCreditsHeld(account.data);
+  useFreeCreditsVerifySurface(held && host != null);
+  const state = held
+    ? "held"
+    : contextualUpsell
+      ? null
+      : promoState(account.data, prefs.creditsExhaustedAt, now);
   const [excited, setExcited] = useState(false);
   const tier = creditsTier(account.data);
   const remaining =
@@ -115,10 +129,16 @@ export const UpgradePromo = () => {
         ? "creditsCard.lowTitle"
         : "creditsCard.levelUpTitle";
   const web = state === "web";
+  const verifyPhone = () => {
+    startFreeCreditsWatch();
+    void platformSystem(transport.client).openExternal({
+      url: ABACUS_VERIFY_PHONE_URL,
+    });
+  };
   // A free account's card names no gains of its own: Upgrade opens the
   // dialog with the plan's whole pitch.
   const lines = web ? WEB_LINES : [];
-  if ((tier !== "free" && !web) || contextualUpsell || !host)
+  if ((!held && ((tier !== "free" && !web) || contextualUpsell)) || !host)
     return createPortal(null, target);
   return createPortal(
     <AnimatePresence>
@@ -127,8 +147,13 @@ export const UpgradePromo = () => {
           key={key}
           data-slot="upgrade-promo"
           aria-label={t(
-            web ? "creditsCard.paidWebTitle" : "creditsCard.upsellTitle"
+            held
+              ? "creditsCard.lockedTitle"
+              : web
+                ? "creditsCard.paidWebTitle"
+                : "creditsCard.upsellTitle"
           )}
+          data-state={held ? "held" : undefined}
           className="bg-background pointer-events-auto relative isolate w-full overflow-hidden rounded-(--pane-radius) border p-3"
           initial={{
             opacity: 0,
@@ -145,14 +170,20 @@ export const UpgradePromo = () => {
           <div className="phone-glow pointer-events-none -z-10" aria-hidden />
           <div className="flex items-center gap-3">
             <PromoCharacter
-              remaining={remaining}
+              remaining={held ? null : remaining}
               total={account.data?.credits_granted ?? null}
               excited={excited}
               upgraded={false}
             />
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold">
-                {t(web ? "creditsCard.paidWebTitle" : title)}
+                {t(
+                  held
+                    ? "creditsCard.lockedTitle"
+                    : web
+                      ? "creditsCard.paidWebTitle"
+                      : title
+                )}
               </p>
               {lines.length > 0 && (
                 <ul className="text-muted-foreground mt-0.5 flex flex-col gap-0.5 text-xs">
@@ -164,7 +195,11 @@ export const UpgradePromo = () => {
                   ))}
                 </ul>
               )}
-              {remaining != null ? (
+              {held ? (
+                <p className="text-muted-foreground mt-1 text-xs">
+                  {t("creditsCard.lockedBody")}
+                </p>
+              ) : remaining != null ? (
                 <p className="text-muted-foreground mt-1 text-xs">
                   {t("creditsCard.progress", {
                     remaining: new Intl.NumberFormat(i18n.language, {
@@ -176,7 +211,8 @@ export const UpgradePromo = () => {
                   })}
                 </p>
               ) : null}
-              {account.data?.credits_granted != null &&
+              {!held &&
+              account.data?.credits_granted != null &&
               account.data.credits_granted > 0 &&
               remaining != null ? (
                 <div
@@ -220,15 +256,20 @@ export const UpgradePromo = () => {
             onMouseLeave={() => setExcited(false)}
             onFocus={() => setExcited(true)}
             onBlur={() => setExcited(false)}
+            data-action={held ? "verify-phone" : undefined}
             onClick={() =>
-              void (web
-                ? platformSystem(transport.client).openExternal({
-                    url: ABACUS_AGENT_URL,
-                  })
-                : requestPlanDialog("sidebar"))
+              held
+                ? verifyPhone()
+                : void (web
+                    ? platformSystem(transport.client).openExternal({
+                        url: ABACUS_AGENT_URL,
+                      })
+                    : requestPlanDialog("sidebar"))
             }
           >
-            {web ? (
+            {held ? (
+              t("outcome.verifyPhone.cta")
+            ) : web ? (
               <>
                 {t("creditsCard.paidWebCta")}
                 <ArrowUpRight aria-hidden />

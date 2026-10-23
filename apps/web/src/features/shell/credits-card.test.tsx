@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
+import { resetFreeCreditsWatch } from "#renderer/lib/free-credits-watch";
 import { initI18n } from "#renderer/lib/i18n";
 import { onPlanActive, openUpgrade } from "#renderer/lib/upgrade";
 import {
@@ -26,9 +27,11 @@ const state = vi.hoisted(() => ({
     subscription_tier: "free",
     credits_granted: 100,
     credits_used: 95,
+    free_credits_held: undefined as boolean | undefined,
   },
   exhaustedAt: null as number | null,
   refetch: vi.fn(),
+  refetchQueries: vi.fn(async () => {}),
   query: vi.fn(),
   open: vi.fn(),
   update: vi.fn(),
@@ -36,6 +39,7 @@ const state = vi.hoisted(() => ({
   listModels: vi.fn(),
 }));
 vi.mock("@tanstack/react-query", () => ({
+  useQueryClient: () => ({ refetchQueries: state.refetchQueries }),
   useQuery: (options: { queryKey?: unknown }) => {
     state.query(options);
     return {
@@ -57,6 +61,7 @@ vi.mock("#renderer/lib/use-app-context", () => ({
           abacus: {
             queryOptions: () => ({ queryKey: ["account"] }),
             queryKey: () => ["account"],
+            key: () => ["account"],
           },
         },
       },
@@ -104,6 +109,7 @@ beforeEach(async () => {
   state.account.subscription_tier = "free";
   state.account.user_id = "dummy";
   state.account.credits_used = 95;
+  state.account.free_credits_held = undefined;
 });
 it("shows actual credit progress and reacts to CTA focus", () => {
   render(promo());
@@ -132,6 +138,43 @@ it("points an account already on a paid tier at AbacusAI Agent on the web", asyn
   expect(state.open).toHaveBeenCalledWith({
     url: "https://apps.abacus.ai/chatllm",
   });
+});
+
+it("held free credits: locked, not the grant, and Verify opens the page and reads the account on return", () => {
+  state.account.free_credits_held = true;
+  state.account.credits_granted = 2000;
+  state.account.credits_used = 0;
+  state.open.mockClear();
+  state.refetchQueries.mockClear();
+  try {
+    render(promo());
+    expect(screen.getByText("Credits locked — verify your phone")).toBeTruthy();
+    expect(screen.queryByText(/credits left/)).toBeNull();
+    expect(screen.queryByRole("progressbar")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Upgrade" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Verify phone" }));
+    expect(state.open).toHaveBeenCalledWith({
+      url: "https://apps.abacus.ai/bot/link/verify-phone",
+    });
+    window.dispatchEvent(new Event("focus"));
+    expect(state.refetchQueries).toHaveBeenCalledWith(
+      { queryKey: ["account"] },
+      { cancelRefetch: false }
+    );
+  } finally {
+    state.account.credits_granted = 100;
+    resetFreeCreditsWatch();
+  }
+});
+
+it("unlocked, or a server that does not say: the usual card with the balance", () => {
+  for (const held of [false, undefined]) {
+    state.account.free_credits_held = held;
+    const view = render(promo());
+    expect(screen.getByText("5 of 100 credits left")).toBeTruthy();
+    expect(screen.queryByText("Credits locked — verify your phone")).toBeNull();
+    view.unmount();
+  }
 });
 
 it("rounds floating point credit balances without changing progress", () => {
