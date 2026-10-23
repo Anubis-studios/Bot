@@ -152,6 +152,8 @@ export const SuccessPitchRow = ({ active }: { active: boolean }) => {
   const now = useNow();
   const key = creditAccountKey(account);
   const mark = key != null ? prefs.successPitch?.[key] : undefined;
+  // The gallery previews an offer of its own, and keeps no answer to it.
+  const preview = slots.successPitchOffer != null;
   const offer: SuccessPitchOffer | null =
     slots.successPitchOffer ?? mark?.offer ?? null;
   const cards = prefs.dismissals.successPitchCards ?? {};
@@ -186,12 +188,14 @@ export const SuccessPitchRow = ({ active }: { active: boolean }) => {
   const showing =
     visible && billing != null && wallOffer(billing) != null ? offer : null;
 
-  const write = (next: SuccessPitchCardState) =>
+  const write = (next: SuccessPitchCardState): void => {
+    if (preview) return;
     void db
       .updatePrefs({
         dismissals: { successPitchCards: { ...cards, [key!]: next } },
       })
       .catch(() => undefined);
+  };
   const base = (): SuccessPitchCardState => ({
     shown: card?.shown ?? 0,
     lastShownAt: card?.lastShownAt ?? null,
@@ -199,12 +203,14 @@ export const SuccessPitchRow = ({ active }: { active: boolean }) => {
     shownOffer: card?.shownOffer ?? null,
     answered: card?.answered ?? null,
   });
-  const funnel = (step: FunnelStep, trigger: string) =>
+  const funnel = (step: FunnelStep, trigger: string): void => {
+    if (preview) return;
     void transport.client.system
       .funnelStep({ step, detail: trigger })
       .catch(() => undefined);
+  };
   const shown = useEffectEvent((seen: SuccessPitchOffer) => {
-    if (card?.shownOffer === seen.id || slots.successPitchOffer != null) return;
+    if (card?.shownOffer === seen.id) return;
     funnel("success_pitch_shown", seen.trigger);
     const previous = base();
     write({

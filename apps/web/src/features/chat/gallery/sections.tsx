@@ -11,6 +11,7 @@ import { DeliverablesCard } from "#renderer/components/file-preview";
 import { clearDraft } from "#renderer/lib/continuity/composer-drafts";
 import { botAccentStyle } from "#renderer/lib/theme";
 
+import { UpgradeDialogHost } from "../../upgrade-dialog";
 import { fixtureRuntime } from "../fixtures/player";
 import { SCENARIOS, type Scenario } from "../fixtures/scenarios";
 import type { ChatViewSlots, ComposerConfig } from "../kit/context";
@@ -255,6 +256,8 @@ const View = ({
           notchEnabled={scenario.skin === "bot"}
         />
       </div>
+      {/* The success pitch's Upgrade opens the upgrade dialog, as in the shell. */}
+      {scenario.view?.successPitch != null && <UpgradeDialogHost />}
     </div>
   );
 };
