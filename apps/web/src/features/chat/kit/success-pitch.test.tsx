@@ -197,11 +197,11 @@ describe("SuccessPitchRow", () => {
         (item) => item.textContent
       )
     ).toEqual([
-      "Build and publish web apps",
+      "Build and deploy powerful apps on the web, including mobile apps",
       "Top models: Model A, Model B, Model C, Model D",
       "Image and video generation",
       "20,000 credits a month (10x the free plan)",
-      "Personal agents in Abacus AI Agent on the web that run 24/7: WhatsApp, Discord and Telegram auto-replies, all your routines, and everything your bot does",
+      "Personal agents in Abacus AI Agent on the web that run 24/7, even with your computer off: WhatsApp, Discord and Telegram auto-replies, all your routines, and everything your bot does",
       "100+ connectors: Gmail, Google Calendar, Slack, Drive, Notion and more",
     ]);
     expect(
