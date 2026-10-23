@@ -110,6 +110,12 @@ import {
   importLegacyTourSeen,
 } from "./services/config/legacy-prefs";
 import { createLoginItem } from "./services/config/login-item";
+import {
+  appLanguage,
+  nativeT,
+  osLanguages,
+  setNativeLanguage,
+} from "./services/config/native-language";
 import { notificationSilent } from "./services/config/notification-policy";
 import { PrefsStore, prefsFile } from "./services/config/prefs-store";
 import {
@@ -727,12 +733,12 @@ async function createWindow(restored?: RecreatedWindowState) {
 
     const choice = dialog.showMessageBoxSync(mainWindow, {
       type: "question",
-      buttons: ["Keep running in background", "Quit anyway"],
+      buttons: [nativeT("keepRunning"), nativeT("quitAnyway")],
       defaultId: 0,
       cancelId: 0,
-      title: "A task is running",
-      message: "A task is still running.",
-      detail: "Keep it running in the background, or quit and stop it?",
+      title: nativeT("taskRunningTitle"),
+      message: nativeT("taskRunningMessage"),
+      detail: nativeT("taskRunningDetail"),
     });
 
     if (choice === 0) {
@@ -780,8 +786,13 @@ async function createWindow(restored?: RecreatedWindowState) {
   };
 
   // Shown when the renderer fails to load, so the React ErrorBoundary never
-  // mounts. A data: URL works with no disk or network; strings stay English.
+  // mounts. A data: URL works with no disk or network, in the app's language.
   const buildErrorPageUrl = (target: string): string => {
+    const text = (key: string): string =>
+      nativeT(key)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;");
     const html = `<!doctype html><html><head><meta charset="utf-8"/>
 <style>
   html,body{height:100%;margin:0}
@@ -795,9 +806,9 @@ async function createWindow(restored?: RecreatedWindowState) {
   button:hover{background:#6b4ee6}
 </style></head>
 <body>
-  <h1>Couldn't load the app</h1>
-  <p>The application failed to load. Check your connection and try again.</p>
-  <button onclick="location.href=${JSON.stringify(target)}">Retry</button>
+  <h1>${text("loadFailed")}</h1>
+  <p>${text("loadFailedDetail")}</p>
+  <button onclick="location.href=${JSON.stringify(target)}">${text("retry")}</button>
 </body></html>`;
     return "data:text/html;charset=utf-8," + encodeURIComponent(html);
   };
@@ -914,10 +925,13 @@ async function createWindow(restored?: RecreatedWindowState) {
             });
           }
         } else {
-          template.push({ label: "No spelling suggestions", enabled: false });
+          template.push({
+            label: nativeT("noSpellingSuggestions"),
+            enabled: false,
+          });
         }
         template.push({
-          label: "Add to dictionary",
+          label: nativeT("addToDictionary"),
           click: () =>
             contents.session.addWordToSpellCheckerDictionary(misspelledWord),
         });
@@ -926,11 +940,23 @@ async function createWindow(restored?: RecreatedWindowState) {
 
       if (isEditable || selectionText) {
         template.push(
-          { role: "cut", enabled: isEditable && editFlags.canCut },
-          { role: "copy", enabled: editFlags.canCopy },
-          { role: "paste", enabled: isEditable && editFlags.canPaste },
+          {
+            role: "cut",
+            label: nativeT("cut"),
+            enabled: isEditable && editFlags.canCut,
+          },
+          { role: "copy", label: nativeT("copy"), enabled: editFlags.canCopy },
+          {
+            role: "paste",
+            label: nativeT("paste"),
+            enabled: isEditable && editFlags.canPaste,
+          },
           { type: "separator" },
-          { role: "selectAll", enabled: editFlags.canSelectAll }
+          {
+            role: "selectAll",
+            label: nativeT("selectAll"),
+            enabled: editFlags.canSelectAll,
+          }
         );
       }
 
@@ -997,13 +1023,12 @@ async function createWindow(restored?: RecreatedWindowState) {
 
       const choice = dialog.showMessageBoxSync(mainWindow, {
         type: "error",
-        buttons: ["Restart", "Quit"],
+        buttons: [nativeT("restart"), nativeT("quit")],
         defaultId: 0,
         cancelId: 1,
         title: APP_DISPLAY_NAME,
-        message: "The app keeps crashing",
-        detail:
-          "The application window has crashed repeatedly. Restart to try again.",
+        message: nativeT("crashMessage"),
+        detail: nativeT("crashDetail"),
       });
       // `quit`, not `exit`: before-quit tears the terminal PTYs down first.
       if (choice === 0) app.relaunch();
@@ -1015,12 +1040,12 @@ async function createWindow(restored?: RecreatedWindowState) {
       console.error("[recovery] renderer unresponsive");
       const choice = dialog.showMessageBoxSync(mainWindow, {
         type: "warning",
-        buttons: ["Wait", "Reload"],
+        buttons: [nativeT("wait"), nativeT("reload")],
         defaultId: 0,
         cancelId: 0,
         title: APP_DISPLAY_NAME,
-        message: "The app is not responding",
-        detail: "You can keep waiting, or reload the window to recover.",
+        message: nativeT("unresponsiveMessage"),
+        detail: nativeT("unresponsiveDetail"),
       });
       if (choice === 1) {
         loadAppContent();
@@ -1125,6 +1150,97 @@ const PICKED_FILE_MIME: Record<string, string> = {
 };
 
 /**
+ * The about panel and, on macOS, the application menu, labelled in the app's
+ * language (native-language.ts). Every item keeps its role, so it acts as
+ * Electron's default menu does; the Window menu keeps its role too, which is
+ * how macOS lists the open windows in it.
+ */
+function updateApplicationMenu(): void {
+  app.setAboutPanelOptions({
+    applicationName: APP_DISPLAY_NAME,
+    applicationVersion: app.getVersion(),
+    copyright: `Copyright © ${new Date().getFullYear()} Abacus.AI`,
+    credits: nativeT("credits"),
+    website: "https://github.com/abacusai/abacusai-bot/blob/main/README.md",
+    iconPath: resourcePath("icon2.png"),
+  });
+  if (process.platform !== "darwin") return;
+  const named = { app: APP_DISPLAY_NAME };
+  // The default menu labels its items from app.name, which keeps the hyphen.
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate([
+      {
+        label: APP_DISPLAY_NAME,
+        submenu: [
+          { role: "about", label: nativeT("aboutApp", named) },
+          { type: "separator" },
+          { role: "services", label: nativeT("services") },
+          { type: "separator" },
+          { role: "hide", label: nativeT("hideApp", named) },
+          { role: "hideOthers", label: nativeT("hideOthers") },
+          { role: "unhide", label: nativeT("showAll") },
+          { type: "separator" },
+          { role: "quit", label: nativeT("quitApp", named) },
+        ],
+      },
+      {
+        label: nativeT("file"),
+        submenu: [{ role: "close", label: nativeT("close") }],
+      },
+      {
+        label: nativeT("edit"),
+        submenu: [
+          { role: "undo", label: nativeT("undo") },
+          { role: "redo", label: nativeT("redo") },
+          { type: "separator" },
+          { role: "cut", label: nativeT("cut") },
+          { role: "copy", label: nativeT("copy") },
+          { role: "paste", label: nativeT("paste") },
+          { role: "selectAll", label: nativeT("selectAll") },
+        ],
+      },
+      {
+        label: nativeT("view"),
+        submenu: [
+          { role: "reload", label: nativeT("reload") },
+          { role: "forceReload", label: nativeT("forceReload") },
+          { role: "toggleDevTools", label: nativeT("developerTools") },
+          { type: "separator" },
+          { role: "resetZoom", label: nativeT("resetZoom") },
+          { role: "zoomIn", label: nativeT("zoomIn") },
+          { role: "zoomOut", label: nativeT("zoomOut") },
+          { type: "separator" },
+          { role: "togglefullscreen", label: nativeT("fullScreen") },
+        ],
+      },
+      {
+        role: "windowMenu",
+        label: nativeT("window"),
+        submenu: [
+          { role: "minimize", label: nativeT("minimize") },
+          { role: "zoom", label: nativeT("zoom") },
+          { type: "separator" },
+          { role: "front", label: nativeT("front") },
+        ],
+      },
+    ])
+  );
+}
+
+/** Loads the app's language for native words and relabels the menu when it changed. */
+async function applyNativeLanguage(): Promise<void> {
+  try {
+    if (await setNativeLanguage(appLanguage(prefsStore.get().language).ui))
+      updateApplicationMenu();
+  } catch (error) {
+    console.error(
+      "[i18n] native language failed; keeping the current one",
+      error
+    );
+  }
+}
+
+/**
  * The bodies of the top-level `window.api` handlers, as named operations: the
  * `ipcMain` handlers registered in `whenReady` and the oRPC procedures
  * (main/rpc) both call these, so neither carries its own copy.
@@ -1134,7 +1250,7 @@ const appOperations: AppOperations = {
   async openFolderDialog() {
     const result = await showOpenDialogFromApp({
       properties: ["openDirectory", "dontAddToRecent", "createDirectory"],
-      title: "Select Folder",
+      title: nativeT("selectFolder"),
     });
     return result?.filePaths?.[0] || null;
   },
@@ -1147,18 +1263,22 @@ const appOperations: AppOperations = {
     const result = await showOpenDialogFromApp({
       properties: theme ? ["openFile"] : ["openFile", "multiSelections"],
       title: imagesOnly
-        ? "Select Images"
+        ? nativeT("selectImages")
         : theme
-          ? "Select a Theme"
-          : "Select Files",
+          ? nativeT("selectTheme")
+          : nativeT("selectFiles"),
       ...(theme
-        ? { filters: [{ name: "Themes", extensions: ["json", "jsonc"] }] }
+        ? {
+            filters: [
+              { name: nativeT("themes"), extensions: ["json", "jsonc"] },
+            ],
+          }
         : {}),
       ...(imagesOnly
         ? {
             filters: [
               {
-                name: "Images",
+                name: nativeT("images"),
                 extensions: [
                   "png",
                   "jpg",
@@ -1243,6 +1363,7 @@ const appOperations: AppOperations = {
   },
 
   appVersion: () => app.getVersion(),
+  systemLanguages: () => osLanguages(),
   homeDir: () => os.homedir(),
   botHome: () => abacusBotHome(),
   legacyInstall: () => legacyInstall,
@@ -1282,12 +1403,12 @@ const appOperations: AppOperations = {
   async saveLogs(rendererLogs) {
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     const result = await showSaveDialogFromApp({
-      title: "Save logs",
+      title: nativeT("saveLogs"),
       defaultPath: path.join(
         app.getPath("downloads"),
         `abacusai-bot-logs-${stamp}.zip`
       ),
-      filters: [{ name: "Zip Archives", extensions: ["zip"] }],
+      filters: [{ name: nativeT("zipArchives"), extensions: ["zip"] }],
     });
     if (result.canceled || !result.filePath) return { success: false };
 
@@ -1368,13 +1489,15 @@ const appOperations: AppOperations = {
     const kind = request?.kind === "folder" ? "folder" : "file";
     const result = await showOpenDialogFromApp({
       title:
-        kind === "folder" ? "Select skill folder(s)" : "Select skill file(s)",
+        kind === "folder"
+          ? nativeT("selectSkillFolders")
+          : nativeT("selectSkillFiles"),
       properties:
         kind === "folder"
           ? ["openDirectory", "multiSelections", "dontAddToRecent"]
           : ["openFile", "multiSelections", "dontAddToRecent"],
       ...(kind === "file"
-        ? { filters: [{ name: "Skill", extensions: ["md"] }] }
+        ? { filters: [{ name: nativeT("skill"), extensions: ["md"] }] }
         : {}),
     });
     if (result.canceled || result.filePaths.length === 0) {
@@ -1670,6 +1793,12 @@ app
         // `prefs.theme` drives the native theme (spec 00 B.2), as `theme:set`
         // does for the legacy renderer.
         followPrefsTheme(prefsStore, nativeTheme, refreshWindowChrome);
+        // The menus and dialogs follow the UI language: the OS's until the
+        // user picks one, then theirs, the same resolution the renderer uses.
+        void applyNativeLanguage();
+        prefsStore.onChanged((row, previous) => {
+          if (row.language !== previous.language) void applyNativeLanguage();
+        });
         // Development acceptance runs only (spec 01 §12); inert when packaged.
         if (import.meta.env.ABACUS_DEV_HARNESS) {
           const { installMutationHarness } =
@@ -1733,39 +1862,8 @@ app
       }
     })();
 
-    app.setAboutPanelOptions({
-      applicationName: APP_DISPLAY_NAME,
-      applicationVersion: app.getVersion(),
-      copyright: `Copyright © ${new Date().getFullYear()} Abacus.AI`,
-      credits: "Open source under the MIT License",
-      website: "https://github.com/abacusai/abacusai-bot/blob/main/README.md",
-      iconPath: resourcePath("icon2.png"),
-    });
-    if (process.platform === "darwin") {
-      // The default menu labels its items from app.name, which keeps the hyphen.
-      Menu.setApplicationMenu(
-        Menu.buildFromTemplate([
-          {
-            label: APP_DISPLAY_NAME,
-            submenu: [
-              { role: "about", label: `About ${APP_DISPLAY_NAME}` },
-              { type: "separator" },
-              { role: "services" },
-              { type: "separator" },
-              { role: "hide", label: `Hide ${APP_DISPLAY_NAME}` },
-              { role: "hideOthers" },
-              { role: "unhide" },
-              { type: "separator" },
-              { role: "quit", label: `Quit ${APP_DISPLAY_NAME}` },
-            ],
-          },
-          { role: "fileMenu" },
-          { role: "editMenu" },
-          { role: "viewMenu" },
-          { role: "windowMenu" },
-        ])
-      );
-    }
+    // Labelled in the app's language, and rebuilt when the user changes it.
+    updateApplicationMenu();
 
     // Relaunch after adding skills so new agent processes load them at startup.
 

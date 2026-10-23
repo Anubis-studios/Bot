@@ -247,7 +247,7 @@ describe("opening the forever chat", () => {
     expect(kickstart).not.toContain("connect_connector");
   });
 
-  it("writes the first run in the app's language", async () => {
+  it("writes the first-run note itself in the app's language", async () => {
     const callbacks = makeCallbacks({ appLanguage: () => "pt-BR" });
     const service = new BotService(callbacks);
     const bot = service.create({ name: "Scout", description: "Watch." });
@@ -255,10 +255,62 @@ describe("opening the forever chat", () => {
     await service.openChat(bot.id);
 
     const [, , kickstart] = vi.mocked(callbacks.sendMessage).mock.calls[0]!;
-    expect(kickstart).toContain(
-      "Write in Brazilian Portuguese, the user's app language, unless they write to you in another."
+    expect(kickstart).toBe(
+      "[first run] Apresente-se uma única vez e depois comece sua missão. " +
+        "Tudo o que vem depois de um resultado de ferramenta é a mesma resposta continuando. " +
+        "Sem segunda saudação, sem repetir a missão. " +
+        "Escreva em português, o idioma do usuário, a menos que ele escreva para você em outro."
     );
-    expect(kickstart).toContain("get started on your mission");
+  });
+
+  it("keeps the English note, word for word, for an English app", async () => {
+    const callbacks = makeCallbacks({ appLanguage: () => "en-US" });
+    const service = new BotService(callbacks);
+    const bot = service.create({ name: "Scout", description: "Watch." });
+
+    await service.openChat(bot.id);
+
+    const [, , kickstart] = vi.mocked(callbacks.sendMessage).mock.calls[0]!;
+    expect(kickstart).toBe(
+      "[first run] Introduce yourself once, then get started on your mission. " +
+        "Everything after a tool result is the same reply continuing. No second greeting, " +
+        "no restating the mission. Write in American English, the user's language, unless " +
+        "they write to you in another."
+    );
+  });
+
+  it("writes the first run in the reply language's resolver: the saved language first, never Hindi", async () => {
+    const callbacks = makeCallbacks({ appLanguage: () => "hi-IN" });
+    const service = new BotService(callbacks);
+    const bot = service.create({ name: "Scout", description: "Watch." });
+
+    await service.openChat(bot.id);
+    const [, , hindiOs] = vi.mocked(callbacks.sendMessage).mock.calls[0]!;
+    expect(hindiOs).toMatch(/^\[first run\] Introduce yourself once/);
+    expect(hindiOs).toContain("Write in English, the user's language,");
+    expect(hindiOs).not.toMatch(/Hindi|[\u0900-\u097f]/);
+
+    fs.writeFileSync(
+      path.join(home, "user-language.json"),
+      JSON.stringify({ language: { name: "Spanish", source: "detected" } })
+    );
+    const other = service.create({ name: "Scout 2", description: "Watch." });
+    await service.openChat(other.id);
+    const [, , saved] = vi.mocked(callbacks.sendMessage).mock.calls[1]!;
+    expect(saved).toMatch(/^\[first run\] Preséntate una sola vez/);
+    expect(saved).toContain(
+      "Escribe en español latinoamericano, el idioma del usuario"
+    );
+
+    // A language the app has no locale for: the English note, naming it.
+    fs.writeFileSync(
+      path.join(home, "user-language.json"),
+      JSON.stringify({ language: { name: "Bangla", source: "detected" } })
+    );
+    const third = service.create({ name: "Scout 3", description: "Watch." });
+    await service.openChat(third.id);
+    const [, , bangla] = vi.mocked(callbacks.sendMessage).mock.calls[2]!;
+    expect(bangla).toContain("Write in Bangla, the user's language,");
   });
 
   it("starts a bot made from the user's words on those words, asking for nothing", async () => {
@@ -278,9 +330,9 @@ describe("opening the forever chat", () => {
     expect(persona).not.toContain("Connectors your mission needs");
     const [, , kickstart] = vi.mocked(callbacks.sendMessage).mock.calls[0]!;
     expect(kickstart).toContain(
-      'take the first step toward what the user asked for: "Study Buddy for my exams".'
+      'kullanıcının istediği şeye doğru ilk adımı at: "Study Buddy for my exams".'
     );
-    expect(kickstart).toContain("Write in Turkish,");
+    expect(kickstart).toContain("Kullanıcının dili olan Türkçe ile yaz;");
     expect(kickstart).not.toContain("connect_connector");
   });
 

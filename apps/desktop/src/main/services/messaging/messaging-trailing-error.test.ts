@@ -1245,6 +1245,29 @@ describe("the chat app's own language", () => {
     expect(channelLocale(null, null)).toBe("en-US");
   });
 
+  it("labels the native menus in the UI language, English until one loads", async () => {
+    const { nativeT, setNativeLanguage } =
+      await import("../config/native-language");
+    expect(nativeT("cut")).toBe("Cut");
+    expect(nativeT("aboutApp", { app: "AbacusAI Bot" })).toBe(
+      "About AbacusAI Bot"
+    );
+    expect(await setNativeLanguage("de-DE")).toBe(true);
+    expect(nativeT("cut")).toBe("Ausschneiden");
+    expect(await setNativeLanguage("de-DE")).toBe(false);
+    expect(await setNativeLanguage("tr-TR")).toBe(true);
+    expect(nativeT("quitApp", { app: "AbacusAI Bot" })).toBe(
+      "AbacusAI Bot Uygulamasından Çık"
+    );
+    await setNativeLanguage("en-US");
+  });
+
+  it("is never Hindi: a Hindi language or app falls back to English", () => {
+    expect(channelLocale("Hindi", "hi-IN")).toBe("en-US");
+    expect(channelLocale(null, "hi-IN")).toBe("en-US");
+    expect(channelLocale("Hindi", "tr-TR")).toBe("tr-TR");
+  });
+
   it("a Portuguese user hears the wall in Portuguese, with the bot's link and the plan's price", async () => {
     mocks.language = "Portuguese";
     mocks.fetchUpgradeUrl = async () => null;

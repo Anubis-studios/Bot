@@ -3,7 +3,8 @@
  * wall), in the person's language: the app's own locale files, so a line is
  * translated once for the card and the chat alike. The language is the one
  * the bot already answers in (user-language.json), else the app's, else
- * English; a key a locale lacks reads in English.
+ * English; a key a locale lacks reads in English. The main process's other
+ * words (the first-run note, native menus and dialogs) load the same way.
  */
 import type { PlanT } from "@abacus-ai/contract/billing-plan";
 import {
@@ -23,7 +24,6 @@ const LOADERS: Record<
   "es-ES": () => import("#locales/es-ES.json"),
   "es-419": () => import("#locales/es-419.json"),
   "fr-FR": () => import("#locales/fr-FR.json"),
-  "hi-IN": () => import("#locales/hi-IN.json"),
   "id-ID": () => import("#locales/id-ID.json"),
   "it-IT": () => import("#locales/it-IT.json"),
   "ja-JP": () => import("#locales/ja-JP.json"),
@@ -43,7 +43,6 @@ const LANGUAGE_LOCALES: Record<string, SupportedLanguage> = {
   "spanish (spain)": "es-ES",
   "castilian spanish": "es-ES",
   french: "fr-FR",
-  hindi: "hi-IN",
   indonesian: "id-ID",
   italian: "it-IT",
   japanese: "ja-JP",
@@ -70,17 +69,27 @@ const shippedLocale = (tag: string): SupportedLanguage | null => {
 };
 
 /**
- * The locale a chat-app line is written in: the language the bot answers
- * this person in, else the app's own, else English.
+ * A language name's locale: "Turkish", or a regional name such as "European
+ * Spanish" or "American English" by its last word.
+ */
+const namedLocale = (name: string): SupportedLanguage | undefined => {
+  const lower = name.trim().toLowerCase();
+  if (lower === "european spanish") return "es-ES";
+  return (
+    LANGUAGE_LOCALES[lower] ?? LANGUAGE_LOCALES[lower.split(" ").at(-1) ?? ""]
+  );
+};
+
+/**
+ * The locale a chat-app line (or the app's own first-run note) is written
+ * in: the language the bot answers this person in, else the app's own,
+ * else English.
  */
 export function channelLocale(
   userLanguage: string | null,
   appLanguage: string | null
 ): SupportedLanguage {
-  const named =
-    userLanguage != null
-      ? LANGUAGE_LOCALES[userLanguage.trim().toLowerCase()]
-      : undefined;
+  const named = userLanguage != null ? namedLocale(userLanguage) : undefined;
   if (named != null) return named;
   const app = appLanguage != null ? shippedLocale(appLanguage) : null;
   return app ?? "en-US";
@@ -122,6 +131,14 @@ export async function channelWords(
       loaded.set(locale, enUS);
     }
   }
+  return loadedWords(locale);
+}
+
+/**
+ * The translator for a locale already loaded by `channelWords`, English
+ * until it is: for callers that cannot wait (a context menu being built).
+ */
+export function loadedWords(locale: SupportedLanguage): ChannelWords {
   const tree = loaded.get(locale) ?? enUS;
   const plural = new Intl.PluralRules(locale);
   const find = (key: string): string | undefined =>

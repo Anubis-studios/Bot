@@ -13,6 +13,7 @@ import {
   phoneFlushPrompt,
   phoneOperatingPrompt,
 } from "../phone/phone-prompts.js";
+import { replyLanguageLine } from "../reply-language.js";
 import { botOperatingPrompt } from "./bot-prompts.js";
 
 describe("the bot's reply rule", () => {
@@ -72,12 +73,20 @@ describe("the phone loop's clock and check-ins", () => {
     expect(botOperatingPrompt()).toMatch(/connectors this app can attach/);
   });
 
-  it("states the user's language by name, English when none is known, and follows a switch", () => {
-    expect(flat(phoneOperatingPrompt(null, null, "pt-BR"))).toMatch(
-      /The user's language is Brazilian Portuguese: reply in it, and if they write in another language, switch to theirs\./
+  it("follows the user's message, with the server's language (else English, never Hindi) as the fallback", () => {
+    const line = replyLanguageLine({
+      name: "Brazilian Portuguese",
+      chosen: false,
+    });
+    expect(flat(phoneOperatingPrompt(null, null, "pt-BR"))).toContain(line);
+    expect(flat(phoneOperatingPrompt(null))).toContain(
+      replyLanguageLine({ name: "English", chosen: false })
     );
-    expect(flat(phoneOperatingPrompt(null))).toMatch(
-      /not known yet: reply in English, and if they write in another language, switch to theirs\./
+    expect(flat(phoneOperatingPrompt(null, null, "hi"))).toContain(
+      "The user's language is English."
+    );
+    expect(flat(phoneOperatingPrompt(null))).not.toMatch(
+      /not known yet|reply in Hindi/
     );
   });
 

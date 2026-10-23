@@ -170,6 +170,20 @@ describe("PrefsStore", () => {
     expect(new PrefsStore({ file }).get().theme).toBe("system");
   });
 
+  it("reads a saved Hindi UI language back as system, which resolves to English", () => {
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        row: { theme: "dark", language: "hi-IN" },
+        provenance: { theme: "user", language: "user" },
+      })
+    );
+    const store = new PrefsStore({ file });
+    expect(store.get()).toMatchObject({ theme: "dark", language: "system" });
+    expect(store.provenance().language).toBe("default");
+    expect(() => store.update({ language: "hi-IN" as never })).toThrow();
+  });
+
   it("a failed write changes nothing; the retry writes, and a reload has it", () => {
     // Block the parent with a file: a real write failure on Windows as well
     // as POSIX, where directory chmod would also work.

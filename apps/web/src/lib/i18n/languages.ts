@@ -1,57 +1,34 @@
 /**
- * Language matching (copied from the old renderer's i18n.ts:34-67 with its
- * tests; the old copy stays until cut-over) and the explicit "system" choice
- * (spec 01 §9.2).
+ * The renderer's side of the app's language. Matching and the "system"
+ * choice live in the contract (contract/languages.ts), shared with the main
+ * process, so the UI, the native menus and the agent's reply fallback
+ * resolve the same way. "system" reads the OS's preferred languages the main
+ * process reports (`system.info`), else the browser's.
  */
 import {
-  SUPPORTED_LANGUAGES,
+  FALLBACK_LANGUAGE,
+  matchSupportedLanguage,
+  resolveAppLanguage,
   type SupportedLanguage,
 } from "@abacus-ai/contract/contract";
 
-export const FALLBACK_LANGUAGE: SupportedLanguage = "en-US";
+export { FALLBACK_LANGUAGE, matchSupportedLanguage, type SupportedLanguage };
 
-export { type SupportedLanguage };
+/** The OS's preferred languages, as main reported them at boot; null in a browser. */
+let osLanguages: readonly string[] | null = null;
 
-/**
- * Spain gets `es-ES`; every other Spanish region, and bare `es`, gets the
- * Latin-American `es-419`, the larger region of the two bundles shipped.
- */
-export const matchSupportedLanguage = (
-  languageTags: readonly string[]
-): SupportedLanguage | undefined => {
-  for (const tag of languageTags) {
-    const normalized = tag.toLowerCase();
-    const exact = SUPPORTED_LANGUAGES.find(
-      (code) => code.toLowerCase() === normalized
-    );
-    if (exact) return exact;
-
-    const [base] = normalized.split("-");
-    if (base === "es") {
-      // Intl.Locale finds the region past a script subtag (`es-Latn-ES`); an
-      // invalid injected value still gets the deliberate default.
-      let region: string | undefined;
-      try {
-        region = new Intl.Locale(tag).region;
-      } catch {
-        region = undefined;
-      }
-      return region?.toUpperCase() === "ES" ? "es-ES" : "es-419";
-    }
-
-    const related = SUPPORTED_LANGUAGES.find(
-      (code) => code.split("-")[0]?.toLowerCase() === base
-    );
-    if (related) return related;
-  }
-  return undefined;
+/** Set once at boot from `system.info`; an older main that sends none keeps the browser's. */
+export const setSystemLanguages = (
+  languages: readonly string[] | undefined
+): void => {
+  osLanguages = languages != null && languages.length > 0 ? languages : null;
 };
+
+const systemLanguages = (): readonly string[] =>
+  osLanguages ?? navigator.languages;
 
 /** `"system"` follows the OS languages; an explicit code stays. */
 export const resolveLanguage = (
   pref: "system" | SupportedLanguage,
-  systemLanguages: readonly string[] = navigator.languages
-): SupportedLanguage =>
-  pref === "system"
-    ? (matchSupportedLanguage(systemLanguages) ?? FALLBACK_LANGUAGE)
-    : pref;
+  languages: readonly string[] = systemLanguages()
+): SupportedLanguage => resolveAppLanguage(pref, languages).ui;

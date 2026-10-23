@@ -40,6 +40,8 @@ export const createNodeAppOperations = (lease: HostLease): AppOperations => ({
   homeDir: homedir,
   botHome: abacusBotHome,
   legacyInstall: () => false,
+  // No desktop OS here: the browser's own languages decide a "system" UI.
+  systemLanguages: () => [],
   restartApp: () => shutdown(75),
   deleteAllData: refuse("system.deleteAllData"),
   reportFunnelStep: (step, detail, once) => {

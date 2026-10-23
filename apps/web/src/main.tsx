@@ -35,6 +35,7 @@ import {
   initI18n,
   fixedT,
   resolveLanguage,
+  setSystemLanguages,
 } from "#renderer/lib/i18n";
 import { installLogRing } from "#renderer/lib/log-ring";
 import { resolvePrefsLook } from "#renderer/lib/look";
@@ -204,6 +205,8 @@ const start = async (): Promise<void> => {
     const look = resolvePrefsLook(prefs, null, media());
     applyTheme(document, look.mode);
     applyLook(document, look, prefs.appearance?.translucency !== false, prefs);
+    // "system" reads the OS languages main reports, as the menus and the agent do.
+    setSystemLanguages(boot.system.systemLanguages);
     await changeLanguage(resolveLanguage(prefs.language)).catch(
       (error: unknown) => {
         console.error("[renderer] locale failed; keeping English", error);

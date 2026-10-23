@@ -7,6 +7,10 @@
 import fs from "fs";
 import path from "path";
 
+import {
+  readUserLanguage,
+  resolveReplyLanguage,
+} from "@abacus-ai/agent/user-language";
 import { connectorById } from "@abacus-ai/connectors/registry";
 import type { UserTextTags } from "@abacus-ai/contract/agent-types";
 import {
@@ -28,6 +32,11 @@ import {
 import type { SessionOwner } from "@abacus-ai/contract/contracts";
 import { EntityNotFoundError } from "@abacus-ai/contract/not-found";
 
+import {
+  channelLocale,
+  channelWords,
+  type ChannelWords,
+} from "../messaging/channel-words";
 import {
   botDir,
   botForSession,
@@ -288,43 +297,53 @@ const changeNotice = (notice: BotChangeNotice): string => {
   );
 };
 
-/** "Brazilian Portuguese", "Turkish": the language a tag names, in English. */
-const languageName = (tag: string): string => {
+/** A language's own name in its own locale: "Türkçe", "português". */
+const nativeLanguageName = (locale: string): string => {
   try {
-    const name = new Intl.DisplayNames(["en"], { type: "language" }).of(tag);
-    return (name ?? tag).replace(/\s*\(.*\)$/, "");
+    const name = new Intl.DisplayNames([locale], { type: "language" }).of(
+      locale
+    );
+    return (name ?? locale).replace(/\s*\(.*\)$/, "");
   } catch {
-    return tag;
+    return locale;
   }
 };
 
-/** Visible first message of a fresh bot chat, so the bot speaks first. */
-const kickstartMessage = (bot: Bot, language: string | null): string => {
+/**
+ * Visible first message of a fresh bot chat, so the bot speaks first. Written
+ * in the user's resolved reply language (the app's own locale files, English
+ * for a language the app does not ship), never Hindi: a note in English is
+ * what the model answers in English. The `[first run]` tag stays as is; the
+ * app and the agent recognise the note by it.
+ */
+const kickstartMessage = (
+  bot: Bot,
+  language: string | null,
+  words: ChannelWords
+): string => {
+  const { t } = words;
   const names = neededConnectorNames(bot);
   const connect =
     names.length === 0
-      ? ""
+      ? null
       : names.length === 1
-        ? `First, if the system reminder does not list ${names[0]} as ` +
-          "connected, call connect_connector for it now. "
-        : "First, call connect_connector now for each of " +
-          `${names.slice(0, -1).join(", ")} and ${names.at(-1)} that the ` +
-          "system reminder does not list as connected. ";
+        ? t("kickoff.connectOne", { name: names[0]! })
+        : t("kickoff.connectMany", {
+            names: new Intl.ListFormat(words.locale, {
+              type: "conjunction",
+            }).format(names),
+          });
   const goal = goalOfMission(bot.description);
   const start =
-    goal == null
-      ? "get started on your mission"
-      : `take the first step toward what the user asked for: "${goal}"`;
-  const write =
-    language == null
-      ? ""
-      : ` Write in ${languageName(language)}, the user's app language, ` +
-        "unless they write to you in another.";
-  return (
-    `[first run] ${connect}Introduce yourself once, then ${start}. ` +
-    "Everything after a tool result is the same reply continuing. " +
-    `No second greeting, no restating the mission.${write}`
-  );
+    goal == null ? t("kickoff.startMission") : t("kickoff.startGoal", { goal });
+  return `[first run] ${[
+    connect,
+    t("kickoff.introduce", { start }),
+    t("kickoff.continuing"),
+    language == null ? null : t("kickoff.write", { language }),
+  ]
+    .filter((part): part is string => part != null)
+    .join(" ")}`;
 };
 
 /**
@@ -716,7 +735,7 @@ export class BotService {
           this.callbacks.sendMessage(
             workspaceId,
             bot.sessionId,
-            this.kickstart(bot),
+            await this.kickstart(bot),
             { operator: { kind: "kickstart" } }
           );
           markBotKickstarted(botId);
@@ -743,9 +762,12 @@ export class BotService {
     // is the same conversation to the user, and would introduce itself again.
     const started = await this.callbacks.startSession(workspaceId, session.id);
     if (started.success && bot.sessionId == null) {
-      this.callbacks.sendMessage(workspaceId, session.id, this.kickstart(bot), {
-        operator: { kind: "kickstart" },
-      });
+      this.callbacks.sendMessage(
+        workspaceId,
+        session.id,
+        await this.kickstart(bot),
+        { operator: { kind: "kickstart" } }
+      );
       markBotKickstarted(botId);
     }
 
@@ -876,8 +898,18 @@ export class BotService {
     };
   }
 
-  private kickstart(bot: Bot): string {
-    return kickstartMessage(bot, this.callbacks.appLanguage?.() ?? null);
+  /** The first-run note, in the language replies resolve to (user-language.ts). */
+  private async kickstart(bot: Bot): Promise<string> {
+    const tag = this.callbacks.appLanguage?.() ?? null;
+    if (tag == null)
+      return kickstartMessage(bot, null, await channelWords("en-US"));
+    const { name } = resolveReplyLanguage(readUserLanguage(), tag);
+    const locale = channelLocale(name, null);
+    return kickstartMessage(
+      bot,
+      locale === "en-US" ? name : nativeLanguageName(locale),
+      await channelWords(locale)
+    );
   }
 
   /** The sponsored-run marker for a routine session, which is the bot's work too; empty once the window has passed. */

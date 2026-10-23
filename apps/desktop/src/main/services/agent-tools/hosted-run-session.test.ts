@@ -25,6 +25,8 @@ vi.mock("electron", () => {
         isPackaged: false,
         getPath: () => process.env.ABACUSAI_BOT_HOME,
         getVersion: () => "1.0.86",
+        getLocale: () => "en-US",
+        getPreferredSystemLanguages: () => ["en-US"],
       },
     },
     {

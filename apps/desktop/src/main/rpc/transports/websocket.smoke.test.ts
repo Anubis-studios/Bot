@@ -55,6 +55,7 @@ describe("the router over a WebSocket (A-T5)", () => {
         bus,
         app: {
           appVersion: () => "9.9.9",
+          systemLanguages: () => ["tr-TR", "en-US"],
           homeDir: () => "/h",
           botHome: () => "/h/.abacusai-bot",
           legacyInstall: () => false,
@@ -65,8 +66,10 @@ describe("the router over a WebSocket (A-T5)", () => {
     });
     const client = clientFor(server.url);
 
+    // The OS languages ride along, so the renderer resolves "system" as main does.
     await expect(client.system.info()).resolves.toMatchObject({
       appVersion: "9.9.9",
+      systemLanguages: ["tr-TR", "en-US"],
     });
 
     const updates = await client.update.events();

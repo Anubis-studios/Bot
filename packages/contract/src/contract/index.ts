@@ -106,6 +106,12 @@ export type {
 } from "./window";
 export type * from "./rows";
 export { SUPPORTED_LANGUAGES } from "./rows";
+export {
+  FALLBACK_LANGUAGE,
+  matchSupportedLanguage,
+  resolveAppLanguage,
+  type AppLanguage,
+} from "./languages";
 export type * from "./agui";
 
 export type * from "./notch";

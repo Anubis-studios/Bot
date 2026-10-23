@@ -53,6 +53,12 @@ export interface ProfileToolHost {
 export interface ForeverProfile {
   /** Standing prompt parts after pi's base prompt, fixed for the session. */
   systemPrompt(): string[];
+  /**
+   * True when `systemPrompt` already states the reply-language rule from a
+   * language of its own (the phone's, from the server); the engine closes
+   * the prompt with the account's otherwise, and learns it from the owner.
+   */
+  statesReplyLanguage?: boolean;
   /** The profile's own pi tool definitions, ahead of browser_task and MCP. */
   tools(cwd: string, host: ProfileToolHost): unknown[];
   /** The MCP tools this chat gets, none unless named there; every one without it. */

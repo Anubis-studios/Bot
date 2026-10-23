@@ -22,6 +22,7 @@ import type { ForeverEngine } from "../forever/engine.js";
 import { IDENTITY_PROMPT } from "../persona.js";
 import { PhoneSession } from "../phone/phone-session.js";
 import type { DesktopEvent } from "../protocol.js";
+import { writeUserLanguage } from "../user-language.js";
 import { BotSession } from "./bot-session.js";
 
 let provider: FakeProvider;
@@ -92,6 +93,10 @@ afterAll(async () => {
 afterEach(async () => {
   bot?.dispose();
   bot = null;
+  delete process.env.ABACUSAI_BOT_LOCALE;
+  delete process.env.ABACUSAI_BOT_SENDER_CHAT;
+  delete process.env.ABACUSAI_BOT_AUDIENCE;
+  fs.rmSync(path.join(home, "user-language.json"), { force: true });
   await server?.close();
   server = null;
   provider.calls.length = 0;
@@ -277,5 +282,124 @@ describe.each([
       expect(system).toMatch(/edits\[\]\.oldText must match the file exactly/);
       expect(system).not.toMatch(/inside pi|Pi documentation/);
     }
+  }, 60_000);
+});
+
+describe("the reply-language block in a bot's chats", () => {
+  const BLOCK = "## Reply language";
+  const blockLine = (prompt: string): string =>
+    prompt.slice(prompt.indexOf(BLOCK)).split("\n")[2] ?? "";
+  const prompts = (): string[] =>
+    provider.calls.map((call) => systemPrompt(call));
+
+  it("closes the bot's prompt with the app's language, byte-identical across turns in mixed languages", async () => {
+    process.env.ABACUSAI_BOT_LOCALE = "es-MX";
+    bot = newBot();
+    await bot.start();
+    for (const text of ["hola", "ok", "what's next?", "merci", "gracias"])
+      await bot.send(text);
+
+    const [first, ...rest] = prompts();
+    expect(blockLine(first!)).toContain(
+      "The user's language is Mexican Spanish."
+    );
+    expect(blockLine(first!)).toContain("the user's latest message");
+    // Once, and after the bot's memory: last of what the app contributes.
+    expect(first!.split(BLOCK)).toHaveLength(2);
+    expect(first!.indexOf(BLOCK)).toBeGreaterThan(
+      first!.indexOf("persistent personal bot")
+    );
+    for (const prompt of rest) expect(prompt).toBe(first);
+  }, 60_000);
+
+  it("changes once when the language is first saved, and never per message", async () => {
+    process.env.ABACUSAI_BOT_LOCALE = "tr-TR";
+    bot = newBot();
+    await bot.start();
+    await bot.send("merhaba");
+    writeUserLanguage("Turkish", "detected");
+    await bot.send("nasılsın");
+    await bot.send("ok");
+
+    const all = prompts();
+    expect(new Set(all).size).toBe(1);
+    expect(blockLine(all[0]!)).toContain("The user's language is Turkish.");
+
+    writeUserLanguage("German", "user");
+    await bot.send("hallo");
+    await bot.send("danke");
+    const after = prompts().slice(all.length);
+    expect(new Set(after).size).toBe(1);
+    expect(blockLine(after[0]!)).toContain(
+      "The user chose German for every reply"
+    );
+  }, 60_000);
+
+  it("lets a remote sender's message win in their chat, the user's choice only the fallback", async () => {
+    writeUserLanguage("German", "user");
+    process.env.ABACUSAI_BOT_SENDER_CHAT = "1";
+    bot = newBot();
+    await bot.start();
+    await bot.send("¿Hola, está disponible mañana?");
+
+    const line = blockLine(systemPrompt());
+    expect(line).toMatch(
+      /^The user's language is German\. Reply in the language of the user's latest message/
+    );
+    expect(line).not.toContain("The user chose");
+  }, 60_000);
+
+  it("gives the phone loop one rule, from its own language, not the app's", async () => {
+    process.env.ABACUSAI_BOT_LOCALE = "tr-TR";
+    bot = new PhoneSession({
+      cwd: fs.mkdtempSync(path.join(os.tmpdir(), "abacusai-bot-botmcp-")),
+      mode: "yolo",
+      emit: () => {},
+    });
+    await bot.start();
+    await bot.send("hi");
+
+    const prompt = systemPrompt();
+    expect(prompt).not.toContain(BLOCK);
+    expect(
+      prompt.match(/Reply in the language of the user's latest message/g)
+    ).toHaveLength(1);
+    expect(prompt).toContain("The user's language is English.");
+    expect(prompt).not.toContain("language is Turkish");
+  }, 60_000);
+
+  it("offers set_user_language in the user's own bot chat, and never in a sender's", async () => {
+    process.env.ABACUSAI_BOT_AUDIENCE = "owner";
+    bot = newBot();
+    await bot.start();
+    await bot.send("lütfen İngilizce cevap ver");
+    expect(offeredTools()).toContain("set_user_language");
+    bot.dispose();
+
+    delete process.env.ABACUSAI_BOT_AUDIENCE;
+    process.env.ABACUSAI_BOT_SENDER_CHAT = "1";
+    bot = newBot();
+    await bot.start();
+    await bot.send("answer in English please");
+    expect(offeredTools()).not.toContain("set_user_language");
+  }, 60_000);
+
+  it("lets the phone loop save a language asked for from now on, through its check-ins setting", async () => {
+    bot = new PhoneSession({
+      cwd: fs.mkdtempSync(path.join(os.tmpdir(), "abacusai-bot-botmcp-")),
+      mode: "yolo",
+      emit: () => {},
+    });
+    await bot.start();
+    await bot.send("reply in English from now on");
+    const tools = (provider.calls.at(-1)?.body.tools ?? []) as Array<{
+      function?: { name?: string; description?: string };
+    }>;
+    const checkins = tools.find((tool) =>
+      /check-ins/.test(tool.function?.description ?? "")
+    );
+    expect(checkins?.function?.description).toMatch(
+      /the one they ask every reply\s+in from now on/
+    );
   }, 60_000);
 });

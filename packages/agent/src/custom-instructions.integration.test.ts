@@ -18,6 +18,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { writeCustomInstructions } from "./custom-instructions.js";
 import { AbacusBotSession } from "./session.js";
+import { writeUserLanguage } from "./user-language.js";
 
 let provider: FakeProvider;
 let home: string;
@@ -67,6 +68,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   delete process.env.ABACUSAI_BOT_HOME;
+  delete process.env.ABACUSAI_BOT_LOCALE;
   await provider.close();
   fs.rmSync(home, { recursive: true, force: true });
   fs.rmSync(cwd, { recursive: true, force: true });
@@ -98,14 +100,15 @@ describe("standing instructions in a real turn", () => {
     expect(prompt.indexOf("SPARROW")).toBeGreaterThan(
       prompt.indexOf("markdown image")
     );
-    // Nothing of ours comes after: what follows is pi's own trailer, which it
-    // appends below everything the app contributes.
+    // Only the reply-language block comes after (it closes every prompt),
+    // then pi's own trailer, which it appends below everything the app
+    // contributes.
     const after = prompt.slice(prompt.indexOf("SPARROW.") + "SPARROW.".length);
 
     // pi's trailer is its skills list (when a tool can read them) and the
-    // cwd line: nothing of ours may sit between SPARROW and those.
+    // cwd line: nothing else of ours may sit between SPARROW and those.
     expect(after.trim()).toMatch(
-      /^(The following skills provide[\s\S]*)?Current working directory:/
+      /^## Reply language\n\n[^\n]+\s+(The following skills provide[\s\S]*)?Current working directory:/
     );
   }, 120_000);
 
@@ -139,5 +142,70 @@ describe("standing instructions in a real turn", () => {
     agent.dispose();
 
     expect(systemPrompt(0)).not.toMatch(/standing instructions/i);
+  }, 120_000);
+});
+
+describe("the reply-language block in a real conversation", () => {
+  const block = (prompt: string): string =>
+    prompt.slice(prompt.indexOf("## Reply language")).split("\n")[2] ?? "";
+
+  it("falls back to the app's language, and stays byte-identical across turns in mixed languages", async () => {
+    process.env.ABACUSAI_BOT_LOCALE = "tr-TR";
+    const agent = session();
+
+    await agent.start();
+    for (const text of [
+      "merhaba, bugün neler var?",
+      "ok",
+      "and in English: what is on my calendar?",
+      "¿y mañana?",
+      "https://example.com",
+      "teşekkürler",
+    ])
+      await agent.send(text);
+    agent.dispose();
+
+    const first = systemPrompt(0);
+    expect(block(first)).toContain("The user's language is Turkish.");
+    expect(block(first)).toContain("the user's latest message");
+    for (let index = 1; index < provider.calls.length; index++)
+      expect(systemPrompt(index)).toBe(first);
+  }, 120_000);
+
+  it("changes exactly once when a language is first saved, at the next turn", async () => {
+    process.env.ABACUSAI_BOT_LOCALE = "pt-BR";
+    const agent = session();
+
+    await agent.start();
+    await agent.send("oi");
+    await agent.send("tudo bem?");
+    writeUserLanguage("Spanish", "detected");
+    await agent.send("hola");
+    await agent.send("gracias");
+    agent.dispose();
+
+    const prompts = provider.calls.map((_call, index) => systemPrompt(index));
+    expect(new Set(prompts).size).toBe(2);
+    expect(block(prompts[0]!)).toContain(
+      "The user's language is Brazilian Portuguese."
+    );
+    expect(block(prompts.at(-1)!)).toContain("The user's language is Spanish.");
+    // One change, between the second turn and the third: never back.
+    const changes = prompts.filter(
+      (prompt, index) => index > 0 && prompt !== prompts[index - 1]
+    );
+    expect(changes).toHaveLength(1);
+  }, 120_000);
+
+  it("falls back to English, not Hindi, on a Hindi OS", async () => {
+    process.env.ABACUSAI_BOT_LOCALE = "hi-IN";
+    const agent = session();
+
+    await agent.start();
+    await agent.send("hello");
+    agent.dispose();
+
+    expect(block(systemPrompt(0))).toContain("The user's language is English.");
+    expect(systemPrompt(0)).not.toMatch(/language is Hindi|reply in Hindi/);
   }, 120_000);
 });

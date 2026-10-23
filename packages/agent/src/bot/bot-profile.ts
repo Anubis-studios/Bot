@@ -8,8 +8,9 @@ import { createBashToolDefinition } from "@earendil-works/pi-coding-agent";
 import { agentShellOperations } from "../backends.js";
 import { withBackgroundOption } from "../background-bash.js";
 import type { ForeverProfile } from "../forever/profile.js";
-import { buildOwnerTools } from "../owner-tools.js";
+import { buildOwnerTools, isOwnerAudience } from "../owner-tools.js";
 import { RecentUserText } from "../traveler/traveler-tool.js";
+import { buildSetUserLanguageTool } from "../user-language.js";
 import { botDir, readBotState, writeBotState } from "./bot-config.js";
 import { BOT_MEMORY_TOOL_NAME, buildBotMemoryTool } from "./bot-memory-tool.js";
 import {
@@ -81,6 +82,8 @@ export function createBotProfile(): ForeverProfile {
       buildBotTimeTool(),
       buildBotReactionTool(),
       ...buildOwnerTools({ recentUserText }),
+      // Only the user's own chat saves their language: a sender is someone else.
+      ...(isOwnerAudience() ? [buildSetUserLanguageTool()] : []),
       botBashTool(cwd),
     ],
     // The bot's own memory tool replaces the desktop's global one.
