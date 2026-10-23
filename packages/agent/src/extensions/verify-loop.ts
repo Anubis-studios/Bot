@@ -1,16 +1,14 @@
 /**
  * Ported from codingagent-lite (abacusai/codingagent-lite), MIT.
  *
- * Outer verification loop: when a run that changed files settles (by the
- * turn's checkpoint, so a shell write counts too), re-run the project's test
- * suite; if red, the output goes back in as a follow-up. Fires at most
- * ABACUSAI_BOT_VERIFY_RETRIES times per prompt (default 1), never for runs it
- * triggered itself. Uses run_tests' detector so the two cannot drift.
+ * Outer verification loop: when a run that wrote files settles, re-run the
+ * project's test suite; if red, the output goes back in as a follow-up. Fires
+ * at most ABACUSAI_BOT_VERIFY_RETRIES times per prompt (default 1), never for
+ * runs it triggered itself. Uses run_tests' detector so the two cannot drift.
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 import { execConfined } from "../backends.js";
-import type { CheckpointTracker } from "../checkpoint-store.js";
 import { currentMode } from "../current-mode.js";
 import { AgentMode } from "../protocol.js";
 import { runFallbackShell } from "../sandbox/shell.js";
@@ -33,19 +31,7 @@ export const resolveMaxRetries = (raw: string | undefined): number => {
 
 const MAX_RETRIES = resolveMaxRetries(process.env.ABACUSAI_BOT_VERIFY_RETRIES);
 
-/**
- * The loop over one session's checkpoints. Without a tracker it falls back to
- * the file tools' own results, which miss what the shell changed.
- */
-export function verifyLoop(
-  tracker?: CheckpointTracker
-): (pi: ExtensionAPI) => void {
-  return (pi) => install(pi, tracker);
-}
-
-export default verifyLoop();
-
-function install(pi: ExtensionAPI, tracker: CheckpointTracker | undefined) {
+export default function (pi: ExtensionAPI) {
   let wroteFiles = false;
   let retriesUsed = 0;
   let selfTriggered = false;
@@ -58,7 +44,6 @@ function install(pi: ExtensionAPI, tracker: CheckpointTracker | undefined) {
   });
 
   pi.on("tool_result", (event) => {
-    if (tracker != null) return;
     if (
       (event.toolName === "write" ||
         event.toolName === "edit" ||
@@ -70,9 +55,6 @@ function install(pi: ExtensionAPI, tracker: CheckpointTracker | undefined) {
   });
 
   pi.on("agent_settled", async (_event, ctx) => {
-    // The checkpoint extension settled first (it registers earlier).
-    if (tracker != null && tracker.settledChanges().length > 0)
-      wroteFiles = true;
     // Running the test command is arbitrary code execution with no tool call
     // to decline, so only in modes where commands may run unprompted.
     const mode = currentMode();

@@ -1,10 +1,5 @@
 [
   {
-    "prefix": "checkpoints.kind.",
-    "values": ["modified", "created", "deleted"],
-    "sources": ["features/sessions/chat/checkpoint-card.tsx"]
-  },
-  {
     "prefix": "sessions.pr.",
     "values": [
       "approved",
@@ -348,7 +343,6 @@
       "browser_snapshot",
       "browser_tabs",
       "browser_task",
-      "checkpoint_diff",
       "code_map",
       "connect_connector",
       "cronjob",
@@ -391,7 +385,6 @@
       "read_output",
       "read_telegram_messages",
       "read_whatsapp_messages",
-      "restore_checkpoint",
       "run_tests",
       "send_discord_message",
       "send_telegram_message",

@@ -72,11 +72,6 @@ import { chatLoading } from "#renderer/features/chat/runtime/lazy-runtime";
 import { type ChatRuntime } from "#renderer/features/chat/runtime/runtime";
 import { SessionChangesCard } from "#renderer/features/sessions/changes/changes-card";
 import {
-  CheckpointCard,
-  checkpointAfter,
-  useCheckpointTurns,
-} from "#renderer/features/sessions/chat/checkpoint-card";
-import {
   deliverablesAfter,
   rowEndIndex,
   sessionDeliverablesCard,
@@ -361,8 +356,6 @@ const SessionRoute = () => {
     (s) => s.runs.active === null && s.runs.outcomes.at(-1)?.kind === "success"
   );
   const presenter = nativePresenterFor(transport.client);
-  // Re-read after every run: a settled turn is when its checkpoint lands.
-  const checkpointTurns = useCheckpointTurns(sessionId, outcomes.length);
   useEffect(() => {
     openSessionOnce(sessionId);
   }, [sessionId]);
@@ -390,18 +383,6 @@ const SessionRoute = () => {
         path,
         toolKey,
         source: toolKey ? "tool" : "git",
-      }),
-      transition: "none",
-    });
-  const openCheckpointDiff = (path: string, seq: number) =>
-    void navigate({
-      to: "/sessions/$sessionId/diff",
-      params: { sessionId },
-      search: (p: Record<string, unknown>) => ({
-        ...p,
-        path,
-        seq,
-        source: "checkpoint",
       }),
       transition: "none",
     });
@@ -552,32 +533,10 @@ const SessionRoute = () => {
                         at,
                         context.runActive
                       );
-                const checkpoint =
-                  at < 0
-                    ? null
-                    : checkpointAfter(
-                        context.messages,
-                        at,
-                        checkpointTurns,
-                        context.runActive
-                      );
                 const after =
-                  files == null && checkpoint == null ? undefined : (
-                    <div className="flex flex-col gap-2">
-                      {checkpoint != null && (
-                        <CheckpointCard
-                          sessionId={sessionId}
-                          turn={checkpoint}
-                          turns={checkpointTurns}
-                          workspaceRoot={root}
-                          busy={context.runActive}
-                          onOpenDiff={openCheckpointDiff}
-                        />
-                      )}
-                      {files != null &&
-                        sessionDeliverablesCard(files, deliverableOptions)}
-                    </div>
-                  );
+                  files == null
+                    ? undefined
+                    : sessionDeliverablesCard(files, deliverableOptions);
                 if (context.runActive && at === context.messages.length - 1)
                   return after != null ? { after } : null;
                 // Keyed on the stored host message, not the shown row: the

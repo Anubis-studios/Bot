@@ -562,7 +562,6 @@
       "browser_snapshot": "Lire la page sous forme de liste d’éléments interactifs.",
       "browser_tabs": "Lister, changer et fermer les onglets du navigateur.",
       "browser_task": "Confiez une tâche Web entière à un sous-agent de navigateur et obtenez la réponse.",
-      "checkpoint_diff": "Show what earlier turns changed on disk, from their checkpoints.",
       "code_map": "Indexez les fonctions et les classes dans un fichier ou un dossier.",
       "connect_connector": "Demandez à l'utilisateur de joindre un service, tel que Gmail ou Slack, afin que ses outils soient disponibles.",
       "cronjob": "Créez, répertoriez, suspendez ou exécutez des tâches planifiées.",
@@ -607,7 +606,6 @@
       "read_telegram_messages": "Lire les messages Telegram récents, sur demande.",
       "read_whatsapp_messages": "Lire les messages WhatsApp récents, sur demande.",
       "run_tests": "Exécutez les tests du projet et signalez ce qui a réussi et échoué.",
-      "restore_checkpoint": "Put files back as they were before an earlier turn changed them.",
       "send_discord_message": "Envoyer un message sur Discord.",
       "send_telegram_message": "Envoyer un message sur Telegram.",
       "send_to_whatsapp": "Vous envoie un message sur votre WhatsApp depuis le numéro d'AbacusAI Bot.",
@@ -3928,30 +3926,6 @@
     "showInFolder": "Afficher dans le dossier",
     "showLess": "Afficher moins",
     "showMore": "+{{count}} plus"
-  },
-  "checkpoints": {
-    "summary_one": "Changed {{count}} file",
-    "summary_other": "Changed {{count}} files",
-    "restore": "Restore to before this turn",
-    "restoreFile": "Restore this file",
-    "undoRestore": "Undo restore",
-    "busy": "Wait for the agent to finish this turn",
-    "binary": "binary",
-    "noCopy": "no copy kept",
-    "partial": "Some folders were too large to keep whole; files past the limit are not covered.",
-    "failed": "Could not restore. Try again once the agent has finished.",
-    "restored_one": "Restored {{count}} file.",
-    "restored_other": "Restored {{count}} files.",
-    "unrestorable_one": "{{count}} file was too large to keep a copy of.",
-    "unrestorable_other": "{{count}} files were too large to keep a copy of.",
-    "conflicts_one": "{{count}} file changed after this turn and was left as it is.",
-    "conflicts_other": "{{count}} files changed after this turn and were left as they are.",
-    "force": "Restore anyway",
-    "kind": {
-      "modified": "Edited",
-      "created": "Added",
-      "deleted": "Deleted"
-    }
   },
   "devicePanel": {
     "axPermissionNeeded": "L'autorisation Accessibilité est nécessaire pour un miroir du simulateur sans afficher sa fenêtre.",

@@ -562,7 +562,6 @@
       "browser_snapshot": "Membaca halaman sebagai daftar elemen interaktif.",
       "browser_tabs": "Menampilkan, berpindah, dan menutup tab browser.",
       "browser_task": "Serahkan seluruh tugas web ke sub-agen browser dan dapatkan kembali jawabannya.",
-      "checkpoint_diff": "Show what earlier turns changed on disk, from their checkpoints.",
       "code_map": "Indeks fungsi dan kelas dalam file atau folder.",
       "connect_connector": "Minta pengguna untuk melampirkan layanan, seperti Gmail atau Slack, sehingga alatnya tersedia.",
       "cronjob": "Membuat, membuat daftar, menjeda, atau menjalankan tugas terjadwal.",
@@ -607,7 +606,6 @@
       "read_telegram_messages": "Baca pesan Telegram terbaru, saat diminta.",
       "read_whatsapp_messages": "Baca pesan WhatsApp terbaru, saat diminta.",
       "run_tests": "Jalankan pengujian proyek dan laporkan apa yang lulus dan gagal.",
-      "restore_checkpoint": "Put files back as they were before an earlier turn changed them.",
       "send_discord_message": "Kirim pesan di Discord.",
       "send_telegram_message": "Kirim pesan di Telegram.",
       "send_to_whatsapp": "Kirim pesan ke WhatsApp Anda dari nomor AbacusAI Bot.",
@@ -3928,30 +3926,6 @@
     "showInFolder": "Tampilkan di folder",
     "showLess": "Tampilkan lebih sedikit",
     "showMore": "+{{count}} lagi"
-  },
-  "checkpoints": {
-    "summary_one": "Changed {{count}} file",
-    "summary_other": "Changed {{count}} files",
-    "restore": "Restore to before this turn",
-    "restoreFile": "Restore this file",
-    "undoRestore": "Undo restore",
-    "busy": "Wait for the agent to finish this turn",
-    "binary": "binary",
-    "noCopy": "no copy kept",
-    "partial": "Some folders were too large to keep whole; files past the limit are not covered.",
-    "failed": "Could not restore. Try again once the agent has finished.",
-    "restored_one": "Restored {{count}} file.",
-    "restored_other": "Restored {{count}} files.",
-    "unrestorable_one": "{{count}} file was too large to keep a copy of.",
-    "unrestorable_other": "{{count}} files were too large to keep a copy of.",
-    "conflicts_one": "{{count}} file changed after this turn and was left as it is.",
-    "conflicts_other": "{{count}} files changed after this turn and were left as they are.",
-    "force": "Restore anyway",
-    "kind": {
-      "modified": "Edited",
-      "created": "Added",
-      "deleted": "Deleted"
-    }
   },
   "devicePanel": {
     "axPermissionNeeded": "Izin Aksesibilitas diperlukan untuk mencerminkan simulator tanpa menampilkan jendelanya.",

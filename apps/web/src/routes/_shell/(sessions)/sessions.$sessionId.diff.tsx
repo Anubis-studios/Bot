@@ -22,7 +22,6 @@ const SessionDiffRoute = () => {
       path: _path,
       source: _source,
       toolKey: _key,
-      seq: _seq,
       mode: _mode,
       ...rest
     } = search;
@@ -43,7 +42,6 @@ const SessionDiffRoute = () => {
       scope={search.scope}
       source={search.source}
       toolKey={search.toolKey}
-      seq={search.seq}
       mode={search.mode}
       resolveTool={() =>
         search.toolKey

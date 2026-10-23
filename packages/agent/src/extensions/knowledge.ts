@@ -35,8 +35,8 @@ const TOOL_CARDS: Record<string, string> = {
     "one file, a region of a file (offset/limit), or an image.",
   write:
     "write replaces a whole file. Prefer edit for a change to part of one (read it first), or ast_edit " +
-    "for the same structural change in many places. Every turn's changes are checkpointed: undo one with " +
-    "restore_checkpoint rather than rewriting the old contents from memory.",
+    "for the same structural change in many places. Replacing an existing file keeps a copy of what was " +
+    "there under .abacusai-bot/backups/, and the result tells you the path to restore from.",
   ast_edit:
     "ast_edit usage: pattern must be VALID CODE in the target language, not a regex. $VAR matches one " +
     "syntax node, $$$VAR matches a list. Example: pattern `foo($$$ARGS)`, rewrite `bar($$$ARGS)`. " +
@@ -49,12 +49,6 @@ const TOOL_CARDS: Record<string, string> = {
   run_tests:
     'run_tests usage: call with no arguments to run the whole suite, or filter: "substring" for a ' +
     "subset. Do not pass shell flags: it builds the command itself.",
-  checkpoint_diff:
-    "checkpoint_diff usage: no arguments lists recent turns and their files; turn: N shows that turn's diff; " +
-    "sinceTurn: N diffs everything changed from turn N on against the disk now.",
-  restore_checkpoint:
-    "restore_checkpoint usage: turn: N puts that turn's files back byte for byte; paths: [...] limits it. " +
-    "Files changed again later are left alone and named; restore newer turns first, or pass force: true.",
   bash:
     "bash usage: non-interactive commands only; big outputs get trimmed, so pipe exploration through " +
     "grep/head/tail. For file changes use edit/batch_edit/write/ast_edit, not shell redirects.",

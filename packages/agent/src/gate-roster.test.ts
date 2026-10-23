@@ -87,14 +87,6 @@ const CASES: Case[] = [
     acceptEdits: "allow",
     plan: "refuse",
   },
-  {
-    name: "restore_checkpoint",
-    input: { turn: 1 },
-    normal: "ask",
-    acceptEdits: "allow",
-    plan: "refuse",
-    because: "it undoes the agent's own edits, so acceptEdits covers it",
-  },
 
   // Hands the work to a sub-agent, which then runs unwatched. One answer covers
   // everything it goes on to do, so acceptEdits asks here as well.
@@ -236,13 +228,6 @@ const CASES: Case[] = [
   {
     name: "ls",
     input: { path: "." },
-    normal: "allow",
-    acceptEdits: "allow",
-    plan: "allow",
-  },
-  {
-    name: "checkpoint_diff",
-    input: {},
     normal: "allow",
     acceptEdits: "allow",
     plan: "allow",

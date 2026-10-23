@@ -89,10 +89,6 @@
     "./user-language": {
       "types": "./dist/user-language.d.ts",
       "default": "./dist/user-language.js"
-    },
-    "./checkpoint-store": {
-      "types": "./dist/checkpoint-store.d.ts",
-      "default": "./dist/checkpoint-store.js"
     }
   },
   "scripts": {

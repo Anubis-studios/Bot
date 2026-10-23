@@ -562,7 +562,6 @@
       "browser_snapshot": "Leer la página como una lista de elementos interactivos.",
       "browser_tabs": "Listar, cambiar y cerrar las pestañas del navegador.",
       "browser_task": "Entregue una tarea web completa a un subagente del navegador y obtenga la respuesta.",
-      "checkpoint_diff": "Show what earlier turns changed on disk, from their checkpoints.",
       "code_map": "Indexe las funciones y clases en un archivo o carpeta.",
       "connect_connector": "Solicite al usuario que adjunte un servicio, como Gmail o Slack, para que sus herramientas estén disponibles.",
       "cronjob": "Cree, enumere, ponga en pausa o ejecute tareas programadas.",
@@ -607,7 +606,6 @@
       "read_telegram_messages": "Leer mensajes recientes de Telegram cuando se pida.",
       "read_whatsapp_messages": "Leer mensajes recientes de WhatsApp cuando se pida.",
       "run_tests": "Ejecute las pruebas del proyecto e informe lo que pasó y lo que falló.",
-      "restore_checkpoint": "Put files back as they were before an earlier turn changed them.",
       "send_discord_message": "Enviar un mensaje por Discord.",
       "send_telegram_message": "Enviar un mensaje por Telegram.",
       "send_to_whatsapp": "Te envía un mensaje a tu WhatsApp desde el número de AbacusAI Bot.",
@@ -3928,30 +3926,6 @@
     "showInFolder": "Mostrar en carpeta",
     "showLess": "Mostrar menos",
     "showMore": "+{{count}} más"
-  },
-  "checkpoints": {
-    "summary_one": "Changed {{count}} file",
-    "summary_other": "Changed {{count}} files",
-    "restore": "Restore to before this turn",
-    "restoreFile": "Restore this file",
-    "undoRestore": "Undo restore",
-    "busy": "Wait for the agent to finish this turn",
-    "binary": "binary",
-    "noCopy": "no copy kept",
-    "partial": "Some folders were too large to keep whole; files past the limit are not covered.",
-    "failed": "Could not restore. Try again once the agent has finished.",
-    "restored_one": "Restored {{count}} file.",
-    "restored_other": "Restored {{count}} files.",
-    "unrestorable_one": "{{count}} file was too large to keep a copy of.",
-    "unrestorable_other": "{{count}} files were too large to keep a copy of.",
-    "conflicts_one": "{{count}} file changed after this turn and was left as it is.",
-    "conflicts_other": "{{count}} files changed after this turn and were left as they are.",
-    "force": "Restore anyway",
-    "kind": {
-      "modified": "Edited",
-      "created": "Added",
-      "deleted": "Deleted"
-    }
   },
   "devicePanel": {
     "axPermissionNeeded": "Se necesita permiso de Accesibilidad para reflejar el simulador sin mostrar su ventana.",
