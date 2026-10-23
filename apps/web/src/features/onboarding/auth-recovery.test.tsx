@@ -270,9 +270,9 @@ it.each(paymentScreens)(
             "20,000 credits a month (10x the free plan)",
             "Top models: Model A, Model B, Model C, Model D",
             "Image and video generation",
-            "Personal agents in Abacus AI Agent on the web that run 24/7: WhatsApp, Discord and Telegram auto-replies, all your routines, and everything your bot does",
+            "Personal agents in Abacus AI Agent on the web that run 24/7, even with your computer off: WhatsApp, Discord and Telegram auto-replies, all your routines, and everything your bot does",
             "100+ connectors: Gmail, Google Calendar, Slack, Drive, Notion and more",
-            "Build and publish web apps",
+            "Build and deploy powerful apps on the web, including mobile apps",
           ]
     );
     // Only a plan whose payment did not confirm offers subscribers a report.

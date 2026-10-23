@@ -4440,9 +4440,11 @@
       "creditsOnly": "Her ay {{credits}} kredi",
       "models": "En iyi modeller: {{models}}",
       "media": "Görsel ve video oluşturma",
-      "agents": "Web'deki Abacus AI Agent'ta 7/24 çalışan kişisel ajanlar: WhatsApp, Discord ve Telegram otomatik yanıtları, tüm rutinlerin ve botunun yaptığı her şey",
+      "agents": "Web'deki Abacus AI Agent'ta bilgisayarın kapalıyken bile 7/24 çalışan kişisel ajanlar: WhatsApp, Discord ve Telegram otomatik yanıtları, tüm rutinlerin ve botunun yaptığı her şey",
       "connectors": "100+ bağlayıcı: Gmail, Google Calendar, Slack, Drive, Notion ve daha fazlası",
-      "apps": "Web uygulamaları oluşturun ve yayınlayın"
+      "apps": "Mobil uygulamalar dahil, web'de güçlü uygulamalar oluştur ve yayınla",
+      "appsProjects_one": "Mobil uygulamalar dahil, web'de güçlü uygulamalar oluştur ve yayınla: ayda {{count}} proje",
+      "appsProjects_other": "Mobil uygulamalar dahil, web'de güçlü uygulamalar oluştur ve yayınla: ayda {{count}} proje"
     },
     "freeChip": "Ücretsiz model · {{provider}}",
     "freeChipAny": "başka bir sağlayıcı",

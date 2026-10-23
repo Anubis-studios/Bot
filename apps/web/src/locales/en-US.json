@@ -4440,9 +4440,11 @@
       "creditsOnly": "{{credits}} credits a month",
       "models": "Top models: {{models}}",
       "media": "Image and video generation",
-      "agents": "Personal agents in Abacus AI Agent on the web that run 24/7: WhatsApp, Discord and Telegram auto-replies, all your routines, and everything your bot does",
+      "agents": "Personal agents in Abacus AI Agent on the web that run 24/7, even with your computer off: WhatsApp, Discord and Telegram auto-replies, all your routines, and everything your bot does",
       "connectors": "100+ connectors: Gmail, Google Calendar, Slack, Drive, Notion and more",
-      "apps": "Build and publish web apps"
+      "apps": "Build and deploy powerful apps on the web, including mobile apps",
+      "appsProjects_one": "Build and deploy powerful apps on the web, including mobile apps: {{count}} project a month",
+      "appsProjects_other": "Build and deploy powerful apps on the web, including mobile apps: {{count}} projects a month"
     },
     "freeChip": "Free model · {{provider}}",
     "freeChipAny": "another provider",

@@ -4440,9 +4440,11 @@
       "creditsOnly": "매달 {{credits}} 크레딧",
       "models": "최상위 모델: {{models}}",
       "media": "이미지 및 동영상 생성",
-      "agents": "웹의 Abacus AI Agent에서 24시간 돌아가는 개인 에이전트: WhatsApp, Discord, Telegram 자동 답장, 모든 루틴, 그리고 봇이 하는 모든 일",
+      "agents": "웹의 Abacus AI Agent에서 컴퓨터가 꺼져 있어도 24시간 돌아가는 개인 에이전트: WhatsApp, Discord, Telegram 자동 답장, 모든 루틴, 그리고 봇이 하는 모든 일",
       "connectors": "100개 이상의 커넥터: Gmail, Google 캘린더, Slack, Drive, Notion 등",
-      "apps": "웹 앱 만들기 및 게시"
+      "apps": "모바일 앱을 포함한 강력한 앱을 웹에서 만들고 게시",
+      "appsProjects_one": "모바일 앱을 포함한 강력한 앱을 웹에서 만들고 게시: 매월 프로젝트 {{count}}개",
+      "appsProjects_other": "모바일 앱을 포함한 강력한 앱을 웹에서 만들고 게시: 매월 프로젝트 {{count}}개"
     },
     "freeChip": "무료 모델 · {{provider}}",
     "freeChipAny": "다른 제공업체",
