@@ -1,3 +1,4 @@
+import type { SuccessPitchOffer } from "@abacus-ai/contract/success-pitch";
 import { v1ToUiMessages } from "@abacus-ai/contract/transcript/v1-to-ui-messages";
 /**
  * Chat scenarios (spec 02 §11): the agent's recorded goldens replayed as
@@ -32,6 +33,8 @@ export interface Scenario {
     draft?: Draft;
     dictating?: boolean;
     openPicker?: "mode" | "model";
+    /** The success pitch offered under the latest reply. */
+    successPitch?: Pick<SuccessPitchOffer, "trigger" | "moment" | "lead">;
   };
   /** Canned answer to a send in the gallery (echo + reply). */
   reply?: string;
@@ -398,6 +401,53 @@ const OUTCOME_ERRORS: Record<
   },
 };
 
+// ─── the success pitch ─────────────────────────────────────────────────
+
+const SITE_URL = "http://127.0.0.1:58702";
+
+const successSite = (): RelayEvent[] =>
+  seqd([
+    ...b.sessionReady("inc-1", "YOLO"),
+    ...userTurn("r1", "u1", "Build a one-page site for my bakery", at(3)),
+    b.textStart("a1"),
+    ...b.toolCall("c1", "write", "a1", {
+      file_path: "/Users/me/bakery/index.html",
+    }),
+    b.toolResult("c1", { text: "Wrote index.html" }),
+    ...b.toolCall("c2", "agent-tools_present_deliverable", "a1", {
+      items: [{ path: "/Users/me/bakery/index.html" }, { path: SITE_URL }],
+    }),
+    b.toolResult("c2", {
+      text: `[artifact] /Users/me/bakery/index.html\n[artifact] ${SITE_URL}`,
+    }),
+    b.textDelta(
+      "a1",
+      "Done. It's open in the preview: a hero with your photo, the menu with prices, opening hours and a WhatsApp button for orders. No build step, it opens straight away."
+    ),
+    b.textEnd("a1"),
+    b.runFinished("r1", "success", { timestamp: at(2) }),
+  ]);
+
+/** A result, then the user's thanks and the bot's answer, in their language. */
+const successThanks =
+  (words: { ask: string; done: string; thanks: string; welcome: string }) =>
+  (): RelayEvent[] =>
+    seqd([
+      ...b.sessionReady("inc-1", "YOLO"),
+      ...userTurn("r1", "u1", words.ask, at(6)),
+      b.textStart("a1"),
+      ...b.toolCall("c1", "write", "a1", {
+        file_path: "/Users/me/Desktop/calculator.html",
+      }),
+      b.toolResult("c1", { text: "Wrote calculator.html" }),
+      b.textDelta("a1", words.done),
+      b.textEnd("a1"),
+      b.runFinished("r1", "success", { timestamp: at(5) }),
+      ...userTurn("r2", "u2", words.thanks, at(2)),
+      ...b.text("a2", "assistant", words.welcome),
+      b.runFinished("r2", "success", { timestamp: at(1) }),
+    ]);
+
 const sessionOutcome = (kind: string) => (): RelayEvent[] =>
   seqd([
     ...b.sessionReady("inc-1", "DEFAULT"),
@@ -604,6 +654,74 @@ const migratedHistory = (): UIMessage[] => {
 };
 
 export const SCENARIOS: Scenario[] = [
+  {
+    id: "success-site",
+    canvas: ["SuccessPitchCard", "site"],
+    skin: "bot",
+    events: successSite,
+    view: {
+      placeholder: "Message your bot...",
+      successPitch: { trigger: "deliverable", moment: "site", lead: "apps" },
+    },
+  },
+  {
+    id: "success-thanks-en",
+    canvas: ["SuccessPitchCard", "positive reaction"],
+    skin: "bot",
+    events: successThanks({
+      ask: "Make me a calculator on my desktop",
+      done: "Done: calculator.html is on your desktop. It adds, subtracts, multiplies and divides, keeps a running total, and works with the keyboard too.",
+      thanks: "perfect, thank you!",
+      welcome: "You're welcome! I can add a history panel next if you'd like.",
+    }),
+    view: {
+      placeholder: "Message your bot...",
+      successPitch: {
+        trigger: "positive_reaction",
+        moment: "reaction",
+        lead: null,
+      },
+    },
+  },
+  {
+    id: "success-thanks-tr",
+    canvas: ["SuccessPitchCard", "positive reaction", "tr-TR"],
+    skin: "bot",
+    events: successThanks({
+      ask: "Masaüstüme bir hesap makinesi yap",
+      done: "Tamam: calculator.html masaüstünde. Toplama, çıkarma, çarpma ve bölme yapıyor, ara toplamı tutuyor ve klavyeyle de çalışıyor.",
+      thanks: "harika olmuş, çok teşekkürler!",
+      welcome:
+        "Rica ederim! Hesap makinesi masaüstünde, istersen geçmiş ekranı da ekleyebilirim.",
+    }),
+    view: {
+      placeholder: "Bir mesaj yaz...",
+      successPitch: {
+        trigger: "positive_reaction",
+        moment: "reaction",
+        lead: null,
+      },
+    },
+  },
+  {
+    id: "success-thanks-pt",
+    canvas: ["SuccessPitchCard", "positive reaction", "pt-BR"],
+    skin: "bot",
+    events: successThanks({
+      ask: "Faça uma calculadora na minha área de trabalho",
+      done: "Pronto: calculator.html está na sua área de trabalho. Ela soma, subtrai, multiplica e divide, guarda o total parcial e também funciona pelo teclado.",
+      thanks: "valeu, ficou perfeito!",
+      welcome: "De nada! Se quiser, posso adicionar um histórico das contas.",
+    }),
+    view: {
+      placeholder: "Escreva uma mensagem...",
+      successPitch: {
+        trigger: "positive_reaction",
+        moment: "reaction",
+        lead: null,
+      },
+    },
+  },
   {
     id: "bot-message-inline-links",
     canvas: ["Inline reply links"],

@@ -109,6 +109,11 @@ export interface AguiRelayHost {
     message: string,
     tags?: UserTextTags
   ): void;
+  /**
+   * The user picked a reaction on a message; `latest` when it is the
+   * thread's newest assistant message.
+   */
+  reacted?(threadId: string, emoji: string, latest: boolean): void;
   /** Main's turn state: the user stopped the turn (legacy `stopAgentTurn`). */
   markStopped(threadId: string): void;
   /**
@@ -1042,6 +1047,19 @@ export class AguiRelayService implements AguiSource {
       this.#setPendingReactions(threadId, remaining);
       return;
     }
+    if (target.role === "assistant")
+      try {
+        this.#host.reacted?.(
+          threadId,
+          input.emoji,
+          thread
+            .checkpoint()
+            .messages.findLast((message) => message.role === "assistant")
+            ?.id === input.messageId
+        );
+      } catch (error) {
+        this.#log(`${threadId}: a reaction listener threw: ${String(error)}`);
+      }
     const excerpt = target.parts
       .flatMap((part) => (part.type === "text" ? [part.content] : []))
       .join("")

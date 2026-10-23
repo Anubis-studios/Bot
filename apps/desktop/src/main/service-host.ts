@@ -185,6 +185,7 @@ import type {
   RoutineUpdateInput,
 } from "@abacus-ai/contract/routines";
 import { InvalidInputError } from "@abacus-ai/contract/service-errors";
+import { isPositiveReactionEmoji } from "@abacus-ai/contract/success-pitch";
 import type {
   TerminalShellId,
   TerminalShellState,
@@ -367,6 +368,7 @@ import {
   type McpRuntimeSummary,
 } from "./services/debug-sync/diagnostics-sync-service";
 import { FeedbackService } from "./services/debug-sync/feedback-service";
+import { reportFunnelStep } from "./services/debug-sync/funnel-beacon";
 import { LogSyncService } from "./services/debug-sync/log-sync-service";
 import { syncLogFor } from "./services/debug-sync/sync-log";
 import { createUsageReporter } from "./services/debug-sync/usage-report";
@@ -464,6 +466,10 @@ import {
 } from "./services/providers/exec-backend-service";
 import { listAvailableModels } from "./services/providers/models";
 import { resolveSessionModel } from "./services/providers/session-model";
+import {
+  successPitchListener,
+  SuccessPitchWatch,
+} from "./services/providers/success-pitch";
 import { SandboxProbeService } from "./services/sandbox/sandbox-probe-service";
 import { agentTurnBusy } from "./services/session/agent-busy";
 import { AgentSessionManagerService } from "./services/session/agent-session-manager-service";
@@ -584,6 +590,9 @@ export class ServiceHost {
       this.messagingGatewayService.noteTurnClosed(record);
       this.settleRoutineRun(record);
       this.settleTurnWaiter(record);
+      void this.successPitch.turnClosed(record).catch((error: unknown) => {
+        console.warn(`[success-pitch] deciding failed: ${String(error)}`);
+      });
       this.debugSyncService.enqueue(record.sessionId);
     });
     // A turn in any session (a chat, a bot, a routine with nobody watching)
@@ -611,6 +620,8 @@ export class ServiceHost {
         kindOf: (id) => this.settledTurnKind(id),
       })
     );
+    // What each running turn did, for the success pitch at its close.
+    this.onAgentEvent(successPitchListener(this.successPitch));
     // Usage counts for the daily report; the listener never throws.
     this.onAgentEvent(
       createUsageReporter(platform === "web-host" ? "web" : "desktop", {
@@ -677,11 +688,16 @@ export class ServiceHost {
       send: (threadId, command) =>
         this.agentManagerService.sendCommandToSession(threadId, command),
       acceptedMessage: (threadId, message, tags) => {
+        this.successPitch.userSaid(threadId, message, tags);
         this.agentSessionManagerService.nameFromMessage(
           threadId,
           message,
           tags
         );
+      },
+      reacted: (threadId, emoji, latest) => {
+        if (latest && isPositiveReactionEmoji(emoji))
+          void this.successPitch.reacted(threadId);
       },
       markSent: (threadId) => {
         // The user's own words in the app: a relayed turn they join answers
@@ -942,6 +958,27 @@ export class ServiceHost {
     readAccount: () => fetchAbacusAccount(true),
     tellInChat: (sessionId, mark) =>
       this.messagingGatewayService.tellCreditThreshold(sessionId, mark),
+  });
+
+  /** The success pitch, decided at each turn's close (TurnLedger). */
+  private readonly successPitch = new SuccessPitchWatch({
+    prefs: () => this.prefs?.() ?? null,
+    account: () => cachedAbacusAccount(),
+    pitchable: (sessionId) =>
+      this.agentSessionManagerService.laneOf(sessionId) == null &&
+      !this.agentSessionManagerService.isRoutineSession(sessionId),
+    workspacePath: (sessionId) => {
+      const workspaceId =
+        this.agentSessionManagerService.get(sessionId)?.workspaceId;
+      const workspace = this.workspaceService
+        .getWorkspaces()
+        .find((entry) => entry.id === workspaceId);
+      return workspace?.isRemote === true ? null : (workspace?.path ?? null);
+    },
+    turnOpen: (sessionId) => this.turnLedger.isOpen(sessionId),
+    tellInChat: (sessionId) =>
+      this.messagingGatewayService.tellSuccessPitch(sessionId),
+    funnel: (step, detail) => reportFunnelStep(step, detail),
   });
 
   /** What a turn in `sessionId` counts as for the milestone card's estimate. */
@@ -3669,10 +3706,14 @@ export class ServiceHost {
       []) as TranscriptSegment[];
   }
 
-  submitTurnFeedback(
+  async submitTurnFeedback(
     feedback: TurnFeedbackInput
   ): Promise<TurnFeedbackOutcome> {
-    return this.feedbackService.submit(feedback);
+    const outcome = await this.feedbackService.submit(feedback);
+    // A thumbs-up on a reply is praise for the success pitch.
+    if (outcome.ok && feedback.rating === "up")
+      void this.successPitch.reacted(feedback.sessionId);
+    return outcome;
   }
 
   async startAgentSession(
@@ -3787,6 +3828,11 @@ export class ServiceHost {
       );
       return false;
     }
+    this.successPitch.userSaid(
+      request.sessionId,
+      request.message,
+      request.userText
+    );
     try {
       this.agentSessionManagerService.nameFromMessage(
         request.sessionId,

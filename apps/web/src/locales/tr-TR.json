@@ -4570,6 +4570,17 @@
     "upgrade": "Yükselt",
     "continueFree": "Ücretsiz devam et"
   },
+  "successPitch": {
+    "moment": {
+      "site": "Siten yayında ve çalışıyor.",
+      "file": "Dosyan hazır.",
+      "reaction": "İşine yaradığına sevindim."
+    },
+    "line": "Böyle projeler {{plan}} ile durmadan devam etsin.",
+    "chat": {
+      "once": "Bunu burada bir daha açmayacağım."
+    }
+  },
   "kickoff": {
     "connectOne": "Önce, sistem hatırlatıcısı {{name}} için bağlı demiyorsa hemen bunun için connect_connector çağır.",
     "connectMany": "Önce, {{names}} arasından sistem hatırlatıcısının bağlı olarak listelemediği her biri için hemen connect_connector çağır.",

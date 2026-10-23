@@ -2,6 +2,7 @@
  * `window.__abacusDev` for the screenshot and acceptance runs (spec 01
  * §10.2), installed only in builds made with VITE_UI_GALLERY=1.
  */
+import type { PrefsPatch } from "@abacus-ai/contract/contract/rows";
 import type { AnyRouter } from "@tanstack/react-router";
 
 import type { Db } from "#renderer/data/db";
@@ -21,6 +22,8 @@ interface AbacusDev {
   setPinned(pinned: boolean): Promise<void>;
   setTheme(theme: "system" | "light" | "dark"): Promise<void>;
   setMotion(reduce: "system" | "on" | "off"): Promise<void>;
+  /** The UI language, for the screenshot run's localized shots. */
+  setLanguage(language: NonNullable<PrefsPatch["language"]>): Promise<void>;
   band(): string | undefined;
   /** What the collections hold now, for the live-data acceptance checks. */
   rows(table: string): unknown[];
@@ -94,6 +97,7 @@ export const installDevHooks = (router: AnyRouter, db: Db): void => {
     setPinned: (pinned) => db.updatePrefs({ sidebar: { pinned } }),
     setTheme: (theme) => db.updatePrefs({ theme }),
     setMotion: (reduce) => db.updatePrefs({ motion: { reduce } }),
+    setLanguage: (language) => db.updatePrefs({ language }),
     band: () => document.documentElement.dataset.band,
     rows: (table) => [...(tables[table]?.toArray ?? [])],
     syncStatus: (table) => tables[table]?.utils.status() ?? null,

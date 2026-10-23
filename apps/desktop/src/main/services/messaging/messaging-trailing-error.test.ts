@@ -1142,6 +1142,48 @@ describe("a credit milestone crossed in a chat-app turn", () => {
   });
 });
 
+describe("the success pitch in a chat app", () => {
+  it("the user's own chat hears it after the reply: glad it worked, the plan's whole pitch, the link, once", async () => {
+    const h = harness({ self: true });
+    await h.inbound("thanks!");
+    h.say("You're welcome!");
+    h.idle();
+    expect(await h.gateway.tellSuccessPitch(h.sessionOf("C1"))).toBe(true);
+    expect(h.sent()).toEqual([
+      "You're welcome!",
+      [
+        "Glad that worked for you.",
+        offerLines(UPGRADE_URL),
+        "I won't bring this up again here.",
+      ].join("\n"),
+    ]);
+  });
+
+  it("a turn that was not a chat app's, or long over, says nothing there", async () => {
+    const h = harness({ self: true });
+    expect(await h.gateway.tellSuccessPitch("session-x")).toBe(false);
+    await h.inbound("thanks!");
+    h.say("Anytime.");
+    h.idle();
+    h.clock.now += 10 * 60_000;
+    expect(await h.gateway.tellSuccessPitch(h.sessionOf("C1"))).toBe(false);
+    expect(h.sent()).toEqual(["Anytime."]);
+  });
+
+  it("is worded in the user's language", async () => {
+    mocks.language = "portuguese";
+    const h = harness({ self: true });
+    await h.inbound("valeu!");
+    h.say("De nada!");
+    h.idle();
+    await h.gateway.tellSuccessPitch(h.sessionOf("C1"));
+    const line = h.sent().at(-1)!;
+    expect(line.startsWith("Que bom que deu certo.\n")).toBe(true);
+    expect(line).toContain("- Geração de imagens e vídeos");
+    expect(line.endsWith("Não vou mais falar disso por aqui.")).toBe(true);
+  });
+});
+
 describe("chatReplyForFailure", () => {
   it("gives someone else's chat nothing, whatever the failure", () => {
     for (const error of [WALL, ownKey("credit"), POOL_OUT, NO_MODEL, {}])

@@ -4570,6 +4570,17 @@
     "upgrade": "Upgrade",
     "continueFree": "Continue free"
   },
+  "successPitch": {
+    "moment": {
+      "site": "Your site is up and running.",
+      "file": "Your file is ready.",
+      "reaction": "Glad that worked for you."
+    },
+    "line": "Keep projects like this going with {{plan}}.",
+    "chat": {
+      "once": "I won't bring this up again here."
+    }
+  },
   "kickoff": {
     "connectOne": "First, if the system reminder does not list {{name}} as connected, call connect_connector for it now.",
     "connectMany": "First, call connect_connector now for each of {{names}} that the system reminder does not list as connected.",

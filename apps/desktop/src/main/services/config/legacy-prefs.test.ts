@@ -203,6 +203,7 @@ describe("composeLegacyPrefs", () => {
       routinesAlwaysOnCardAt: null,
       routinesMissedSeenAt: null,
       creditThresholdCards: {},
+      successPitchCards: {},
       freePlanSeenAt: null,
       upgradeRoutinesSeenAt: null,
     });
@@ -256,6 +257,7 @@ describe("composeLegacyPrefs", () => {
       routinesAlwaysOnCardAt: null,
       routinesMissedSeenAt: null,
       creditThresholdCards: {},
+      successPitchCards: {},
       freePlanSeenAt: null,
       upgradeRoutinesSeenAt: null,
     });

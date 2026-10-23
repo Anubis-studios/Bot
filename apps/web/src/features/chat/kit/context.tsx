@@ -1,4 +1,5 @@
 import type { AgentMode } from "@abacus-ai/contract/agent-types";
+import type { SuccessPitchOffer } from "@abacus-ai/contract/success-pitch";
 /**
  * The thread view's context: the session, the runtime, the skin and the
  * route-provided pieces (spec 02 §2 `ChatViewProps`). Widgets the kit
@@ -162,6 +163,8 @@ export interface ChatViewSlots {
   composerTasks?: ReactNode;
   /** The route's pieces after the last run's outcome (the Changes card, phase 4). */
   runTail?: ReactNode;
+  /** The gallery's success pitch offer, previewed in place of the account's. */
+  successPitchOffer?: SuccessPitchOffer;
   /** A turn's files as the route's deliverables card, opening the way it does. */
   renderDeliverables?: (items: readonly TurnDeliverable[]) => ReactNode;
   /** Route-owned actions beside the permission card (sessions §17.1). */

@@ -4570,6 +4570,17 @@
     "upgrade": "업그레이드",
     "continueFree": "무료로 계속하기"
   },
+  "successPitch": {
+    "moment": {
+      "site": "사이트가 열려 잘 돌아가고 있어요.",
+      "file": "파일이 준비됐어요.",
+      "reaction": "도움이 됐다니 다행이에요."
+    },
+    "line": "{{plan}}로 이런 프로젝트를 계속 이어가세요.",
+    "chat": {
+      "once": "여기서 이 이야기는 다시 하지 않을게요."
+    }
+  },
   "kickoff": {
     "connectOne": "먼저, 시스템 알림에 {{name}}이(가) 연결됨으로 표시되지 않으면 지금 connect_connector를 호출하세요.",
     "connectMany": "먼저, {{names}} 중 시스템 알림에 연결됨으로 표시되지 않은 각 항목에 대해 지금 connect_connector를 호출하세요.",

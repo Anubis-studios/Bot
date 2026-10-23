@@ -1,17 +1,10 @@
-import {
-  PITCH_LINES,
-  type PitchLine,
-  planPitch,
-  planPrice,
-  wallOffer,
-} from "@abacus-ai/contract/billing-plan";
+import { planPrice, wallOffer } from "@abacus-ai/contract/billing-plan";
 import type { AbacusAccountInfo } from "@abacus-ai/contract/contracts";
 import { providerDisplayName } from "@abacus-ai/contract/settings";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Bot,
   Calendar,
-  Check,
   Clock,
   Folder,
   Loader2,
@@ -21,11 +14,7 @@ import {
 import { useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
-import {
-  creditsTier,
-  upgradePitch,
-  type UpgradePitch,
-} from "#renderer/lib/credits";
+import { creditsTier } from "#renderer/lib/credits";
 import {
   ownKeyHeadlineKey,
   ownKeyResumeModel,
@@ -41,10 +30,11 @@ import {
   useUpgradeDialogRequest,
   type UpgradeDialogRequest,
 } from "#renderer/lib/upgrade-dialog";
-import { useAccount } from "#renderer/lib/use-account";
 import { useAppContext } from "#renderer/lib/use-app-context";
 import { Button } from "#renderer/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "#renderer/ui/dialog";
+
+import { PlanPitchList, upgradeCtaLabel } from "./plan-pitch";
 
 /** A free account whose Abacus credits are used up: the only one asked. */
 export const spentFreeAccount = (
@@ -64,40 +54,6 @@ const askedAccount = (
     ? creditsTier(account) === "free"
     : spentFreeAccount(account);
 
-/**
- * The plan's whole pitch, led by what the person's side gains (upgradePitch);
- * an own key's offer leads with the models, the reason to switch, and the
- * connectors' with the connectors.
- */
-const pitchOrder = (
-  pitch: UpgradePitch | null,
-  lead: PitchLine | null
-): readonly PitchLine[] => {
-  const order: readonly PitchLine[] =
-    pitch === "sessions"
-      ? ["models", "apps", "media", "credits", "agents", "connectors"]
-      : pitch === "bots"
-        ? ["credits", "agents", "connectors", "models", "apps", "media"]
-        : PITCH_LINES;
-  return lead == null
-    ? order
-    : [lead, ...order.filter((line) => line !== lead)];
-};
-
-const Feature = ({ lead, rest }: { lead?: string; rest: string }) => (
-  <li className="flex gap-2.5 text-sm/5">
-    <Check
-      aria-hidden
-      className="mt-0.5 size-4 shrink-0 text-violet-600 dark:text-violet-400"
-      strokeWidth={2.4}
-    />
-    <span>
-      {lead != null && <span className="font-semibold">{lead}</span>}
-      {rest}
-    </span>
-  </li>
-);
-
 const Tile = ({ children }: { children: ReactNode }) => (
   <span className="bg-muted text-foreground flex size-10 items-center justify-center rounded-[11px]">
     {children}
@@ -114,29 +70,16 @@ const DialogBody = ({
 }) => {
   const { t, i18n } = useTranslation();
   const { transport } = useAppContext();
-  const { data: account } = useAccount();
   const { data: billing } = useQuery({
     ...transport.orpc.account.billingPlan.queryOptions({ input: {} }),
     staleTime: 60_000,
   });
-  const [waiting, setWaiting] = useState(false);
+  // Asked for at checkout (a card's Upgrade): straight to waiting for the plan.
+  const [waiting, setWaiting] = useState(request.checkout === true);
   const connectors = request.kind === "connectors";
   const ownKey = request.kind === "own-key";
   const plan = request.kind === "plan";
   const offer = wallOffer(billing ?? null);
-  // Never half a pitch: the list waits for the plan it is read from.
-  const pitch =
-    billing != null
-      ? planPitch(
-          t,
-          billing,
-          i18n.language,
-          pitchOrder(
-            upgradePitch(account),
-            ownKey ? "models" : connectors ? "connectors" : null
-          )
-        )
-      : [];
 
   // Checkout runs in the browser: once the plan is active (lib/upgrade.ts
   // watches for it), send the waiting message and close.
@@ -296,13 +239,10 @@ const DialogBody = ({
           </p>
         </div>
       )}
-      {pitch.length > 0 && (
-        <ul className="flex flex-col gap-2.5" data-slot="upgrade-pitch">
-          {pitch.map((line) => (
-            <Feature key={line} rest={line} />
-          ))}
-        </ul>
-      )}
+      <PlanPitchList
+        billing={billing ?? null}
+        lead={ownKey ? "models" : connectors ? "connectors" : null}
+      />
       <div className="flex flex-col gap-1.5 pt-1">
         <Button
           className="h-11 text-sm font-semibold"
@@ -312,9 +252,7 @@ const DialogBody = ({
             setWaiting(true);
           }}
         >
-          {offer != null
-            ? t("outcome.wall.upgradeCta", { plan: offer.planName })
-            : t("creditsCard.cta")}
+          {upgradeCtaLabel(t, offer)}
         </Button>
         <Button
           variant="ghost"
@@ -389,7 +327,7 @@ export const UpgradeDialogHost = () => {
           data-kind={request.kind}
           className="gap-5 p-7 pb-5 text-sm sm:max-w-[440px] [&>*]:min-w-0"
         >
-          <DialogBody request={request} onDone={done} />
+          <DialogBody key={request.key} request={request} onDone={done} />
         </DialogContent>
       )}
     </Dialog>

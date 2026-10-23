@@ -440,3 +440,19 @@ export function extractArtifacts(
 
   return [];
 }
+
+/**
+ * What one settled tool call handed over to the user: a presented
+ * deliverable, a component's output, generated media. File edits and the
+ * links a turn read along the way are its work, not a hand-over.
+ */
+export function handedOverArtifacts(
+  payload: unknown,
+  workspacePath: string | null
+): ArtifactDraft[] {
+  return extractArtifacts(payload, workspacePath).filter(
+    (draft) =>
+      !FILE_MUTATION_TOOLS.has(draft.toolName) &&
+      !LINK_TOOLS.has(draft.toolName)
+  );
+}

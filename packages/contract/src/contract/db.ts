@@ -9,6 +9,11 @@ import * as v from "valibot";
 import { HOME_CHANNELS } from "../bots";
 import { CREDIT_TASK_KINDS, CREDIT_THRESHOLDS } from "../credit-thresholds";
 import { THEME_COLOR_KEYS } from "../look";
+import {
+  SUCCESS_PITCH_LEADS,
+  SUCCESS_PITCH_MOMENTS,
+  SUCCESS_PITCH_TRIGGERS,
+} from "../success-pitch";
 import { base, mutation, query, subscription } from "./base";
 import { AvatarAccessorySchema, BotWallpaperSchema } from "./bots";
 import {
@@ -134,6 +139,22 @@ const CreditThresholdMarkSchema = v.strictObject({
   told: v.nullable(CreditThresholdSchema),
 });
 
+const SuccessPitchMarkSchema = v.strictObject({
+  offer: v.nullable(
+    v.strictObject({
+      id: v.string(),
+      sessionId: v.string(),
+      trigger: v.picklist(SUCCESS_PITCH_TRIGGERS),
+      moment: v.picklist(SUCCESS_PITCH_MOMENTS),
+      lead: v.nullable(v.picklist(SUCCESS_PITCH_LEADS)),
+      at: v.number(),
+    })
+  ),
+  appTurns: v.number(),
+  chatTurns: v.number(),
+  chatToldAt: NullableTimestamp,
+});
+
 export const BOT_SOUND_LEVELS = ["all", "needs-me", "nothing"] as const;
 export const PREFS_TEXT_SIZES = [13, 14, 15] as const;
 /** `@abacus-ai/connectors`' `MessagingPlatform` (checked in contract.types.test). */
@@ -214,6 +235,16 @@ export const PREFS_GROUP_ENTRIES = {
         answered: v.nullable(CreditThresholdSchema),
       })
     ),
+    successPitchCards: v.record(
+      v.string(),
+      v.strictObject({
+        shown: v.number(),
+        lastShownAt: NullableTimestamp,
+        notNow: v.number(),
+        shownOffer: v.nullable(v.string()),
+        answered: v.nullable(v.string()),
+      })
+    ),
     /** The account first read on the free plan here, so a paid read after it is an upgrade. */
     freePlanSeenAt: NullableTimestamp,
     /** The after-upgrade card sending routines to Abacus AI Agent on the web, seen. */
@@ -286,6 +317,7 @@ export const PREFS_SCALAR_ENTRIES = {
   creditsExhaustedAt: NullableTimestamp,
   freeLaneChosenAt: NullableTimestamp,
   creditThresholds: v.record(v.string(), CreditThresholdMarkSchema),
+  successPitch: v.record(v.string(), SuccessPitchMarkSchema),
   browserHomepage: v.nullable(v.string()),
   showLinkPreviews: v.boolean(),
   /** Off: no `gh` call, no PR chip, tab or review anywhere. */
@@ -327,6 +359,7 @@ export const PrefsPatchSchema = v.strictObject({
   creditsExhaustedAt: v.optional(S.creditsExhaustedAt),
   freeLaneChosenAt: v.optional(S.freeLaneChosenAt),
   creditThresholds: v.optional(S.creditThresholds),
+  successPitch: v.optional(S.successPitch),
   browserHomepage: v.optional(S.browserHomepage),
   showLinkPreviews: v.optional(S.showLinkPreviews),
   githubIntegration: v.optional(S.githubIntegration),
