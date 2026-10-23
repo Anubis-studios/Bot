@@ -1,6 +1,8 @@
 /**
- * The guards: protected paths, read before edit, the shell deny list and the
- * overwrite redirect. Copies of what a turn replaces are checkpoints.test.ts's.
+ * Replacing a file is allowed, and that is only safe because the previous
+ * contents are kept and the model is told where, so these pin exactly that
+ * pair. Either half alone is worse than a refusal: a copy nobody can find,
+ * or an overwrite with no copy.
  */
 import * as cp from "node:child_process";
 import * as fs from "node:fs";
@@ -12,6 +14,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { ALLOWED_PATHS_ENV } from "../allowed-paths.js";
 import { setCurrentMode } from "../current-mode.js";
+import { modelPath } from "../model-path.js";
 import { AgentMode } from "../protocol.js";
 import { emptyTrashMessage } from "../trash.js";
 import guardrails, { bashWriteTargets, isProtectedPath } from "./guardrails.js";
@@ -26,6 +29,13 @@ const writeCall = (filePath: string, content = "new contents") => ({
   input: { path: filePath, content },
 });
 
+const backupsIn = (relativeDir = "."): string[] => {
+  const directory = path.join(cwd, ".abacusai-bot", "backups", relativeDir);
+  return fs.existsSync(directory)
+    ? fs.readdirSync(directory).filter((n) => n.endsWith(".bak"))
+    : [];
+};
+
 beforeEach(() => {
   cwd = fs.mkdtempSync(path.join(os.tmpdir(), "guardrails-test-"));
   pi = fakePi();
@@ -37,14 +47,23 @@ afterEach(() => {
 });
 
 describe("replacing an existing file", () => {
-  it("is allowed, and leaves nothing of its own in the workspace", async () => {
+  it("is allowed, and keeps what was there", async () => {
     fs.writeFileSync(path.join(cwd, "server.js"), "original contents");
 
     const blocked = await pi.fire("tool_call", writeCall("server.js"), ctx());
 
     expect(blocked).toBeUndefined();
-    expect(fs.existsSync(path.join(cwd, ".abacusai-bot"))).toBe(false);
-    const result = await pi.fire(
+    const kept = backupsIn();
+    expect(kept).toHaveLength(1);
+    const copy = path.join(cwd, ".abacusai-bot", "backups", kept[0] ?? "");
+    expect(fs.readFileSync(copy, "utf8")).toBe("original contents");
+  });
+
+  it("tells the model where the copy went, and how to put it back", async () => {
+    fs.writeFileSync(path.join(cwd, "server.js"), "original contents");
+    await pi.fire("tool_call", writeCall("server.js"), ctx());
+
+    const result = (await pi.fire(
       "tool_result",
       {
         toolName: "write",
@@ -53,8 +72,98 @@ describe("replacing an existing file", () => {
         content: [{ type: "text", text: "ok" }],
       },
       ctx()
+    )) as { content: Array<{ text: string }> } | undefined;
+
+    const text = result?.content.map((part) => part.text).join("\n") ?? "";
+    // The message names the copy as the model spells a path (forward slashes).
+    expect(text).toContain(modelPath(path.join(".abacusai-bot", "backups")));
+    expect(text).toContain("cp ");
+    expect(text).toContain("server.js");
+  });
+
+  it("keeps the earlier copy when the same file is replaced twice", async () => {
+    const file = path.join(cwd, "server.js");
+    fs.writeFileSync(file, "first");
+    await pi.fire("tool_call", writeCall("server.js"), ctx());
+    fs.writeFileSync(file, "second");
+    await pi.fire("tool_call", writeCall("server.js"), ctx());
+
+    const kept = backupsIn()
+      .map((name) =>
+        fs.readFileSync(
+          path.join(cwd, ".abacusai-bot", "backups", name),
+          "utf8"
+        )
+      )
+      .sort();
+    // The first overwrite's copy is the one a rescue actually needs.
+    expect(kept).toEqual(["first", "second"]);
+  });
+
+  it("mirrors the workspace layout so same-named files stay apart", async () => {
+    fs.mkdirSync(path.join(cwd, "client"), { recursive: true });
+    fs.mkdirSync(path.join(cwd, "server"), { recursive: true });
+    fs.writeFileSync(path.join(cwd, "client", "index.js"), "client side");
+    fs.writeFileSync(path.join(cwd, "server", "index.js"), "server side");
+
+    await pi.fire("tool_call", writeCall("client/index.js"), ctx());
+    await pi.fire("tool_call", writeCall("server/index.js"), ctx());
+
+    expect(backupsIn("client")).toHaveLength(1);
+    expect(backupsIn("server")).toHaveLength(1);
+  });
+
+  it("keeps the backups out of the project history", async () => {
+    fs.writeFileSync(path.join(cwd, "server.js"), "original contents");
+    await pi.fire("tool_call", writeCall("server.js"), ctx());
+
+    expect(
+      fs.readFileSync(
+        path.join(cwd, ".abacusai-bot", "backups", ".gitignore"),
+        "utf8"
+      )
+    ).toBe("*\n");
+  });
+
+  it("still refuses a file too large to copy", async () => {
+    const file = path.join(cwd, "huge.bin");
+    fs.writeFileSync(file, Buffer.alloc(26 * 1024 * 1024));
+
+    const blocked = (await pi.fire(
+      "tool_call",
+      writeCall("huge.bin"),
+      ctx()
+    )) as {
+      block: boolean;
+      reason: string;
+    };
+
+    expect(blocked?.block).toBe(true);
+    expect(blocked.reason).toContain("too large");
+    expect(backupsIn()).toHaveLength(0);
+    // Writing 26 MB is the point of the test, and a CI disk can take seconds.
+  }, 20_000);
+
+  it("says nothing about backups when the file is new", async () => {
+    const blocked = await pi.fire(
+      "tool_call",
+      writeCall("brand-new.js"),
+      ctx()
+    );
+    expect(blocked).toBeUndefined();
+
+    const result = await pi.fire(
+      "tool_result",
+      {
+        toolName: "write",
+        isError: false,
+        input: { path: "brand-new.js" },
+        content: [{ type: "text", text: "ok" }],
+      },
+      ctx()
     );
     expect(result).toBeUndefined();
+    expect(backupsIn()).toHaveLength(0);
   });
 });
 
@@ -65,6 +174,7 @@ describe("the guards that stay", () => {
       block: boolean;
     };
     expect(blocked?.block).toBe(true);
+    expect(backupsIn()).toHaveLength(0);
   });
 
   it("still requires a read before an edit", async () => {

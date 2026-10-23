@@ -27,7 +27,7 @@ export const routineDir = (routineId: string): string =>
 
 /**
  * Where a routine set up for a project keeps its records: inside the project,
- * under the app's own dot-folder.
+ * under the app's own dot-folder, beside the backups the file tools keep.
  */
 export const routineDirInWorkspace = (
   workspacePath: string,

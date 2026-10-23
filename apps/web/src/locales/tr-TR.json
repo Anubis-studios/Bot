@@ -562,7 +562,6 @@
       "browser_snapshot": "Sayfayı etkileşimli öğeler listesi olarak oku.",
       "browser_tabs": "Tarayıcı sekmelerini listele, aralarında geçiş yap ve kapat.",
       "browser_task": "Bütün bir web görevini bir tarayıcı alt ajanına devret ve yanıtı al.",
-      "checkpoint_diff": "Önceki turların diskte neyi değiştirdiğini kontrol noktalarından göster.",
       "code_map": "Bir dosya veya klasördeki fonksiyonları ve sınıfları dizinle.",
       "connect_connector": "Kullanıcıdan Gmail veya Slack gibi bir hizmeti eklemesini iste, böylece araçları kullanılabilir hale gelsin.",
       "cronjob": "Zamanlanmış görevleri oluştur, listele, duraklat veya çalıştır.",
@@ -607,7 +606,6 @@
       "read_telegram_messages": "İstek üzerine son Telegram mesajlarını oku.",
       "read_whatsapp_messages": "İstek üzerine son WhatsApp mesajlarını oku.",
       "run_tests": "Projenin testlerini çalıştır ve nelerin geçip nelerin kaldığını bildir.",
-      "restore_checkpoint": "Dosyaları önceki bir turun değiştirmesinden önceki hâline geri koy.",
       "send_discord_message": "Discord'da mesaj gönder.",
       "send_telegram_message": "Telegram'da mesaj gönder.",
       "send_to_whatsapp": "AbacusAI Bot'un numarasından kendi WhatsApp'ına mesaj veya ekran görüntüsü gönder.",
@@ -3928,30 +3926,6 @@
     "showInFolder": "Klasörde göster",
     "showLess": "Daha az göster",
     "showMore": "+{{count}} daha"
-  },
-  "checkpoints": {
-    "summary_one": "{{count}} dosya değişti",
-    "summary_other": "{{count}} dosya değişti",
-    "restore": "Bu turdan önceki hâline döndür",
-    "restoreFile": "Bu dosyayı geri yükle",
-    "undoRestore": "Geri yüklemeyi geri al",
-    "busy": "Ajanın bu turu bitirmesini bekle",
-    "binary": "ikili",
-    "noCopy": "kopya tutulmadı",
-    "partial": "Bazı klasörler tamamen saklanamayacak kadar büyüktü; sınırı aşan dosyalar kapsanmıyor.",
-    "failed": "Geri yüklenemedi. Ajan bitirdikten sonra yeniden dene.",
-    "restored_one": "{{count}} dosya geri yüklendi.",
-    "restored_other": "{{count}} dosya geri yüklendi.",
-    "unrestorable_one": "{{count}} dosya kopyası tutulamayacak kadar büyüktü.",
-    "unrestorable_other": "{{count}} dosya kopyası tutulamayacak kadar büyüktü.",
-    "conflicts_one": "{{count}} dosya bu turdan sonra değişti ve olduğu gibi bırakıldı.",
-    "conflicts_other": "{{count}} dosya bu turdan sonra değişti ve olduğu gibi bırakıldı.",
-    "force": "Yine de geri yükle",
-    "kind": {
-      "modified": "Düzenlendi",
-      "created": "Eklendi",
-      "deleted": "Silindi"
-    }
   },
   "devicePanel": {
     "axPermissionNeeded": "Simülatörü penceresini göstermeden yansıtmak için Erişilebilirlik izni gerekiyor.",

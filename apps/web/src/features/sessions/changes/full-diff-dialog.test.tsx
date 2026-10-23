@@ -1,20 +1,8 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
-const checkpointDiff = vi.fn(async () => [
-  {
-    path: "/elsewhere/app.py",
-    kind: "modified",
-    binary: false,
-    omitted: false,
-    before: "ok()\n",
-    after: "oops(\n",
-  },
-]);
 vi.mock("../data/queries", () => ({
-  useSessionsTransport: () => ({
-    client: { checkpoints: { diff: checkpointDiff } },
-  }),
+  useSessionsTransport: () => ({}),
   useGitState: () => null,
   useCheckoutIdentity: () => "w:primary:/repo",
 }));
@@ -59,34 +47,6 @@ it("a mounted dialog refetches when switching tool edits to the same path", asyn
   );
   expect(await screen.findByText(/\+edit-B/)).toBeTruthy();
   expect(resolveB).toHaveBeenCalledOnce();
-  view.unmount();
-  qc.clear();
-});
-
-it("shows a checkpointed turn's diff without git, and no git fallback", async () => {
-  await initI18n();
-  const qc = new QueryClient();
-  const view = render(
-    <QueryClientProvider client={qc}>
-      <FullDiffDialog
-        workspaceId="w"
-        sessionId="s"
-        root="/repo"
-        path="/elsewhere/app.py"
-        source="checkpoint"
-        seq={2}
-        resolveTool={async () => ({ state: "unavailable" })}
-        onClose={() => {}}
-        onGit={() => {}}
-      />
-    </QueryClientProvider>
-  );
-  expect(await screen.findByText(/\+oops\(/)).toBeTruthy();
-  expect(checkpointDiff).toHaveBeenCalledWith({
-    sessionId: "s",
-    seq: 2,
-    path: "/elsewhere/app.py",
-  });
   view.unmount();
   qc.clear();
 });

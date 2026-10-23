@@ -40,10 +40,8 @@ credentials in your linked Abacus.AI account.
 ## Files on disk
 
 The app stores settings, provider keys, conversations, bot instructions, memory,
-skills, and logs under `~/.abacusai-bot/`. Copies of the files each agent turn
-changed, which the Restore button and the agent's own undo use, live under
-`~/.abacusai-bot/checkpoints/` for 30 days. Project skills live under
-`.abacusai-bot/` in the workspace. Some app preferences and connected web
+skills, and logs under `~/.abacusai-bot/`. Project skills and file backups live
+under `.abacusai-bot/` in the workspace. Some app preferences and connected web
 sessions also live in the operating system's application-data directory.
 
 Set `ABACUSAI_BOT_HOME` to change the main data directory. To reset local data,

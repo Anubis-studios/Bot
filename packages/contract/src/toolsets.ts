@@ -122,9 +122,6 @@ export const TOOLSETS: Toolset[] = [
       // Structural editing: the model describes a pattern and the splice is
       // exact, removing the line numbers and whitespace cheap models get wrong.
       tool("ast_edit"),
-      // Every turn's file changes are checkpointed; these read and undo them.
-      tool("checkpoint_diff"),
-      tool("restore_checkpoint"),
       tool("code_map"),
       tool("grep"),
       tool("glob"),

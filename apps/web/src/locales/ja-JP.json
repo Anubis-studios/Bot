@@ -562,7 +562,6 @@
       "browser_snapshot": "ページを操作可能な要素の一覧として読み取ります。",
       "browser_tabs": "ブラウザーのタブを一覧表示、切り替え、閉じます。",
       "browser_task": "Web タスク全体をブラウザーのサブエージェントに渡し、答えを返します。",
-      "checkpoint_diff": "Show what earlier turns changed on disk, from their checkpoints.",
       "code_map": "ファイルまたはフォルダー内の関数とクラスにインデックスを付けます。",
       "connect_connector": "Gmail や Slack などのサービスをアタッチするようにユーザーに依頼し、そのツールが使用できるようにします。",
       "cronjob": "スケジュールされたタスクを作成、一覧表示、一時停止、または実行します。",
@@ -607,7 +606,6 @@
       "read_telegram_messages": "求めに応じて最近の Telegram メッセージを読みます。",
       "read_whatsapp_messages": "求めに応じて最近の WhatsApp メッセージを読みます。",
       "run_tests": "プロジェクトのテストを実行し、成功したものと失敗したものを報告します。",
-      "restore_checkpoint": "Put files back as they were before an earlier turn changed them.",
       "send_discord_message": "Discord でメッセージを送信します。",
       "send_telegram_message": "Telegram でメッセージを送信します。",
       "send_to_whatsapp": "AbacusAI Bot の番号からあなたの WhatsApp にメッセージを送ります。",
@@ -3928,30 +3926,6 @@
     "showInFolder": "フォルダ内に表示",
     "showLess": "表示を少なくする",
     "showMore": "+{{count}} 詳細"
-  },
-  "checkpoints": {
-    "summary_one": "Changed {{count}} file",
-    "summary_other": "Changed {{count}} files",
-    "restore": "Restore to before this turn",
-    "restoreFile": "Restore this file",
-    "undoRestore": "Undo restore",
-    "busy": "Wait for the agent to finish this turn",
-    "binary": "binary",
-    "noCopy": "no copy kept",
-    "partial": "Some folders were too large to keep whole; files past the limit are not covered.",
-    "failed": "Could not restore. Try again once the agent has finished.",
-    "restored_one": "Restored {{count}} file.",
-    "restored_other": "Restored {{count}} files.",
-    "unrestorable_one": "{{count}} file was too large to keep a copy of.",
-    "unrestorable_other": "{{count}} files were too large to keep a copy of.",
-    "conflicts_one": "{{count}} file changed after this turn and was left as it is.",
-    "conflicts_other": "{{count}} files changed after this turn and were left as they are.",
-    "force": "Restore anyway",
-    "kind": {
-      "modified": "Edited",
-      "created": "Added",
-      "deleted": "Deleted"
-    }
   },
   "devicePanel": {
     "axPermissionNeeded": "ウインドウを表示せずにシミュレーターをミラーリングするにはアクセシビリティの許可が必要です。",

@@ -135,7 +135,6 @@ const FOCUSED_ENTRYPOINTS: Record<string, readonly string[]> = {
     "device/device-tab",
     "changes/changes-card",
     "changes/full-diff-dialog",
-    "chat/checkpoint-card",
     "chat/deliverables",
     "chat/known-files",
     "context/context-tray",
