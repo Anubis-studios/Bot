@@ -7,7 +7,6 @@ import { BOT_AVATAR_COLORS } from "@abacus-ai/contract/bots";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, type CSSProperties } from "react";
 
-import { DeliverablesCard } from "#renderer/components/file-preview";
 import { clearDraft } from "#renderer/lib/continuity/composer-drafts";
 import { botAccentStyle } from "#renderer/lib/theme";
 
@@ -262,17 +261,9 @@ const View = ({
   );
 };
 
-/** The scenario's success pitch and the route's deliverables card. */
-const gallerySlots = (scenario: Scenario, threadId: string): ChatViewSlots => ({
-  renderDeliverables: (items) => (
-    <DeliverablesCard
-      items={items}
-      onOpen={() => {}}
-      onReveal={() => {}}
-      onOpenUrl={() => {}}
-    />
-  ),
-  ...(scenario.view?.successPitch != null
+/** The scenario's success pitch, previewed under its latest reply. */
+const gallerySlots = (scenario: Scenario, threadId: string): ChatViewSlots =>
+  scenario.view?.successPitch != null
     ? {
         successPitchOffer: {
           ...scenario.view.successPitch,
@@ -281,7 +272,6 @@ const gallerySlots = (scenario: Scenario, threadId: string): ChatViewSlots => ({
           at: 0,
         },
       }
-    : {}),
-});
+    : {};
 
 export const chatGallerySections = { Nav, View };

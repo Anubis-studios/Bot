@@ -108,6 +108,7 @@ const mount = async ({
   const os = implement(contract);
   const seed = defaultSeed();
   const base = fixturePrefs();
+  const opened: string[] = [];
   const harness = await createHarness("/", {
     seed: {
       ...seed,
@@ -122,6 +123,7 @@ const mount = async ({
         ...prefs,
       }),
     },
+    openExternal: (url) => opened.push(url),
     procedures: {
       account: {
         abacus: os.account.abacus.handler(() => account),
@@ -161,7 +163,7 @@ const mount = async ({
       .map(([, input]) => input as { step: string; detail?: string });
   const cards = () =>
     harness.appDb.collections.prefs.get("app")?.dismissals.successPitchCards;
-  return { harness, steps, cards };
+  return { harness, steps, cards, opened };
 };
 
 const card = (patch: Partial<SuccessPitchCard> = {}): SuccessPitchCard => ({
@@ -245,6 +247,8 @@ describe("SuccessPitchRow", () => {
       kind: "plan",
       checkout: true,
     });
+    // Checkout opened in the browser, as the dialog's own Upgrade does.
+    await waitFor(() => expect(h.opened).toHaveLength(1));
     await waitFor(() =>
       expect(h.cards()?.["o1:u1"]).toMatchObject({
         answered: "turn-1",
