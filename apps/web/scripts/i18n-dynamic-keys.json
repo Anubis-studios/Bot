@@ -1742,5 +1742,13 @@
       "low.estimateTasks"
     ],
     "sources": ["../../../packages/contract/src/credit-thresholds.ts"]
+  },
+  {
+    "prefix": "successPitch.",
+    "values": ["moment.site", "moment.file", "moment.reaction", "chat.once"],
+    "sources": [
+      "../../../packages/contract/src/success-pitch.ts",
+      "../../desktop/src/main/services/messaging/chat-failure-reply.ts"
+    ]
   }
 ]

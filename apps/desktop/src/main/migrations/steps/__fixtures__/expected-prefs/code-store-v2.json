@@ -28,6 +28,7 @@
       "dismissals.routinesAlwaysOnCardAt": "default",
       "dismissals.routinesAlwaysOnToldAt": "default",
       "dismissals.routinesMissedSeenAt": "default",
+      "dismissals.successPitchCards": "default",
       "dismissals.upgradeRoutinesSeenAt": "default",
       "dismissals.upsell": "default",
       "dismissals.whatsappIntroAt": "default",
@@ -60,6 +61,7 @@
       "sounds.perBot": "default",
       "sounds.perEvent": "default",
       "sounds.quietHours": "default",
+      "successPitch": "default",
       "theme": "legacy",
       "tour.at": "default",
       "tour.status": "default",
@@ -96,6 +98,7 @@
         "routinesAlwaysOnCardAt": null,
         "routinesAlwaysOnToldAt": null,
         "routinesMissedSeenAt": null,
+        "successPitchCards": {},
         "upgradeRoutinesSeenAt": null,
         "upsell": false,
         "whatsappIntroAt": null
@@ -149,6 +152,7 @@
           "start": "22:00"
         }
       },
+      "successPitch": {},
       "theme": "light",
       "tour": {
         "at": null,

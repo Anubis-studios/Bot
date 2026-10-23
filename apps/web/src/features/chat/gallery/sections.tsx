@@ -10,9 +10,10 @@ import { useEffect, useState, type CSSProperties } from "react";
 import { clearDraft } from "#renderer/lib/continuity/composer-drafts";
 import { botAccentStyle } from "#renderer/lib/theme";
 
+import { UpgradeDialogHost } from "../../upgrade-dialog";
 import { fixtureRuntime } from "../fixtures/player";
 import { SCENARIOS, type Scenario } from "../fixtures/scenarios";
-import type { ComposerConfig } from "../kit/context";
+import type { ChatViewSlots, ComposerConfig } from "../kit/context";
 import { ChatView } from "../kit/view";
 
 const GALLERY_GROUPS: Array<{
@@ -64,6 +65,7 @@ const GALLERY_GROUPS: Array<{
       s.id === "session-workspace-missing" ||
       s.id === "session-golden-steer",
   },
+  { id: "chat-success", match: (s) => s.id.startsWith("success-") },
   {
     id: "chat-errors",
     match: (s) =>
@@ -248,12 +250,28 @@ const View = ({
             scenario.skin === "session" ? "/Users/me/code/abacusai-bot" : null
           }
           composer={composerFor(scenario, { value: model, set: setModel })}
+          slots={gallerySlots(scenario, runtime.threadId)}
           onOpenSubagent={() => {}}
           notchEnabled={scenario.skin === "bot"}
         />
       </div>
+      {/* The success pitch's Upgrade opens the upgrade dialog, as in the shell. */}
+      {scenario.view?.successPitch != null && <UpgradeDialogHost />}
     </div>
   );
 };
+
+/** The scenario's success pitch, previewed under its latest reply. */
+const gallerySlots = (scenario: Scenario, threadId: string): ChatViewSlots =>
+  scenario.view?.successPitch != null
+    ? {
+        successPitchOffer: {
+          ...scenario.view.successPitch,
+          id: `gallery-${scenario.id}`,
+          sessionId: threadId,
+          at: 0,
+        },
+      }
+    : {};
 
 export const chatGallerySections = { Nav, View };

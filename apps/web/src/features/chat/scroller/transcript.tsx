@@ -44,6 +44,7 @@ import {
   runningTools,
   Typing,
 } from "../kit/status/status";
+import { SuccessPitchRow } from "../kit/success-pitch";
 import { UpgradeTriggers } from "../kit/upgrade-triggers";
 import { useHost, useThreadStore } from "../store/selectors";
 import type { RunOutcomeRecord } from "../store/thread-store";
@@ -884,6 +885,7 @@ export const Transcript = ({ messages, Message }: TranscriptProps) => {
           ))}
           {rows}
           <RunTail messages={messages} />
+          <SuccessPitchRow active={active} />
           <UpgradeTriggers
             messages={messages}
             outcome={active ? undefined : outcomes.at(-1)}

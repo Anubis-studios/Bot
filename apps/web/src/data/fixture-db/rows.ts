@@ -243,6 +243,7 @@ export const fixturePrefs = (overrides: Partial<PrefsRow> = {}): PrefsRow => ({
   creditsExhaustedAt: null,
   freeLaneChosenAt: null,
   creditThresholds: {},
+  successPitch: {},
   browserHomepage: null,
   onboardingStep: null,
   dismissals: {
@@ -257,6 +258,7 @@ export const fixturePrefs = (overrides: Partial<PrefsRow> = {}): PrefsRow => ({
     routinesAlwaysOnCardAt: null,
     routinesMissedSeenAt: null,
     creditThresholdCards: {},
+    successPitchCards: {},
     freePlanSeenAt: null,
     upgradeRoutinesSeenAt: null,
   },

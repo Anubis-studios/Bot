@@ -4570,6 +4570,17 @@
     "upgrade": "Passer au forfait",
     "continueFree": "Continuer gratuitement"
   },
+  "successPitch": {
+    "moment": {
+      "site": "Votre site est en ligne et fonctionne.",
+      "file": "Votre fichier est prêt.",
+      "reaction": "Ravi que ça vous ait aidé."
+    },
+    "line": "Continuez des projets comme celui-ci avec {{plan}}.",
+    "chat": {
+      "once": "Je n'en reparlerai plus ici."
+    }
+  },
   "kickoff": {
     "connectOne": "D'abord, si le rappel système n'indique pas {{name}} comme connecté, appelle connect_connector pour le connecter maintenant.",
     "connectMany": "D'abord, appelle connect_connector maintenant pour chacun de {{names}} que le rappel système n'indique pas comme connecté.",

@@ -1,7 +1,9 @@
 import type { UIMessage } from "@tanstack/ai-client";
 import { Store, useStore } from "@tanstack/react-store";
 
+import type { AppClient } from "#renderer/data/transport/types";
 import type { OwnKeyFailure } from "#renderer/lib/own-key-unavailable";
+import { openUpgrade } from "#renderer/lib/upgrade";
 import { hiddenUserMessage, userMessageText } from "#renderer/lib/user-message";
 
 /**
@@ -28,6 +30,8 @@ export interface UpgradeDialogRequest {
   ownKey?: OwnKeyFailure;
   /** `credits`: the free tier ended, rather than its credits running out. */
   expired?: boolean;
+  /** `plan`: checkout already opened (a card's Upgrade); the dialog waits for the plan. */
+  checkout?: boolean;
   /** Sends that message again once the plan is active, on `model` if given. */
   resume?: (model?: string) => Promise<unknown>;
 }
@@ -102,6 +106,24 @@ export const requestPlanDialog = (source: string): void =>
     { kind: "plan", key: `plan:${source}:${Date.now()}`, threadId: source },
     true
   );
+
+/**
+ * The upgrade dialog's Upgrade, from a card that already shows the whole
+ * pitch: checkout opens (call it inside the click: the web build opens its
+ * tab there) and the dialog waits for the plan, as after its own Upgrade.
+ */
+export const startPlanCheckout = (client: AppClient, source: string): void => {
+  void openUpgrade(client);
+  requestUpgradeDialog(
+    {
+      kind: "plan",
+      key: `plan:${source}:${Date.now()}`,
+      threadId: source,
+      checkout: true,
+    },
+    true
+  );
+};
 
 /** The Abacus connectors gateway's tools are named `abacus-connectors_<Tool>`. */
 const CONNECTOR_TOOL_PREFIX = "abacus-connectors";

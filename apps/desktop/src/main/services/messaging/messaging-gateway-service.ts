@@ -5,6 +5,7 @@ import { readUserLanguage } from "@abacus-ai/agent/user-language";
 import type { UserTextTags } from "@abacus-ai/contract/agent-types";
 import { AgentMode, AgentStatus } from "@abacus-ai/contract/agent-types";
 import type { DesktopEvent } from "@abacus-ai/contract/agent-types";
+import type { BillingPlan } from "@abacus-ai/contract/billing-plan";
 import type {
   AgentSessionListItem,
   StartAgentSessionResult,
@@ -40,9 +41,14 @@ import {
 import { environmentNoticeService } from "../providers/environment-notice-service";
 import type { TurnChannel, TurnRecord } from "../session/turn-ledger";
 import { AbacusChannelsConnector } from "./abacus-channels-connector";
-import { channelLocale, channelWords } from "./channel-words";
+import {
+  channelLocale,
+  type ChannelWords,
+  channelWords,
+} from "./channel-words";
 import {
   chatLineForCreditThreshold,
+  chatLineForSuccessPitch,
   chatFailureOf,
   chatReplyForFailure,
   contactFailureNotice,
@@ -1693,9 +1699,36 @@ export class MessagingGatewayService {
    * `sessionId`: one line in the user's own chat on that app, never in a
    * contact's. Whether it went; false when the turn was not a chat app's.
    */
-  async tellCreditThreshold(
+  tellCreditThreshold(
     sessionId: string,
     mark: CreditThresholdMark
+  ): Promise<boolean> {
+    return this.tellOwnChat(sessionId, (words, link, billing) =>
+      chatLineForCreditThreshold(words, mark, link, billing)
+    );
+  }
+
+  /**
+   * The success pitch, once ever, in the user's own chat on the app whose
+   * turn in `sessionId` just ended. Whether it went.
+   */
+  tellSuccessPitch(sessionId: string): Promise<boolean> {
+    return this.tellOwnChat(sessionId, chatLineForSuccessPitch);
+  }
+
+  /**
+   * A line about the account, said in the user's own chat on the app whose
+   * turn in `sessionId` just ended (never a contact's), in their language,
+   * with the plan as just read and its upgrade link. False when the turn was
+   * not a chat app's, or long over.
+   */
+  private async tellOwnChat(
+    sessionId: string,
+    line: (
+      words: ChannelWords,
+      link: string,
+      billing: BillingPlan | null
+    ) => string
   ): Promise<boolean> {
     const route = this.routesBySession.get(sessionId);
     const ended = this.chatTurnEndedAt.get(sessionId);
@@ -1716,14 +1749,13 @@ export class MessagingGatewayService {
         this.options.appLanguage?.() ?? null
       )
     );
-    const line = chatLineForCreditThreshold(
+    const text = line(
       words,
-      mark,
       billing?.upgrades[0]?.url ?? upgradeUrl ?? botUpgradePage("channel"),
       billing
     );
-    if (isOwn) this.deliver(route, line);
-    else this.deliverToSelf(own, line);
+    if (isOwn) this.deliver(route, text);
+    else this.deliverToSelf(own, text);
     return true;
   }
 

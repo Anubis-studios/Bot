@@ -20,6 +20,7 @@ import type {
   CreditThresholdMark,
 } from "../credit-thresholds";
 import type { RoutineListItem, RoutineRun } from "../routines";
+import type { SuccessPitchCard, SuccessPitchMark } from "../success-pitch";
 
 /** Random per main-process start; seqs compare only within one epoch. */
 export type Epoch = string;
@@ -167,6 +168,8 @@ export interface PrefsRow {
   freeLaneChosenAt?: number | null;
   /** Per account (creditAccountKey): the free grant's latest milestone, stamped by main. */
   creditThresholds?: Record<string, CreditThresholdMark>;
+  /** Per account (creditAccountKey): the success pitch owed, stamped by main. */
+  successPitch?: Record<string, SuccessPitchMark>;
   browserHomepage: string | null;
   showLinkPreviews?: boolean;
   /** Absent reads as on. */
@@ -185,6 +188,8 @@ export interface PrefsRow {
     routinesMissedSeenAt: number | null;
     /** Per account: the credit milestone card shown and answered. */
     creditThresholdCards?: Record<string, CreditThresholdCard>;
+    /** Per account: the success pitch shown and answered. */
+    successPitchCards?: Record<string, SuccessPitchCard>;
     freePlanSeenAt: number | null;
     upgradeRoutinesSeenAt: number | null;
   };

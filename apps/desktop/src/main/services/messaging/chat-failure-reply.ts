@@ -10,6 +10,7 @@ import {
   tasksLeft,
 } from "@abacus-ai/contract/credit-thresholds";
 import { providerDisplayName } from "@abacus-ai/contract/settings";
+import { SUCCESS_PITCH_MOMENT_COPY } from "@abacus-ai/contract/success-pitch";
 
 import type { TurnRecord } from "../session/turn-ledger";
 import type { ChannelWords } from "./channel-words";
@@ -342,6 +343,22 @@ export const chatLineForCreditThreshold = (
     words.t("outcome.channel.link", { link }),
   ].join("\n");
 };
+
+/**
+ * The success pitch in the user's own chat app, once ever after they praised
+ * a result: glad it worked, the plan's whole pitch with its price, the link,
+ * and that it will not be said there again.
+ */
+export const chatLineForSuccessPitch = (
+  words: ChannelWords,
+  link: string,
+  billing: BillingPlan | null
+): string =>
+  [
+    words.t(SUCCESS_PITCH_MOMENT_COPY.reaction),
+    ...offerLines(words, { upgradeUrl: link, topUpUrl: link, billing }),
+    words.t("successPitch.chat.once"),
+  ].join("\n");
 
 /**
  * What the user's own chat hears when a turn in someone else's chat failed:

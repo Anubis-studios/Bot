@@ -4570,6 +4570,17 @@
     "upgrade": "Upgrade",
     "continueFree": "Kostenlos weitermachen"
   },
+  "successPitch": {
+    "moment": {
+      "site": "Deine Website ist online und läuft.",
+      "file": "Deine Datei ist fertig.",
+      "reaction": "Schön, dass es geklappt hat."
+    },
+    "line": "Mit {{plan}} bleiben Projekte wie dieses in Bewegung.",
+    "chat": {
+      "once": "Ich spreche das hier nicht noch einmal an."
+    }
+  },
   "kickoff": {
     "connectOne": "Falls die Systemerinnerung {{name}} nicht als verbunden aufführt, rufe zuerst sofort connect_connector dafür auf.",
     "connectMany": "Rufe zuerst sofort connect_connector für jeden von {{names}} auf, den die Systemerinnerung nicht als verbunden aufführt.",

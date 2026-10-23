@@ -524,6 +524,19 @@ describe("the free grant's milestone card", () => {
     ).toBeTruthy();
   });
 
+  it("a plan ask made at checkout (a card's Upgrade) opens on the dialog's wait for the plan", async () => {
+    const open = await dialog({
+      kind: "plan",
+      key: "k3",
+      threadId: "success-pitch",
+      checkout: true,
+    });
+    await waitFor(() =>
+      expect(open.textContent).toContain("Finish checkout in your browser")
+    );
+    expect(screen.getByRole("button", { name: "I've upgraded" })).toBeTruthy();
+  });
+
   it("an expired free tier's dialog says it expired", async () => {
     const open = await dialog({
       kind: "credits",

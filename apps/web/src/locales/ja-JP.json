@@ -4570,6 +4570,17 @@
     "upgrade": "アップグレード",
     "continueFree": "無料で続ける"
   },
+  "successPitch": {
+    "moment": {
+      "site": "サイトが公開され、動いています。",
+      "file": "ファイルの準備ができました。",
+      "reaction": "お役に立ててよかったです。"
+    },
+    "line": "{{plan}} なら、こうしたプロジェクトを続けられます。",
+    "chat": {
+      "once": "この話はここではもうしません。"
+    }
+  },
   "kickoff": {
     "connectOne": "まず、システムリマインダーで{{name}}が接続済みとして表示されていない場合は、今すぐconnect_connectorを呼び出してください。",
     "connectMany": "まず、{{names}}のうちシステムリマインダーで接続済みとして表示されていないものそれぞれについて、今すぐconnect_connectorを呼び出してください。",

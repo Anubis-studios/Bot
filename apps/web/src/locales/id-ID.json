@@ -4570,6 +4570,17 @@
     "upgrade": "Upgrade",
     "continueFree": "Lanjut gratis"
   },
+  "successPitch": {
+    "moment": {
+      "site": "Situsmu sudah aktif dan berjalan.",
+      "file": "Filemu sudah siap.",
+      "reaction": "Senang itu berhasil untukmu."
+    },
+    "line": "Lanjutkan proyek seperti ini dengan {{plan}}.",
+    "chat": {
+      "once": "Aku tidak akan membahas ini lagi di sini."
+    }
+  },
   "kickoff": {
     "connectOne": "Pertama, jika pengingat sistem tidak mencantumkan {{name}} sebagai terhubung, panggil connect_connector untuknya sekarang.",
     "connectMany": "Pertama, panggil connect_connector sekarang untuk setiap {{names}} yang tidak dicantumkan sebagai terhubung oleh pengingat sistem.",

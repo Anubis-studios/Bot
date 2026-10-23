@@ -12,6 +12,7 @@
     "./conflict": "./src/conflict.ts",
     "./contracts": "./src/contracts.ts",
     "./credit-thresholds": "./src/credit-thresholds.ts",
+    "./success-pitch": "./src/success-pitch.ts",
     "./conversation-scope": "./src/conversation-scope.ts",
     "./deliverables": "./src/deliverables.ts",
     "./exec-backends": "./src/exec-backends.ts",

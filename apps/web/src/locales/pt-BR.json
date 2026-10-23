@@ -4570,6 +4570,17 @@
     "upgrade": "Fazer upgrade",
     "continueFree": "Continuar grátis"
   },
+  "successPitch": {
+    "moment": {
+      "site": "Seu site está no ar.",
+      "file": "Seu arquivo está pronto.",
+      "reaction": "Que bom que deu certo."
+    },
+    "line": "Mantenha projetos assim rodando com o {{plan}}.",
+    "chat": {
+      "once": "Não vou mais falar disso por aqui."
+    }
+  },
   "kickoff": {
     "connectOne": "Primeiro, se o lembrete do sistema não listar {{name}} como conectado, chame connect_connector para ele agora.",
     "connectMany": "Primeiro, chame connect_connector agora para cada um de {{names}} que o lembrete do sistema não listar como conectado.",
