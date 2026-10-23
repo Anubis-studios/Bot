@@ -4527,7 +4527,9 @@
       "contactEmpty": "{{name}} kişisine yanıt vermedim: hiçbir yanıt gelmedi. Yanıtlamak için uygulamayı aç veya ne söylememi istediğini bana yaz.",
       "undelivered": "{{name}} kişisine gönderilen bir mesaj iletilemedi.",
       "appClosed": "Ben yanıt veremeden uygulama kapatıldı. Kaldığı yerden devam etmek için tekrar gönder.",
-      "stillWorking": "Hâlâ üzerinde çalışıyorum (şu ana kadar {{minutes}} dk). Bitince buradan yanıt vereceğim."
+      "stillWorking": "Hâlâ üzerinde çalışıyorum (şu ana kadar {{minutes}} dk). Bitince buradan yanıt vereceğim.",
+      "verifyPhone": "{{credits}} ücretsiz krediyi açmak için telefonunu doğrula: {{link}}",
+      "verifyPhoneNoCount": "Ücretsiz kredilerini açmak için telefonunu doğrula: {{link}}"
     },
     "unavailable": {
       "title": {
@@ -4555,6 +4557,12 @@
       "title": "Son ödemenizi doğrulayamadık",
       "body": "Aboneliğiniz etkinse support@abacus.ai ile iletişime geçin. Lütfen tekrar satın almayın.",
       "billing": "Faturalandırmayı aç"
+    },
+    "verifyPhone": {
+      "title": "{{credits}} ücretsiz krediyi açmak için telefonunu doğrula",
+      "titleNoCount": "Ücretsiz kredilerini açmak için telefonunu doğrula",
+      "body": "Tarayıcında bir dakika sürer. Ardından mesajını yeniden gönder.",
+      "cta": "Telefonu doğrula"
     }
   },
   "creditThreshold": {

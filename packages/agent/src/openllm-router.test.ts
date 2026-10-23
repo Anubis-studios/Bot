@@ -194,6 +194,33 @@ describe("a provider that refuses the account", () => {
   });
 });
 
+describe("free credits held until the account verifies a phone", () => {
+  // The exact error a chat-completions call ends on, as the client words it.
+  const VERIFY =
+    '429: {"message":"Verify your phone to unlock 2,000 free credits: https://apps.abacus.ai/bot/link/verify-phone","type":"insufficient_quota","param":null,"code":"insufficient_quota","abacus_error_code":"abacus_credits_not_activated"}';
+
+  it("ends the turn on the first refusal: no other model, no credit wall, nothing sits out", () => {
+    const store = memoryStore();
+    const router = new OpenLlmRouter(() => 1_000, store, memoryQuotaStore());
+
+    const next = router.failed(registry, VERIFY, {
+      provider: "abacus",
+      id: "muse-spark-1.3-contributor",
+    });
+
+    expect(next).toBeNull();
+    expect(router.chain.failure()).toMatchObject({
+      cause: "phone_verification",
+      provider: "abacus",
+    });
+    expect(creditWallActive(1_000)).toBe(false);
+    expect(store.read()).toEqual({});
+    // The next send, once verified, starts on Abacus again.
+    expect(router.pick(registry)?.id).toBe("abacus/muse-spark-1.3-contributor");
+    expect(router.poolShut(registry)).toBe(false);
+  });
+});
+
 describe("a model that merely failed", () => {
   it("sits out on its own and is not returned to this turn", () => {
     pool.models = [

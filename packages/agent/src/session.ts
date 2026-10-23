@@ -1542,6 +1542,7 @@ export class AbacusBotSession {
       failure.cause === "credits_exhausted" ||
       failure.cause === "credits_expired" ||
       failure.cause === "payment_required" ||
+      failure.cause === "phone_verification" ||
       failure.cause === "key_invalid" ||
       isAuthFailure(failure.raw)
     )

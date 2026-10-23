@@ -74,6 +74,8 @@ interface NotificationAction {
   provider?: string;
   /** `continue-free`: the free sources the turn would go on with, in order. */
   providers?: string[];
+  /** `verify-phone` (its page is `link`): the free credits it unlocks, as the server names them. */
+  credits?: string;
   /**
    * `own-key-unavailable`: credit, rate_limit, down or network.
    * `upgrade-abacus`: exhausted or expired (absent reads as exhausted).

@@ -858,3 +858,85 @@ describe("who refused: Abacus's wall, its billing gate, or the user's own key", 
     );
   });
 });
+
+describe("free credits held until the account verifies a phone", () => {
+  const VERIFY =
+    '429: {"message":"Verify your phone to unlock 2,000 free credits: https://apps.abacus.ai/bot/link/verify-phone","type":"insufficient_quota","param":null,"code":"insufficient_quota","abacus_error_code":"abacus_credits_not_activated"}';
+  const pinned = {
+    routed: false,
+    freeLaneProviders: ["gemini", "openrouter"],
+    onFreeLane: false,
+    abacusFreeModels: [{ model: "abacus/free-1", label: "Free One" }],
+    abacus: "out" as const,
+  };
+
+  it("is its own cause, read from the code, and only from Abacus", () => {
+    expect(classifyAttempt(VERIFY, "abacus")).toBe("phone_verification");
+    expect(classifyAttempt(VERIFY, "gemini")).not.toBe("phone_verification");
+  });
+
+  it("offers the verify page and nothing else: no plan, no other model, no free lane", () => {
+    for (const context of [pinned, { ...pinned, routed: true }]) {
+      const chain = new TurnChain();
+      chain.failed("429 Too Many Requests", "openrouter");
+      chain.failed(VERIFY, "abacus");
+      const shown = presentFailure(chain.failure()!, context);
+      expect(shown.cause).toBe("phone_verification");
+      expect(shown.actions).toEqual([
+        {
+          type: "verify-phone",
+          link: "https://apps.abacus.ai/bot/link/verify-phone",
+          credits: "2,000",
+        },
+      ]);
+      expect(shown.message).toBe(
+        "Verify your phone to unlock 2,000 free credits. Verify it once at https://apps.abacus.ai/bot/link/verify-phone, then send your message again."
+      );
+    }
+    // Chosen free lane or not, the wall's card never stands in for it.
+    const lane = presentFailure(
+      { cause: "phone_verification", provider: "abacus", raw: VERIFY },
+      { ...pinned, routed: true, onFreeLane: true }
+    );
+    expect(lane.actions?.[0]?.type).toBe("verify-phone");
+  });
+
+  it("takes the page from the refusal, but only an Abacus page", () => {
+    const at = (url: string) =>
+      presentFailure(
+        {
+          cause: "phone_verification",
+          provider: "abacus",
+          raw: VERIFY.replace(
+            "https://apps.abacus.ai/bot/link/verify-phone",
+            url
+          ),
+        },
+        pinned
+      ).actions?.[0]?.link;
+    expect(at("https://staging-apps.abacus.ai/bot/link/verify-phone")).toBe(
+      "https://staging-apps.abacus.ai/bot/link/verify-phone"
+    );
+    expect(at("https://example.test/verify-phone")).toBe(
+      "https://apps.abacus.ai/bot/link/verify-phone"
+    );
+    const bare = presentFailure(
+      {
+        cause: "phone_verification",
+        provider: "abacus",
+        raw: '429: {"message":"Free credits are on hold.","abacus_error_code":"abacus_credits_not_activated"}',
+      },
+      pinned
+    );
+    expect(bare.actions).toEqual([
+      {
+        type: "verify-phone",
+        link: "https://apps.abacus.ai/bot/link/verify-phone",
+      },
+    ]);
+  });
+
+  it("is never waited out as a busy provider", () => {
+    expect(isBusyCause(VERIFY, "abacus")).toBe(false);
+  });
+});

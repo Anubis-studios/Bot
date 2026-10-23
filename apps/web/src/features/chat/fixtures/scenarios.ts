@@ -382,6 +382,20 @@ const OUTCOME_ERRORS: Record<
       { type: "switch-model" },
     ],
   },
+  "verify-phone": {
+    message:
+      "Verify your phone to unlock 2,000 free credits. Verify it once at https://apps.abacus.ai/bot/link/verify-phone, then send your message again.",
+    cause: "phone_verification",
+    detail:
+      "429: Verify your phone to unlock 2,000 free credits: https://apps.abacus.ai/bot/link/verify-phone",
+    actions: [
+      {
+        type: "verify-phone",
+        link: "https://apps.abacus.ai/bot/link/verify-phone",
+        credits: "2,000",
+      },
+    ],
+  },
 };
 
 const sessionOutcome = (kind: string) => (): RelayEvent[] =>

@@ -1707,6 +1707,8 @@
       "someone",
       "payment",
       "paymentLapsed",
+      "verifyPhone",
+      "verifyPhoneNoCount",
       "timedOut",
       "agentExited",
       "empty",

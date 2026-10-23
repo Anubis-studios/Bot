@@ -4527,7 +4527,9 @@
       "contactEmpty": "Non ho risposto a {{name}}: non è arrivata nessuna risposta. Apri l'app per rispondergli, oppure dimmi cosa scrivere.",
       "undelivered": "Non è stato possibile consegnare un messaggio a {{name}}.",
       "appClosed": "L'app è stata chiusa prima che potessi rispondere. Rimandalo per riprendere.",
-      "stillWorking": "Ci sto ancora lavorando ({{minutes}} min finora). Ti rispondo qui quando è pronto."
+      "stillWorking": "Ci sto ancora lavorando ({{minutes}} min finora). Ti rispondo qui quando è pronto.",
+      "verifyPhone": "Verifica il tuo telefono per sbloccare {{credits}} crediti gratuiti: {{link}}",
+      "verifyPhoneNoCount": "Verifica il tuo telefono per sbloccare i tuoi crediti gratuiti: {{link}}"
     },
     "unavailable": {
       "title": {
@@ -4555,6 +4557,12 @@
       "title": "Non siamo riusciti a confermare il tuo ultimo pagamento",
       "body": "Se il tuo abbonamento è attivo, contatta support@abacus.ai. Non acquistare di nuovo.",
       "billing": "Apri fatturazione"
+    },
+    "verifyPhone": {
+      "title": "Verifica il tuo telefono per sbloccare {{credits}} crediti gratuiti",
+      "titleNoCount": "Verifica il tuo telefono per sbloccare i tuoi crediti gratuiti",
+      "body": "Ci vuole un minuto nel browser. Poi invia di nuovo il tuo messaggio.",
+      "cta": "Verifica telefono"
     }
   },
   "creditThreshold": {
