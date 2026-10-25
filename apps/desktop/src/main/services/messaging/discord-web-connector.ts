@@ -74,11 +74,11 @@ const isCertError = (code: number): boolean => code <= -200 && code > -300;
 
 const NOT_SIGNED_IN = "Discord is not signed in. Sign in to connect.";
 const STUCK_LOADING =
-  "Discord did not finish loading. Open Discord to sign in again.";
+  "Discord did not finish loading. Click Connect to try again.";
 const UNREACHABLE =
-  "Discord could not be reached. Check your connection, then open Discord to try again.";
+  "Discord could not be reached. Check your connection, then click Connect.";
 const CERT_BLOCKED =
-  "Discord's secure connection failed, so it may be blocked on this network. Open Discord to try again.";
+  "Discord's secure connection failed, so it may be blocked on this network. Click Connect to try again.";
 
 /** How many servers the post-connect crawl visits, and channels kept each. */
 const MAX_GUILDS = 50;
