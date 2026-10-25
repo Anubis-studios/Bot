@@ -21,6 +21,8 @@ import { environmentNoticeService } from "../providers/environment-notice-servic
 type StoredPlatform = {
   enabled?: boolean;
   values?: Record<string, string>;
+  /** A web-login platform's last sign-in verdict; absent until first seen. */
+  signedIn?: boolean;
 };
 
 type StoredConfig = {
@@ -181,6 +183,24 @@ export const setPlatformEnabled = (
   // A conversation in progress was told what connectors it has. Pairing changes
   // deliberately do not mark: they are traffic, not a connector-list change.
   environmentNoticeService.markChanged();
+};
+
+/** Null when never recorded, e.g. an install from before the record. */
+export const readPlatformSignedIn = (
+  platformId: MessagingPlatformId
+): boolean | null => {
+  const signedIn = readConfig().platforms?.[platformId]?.signedIn;
+  return typeof signedIn === "boolean" ? signedIn : null;
+};
+
+export const savePlatformSignedIn = (
+  platformId: MessagingPlatformId,
+  signedIn: boolean
+): void => {
+  const config = readConfig();
+  const platforms = { ...config.platforms };
+  platforms[platformId] = { ...platforms[platformId], signedIn };
+  writeConfig({ ...config, platforms });
 };
 
 /**
