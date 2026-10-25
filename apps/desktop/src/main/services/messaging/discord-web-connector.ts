@@ -20,6 +20,10 @@ import {
   runPageScript,
   setFileInput,
 } from "./connector";
+import {
+  readPlatformSignedIn,
+  savePlatformSignedIn,
+} from "./messaging-config-service";
 
 /**
  * Discord, by driving the real discord.com web app in a hidden BrowserWindow
@@ -53,6 +57,25 @@ const INBOUND_POLL_MS = 5000;
 
 /** Login polls stuck on the boot spinner before the page is reloaded. */
 const STUCK_BOOT_POLLS = 20;
+/**
+ * Reloads in a row that still find neither sign-in nor login form before the
+ * checks stop until the user opens Discord. Unbounded, a page that can never
+ * load (blocked network, a challenge page) reloaded every 30s for good.
+ */
+const MAX_STUCK_RELOADS = 3;
+
+/** Chromium's net error for a navigation we replaced or refused ourselves. */
+const NET_ERR_ABORTED = -3;
+/** Chromium's certificate errors: -200 to -299. */
+const isCertError = (code: number): boolean => code <= -200 && code > -300;
+
+const NOT_SIGNED_IN = "Discord is not signed in. Sign in to connect.";
+const STUCK_LOADING =
+  "Discord did not finish loading. Open Discord to sign in again.";
+const UNREACHABLE =
+  "Discord could not be reached. Check your connection, then open Discord to try again.";
+const CERT_BLOCKED =
+  "Discord's secure connection failed, so it may be blocked on this network. Open Discord to try again.";
 
 /** How many servers the post-connect crawl visits, and channels kept each. */
 const MAX_GUILDS = 50;
@@ -118,6 +141,15 @@ export class DiscordWebConnector implements MessagingConnector {
   private signedOutTicks = 0;
   /** Consecutive polls stuck between login form and app. See checkLogin. */
   private bootStuckTicks = 0;
+  /** Stuck-page reloads since the last sign-in or user retry. */
+  private stuckReloads = 0;
+  /**
+   * No page and no checks until the user opens Discord (resume): never
+   * signed in here, out of reloads, or the page could not load at all.
+   */
+  private parked = false;
+  /** The stored sign-in verdict, so a poll writes it on change only. */
+  private signedInRecord: boolean | null = null;
   private readonly loginPoll = new PollScheduler(
     () => this.checkLogin(),
     LOGIN_POLL_MS,
@@ -199,8 +231,20 @@ export class DiscordWebConnector implements MessagingConnector {
   async start(): Promise<void> {
     if (this.running) return;
     this.running = true;
-    this.callbacks.onState("connecting");
+    this.parked = false;
+    this.stuckReloads = 0;
+    this.signedInRecord = readPlatformSignedIn(this.id);
 
+    // Signed out last time: a hidden page has nothing to find, so none is
+    // loaded until the user opens Discord. Never recorded (an install from
+    // before the record) loads as it always did.
+    if (this.signedInRecord === false) {
+      this.callbacks.onLog("discord-web: not signed in, waiting for the user");
+      this.park("needs_login", NOT_SIGNED_IN);
+      return;
+    }
+
+    this.callbacks.onState("connecting");
     // Hidden: the connect dialog reveals the window when a login form is up.
     this.window = this.buildWindow(false);
     try {
@@ -211,13 +255,15 @@ export class DiscordWebConnector implements MessagingConnector {
       );
     }
 
-    if (!this.running) return;
+    // A load that failed outright parked the lane (see onLoadFailed).
+    if (!this.running || this.parked) return;
     this.pollLogin();
     void this.checkLogin();
   }
 
   async stop(): Promise<void> {
     this.running = false;
+    this.parked = false;
     this.loggedIn = false;
     this.railReads = 0;
     this.contactsRead = false;
@@ -740,6 +786,54 @@ export class DiscordWebConnector implements MessagingConnector {
     this.loginPoll.start();
   }
 
+  /**
+   * Stop checking and drop the page until the user opens Discord. The state
+   * is one the gateway leaves alone (`needs_login`) or restarts only on the
+   * user's next connect (`error`), so nothing loads the page again by itself.
+   */
+  private park(state: "needs_login" | "error", message: string): void {
+    this.parked = true;
+    this.bootStuckTicks = 0;
+    this.loginPoll.stop();
+    const win = this.window;
+    this.window = null;
+    if (win != null && !win.isDestroyed()) win.destroy();
+    this.callbacks.onState(state, message);
+  }
+
+  /**
+   * The user opened Discord (its login, or a link page): a fresh start for
+   * the checks. A parked lane gets its page back via ensureWindow.
+   */
+  private resume(): void {
+    this.stuckReloads = 0;
+    this.bootStuckTicks = 0;
+    if (!this.running || !this.parked) return;
+    this.parked = false;
+    this.callbacks.onLog("discord-web: opened by the user, checking again");
+    this.callbacks.onState("connecting");
+    this.pollLogin();
+  }
+
+  private recordSignedIn(signedIn: boolean): void {
+    if (this.signedInRecord === signedIn) return;
+    this.signedInRecord = signedIn;
+    savePlatformSignedIn(this.id, signedIn);
+  }
+
+  /**
+   * The page itself could not load: a certificate or network failure that a
+   * reload would only repeat. Only before sign-in; a signed-in session keeps
+   * its own handling, where a navigation can fail mid-use and come back.
+   */
+  private onLoadFailed(code: number, description: string): void {
+    if (!this.running || this.parked || this.loggedIn) return;
+    this.callbacks.onLog(
+      `discord-web: page failed to load (${code} ${description}), waiting for the user`
+    );
+    this.park("error", isCertError(code) ? CERT_BLOCKED : UNREACHABLE);
+  }
+
   private logFailure(what: string, error: unknown): void {
     this.callbacks.onLog(
       `discord-web: ${what} failed: ${String((error as Error)?.message ?? error)}`
@@ -748,7 +842,8 @@ export class DiscordWebConnector implements MessagingConnector {
 
   /** See MessagingConnector.probeLive: one login check, now, then the answer. */
   async probeLive(): Promise<boolean> {
-    if (!this.running) return false;
+    // A parked lane has no page, and a probe must not load one.
+    if (!this.running || this.parked) return false;
     try {
       await this.checkLogin();
     } catch {
@@ -758,17 +853,19 @@ export class DiscordWebConnector implements MessagingConnector {
   }
 
   private async checkLogin(): Promise<void> {
-    if (!this.running) return;
+    if (!this.running || this.parked) return;
     // A page mid-navigation reads as neither logged in nor out.
     if (this.driving > 0) return;
     const state = await this.run<LoginState>(LOGIN_STATE_SCRIPT, {});
-    if (state == null) return;
+    if (state == null || this.parked) return;
 
     if (state.loggedIn) this.signedOutTicks = 0;
     if (state.loggedIn || state.loginVisible === true) this.bootStuckTicks = 0;
 
     if (state.loggedIn && !this.loggedIn) {
       this.loggedIn = true;
+      this.stuckReloads = 0;
+      this.recordSignedIn(true);
       const win = this.window;
       if (win != null && !win.isDestroyed() && win.isVisible()) {
         win.hide();
@@ -790,20 +887,29 @@ export class DiscordWebConnector implements MessagingConnector {
 
     // A login form is a wait on a human, not a failure: `needs_login` keeps
     // the gateway from restarting us. Only the connect dialog shows the window.
+    // Watching it reloads nothing; recorded so the next launch skips the page.
     if (!state.loggedIn && !this.loggedIn && state.loginVisible === true) {
-      this.callbacks.onState(
-        "needs_login",
-        "Discord is not signed in. Sign in to connect."
-      );
+      this.stuckReloads = 0;
+      this.recordSignedIn(false);
+      this.callbacks.onState("needs_login", NOT_SIGNED_IN);
       return;
     }
 
     // Neither login form nor app: Discord's boot spinner, which can wedge
     // indefinitely; a reload with the session in the partition comes back in.
+    // A few reloads, then the user's call: one that never loads would loop.
     if (!state.loggedIn && !this.loggedIn) {
       this.bootStuckTicks += 1;
       if (this.bootStuckTicks >= STUCK_BOOT_POLLS) {
         this.bootStuckTicks = 0;
+        if (this.stuckReloads >= MAX_STUCK_RELOADS) {
+          this.callbacks.onLog(
+            `discord-web: still not loaded after ${MAX_STUCK_RELOADS} reloads, waiting for the user`
+          );
+          this.park("needs_login", STUCK_LOADING);
+          return;
+        }
+        this.stuckReloads += 1;
         this.callbacks.onLog(
           "discord-web: stuck on the boot spinner, reloading the page"
         );
@@ -835,6 +941,7 @@ export class DiscordWebConnector implements MessagingConnector {
 
   /** Bring the login window back to the front (re-scan, or first login). */
   showLoginWindow(): void {
+    this.resume();
     const win = this.ensureWindow();
     if (win == null) return;
     presentAsDialog(win);
@@ -856,6 +963,7 @@ export class DiscordWebConnector implements MessagingConnector {
    */
   present(url: string, capturePrefix?: string): Promise<string | null> {
     return this.serialize(async () => {
+      this.resume();
       const win = this.ensureWindow();
       if (win == null) return null;
       const captured = await new Promise<string | null>((resolve) => {
@@ -1230,14 +1338,26 @@ export class DiscordWebConnector implements MessagingConnector {
     if (process.platform !== "darwin") win.removeMenu();
     dismissOnEscape(win);
     win.on("closed", () => {
-      this.window = null;
+      if (this.window === win) this.window = null;
+    });
+    win.webContents.on(
+      "did-fail-load",
+      (_event, code, description, _url, isMainFrame) => {
+        if (!isMainFrame || code === NET_ERR_ABORTED) return;
+        if (this.window === win) this.onLoadFailed(code, description);
+      }
+    );
+    // Chromium refuses the certificate on its own; this only reads the verdict.
+    win.webContents.on("certificate-error", (_event, url, error) => {
+      if (this.window !== win || !url.startsWith(`${DISCORD_ORIGIN}/`)) return;
+      this.onLoadFailed(-200, error);
     });
     return win;
   }
 
   private ensureWindow(): BrowserWindow | null {
     if (this.window != null && !this.window.isDestroyed()) return this.window;
-    if (!this.running) return null;
+    if (!this.running || this.parked) return null;
     // Hidden even when logged out; showLoginWindow reveals it explicitly.
     const win = this.buildWindow(false);
     void win.loadURL(DISCORD_WEB_URL, { userAgent: userAgent() });
