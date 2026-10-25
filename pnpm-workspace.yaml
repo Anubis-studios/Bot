@@ -54,10 +54,11 @@ overrides:
   tinypool: ^2.1.2
   "@modelcontextprotocol/sdk": ^1.31.0
   # Keep each dependency on its existing major while fixing the October 2026
-  # HTTP-parser and brace-expansion denial-of-service advisories.
-  "undici@^6": ^6.28.1
-  "undici@^7": ^7.29.1
-  "undici@^8": ^8.10.2
+  # HTTP-parser and brace-expansion denial-of-service advisories, and the
+  # excessive content-encodings one (GHSA-xjj6-f33q-929c).
+  "undici@^6": ^6.29.1
+  "undici@^7": ^7.30.1
+  "undici@^8": ^8.12.2
   "brace-expansion@^1": ^1.1.21
   "brace-expansion@^2": ^2.1.7
   "brace-expansion@^5": ^5.0.12
@@ -77,9 +78,15 @@ overrides:
   # under electron-builder), each major on a release with WebSocket DoS, TLS
   # option-drop and cache-poisoning advisories (GHSA-rfgv-xxqx-mfg5,
   # GHSA-w293-vg96-wgc3, GHSA-vp8m-p9jh-q5pm).
-  "undici@6": ^6.28.1
-  "undici@7": ^7.29.1
-  "undici@8": ^8.10.2
+  "undici@6": ^6.29.1
+  "undici@7": ^7.30.1
+  "undici@8": ^8.12.2
+  # The MCP SDK's express server (local connector auth callbacks): trailing bytes
+  # after a compressed body (GHSA-27r3-jxmh-p828).
+  "body-parser@2": ^2.4.0
+  # zod 4 (lint tooling and the MCP SDK): oversized constrained collections
+  # exhaust memory (GHSA-mrhx-c7xc-m3w5).
+  "zod@4": ^4.6.6
   # minimatch's brace expander, packaging and test tooling only: stack
   # exhaustion on nested groups (GHSA-qhr7-859c-m2p7, GHSA-6j4f-fj2g-mc7p).
   "brace-expansion@1": ^1.1.21
