@@ -53,11 +53,16 @@ const TARGETS = {
         "The defence is the one described for GHSA-jmr9-qjv8-65gv above, and " +
         "2.0.2 is still the newest release that does not exist. Delete when " +
         "extract-zip >=2.0.2 ships.",
-      "GHSA-vfj7-8cjw-p6xm":
-        "braces <=3.0.3 via ultracite's fast-glob: stack exhaustion on deeply " +
-        "nested brace patterns. The patterns come from this repository's own " +
-        "lint and workspace configuration, never from user input, and nothing " +
-        "shipped depends on braces. Delete when a patched braces ships.",
+      // https://github.com/advisories/GHSA-mrhx-c7xc-m3w5: zod 4 is pinned
+      // to the patched 4.6.6 in `overrides`; zod 3 has no patched release.
+      "GHSA-mrhx-c7xc-m3w5":
+        "zod 3.25.76 (the desktop's own pin, the MCP SDK, @tanstack/ai and " +
+        "sandbox-runtime): an array schema collects one issue per failing " +
+        "element, so a huge invalid array can exhaust memory. Its inputs are " +
+        "our own server's responses, local IPC and files, and the MCP servers " +
+        "the user added; the worst case is one of those crashing the app it " +
+        "was added to. Delete when the desktop moves to zod 4 or zod 3 ships " +
+        "a patched release.",
     },
   },
 };
