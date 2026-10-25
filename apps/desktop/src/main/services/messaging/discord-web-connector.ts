@@ -1,5 +1,5 @@
 import type { MessagingPlatformId } from "@abacus-ai/contract/messaging";
-import { BrowserWindow } from "electron";
+import { BrowserWindow, net } from "electron";
 
 import {
   bringToFront,
@@ -63,6 +63,9 @@ const STUCK_BOOT_POLLS = 20;
  * load (blocked network, a challenge page) reloaded every 30s for good.
  */
 const MAX_STUCK_RELOADS = 3;
+
+/** How often a lane parked offline checks whether the network is back. */
+const ONLINE_CHECK_MS = 10_000;
 
 /** Chromium's net error for a navigation we replaced or refused ourselves. */
 const NET_ERR_ABORTED = -3;
@@ -150,6 +153,8 @@ export class DiscordWebConnector implements MessagingConnector {
   private parked = false;
   /** The stored sign-in verdict, so a poll writes it on change only. */
   private signedInRecord: boolean | null = null;
+  /** Set while a lane parked offline waits to try once more on reconnect. */
+  private onlineCheck: ReturnType<typeof setInterval> | null = null;
   private readonly loginPoll = new PollScheduler(
     () => this.checkLogin(),
     LOGIN_POLL_MS,
@@ -264,6 +269,7 @@ export class DiscordWebConnector implements MessagingConnector {
   async stop(): Promise<void> {
     this.running = false;
     this.parked = false;
+    this.stopOnlineCheck();
     this.loggedIn = false;
     this.railReads = 0;
     this.contactsRead = false;
@@ -808,6 +814,7 @@ export class DiscordWebConnector implements MessagingConnector {
   private resume(): void {
     this.stuckReloads = 0;
     this.bootStuckTicks = 0;
+    this.stopOnlineCheck();
     if (!this.running || !this.parked) return;
     this.parked = false;
     this.callbacks.onLog("discord-web: opened by the user, checking again");
@@ -831,7 +838,32 @@ export class DiscordWebConnector implements MessagingConnector {
     this.callbacks.onLog(
       `discord-web: page failed to load (${code} ${description}), waiting for the user`
     );
-    this.park("error", isCertError(code) ? CERT_BLOCKED : UNREACHABLE);
+    if (isCertError(code)) {
+      this.park("error", CERT_BLOCKED);
+      return;
+    }
+    this.park("error", UNREACHABLE);
+    // Started before the network was up (a login item at boot): one more try
+    // once it is. Online already means the site itself is unreachable.
+    if (!net.isOnline()) this.retryWhenOnline();
+  }
+
+  private retryWhenOnline(): void {
+    this.stopOnlineCheck();
+    this.onlineCheck = setInterval(() => {
+      if (!net.isOnline()) return;
+      this.stopOnlineCheck();
+      if (!this.running || !this.parked) return;
+      this.callbacks.onLog("discord-web: back online, loading the page again");
+      this.resume();
+      this.ensureWindow();
+    }, ONLINE_CHECK_MS);
+  }
+
+  private stopOnlineCheck(): void {
+    if (this.onlineCheck == null) return;
+    clearInterval(this.onlineCheck);
+    this.onlineCheck = null;
   }
 
   private logFailure(what: string, error: unknown): void {
