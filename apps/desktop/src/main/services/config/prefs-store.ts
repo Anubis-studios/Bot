@@ -109,7 +109,8 @@ const DEFAULTS: PrefsValues = {
     allowTwoTabRows: false,
     custom: null,
   },
-  // Spec 06 §23.5 b (`haptics` is revisited by R6-T31).
+  // Spec 06 §23.5 b (`haptics` is revisited by R6-T31). `enabled` is the
+  // base default; PrefsStore takes this machine's (notchOnByDefault).
   notch: {
     enabled: true,
     haptics: true,
@@ -125,6 +126,26 @@ const DEFAULTS: PrefsValues = {
 
 /** What a field is before anyone sets it. Mirrors the old renderer's defaults. */
 export const PREFS_DEFAULTS: Readonly<PrefsValues> = Object.freeze(DEFAULTS);
+
+const NOTCH_MIN_MEMORY_BYTES = 8 * 1024 ** 3;
+
+/**
+ * The notch is a second always-on-top renderer. It starts off on Windows and
+ * on machines with 8 GB of memory or less; a user's own choice always wins.
+ */
+export const notchOnByDefault = (
+  platform: string,
+  totalMemoryBytes: number
+): boolean => platform !== "win32" && totalMemoryBytes > NOTCH_MIN_MEMORY_BYTES;
+
+/**
+ * Leaves whose stored value is ignored until someone sets them, so they follow
+ * the current default without rewriting prefs.
+ */
+const UNTOUCHED_FOLLOWS_DEFAULT = new Set<PrefsLeaf>([
+  "appearance.accent",
+  "notch.enabled",
+]);
 
 export const PREFS_FIELDS = Object.keys(PREFS_DEFAULTS) as PrefsField[];
 
@@ -206,9 +227,10 @@ export const prefsFile = (): string => path.join(abacusBotHome(), "prefs.json");
 
 const clone = <T>(value: T): T => structuredClone(value);
 
-const defaultRow = (): PrefsRow => ({
+const defaultRow = (notchEnabled: boolean): PrefsRow => ({
   id: "app",
   ...clone(PREFS_DEFAULTS as PrefsValues),
+  notch: { ...PREFS_DEFAULTS.notch, enabled: notchEnabled },
   updatedAt: EPOCH_ISO,
 });
 
@@ -226,11 +248,14 @@ export interface PrefsStoreOptions {
   /** Null keeps everything in memory (tests, fakes). */
   file?: string | null;
   now?: () => Date;
+  /** This machine's `notch.enabled` default (notchOnByDefault); true if unset. */
+  notchEnabled?: boolean;
 }
 
 export class PrefsStore {
   readonly #file: string | null;
   readonly #now: () => Date;
+  readonly #notchEnabled: boolean;
   readonly #listeners = new Set<PrefsChangeListener>();
   #row: PrefsRow | null = null;
   #provenance: PrefsProvenanceMap = defaultProvenance();
@@ -238,6 +263,7 @@ export class PrefsStore {
   constructor(options: PrefsStoreOptions = {}) {
     this.#file = options.file === undefined ? prefsFile() : options.file;
     this.#now = options.now ?? (() => new Date());
+    this.#notchEnabled = options.notchEnabled ?? true;
   }
 
   /** The row; defaults on first read when no file exists yet. */
@@ -291,7 +317,7 @@ export class PrefsStore {
    */
   resetLegacy(fields: readonly PrefsField[]): PrefsField[] {
     this.#load();
-    const defaults = defaultRow();
+    const defaults = defaultRow(this.#notchEnabled);
     const leaves: [PrefsLeaf, unknown][] = [];
     const reset: PrefsField[] = [];
     for (const field of fields) {
@@ -353,7 +379,7 @@ export class PrefsStore {
 
   #load(): PrefsRow {
     if (this.#row != null) return this.#row;
-    const row = defaultRow();
+    const row = defaultRow(this.#notchEnabled);
     const provenance = defaultProvenance();
     const stored = this.#read();
     if (stored != null) {
@@ -368,9 +394,9 @@ export class PrefsStore {
         // A leaf's own mark, else its group's (the per-field format).
         const mark =
           storedProvenance[leaf] ?? storedProvenance[leaf.split(".")[0]!];
-        // An untouched accent follows today's default without rewriting prefs.
-        // Explicit neutral (null) and all user/legacy colors remain unchanged.
-        if (leaf === "appearance.accent" && mark === "default") continue;
+        // An untouched accent or notch follows today's default; anything the
+        // user (or the old renderer) set is kept, even when it equals it.
+        if (UNTOUCHED_FOLLOWS_DEFAULT.has(leaf) && mark === "default") continue;
         setLeaf(row, leaf, value);
         if (mark === "legacy" || mark === "user") provenance[leaf] = mark;
       }

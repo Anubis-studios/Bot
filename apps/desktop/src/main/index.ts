@@ -117,7 +117,11 @@ import {
   setNativeLanguage,
 } from "./services/config/native-language";
 import { notificationSilent } from "./services/config/notification-policy";
-import { PrefsStore, prefsFile } from "./services/config/prefs-store";
+import {
+  notchOnByDefault,
+  PrefsStore,
+  prefsFile,
+} from "./services/config/prefs-store";
 import {
   readNotificationSettings,
   readLegacySoundOptOut,
@@ -518,13 +522,16 @@ const windowLifecycle = mainWindowLifecycle({
 });
 export const recreateMainWindow = windowLifecycle.recreateMainWindow;
 
+// The notch starts off on Windows and low-memory machines (notchOnByDefault).
+const notchDefault = notchOnByDefault(process.platform, os.totalmem());
+
 /**
  * `~/.abacusai-bot/prefs.json`, the new renderer's prefs row (spec 00 B.2).
  * Read before the window exists for the startup theme; served as `db.prefs`.
  * Nothing reads it before the migrations; if they leave `prefs.json` held by
  * an unresolved commit, it is replaced by one over a session-only copy.
  */
-let prefsStore = new PrefsStore();
+let prefsStore = new PrefsStore({ notchEnabled: notchDefault });
 // Read late: the store is replaced once the migrations settle.
 workspaceServiceHost.attachPrefs(() => prefsStore);
 
@@ -1761,7 +1768,10 @@ app
       beforeInitialize: () => {
         const sessionPrefs = prefsFileAfterMigrations(prefsFile());
         if (sessionPrefs !== prefsFile())
-          prefsStore = new PrefsStore({ file: sessionPrefs });
+          prefsStore = new PrefsStore({
+            file: sessionPrefs,
+            notchEnabled: notchDefault,
+          });
       },
       afterInitialize: () => {
         // A profile relaunch lands here already signed in, so the sign-in handler
