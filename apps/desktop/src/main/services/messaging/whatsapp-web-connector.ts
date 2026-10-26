@@ -28,6 +28,10 @@ import {
   setFileInput,
 } from "./connector";
 import {
+  readPlatformSignedIn,
+  savePlatformSignedIn,
+} from "./messaging-config-service";
+import {
   type BridgeChat,
   type BridgeMessage,
   type BridgeRead,
@@ -86,6 +90,30 @@ const RELOADED = "after WhatsApp Web reloaded";
 const RELINK_ATTACH_TRIES = 3;
 /** How often the page driver tries the bridge again. */
 const BRIDGE_RETRY_MS = 10 * 60_000;
+/**
+ * Reloads in a row that still show neither the chat list nor the QR before the
+ * lane waits on the user. Unbounded, a page that never came back (blocked
+ * network, a wedged boot) reloaded every couple of minutes for days.
+ */
+const MAX_STUCK_RELOADS = 3;
+/** QR polls in a row before the page is believed signed out (as after a link). */
+const QR_BELIEVED_POLLS = 4;
+/** How often a lane parked offline checks whether the network is back. */
+const ONLINE_CHECK_MS = 10_000;
+
+/** Chromium's net error for a navigation we replaced or refused ourselves. */
+const NET_ERR_ABORTED = -3;
+/** Chromium's certificate errors: -200 to -299. */
+const isCertError = (code: number): boolean => code <= -200 && code > -300;
+
+const NOT_LINKED =
+  "WhatsApp is not linked. Click Connect, then scan the QR from your phone (Settings → Linked devices).";
+const STUCK_LOADING =
+  "WhatsApp Web did not finish loading. Click Connect to try again.";
+const UNREACHABLE =
+  "WhatsApp Web could not be reached. Check your connection, then click Connect.";
+const CERT_BLOCKED =
+  "WhatsApp Web's secure connection failed, so it may be blocked on this network. Click Connect to try again.";
 
 /**
  * Whether the page can be used right now. `reconnecting`: the bridge or the
@@ -93,7 +121,12 @@ const BRIDGE_RETRY_MS = 10 * 60_000;
  * `needs_relink`: the phone unlinked this device; `offline`: no network.
  */
 type LinkState = "connected" | "reconnecting" | "needs_relink" | "offline";
-type RelinkOutcome = "connected" | "retry" | "needs_relink" | "offline";
+type RelinkOutcome =
+  | "connected"
+  | "retry"
+  | "needs_relink"
+  | "offline"
+  | "stuck";
 
 type LoginState = { loggedIn: boolean; loginVisible?: boolean };
 
@@ -112,6 +145,22 @@ export class WhatsAppWebConnector implements MessagingConnector {
   private selfLookupDone = false;
   /** Whether this link has told the gateway which chat is the user's own. */
   private selfLinkedAnnounced = false;
+  /** Consecutive QR polls before a link; see QR_BELIEVED_POLLS. */
+  private qrTicks = 0;
+  /** Stuck-page reloads since the page last showed the chat list or the QR. */
+  private stuckReloads = 0;
+  /** What the last load since a reload failed on, for the parked note. */
+  private loadFailure: "cert" | "network" | null = null;
+  /**
+   * No page and no checks until the user clicks Connect (resume): signed out
+   * last time, out of reloads, or the page could not load at all. The note
+   * is what the pane shows and what a call fails with.
+   */
+  private parkedNote: string | null = null;
+  /** The stored sign-in verdict, so a poll writes it on change only. */
+  private signedInRecord: boolean | null = null;
+  /** Set while a lane parked offline waits to try once more on reconnect. */
+  private onlineCheck: ReturnType<typeof setInterval> | null = null;
   private readonly loginPoll = new PollScheduler(
     () => this.checkLogin(),
     LOGIN_POLL_MS,
@@ -203,11 +252,10 @@ export class WhatsAppWebConnector implements MessagingConnector {
   async start(): Promise<void> {
     if (this.running) return;
     this.running = true;
-    this.callbacks.onState("connecting");
-
-    // Hidden: launching the app must never throw WhatsApp Web in the user's
-    // face. The connect dialog reveals it when a login screen is on it.
-    this.window = this.buildWindow(false);
+    this.parkedNote = null;
+    this.stuckReloads = 0;
+    this.qrTicks = 0;
+    this.signedInRecord = readPlatformSignedIn(this.id);
     this.bridge = new WhatsAppBridge({
       run: (script, args) => this.run(script, args),
       raw: async (code) => {
@@ -217,6 +265,21 @@ export class WhatsAppWebConnector implements MessagingConnector {
       },
       log: (line) => this.callbacks.onLog(line),
     });
+    this.watchPower();
+
+    // Signed out last time: a hidden QR has nobody to scan it, so no page is
+    // loaded until the user clicks Connect. Never recorded (an install from
+    // before the record) loads as it always did.
+    if (this.signedInRecord === false) {
+      this.callbacks.onLog("whatsapp-web: not linked, waiting for the user");
+      this.park("needs_login", NOT_LINKED);
+      return;
+    }
+
+    this.callbacks.onState("connecting");
+    // Hidden: launching the app must never throw WhatsApp Web in the user's
+    // face. The connect dialog reveals it when a login screen is on it.
+    this.window = this.buildWindow(false);
     try {
       await this.window.loadURL(WHATSAPP_WEB_URL, { userAgent: userAgent() });
     } catch (error) {
@@ -225,14 +288,16 @@ export class WhatsAppWebConnector implements MessagingConnector {
       );
     }
 
-    if (!this.running) return;
-    this.watchPower();
+    // A load that failed outright parked the lane (see onLoadFailed).
+    if (!this.running || this.parkedNote != null) return;
     this.pollLogin();
     void this.checkLogin();
   }
 
   async stop(): Promise<void> {
     this.running = false;
+    this.parkedNote = null;
+    this.stopOnlineCheck();
     this.loggedIn = false;
     this.bridgeReady = false;
     this.bridge = null;
@@ -286,7 +351,13 @@ export class WhatsAppWebConnector implements MessagingConnector {
    * bounded backoff, the polls paused meanwhile. Never per sweep.
    */
   private relink(cause: string): void {
-    if (!this.running || !this.loggedIn || this.link === "needs_relink") return;
+    if (
+      !this.running ||
+      !this.loggedIn ||
+      this.parkedNote != null ||
+      this.link === "needs_relink"
+    )
+      return;
     if (this.link === "connected") {
       this.link = "reconnecting";
       this.linkCause = cause;
@@ -309,7 +380,8 @@ export class WhatsAppWebConnector implements MessagingConnector {
   }
 
   /** One try: wait out a booting page, reload one that stays blank or lost
-   * the bridge again, then attach. */
+   * the bridge again, then attach. A page still blank after a few reloads
+   * waits on the user: one that never loads would reload for good. */
   private async relinkOnce(): Promise<RelinkOutcome> {
     if (!this.running || !this.loggedIn) return "connected";
     this.relinkAttempts += 1;
@@ -318,9 +390,15 @@ export class WhatsAppWebConnector implements MessagingConnector {
       this.linkCause === RELOADED ? PAGE_BOOT_WAIT_MS : PAGE_SETTLE_MS
     );
     if (page === "blank" || (this.relinkAttempts > 1 && this.bridgeExpected)) {
+      if (page === "blank") {
+        if (this.stuckReloads >= MAX_STUCK_RELOADS) return "stuck";
+        this.stuckReloads += 1;
+      }
       await this.reloadPage();
       page = await this.waitForPage(PAGE_BOOT_WAIT_MS);
     }
+    // The chat list or the QR: the page works, so its reloads start over.
+    if (page !== "blank") this.stuckReloads = 0;
     if (page === "login") return "needs_relink";
     if (page === "blank") return "retry";
     if (!this.bridgeExpected) return "connected";
@@ -348,6 +426,13 @@ export class WhatsAppWebConnector implements MessagingConnector {
     }
     if (outcome === "needs_relink") {
       this.unlinked();
+      return;
+    }
+    if (outcome === "stuck") {
+      this.callbacks.onLog(
+        `whatsapp-web: still blank after ${MAX_STUCK_RELOADS} reloads, waiting for the user`
+      );
+      this.parkUnloaded(STUCK_LOADING);
       return;
     }
     this.link = outcome === "offline" ? "offline" : "reconnecting";
@@ -380,6 +465,7 @@ export class WhatsAppWebConnector implements MessagingConnector {
     if (win == null || win.isDestroyed()) return;
     this.callbacks.onLog("whatsapp-web: reloading WhatsApp Web to reconnect");
     this.lastNumberOpened = null;
+    this.loadFailure = null;
     await boundedWait(
       win.loadURL(WHATSAPP_WEB_URL, { userAgent: userAgent() }),
       PAGE_BOOT_WAIT_MS
@@ -406,6 +492,9 @@ export class WhatsAppWebConnector implements MessagingConnector {
     kind: "read" | "send" = "read"
   ): Promise<T> {
     const deadline = Date.now() + this.userDeadlineMs;
+    // Parked: no page until the user's Connect, so the call fails at once.
+    if (this.parkedNote != null)
+      throw new Error(`${this.parkedNote} Connect is in Library → Messaging.`);
     if (this.relinking != null)
       await boundedWait(this.relinking, this.userDeadlineMs).catch(() => {});
     if (this.link !== "connected") throw new Error(this.linkMessage());
@@ -1163,7 +1252,8 @@ export class WhatsAppWebConnector implements MessagingConnector {
 
   /** See MessagingConnector.probeLive: one login check, now, then the answer. */
   async probeLive(): Promise<boolean> {
-    if (!this.running) return false;
+    // A parked lane has no page, and a probe must not load one.
+    if (!this.running || this.parkedNote != null) return false;
     try {
       await this.checkLogin();
     } catch {
@@ -1173,7 +1263,7 @@ export class WhatsAppWebConnector implements MessagingConnector {
   }
 
   private async checkLogin(): Promise<void> {
-    if (!this.running) return;
+    if (!this.running || this.parkedNote != null) return;
     // Never judge a page the connector is driving: a send's search takes the
     // chat list, the probe's evidence, off the DOM and reads as a logout.
     if (this.lock.busy) {
@@ -1181,14 +1271,18 @@ export class WhatsAppWebConnector implements MessagingConnector {
       return;
     }
     const state = await this.run<LoginState>(LOGIN_STATE_SCRIPT, {});
-    if (state == null) return;
+    if (state == null || this.parkedNote != null) return;
 
     if (state.loggedIn) this.signedOutTicks = 0;
+    this.qrTicks =
+      !state.loggedIn && state.loginVisible === true ? this.qrTicks + 1 : 0;
 
     if (state.loggedIn && !this.loggedIn) {
       this.loggedIn = true;
       this.link = "connected";
       this.linkReported = false;
+      this.stuckReloads = 0;
+      this.recordSignedIn(true);
       const win = this.window;
       if (win != null && !win.isDestroyed() && win.isVisible()) {
         win.hide();
@@ -1217,7 +1311,9 @@ export class WhatsAppWebConnector implements MessagingConnector {
     // A login screen is a wait on a human, not a failure: `needs_login` keeps
     // the gateway from restarting the connector. The window is shown only
     // from the connect dialog, never from a background restart.
+    // Believed after a few polls, it is recorded so the next launch loads no page.
     if (!state.loggedIn && !this.loggedIn && state.loginVisible === true) {
+      if (this.qrTicks >= QR_BELIEVED_POLLS) this.recordSignedIn(false);
       this.callbacks.onState(
         "needs_login",
         "WhatsApp is not linked. Scan the QR from your phone (Settings → Linked devices) to connect."
@@ -1261,6 +1357,7 @@ export class WhatsAppWebConnector implements MessagingConnector {
     // A different phone may be on the other end of the next link.
     this.selfLookupDone = false;
     this.selfLinkedAnnounced = false;
+    this.recordSignedIn(false);
     this.callbacks.onState(
       "needs_login",
       "WhatsApp is no longer linked. The phone unlinked this device or the session expired. Reconnect and scan the QR again."
@@ -1270,6 +1367,7 @@ export class WhatsAppWebConnector implements MessagingConnector {
 
   /** Bring the login window back to the front (re-scan, or first login). */
   showLoginWindow(): void {
+    this.resume();
     const win = this.ensureWindow();
     if (win == null) return;
     // Adopt, fit, show, focus, leaving macOS full screen first.
@@ -1285,6 +1383,99 @@ export class WhatsAppWebConnector implements MessagingConnector {
   /** True once the user has linked the device; surfaced to the connect dialog. */
   get isLoggedIn(): boolean {
     return this.loggedIn;
+  }
+
+  // ── Parking ────────────────────────────────────────────────────────────
+
+  /**
+   * Stop checking and drop the page until the user clicks Connect. The state
+   * is one the gateway leaves alone (`needs_login`) or restarts only on the
+   * user's next connect (`error`), so nothing loads the page again by itself.
+   * The session stays in the partition; the next page signs in from it.
+   */
+  private park(state: "needs_login" | "error", note: string): void {
+    this.parkedNote = note;
+    this.loginPoll.stop();
+    this.inboundPoll.stop();
+    if (this.relinkTimer != null) clearTimeout(this.relinkTimer);
+    this.relinkTimer = null;
+    this.loggedIn = false;
+    this.link = "connected";
+    this.linkReported = false;
+    this.signedOutTicks = 0;
+    this.qrTicks = 0;
+    this.bridgeReady = false;
+    this.lastNumberOpened = null;
+    const win = this.window;
+    this.window = null;
+    if (win != null && !win.isDestroyed()) win.destroy();
+    this.callbacks.onState(state, note);
+  }
+
+  /** Parked for a page that did not load, with the note its failure earned. */
+  private parkUnloaded(fallback: string): void {
+    const failure = this.loadFailure;
+    this.loadFailure = null;
+    if (failure === "cert") {
+      this.park("error", CERT_BLOCKED);
+      return;
+    }
+    this.park("error", failure === "network" ? UNREACHABLE : fallback);
+    // Started before the network was up (a login item at boot), or dropped
+    // since: one more try once it is back. Online means the site itself.
+    if (failure === "network" && !net.isOnline()) this.retryWhenOnline();
+  }
+
+  /** The user clicked Connect: a fresh start for the checks and the page. */
+  private resume(): void {
+    this.stuckReloads = 0;
+    this.qrTicks = 0;
+    this.stopOnlineCheck();
+    if (!this.running || this.parkedNote == null) return;
+    this.parkedNote = null;
+    this.callbacks.onLog("whatsapp-web: opened by the user, checking again");
+    this.callbacks.onState("connecting");
+    this.pollLogin();
+  }
+
+  private recordSignedIn(signedIn: boolean): void {
+    if (this.signedInRecord === signedIn) return;
+    this.signedInRecord = signedIn;
+    savePlatformSignedIn(this.id, signedIn);
+  }
+
+  /**
+   * The page itself could not load. Before a link nothing reloads it, so the
+   * lane waits on the user at once; after one, the failure is noted and the
+   * relink's bounded reloads decide, since a navigation can fail mid-use and
+   * come back.
+   */
+  private onLoadFailed(code: number, description: string): void {
+    if (!this.running || this.parkedNote != null) return;
+    this.loadFailure = isCertError(code) ? "cert" : "network";
+    if (this.loggedIn) return;
+    this.callbacks.onLog(
+      `whatsapp-web: page failed to load (${code} ${description}), waiting for the user`
+    );
+    this.parkUnloaded(UNREACHABLE);
+  }
+
+  private retryWhenOnline(): void {
+    this.stopOnlineCheck();
+    this.onlineCheck = setInterval(() => {
+      if (!net.isOnline()) return;
+      this.stopOnlineCheck();
+      if (!this.running || this.parkedNote == null) return;
+      this.callbacks.onLog("whatsapp-web: back online, loading the page again");
+      this.resume();
+      this.ensureWindow();
+    }, ONLINE_CHECK_MS);
+  }
+
+  private stopOnlineCheck(): void {
+    if (this.onlineCheck == null) return;
+    clearInterval(this.onlineCheck);
+    this.onlineCheck = null;
   }
 
   // ── Inbound + contacts ─────────────────────────────────────────────────
@@ -1563,7 +1754,7 @@ export class WhatsAppWebConnector implements MessagingConnector {
     // A user who closes the login window has not disabled the platform; drop
     // the handle and let the next send or sweep rebuild it via ensureWindow.
     win.on("closed", () => {
-      this.window = null;
+      if (this.window === win) this.window = null;
     });
     // Every load is a fresh page; whatever the bridge injected is gone, and
     // the relink puts it back.
@@ -1572,12 +1763,24 @@ export class WhatsAppWebConnector implements MessagingConnector {
       this.bridgeReady = false;
       if (this.bridgeExpected) this.relink(RELOADED);
     });
+    win.webContents.on(
+      "did-fail-load",
+      (_event, code, description, _url, isMainFrame) => {
+        if (!isMainFrame || code === NET_ERR_ABORTED) return;
+        if (this.window === win) this.onLoadFailed(code, description);
+      }
+    );
+    // Chromium refuses the certificate on its own; this only reads the verdict.
+    win.webContents.on("certificate-error", (_event, url, error) => {
+      if (this.window !== win || !url.startsWith(WHATSAPP_WEB_URL)) return;
+      this.onLoadFailed(-200, error);
+    });
     return win;
   }
 
   private ensureWindow(): BrowserWindow | null {
     if (this.window != null && !this.window.isDestroyed()) return this.window;
-    if (!this.running) return null;
+    if (!this.running || this.parkedNote != null) return null;
     // Hidden even when logged out: whoever needs the user's eyes on it
     // (showLoginWindow, the login-screen check) shows it explicitly.
     const win = this.buildWindow(false);
